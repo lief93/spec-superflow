@@ -8,19 +8,7 @@ The workflow is self-contained and does not require OpenSpec or Superpowers at r
 
 
 <!-- spec-superflow-phase-guard-start -->
-# Phase Guard
-
-**当前阶段**: exploring | **工作流**: auto | **版本**: v0.8.7
-
-## ✅ 允许操作
-- 澄清需求、比较方案
-- 与用户讨论 scope 和 capabilities
-
-## ⛔ 禁止操作
-- 创建规划工件（proposal.md, specs/, design.md, tasks.md）
-- 执行实现代码
-- 修改 execution-contract.md
-
-## 🔔 决策点
-- DP-1: 需求确认 — 进入 specifying 前需用户确认 scope
+# spec-superflow v0.8.7 | 阶段: {{state}} | 工作流: {{workflow}}
+当前阶段允许的操作由 workflow-start 路由规则定义。
+禁止跨越 DP gate 进入下一阶段。变更范围以 execution-contract.md 的 Intent Lock 为准。
 <!-- spec-superflow-phase-guard-end -->
