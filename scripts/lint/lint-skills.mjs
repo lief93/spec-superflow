@@ -78,10 +78,69 @@ export async function lintSkills(options = {}) {
   };
 }
 
+/**
+ * Load only token-specific rules (--include token).
+ */
+async function loadTokenRules() {
+  const tokenRulesPath = join(RULES_DIR, 'token-rules.mjs');
+  if (!existsSync(tokenRulesPath)) return [];
+  try {
+    const mod = await import(tokenRulesPath);
+    return mod.default && typeof mod.default.check === 'function' ? [mod.default] : [];
+  } catch (e) {
+    console.error(`Warning: failed to load token-rules: ${e.message}`);
+    return [];
+  }
+}
+
 // CLI entry
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const report = await lintSkills();
-  if (!report.valid || process.argv.includes('--verbose')) {
+  const includeToken = process.argv.includes('--include') && process.argv[process.argv.indexOf('--include') + 1] === 'token';
+  const verbose = process.argv.includes('--verbose');
+  const fileArgIdx = process.argv.indexOf('--file');
+  const fileArg = fileArgIdx !== -1 ? process.argv[fileArgIdx + 1] : null;
+
+  let report;
+  if (includeToken) {
+    // Token mode: only run token rules
+    const rules = await loadTokenRules();
+    const skillName = fileArg ? fileArg.replace(/.*skills\/([^/]+)\/.*/, '$1') : 'all';
+    const results = [];
+    const dirs = fileArg
+      ? [skillName]
+      : readdirSync(SKILLS_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name);
+
+    for (const dir of dirs) {
+      const skillMd = fileArg || join(SKILLS_DIR, dir, 'SKILL.md');
+      const mdPath = fileArg || skillMd;
+      if (!existsSync(mdPath)) {
+        results.push({ skill: dir, issues: [{ severity: 'error', rule: 'file-existence', message: 'SKILL.md not found' }] });
+        continue;
+      }
+      const content = readFileSync(mdPath, 'utf-8');
+      const ctx = { skillDirs: dirs, skillsDir: SKILLS_DIR };
+      const issues = [];
+      for (const rule of rules) {
+        try {
+          const ruleIssues = await rule.check(dir, content, ctx);
+          if (Array.isArray(ruleIssues)) {
+            issues.push(...ruleIssues.map(i => ({ ...i, rule: rule.name || 'unknown' })));
+          }
+        } catch (e) {
+          issues.push({ severity: 'error', rule: rule.name || 'unknown', message: `Rule threw: ${e.message}` });
+        }
+      }
+      results.push({ skill: dir, issues });
+    }
+
+    const totalIssues = results.reduce((sum, r) => sum + r.issues.length, 0);
+    const errorCount = results.reduce((sum, r) => sum + r.issues.filter(i => i.severity === 'error').length, 0);
+    report = { valid: errorCount === 0, results, summary: `${totalIssues} issue(s) (${errorCount} errors) across ${results.length} skills` };
+  } else {
+    report = await lintSkills();
+  }
+
+  if (!report.valid || verbose) {
     console.log(JSON.stringify(report, null, 2));
   } else {
     console.log(`✅ ${report.summary}`);
