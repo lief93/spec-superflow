@@ -1,0 +1,40 @@
+# .spec-superflow.yaml — lightweight state machine
+# Derived data. Always rebuildable from artifacts. Lost/corrupt → fall back to content-level detection.
+
+# === Core state ===
+state: approved-for-build
+workflow: full
+
+# === Hashes (fast staleness detection) ===
+artifacts_hash: sha256:c08cb20baf13ce23b202d9d3458e1f1ec72fe815aef4b2070a255a3c3e2929d2
+contract_hash: sha256:6d6e8d684cd9f3b4cff70ffdce10f7e05f6e9fda708158ad1bef92060f801d57
+
+# === Execution progress ===
+execution_mode: null
+batches_completed: 4
+test_result: null
+
+# === Metadata ===
+change_name: token-efficiency
+last_transition: 2026-07-03T14:42:22.457Z
+last_transition_from: bridging
+last_transition_to: approved-for-build
+
+# === Decision points ===
+dp_0_decisions: "Token效率优化：压缩hooks/skills/phase-guard/prompts，建立度量基线。逐步确认关键决策，允许破坏性变更。范围外：跨平台一致性、新功能、削弱门禁。"
+dp_0_confirmed: true
+dp_0_timestamp: "2026-07-03T14:32:00Z"
+dp_1_result: null
+dp_1_timestamp: null
+dp_2_result: approved: all 4 artifacts validated, 5 delta specs, 22 tasks in 5 batches
+dp_2_timestamp: 2026-07-03T14:40:51Z
+dp_3_result: approved: 5 batches, 22 requirements covered, batch-inline mode
+dp_3_timestamp: 2026-07-03T14:42:16Z
+dp_4_result: null
+dp_4_timestamp: null
+dp_5_result: null
+dp_5_timestamp: null
+dp_6_result: null
+dp_6_timestamp: null
+dp_7_result: null
+dp_7_timestamp: null
