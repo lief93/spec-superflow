@@ -120,7 +120,6 @@ exploring → specifying → bridging → approved-for-build → executing → c
 ### Key Files
 
 - `templates/*.md` — Templates for the five artifacts (`proposal`, `spec`, `design`, `tasks`, `execution-contract`).
-- `specs/` — Main capability specifications maintained by `spec-merger`.
 - `changes/<change-name>/` — In-flight change directories containing planning artifacts, delta specs, and the execution contract.
 - `docs/examples/` — Two complete change sets (`add-dark-mode`, `refactor-auth-boundary`) used as real test data.
 - `docs/state-machine.md` — Formal state-machine documentation.
