@@ -1,4 +1,4 @@
-# Phase Guard: v0.8.6
+# Phase Guard: v0.8.7
 
 **当前阶段**: exploring | **工作流**: auto
 
