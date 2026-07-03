@@ -7,7 +7,7 @@
 - [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) — 规划引擎（Schema 验证、Delta Spec、工件解析）
 - [obra/superpowers](https://github.com/obra/superpowers) — 执行纪律（TDD 铁律、SDD、系统化调试、代码审查）
 
-当前发布版本：**v0.8.4**。
+当前发布版本：**v0.8.6**。
 
 ---
 
@@ -131,12 +131,12 @@ cp /path/to/spec-superflow/hooks/hooks-cursor.json .cursor/hooks.json
 
 ## OpenAI Codex CLI
 
+`spec-superflow` 通过社区 marketplace 提供，PR 已提交至 [awesome-codex-plugins](https://github.com/hashgraph-online/awesome-codex-plugins)。
+
 ### 安装
 
-`spec-superflow` 不在 OpenAI curated 目录中，需要先添加 marketplace：
-
 ```bash
-codex plugin marketplace add MageByte-Zero/spec-superflow
+codex plugin marketplace add hashgraph-online/awesome-codex-plugins
 codex plugin add spec-superflow@spec-superflow
 ```
 
@@ -352,14 +352,13 @@ cd /path/to/spec-superflow && git pull
 对于名为 `<change-name>` 的变更：
 
 ```text
-workflow/
-└── changes/<change-name>/
-    ├── proposal.md
-    ├── design.md
-    ├── tasks.md
-    ├── specs/
-    │   └── <capability>.md
-    └── execution-contract.md
+changes/<change-name>/
+├── proposal.md
+├── design.md
+├── tasks.md
+├── specs/
+│   └── <capability>.md
+└── execution-contract.md
 ```
 
 流程线：`proposal/specs/design/tasks -> execution-contract.md -> 用户批准 -> 开始实现`

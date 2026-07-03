@@ -1,10 +1,10 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to Codex (codex.ai) when working with code in this repository.
 
 ## What This Is
 
-A Codex plugin that integrates OpenSpec (planning engine) + Superpowers (execution discipline) into a unified AI coding workflow. Self-contained, zero external npm dependencies. 7-platform support (Codex / Cursor / Codex / OpenCode / Copilot CLI / Gemini CLI / Trae).
+A self-contained Codex plugin that integrates OpenSpec-style planning + Superpowers execution discipline. Zero runtime dependencies, supports 7 platforms (Claude Code, Cursor, Codex, OpenCode, Copilot CLI, Gemini CLI, Trae).
 
 ## Commands
 
@@ -28,16 +28,16 @@ npm run validate
 
 TypeScript interfaces + regex-based parsers. Compiles to `dist/` (ES2022 + NodeNext + strict).
 
-- `schema/` — Type definitions: `base.ts` (Requirement, Scenario), `change.ts` (Delta operations: ADDED/MODIFIED/REMOVED/RENAMED), `spec.ts`
-- `parsing/` — `requirement-blocks.ts` parses delta spec markdown into `DeltaPlan` (added/modified/removed/renamed blocks). `change-parser.ts` extracts `## Why` + `## What Changes` + delta sections from proposal markdown.
-- `validation/` — `validator.ts` validates artifacts against schema rules. `constants.ts` holds thresholds (min Why length: 50, max deltas per change: 10, etc.). All public API re-exported from `src/index.ts`.
+- `schema/` — Type definitions: `base.ts` (Requirement, Scenario), `change.ts` (Delta operations), `spec.ts`
+- `parsing/` — `requirement-blocks.ts` parses delta spec markdown. `change-parser.ts` extracts `## Why` + `## What Changes` + delta sections from proposal markdown.
+- `validation/` — `validator.ts` validates artifacts against schema rules. `constants.ts` holds thresholds. All public API re-exported from `src/index.ts`.
 
-### Validation Rules (enforced by `src/validation/validator.ts`)
+### Validation Rules
 
 - **spec.md**: Each Requirement must contain `SHALL` or `MUST`, at least 1 `#### Scenario:` block
-- **Delta spec**: ADDED/MODIFIED must have requirement text + scenarios; cross-section conflicts blocked (e.g., same requirement in both MODIFIED and REMOVED)
+- **Delta spec**: ADDED/MODIFIED must have requirement text + scenarios; cross-section conflicts blocked
 - **proposal.md**: `## Why` ≥ 50 characters, `## What Changes` cannot be empty
-- `Validator` returns `ValidationReport` with `{valid, issues: [{level: ERROR|WARNING|INFO, path, message}], summary}`. Strict mode treats warnings as errors.
+- `Validator` returns `ValidationReport` with `{valid, issues: [{level, path, message}], summary}`. Strict mode treats warnings as errors.
 
 ### Skills (`skills/`)
 
@@ -45,25 +45,25 @@ TypeScript interfaces + regex-based parsers. Compiles to `dist/` (ES2022 + NodeN
 
 | Skill | Phase | Purpose |
 |-------|-------|---------|
-| `workflow-orchestrator` | Entry | Content-level state detection (compares proposal scope vs contract intent lock), routes to correct skill, blocks illegal transitions |
-| `spec-explorer` | Exploring | One-question-at-a-time elicitation, 2-3 approach comparison with recommendation |
-| `spec-forger` | Specifying | Generate planning artifacts, runs schema validation on each |
-| `bridge-contract` | Bridging | Parsing engine auto-extracts 4 planning artifacts → compresses into `execution-contract.md` |
-| `execution-governor` | Executing | TDD Iron Law + SDD subagent-driven development + Review Gates |
-| `systematic-debugger` | Debugging | 4-phase root cause analysis. 3+ fix failures → question architecture → escalate |
-| `code-reviewer` | Review | Structured review with 3 severity levels (Critical/Important/Minor), invoked after each execution batch |
-| `closure-archivist` | Closing | Verification-before-completion Iron Law, archiving, risk summary |
-| `spec-syncer` | Sync | Delta Spec (ADDED/MODIFIED/REMOVED/RENAMED) → intelligent merge into main specs, conflict detection |
+| `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
+| `need-explorer` | Exploring | One-question-at-a-time elicitation, 2-3 approach comparison with recommendation |
+| `spec-writer` | Specifying | Generate planning artifacts + Schema engine validation |
+| `contract-builder` | Bridging | Parsing engine auto-extracts 4 planning artifacts → compresses into `execution-contract.md` |
+| `build-executor` | Executing | TDD Iron Law + SDD subagent-driven development + Review Gates |
+| `bug-investigator` | Debugging | 4-phase root cause analysis. 3+ fix failures → question architecture → escalate |
+| `code-reviewer` | Review | Structured review with 3 severity levels (Critical/Important/Minor) |
+| `release-archivist` | Closing | Verification-before-completion Iron Law, archiving, risk summary |
+| `spec-merger` | Sync | Delta Spec → intelligent merge into main specs, conflict detection |
 
 ### Skill Sub-Prompts
 
-- `skills/execution-governor/implementer-prompt.md` — Subagent implementation template with TDD evidence + self-review requirements
-- `skills/execution-governor/task-reviewer-prompt.md` — Dual-verdict review (spec compliance + code quality)
+- `skills/build-executor/implementer-prompt.md` — Subagent implementation template with TDD evidence + self-review requirements
+- `skills/build-executor/task-reviewer-prompt.md` — Dual-verdict review (spec compliance + code quality)
 - `skills/code-reviewer/code-reviewer-prompt.md` — Structured code review template with 3 severity levels
 
 ### State Machine
 
-7 states: `exploring → specifying → bridging → approved → executing → closing`, with a `debugging` side-path from `executing`.
+8 states: `exploring`, `specifying`, `bridging`, `approved-for-build`, `executing`, `debugging`, `closing`, `abandoned`.
 
 ```
 exploring → specifying → bridging → approved-for-build → executing → closing
@@ -75,7 +75,7 @@ exploring → specifying → bridging → approved-for-build → executing → c
                 (scope change → re-specify)    (contract drift → re-bridge)
 ```
 
-`workflow-orchestrator` is the single entry point. It reads artifact content (not just file existence) to determine current state.
+`workflow-start` is the single entry point. It reads artifact content (not just file existence) to determine current state.
 
 ### Hard Constraints
 
@@ -86,40 +86,41 @@ exploring → specifying → bridging → approved-for-build → executing → c
 
 ### Helper Scripts (`scripts/`)
 
-- `validate-artifacts` — CLI entry: reads a change directory, validates proposal.md + all specs/*/spec.md, prints a report. Used by `npm run validate`.
-- `task-brief` — Extracts a single task's markdown from an implementation plan (avoids pasting task text through controller context).
-- `review-package` — Generates a review diff (commit list + stat + diff with extended context) from BASE..HEAD.
+- `spec-superflow.mjs` — CLI entrypoint for `ssf` / `spec-superflow` commands.
+- `lib/` — CLI subcommand modules (`cmd-validate.mjs`, `cmd-doctor.mjs`, `cmd-state.mjs`, etc.), config loader, hash utilities.
+- `validate-artifacts` — Reads a change directory, validates proposal.md + all specs/*/spec.md, prints a report.
 
 ### Hooks (`hooks/`)
 
-- `hooks/session-start` — Bash script that detects platform (Codex/Cursor/Copilot CLI) and injects `workflow-orchestrator/SKILL.md` as session context. Uses different JSON output formats per platform.
-- `hooks/hooks.json` — Codex hook config (triggers on Startup|Clear|Compact).
+- `hooks/session-start` — Detects platform and injects `workflow-start/SKILL.md` as session context.
+- `hooks/hooks.json` — Claude Code hook config (triggers on Startup | Clear | Compact).
 - `hooks/hooks-cursor.json` — Cursor equivalent.
 
 ### Key Files
 
-- `templates/*.md` — Markdown templates for the 5 artifacts (proposal, spec, design, tasks, execution-contract)
+- `templates/*.md` — Templates for the 5 artifacts (proposal, spec, design, tasks, execution-contract)
 - `docs/examples/` — Two complete change sets (`add-dark-mode`, `refactor-auth-boundary`) used by tests as real input data
 - `docs/state-machine.md` — Formal state machine documentation
 - `docs/artifact-contract.md` — Artifact roles and mapping from planning to execution
+- `docs/decision-points.md` — Standard decision-point protocol
+
+### Fast Paths (v0.6.0+)
+
+- **hotfix** — ≤2 files, no new modules; skips full exploration and specification.
+- **tweak** — ≤4 files, config/docs only; skips exploration, specification, and bridging.
 
 ## Design Decisions
 
-- **`dist/` is committed** — the plugin works via Codex's skill system (markdown files), not as a runtime npm dependency. The compiled engine is tracked so validation scripts work after clone without a build step.
+- **`dist/` is committed** — the plugin is consumed via skills and scripts, not as an npm package. Tracking `dist/` lets validation scripts work immediately after cloning.
 - **Tests import from `dist/`, not `src/`** — always run `npm run build` before `npm test`.
-- **Content-level stale detection, not timestamp-based** — `workflow-orchestrator` compares proposal scope vs contract intent lock, not file modification times.
-- **Self-contained** — does not require OpenSpec or Superpowers to be installed. Features absorbed from those systems are reimplemented here, not imported.
-
-## Constraints
-
-- **Zero external dependencies** — Only TypeScript as devDependency
-- **Node >= 22** — Uses `--experimental-strip-types` for direct .ts test execution
-- **Pure regex parsing** — No Zod or runtime validation libraries
-- **Multi-platform, single source** — Same 9 skills across 7 platforms. Platform-specific wiring is isolated to hooks and plugin manifests (`.Codex-plugin/`, `.cursor-plugin/`, `.opencode/`, `gemini-extension.json`).
+- **Content-level stale detection** — `workflow-start` compares proposal scope vs contract intent lock, not file timestamps.
+- **Self-contained** — does not require OpenSpec or Superpowers to be installed. Absorbed concepts are reimplemented here.
+- **Zero runtime dependencies** — only TypeScript as devDependency.
+- **Multi-platform, single source** — Same 9 skills across 7 platforms. Platform-specific wiring is isolated to hooks and plugin manifests (`.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.opencode/`, `gemini-extension.json`).
 
 ## CI/CD (`.github/workflows/ci.yml`)
 
-- **Push/PR to `main`**: Build + test on Node 22
+- **Push/PR to `main`**: Build + test on Node 22 + Plugin Scanner
 - **Tag push `v*`**: Build + test → `gh release create` → `npm publish --provenance --access public`
 - Release requires `NPM_TOKEN` secret and `id-token: write` permission for provenance
 
@@ -132,7 +133,7 @@ Test data lives in `docs/examples/` — real proposal/spec/design artifacts from
 ## Release Checklist
 
 Refer to `docs/release-checklist.md` before publishing. Key items:
-- Keep `README.md` / `README.zh-CN.md` / `INSTALL.md` / `CHANGELOG.md` / `.Codex-plugin/plugin.json` / `.Codex-plugin/marketplace.json` version in sync
+- Keep `README.md`, `docs/README_en.md`, `INSTALL.md`, `CHANGELOG.md`, and all 7 plugin manifests in sync. Use `ssf version <semver>`.
 - Verify all examples are complete (proposal + specs + design + tasks + execution-contract + README)
 - No stray `TODO` or `TBD` markers
-- `package.json` version matches `.Codex-plugin/plugin.json` version
+- `package.json` version matches `.claude-plugin/plugin.json` version

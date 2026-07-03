@@ -5,7 +5,7 @@ Use this checklist before publishing a new version of `spec-superflow`.
 ## Repository Shape
 
 - `README.md` is current
-- `README.zh-CN.md` is current
+- `docs/README_en.md` is current
 - `INSTALL.md` matches the supported installation story
 - `CHANGELOG.md` contains the new release entry
 - `LICENSE` is present
@@ -13,7 +13,7 @@ Use this checklist before publishing a new version of `spec-superflow`.
 - `.claude-plugin/marketplace.json` version matches `plugin.json`
 - `.cursor-plugin/plugin.json` version matches `plugin.json`
 - `gemini-extension.json` version matches `plugin.json`
-- All 5 manifests can be synced via `ssf version <semver>`
+- All 7 manifests can be synced via `ssf version <semver>`
 
 ## Workflow Integrity
 
@@ -61,7 +61,7 @@ For each example in `docs/examples/`:
 Do one last read of:
 
 - `README.md`
-- `README.zh-CN.md`
+- `docs/README_en.md`
 - `INSTALL.md`
 - `skills/workflow-start/SKILL.md`
 - `skills/contract-builder/SKILL.md`

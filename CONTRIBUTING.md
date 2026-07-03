@@ -33,8 +33,8 @@ Read these files first:
 
 If your change affects workflow behavior, also read:
 
-- `skills/workflow-orchestrator/SKILL.md`
-- `skills/bridge-contract/SKILL.md`
+- `skills/workflow-start/SKILL.md`
+- `skills/contract-builder/SKILL.md`
 
 ## Repository Conventions
 
