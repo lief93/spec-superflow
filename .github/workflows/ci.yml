@@ -26,6 +26,9 @@ jobs:
       - run: npm test
       - name: Check version consistency
         run: node scripts/check-version-consistency.mjs
+      - name: Token efficiency lint (warning only)
+        run: node scripts/lint/lint-skills.mjs --include token
+        continue-on-error: true
 
   release:
     name: Release
@@ -46,6 +49,9 @@ jobs:
       - run: npm test
       - name: Check version consistency
         run: node scripts/check-version-consistency.mjs
+      - name: Token efficiency lint (warning only)
+        run: node scripts/lint/lint-skills.mjs --include token
+        continue-on-error: true
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
