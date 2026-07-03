@@ -4,6 +4,39 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [0.8.6] - 2026-07-03
+
+### Fixed (Bug)
+
+- **CI**: Correct `actions/setup-node` SHA — the previously pinned `v4.5.0` release didn't exist. Changed to `v4.4.0` (latest actual v4). This was silently breaking all CI runs on main.
+
+### Changed
+
+- **Deps**: Bump `actions/checkout` from 4.2.2 to 7.0.0 (SHA-pinned, `tsc` verified).
+- **Deps**: Bump `typescript` from 5.9.3 to 6.0.3 (devDependency, `tsc --noEmit` zero errors).
+- **Branch protection**: Main branch now requires PR + CI checks (`Build & Test (22)`, `scan`) before merge.
+
+## [0.8.5] - 2026-07-03
+
+### Fixed (Bug)
+
+- **Issue #9**: Cursor installation (`install-cursor.mjs`) now copies the full runtime tree (`scripts/`, `docs/`, `templates/`, `dist/`, `hooks/`) instead of just `skills/`. Fixes 24 broken `${CLAUDE_PLUGIN_ROOT}` references in skills.
+
+### Added
+
+- **`ssf install-cursor` CLI command**: Deploys spec-superflow to `.cursor/` directory.
+- **Multi-platform marketplace support**:
+  - `.cursor-plugin/marketplace.json` — Cursor marketplace submission
+  - `.opencode/plugins/spec-superflow.js` — OpenCode plugin entry
+  - `.codex-plugin/plugin.json` — `composerIcon` for Codex
+  - `gemini-extension.json` — Gemini CLI verified install
+- **Codex scanner**: `SECURITY.md`, `assets/icon.svg`, `.codexignore`, `.github/dependabot.yml`, `hol-plugin-scanner.yml` CI workflow. Scanner score: 92/130.
+- **Branch protection setup** for main branch.
+
+### Changed
+
+- **README**: Restructured with quick start first. English README fully synced with Chinese version.
+
 ## [0.8.4] - 2026-07-03
 
 ### Fixed (Bug)
