@@ -61,6 +61,24 @@ function checkHooks(root) {
   }
 }
 
+function checkCodexManifest(root) {
+  const manifestPath = join(root, '.codex-plugin', 'plugin.json');
+  const manifest = readJsonIfExists(manifestPath);
+  if (!manifest) {
+    return { pass: false, message: '.codex-plugin/plugin.json not found' };
+  }
+  if (JSON.stringify(manifest.hooks) !== '{}') {
+    return {
+      pass: false,
+      message: 'Codex manifest must set hooks to {} to suppress hooks/hooks.json auto-discovery',
+    };
+  }
+  if (manifest.interface?.category !== 'Developer Tools') {
+    return { pass: false, message: 'Codex category should be Developer Tools' };
+  }
+  return { pass: true, message: 'hooks suppressed, category Developer Tools' };
+}
+
 function checkSkills(root) {
   const skillsDir = join(root, 'skills');
   if (!existsSync(skillsDir)) {
@@ -164,6 +182,7 @@ export async function run(args) {
     ['Version', checkVersionConsistency(root)],
     ['Root plugin author', checkRootPluginAuthor(root)],
     ['Hooks', checkHooks(root)],
+    ['Codex manifest', checkCodexManifest(root)],
     ['Skills', checkSkills(root)],
     ['dist/', checkDist(root)],
     ['Node.js', checkNodeVersion()],
@@ -196,4 +215,4 @@ export async function run(args) {
   }
 }
 
-export { checkVersionConsistency, checkHooks, checkSkills, checkDist, checkRootPluginAuthor, checkNodeVersion, checkDocs };
+export { checkVersionConsistency, checkHooks, checkCodexManifest, checkSkills, checkDist, checkRootPluginAuthor, checkNodeVersion, checkDocs };

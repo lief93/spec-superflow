@@ -117,6 +117,59 @@ describe('cmd-doctor: checkHooks()', () => {
   });
 });
 
+describe('cmd-doctor: checkCodexManifest()', () => {
+  let checkCodexManifest;
+
+  before(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'ssf-doctor-codex-'));
+    const modulePath = join(process.cwd(), 'scripts/lib/cmd-doctor.mjs');
+    const mod = await import(modulePath);
+    checkCodexManifest = mod.checkCodexManifest;
+  });
+
+  after(() => {
+    if (tempDir) rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('fails when Codex manifest is missing', () => {
+    const result = checkCodexManifest(tempDir);
+    assert.equal(result.pass, false);
+    assert.ok(result.message.includes('not found'));
+  });
+
+  it('fails when hooks is absent because Codex auto-discovers hooks/hooks.json', () => {
+    mkdirSync(join(tempDir, '.codex-plugin'), { recursive: true });
+    writeFileSync(join(tempDir, '.codex-plugin', 'plugin.json'), JSON.stringify({
+      interface: { category: 'Developer Tools' },
+    }));
+
+    const result = checkCodexManifest(tempDir);
+    assert.equal(result.pass, false);
+    assert.ok(result.message.includes('hooks to {}'));
+  });
+
+  it('fails when category is not Developer Tools', () => {
+    writeFileSync(join(tempDir, '.codex-plugin', 'plugin.json'), JSON.stringify({
+      hooks: {},
+      interface: { category: 'Productivity' },
+    }));
+
+    const result = checkCodexManifest(tempDir);
+    assert.equal(result.pass, false);
+    assert.ok(result.message.includes('Developer Tools'));
+  });
+
+  it('passes when hooks are explicitly suppressed and category is Developer Tools', () => {
+    writeFileSync(join(tempDir, '.codex-plugin', 'plugin.json'), JSON.stringify({
+      hooks: {},
+      interface: { category: 'Developer Tools' },
+    }));
+
+    const result = checkCodexManifest(tempDir);
+    assert.equal(result.pass, true);
+  });
+});
+
 describe('cmd-doctor: checkSkills()', () => {
   let checkSkills;
 
