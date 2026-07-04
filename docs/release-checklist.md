@@ -11,7 +11,7 @@ Use this checklist before publishing a new version of `spec-superflow`.
 - `LICENSE` is present
 - `ssf version <semver>` covers all manifests (JSON) + documentation (Markdown/shell)
 - `node scripts/check-version-consistency.mjs` passes (also runs in CI)
-- Verify `spec-superflow-marketplace` repo's `marketplace.json` version matches
+- Verify `.github/plugin/marketplace.json` and `.claude-plugin/marketplace.json` versions match
 
 ## Workflow Integrity
 
@@ -45,6 +45,7 @@ For each example in `docs/examples/`:
 - `node scripts/spec-superflow.mjs version <version> --dry-run` — reports all files in sync
 - `node scripts/check-version-consistency.mjs` — exits 0
 - `node scripts/spec-superflow.mjs --help` — all subcommands listed
+- `node scripts/spec-superflow.mjs install-workbuddy --dry-run` — finds all 9 skills and target paths
 - `spec-superflow.config.json` absence still works (backward compatible defaults)
 - `package.json` `bin` field points to correct entry script
 

@@ -14,7 +14,13 @@ Clone the repository and point OpenCode to the plugin entry:
 git clone https://github.com/MageByte-Zero/spec-superflow.git ~/spec-superflow
 ```
 
-Then in your OpenCode project, reference the plugin in `.opencode/config.json` (or via the UI).
+Then in your OpenCode project, reference this plugin file by absolute path in `.opencode/config.json` (or via the UI):
+
+```text
+~/spec-superflow/.opencode/plugins/spec-superflow.js
+```
+
+Do not copy only `spec-superflow.js` into another project; the plugin reads `../../skills` and `../../GEMINI.md` relative to its own location.
 
 ### Manual Skills Symlink
 

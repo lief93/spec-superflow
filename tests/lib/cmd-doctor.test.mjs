@@ -52,6 +52,20 @@ describe('cmd-doctor: checkVersionConsistency()', () => {
     const result = checkVersionConsistency(tempDir);
     assert.equal(result.pass, true, `Expected pass but got: ${result.message}`);
   });
+
+  it('fails when a marketplace metadata version differs from the plugin version', () => {
+    rmSync(tempDir, { recursive: true, force: true });
+    mkdirSync(join(tempDir, '.github', 'plugin'), { recursive: true });
+    writeFileSync(join(tempDir, 'package.json'), JSON.stringify({ version: '1.0.0' }));
+    writeFileSync(join(tempDir, '.github', 'plugin', 'marketplace.json'), JSON.stringify({
+      metadata: { version: '0.9.0' },
+      plugins: [{ version: '1.0.0' }],
+    }));
+
+    const result = checkVersionConsistency(tempDir);
+    assert.equal(result.pass, false);
+    assert.ok(result.message.includes('.github/plugin/marketplace.json'));
+  });
 });
 
 describe('cmd-doctor: checkHooks()', () => {

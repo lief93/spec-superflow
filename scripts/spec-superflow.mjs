@@ -15,6 +15,7 @@ const COMMANDS = {
   inject:         () => import('./lib/cmd-inject.mjs'),
   audit:          () => import('./lib/cmd-audit.mjs'),
   'install-cursor': () => import('./lib/cmd-install-cursor.mjs'),
+  'install-workbuddy': () => import('./lib/cmd-install-workbuddy.mjs'),
 };
 
 const HELP = `spec-superflow (ssf) — Spec-first workflow CLI
@@ -32,6 +33,7 @@ Commands:
   inject <dir>          Generate phase-guard artifacts for Claude/Cursor/Copilot/Gemini
   audit <dir>           Generate decision-point-audit.md from .spec-superflow.yaml
   install-cursor        Deploy skills/scripts/docs to .cursor/ (local Cursor setup)
+  install-workbuddy     Deploy skills to WorkBuddy marketplace and enable them
 
 Options:
   --help, -h            Show this help message
@@ -50,6 +52,7 @@ Examples:
   ssf state transition changes/my-change/ approved-for-build
   ssf state get changes/my-change/ batches_completed
   ssf install-cursor
+  ssf install-workbuddy
 `;
 
 async function main() {

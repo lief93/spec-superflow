@@ -16,13 +16,14 @@
 | 平台 | 安装 | 升级 | 卸载 |
 |------|------|------|------|
 | Claude Code | marketplace | `/plugin update` | `/plugin uninstall` |
-| Cursor | curl 一键脚本 | 重新运行脚本 | 删除 `.cursor/skills/` |
-| OpenAI Codex CLI | marketplace | `codex plugin update` | `codex plugin remove` |
-| OpenAI Codex App | CLI + App 面板 | CLI 更新 | App 面板禁用 |
+| Cursor | skills 目录 / GitHub 导入 / 一键脚本 | 重新运行脚本 | 删除 `.cursor/skills/` |
+| OpenAI Codex CLI | Plugin Directory / marketplace | `codex plugin update` | `codex plugin remove` |
+| OpenAI Codex App | Plugins 面板 / marketplace | CLI 更新后 App 面板启用 | App 面板禁用 |
 | GitHub Copilot CLI | marketplace | `copilot plugin update` | `copilot plugin uninstall` |
 | Gemini CLI | `gemini extensions install` | `gemini extensions update` | `gemini extensions uninstall` |
-| OpenCode | clone + symlink | `git pull` | 删除 symlink |
-| Trae / 其他本地客户端 | clone + copy | `git pull` + 重新 copy | 删除技能目录 |
+| OpenCode | plugin entry / skills 目录 | `git pull` | 删除 plugin/skills |
+| WorkBuddy | `ssf install-workbuddy` | 重新运行安装器 | 删除 marketplace 插件并禁用 |
+| Trae IDE / TRAE Work | `.trae/skills` / 上传 zip 或 .skill / marketplace | `git pull` + 重新导入 | UI 卸载或删除技能目录 |
 
 ---
 
@@ -64,7 +65,7 @@ git clone https://github.com/MageByte-Zero/spec-superflow.git
 
 ## Cursor
 
-Cursor 通过本地文件部署方式使用 spec-superflow。安装脚本会把 `skills/` 复制到 `.cursor/skills/`，并生成 `.cursor/rules/phase-guard.mdc`（`alwaysApply: true`）。
+Cursor 原生发现 `.cursor/skills/`、`.agents/skills/`、`~/.cursor/skills/`，并兼容 `.claude/skills/`、`.codex/skills/` 等目录。安装脚本会把 `skills/` 复制到 `.cursor/skills/`，并生成 `.cursor/rules/phase-guard.mdc`（`alwaysApply: true`）。
 
 ### 安装（推荐：一键脚本）
 
@@ -117,6 +118,10 @@ mkdir -p .cursor/rules
 cp /path/to/spec-superflow/hooks/hooks-cursor.json .cursor/hooks.json
 ```
 
+### GitHub 导入
+
+也可以在 Cursor 的 **Customize → Rules → Add Rule → Remote Rule (Github)** 中输入仓库 URL 导入。对于需要 `scripts/`、`docs/`、`templates/` 的完整工作流，仍推荐一键脚本。
+
 ### 验证
 
 在 Cursor Agent 中输入：
@@ -131,9 +136,18 @@ cp /path/to/spec-superflow/hooks/hooks-cursor.json .cursor/hooks.json
 
 ## OpenAI Codex CLI
 
-`spec-superflow` 通过社区 marketplace 提供，PR 已提交至 [awesome-codex-plugins](https://github.com/hashgraph-online/awesome-codex-plugins)。
+Codex CLI 的主流方式是打开 `/plugins` 插件目录安装；自动化或社区分发场景使用 `codex plugin marketplace add`。
 
-### 安装
+### 安装（推荐：插件目录）
+
+```bash
+codex
+/plugins
+```
+
+在插件目录中切换到相应 marketplace，选择 `spec-superflow` 并安装。
+
+### 安装（命令行 marketplace）
 
 ```bash
 codex plugin marketplace add hashgraph-online/awesome-codex-plugins
@@ -162,18 +176,22 @@ codex plugin list | grep spec-superflow
 
 ## OpenAI Codex App
 
-Codex App 使用同一套本地 marketplace 配置。
+Codex App 的主流方式是 **Plugins** 面板。仓库已提供 `.codex-plugin/plugin.json` 和 `.agents/plugins/marketplace.json`，可被 Codex marketplace/目录读取。
 
-### 安装
+### 安装（推荐：App 面板）
+
+打开 **Plugins**，搜索或切换到对应 marketplace，选择 `spec-superflow`，点击 **Add to Codex** / install。
+
+### 安装（CLI 预装）
 
 先通过 CLI 添加 marketplace 和插件：
 
 ```bash
-codex plugin marketplace add MageByte-Zero/spec-superflow
+codex plugin marketplace add hashgraph-online/awesome-codex-plugins
 codex plugin add spec-superflow@spec-superflow
 ```
 
-然后**重启 Codex App**，在 **Plugins** 面板中即可看到并启用 `spec-superflow`。
+然后**重启 Codex App**，在 **Plugins** 面板中启用 `spec-superflow`。
 
 ### 升级
 
@@ -195,13 +213,13 @@ codex plugin remove spec-superflow
 
 ## GitHub Copilot CLI
 
-Copilot CLI 从仓库根目录的 `plugin.json` 和 `.claude-plugin/marketplace.json` 识别插件。
+Copilot CLI 的主流方式是 marketplace。仓库已提供根目录 `plugin.json` 和 `.github/plugin/marketplace.json`；Copilot CLI 也兼容 `.claude-plugin/marketplace.json`。
 
 ### 安装
 
 ```bash
-copilot plugin marketplace add MageByte-Zero/spec-superflow-marketplace
-copilot plugin install spec-superflow@spec-superflow-marketplace
+copilot plugin marketplace add MageByte-Zero/spec-superflow
+copilot plugin install spec-superflow@spec-superflow
 ```
 
 ### 升级
@@ -244,9 +262,23 @@ gemini extensions uninstall spec-superflow
 
 ## OpenCode
 
-OpenCode 使用本地 skills 发现方式。仓库已提供 `.agents/skills -> ../skills` 入口，在本仓库中打开 OpenCode 时可直接发现技能。
+OpenCode 支持本地 plugin 文件和 Agent Skills 目录。仓库已提供 `.opencode/plugins/spec-superflow.js` 插件入口，以及 `.agents/skills -> ../skills` 兼容入口。
 
-### 安装
+### 安装（推荐：Plugin Mode）
+
+```bash
+git clone https://github.com/MageByte-Zero/spec-superflow.git
+```
+
+在 OpenCode 的插件配置或 UI 中指向仓库内的插件文件：
+
+```text
+/absolute/path/to/spec-superflow/.opencode/plugins/spec-superflow.js
+```
+
+不要只复制这个 `.js` 文件到另一个项目；它会按相对路径读取仓库里的 `skills/` 和 `GEMINI.md`。如果希望项目内零配置，使用下面的 skills symlink 方式。
+
+### 安装（Skills Symlink）
 
 ```bash
 git clone https://github.com/MageByte-Zero/spec-superflow.git
@@ -279,12 +311,59 @@ rm -rf your-project/.agents/skills
 
 ---
 
+## WorkBuddy
+
+WorkBuddy 把 Skill 作为插件管理：Skill 文件需要进入 WorkBuddy marketplace 的 `plugins/` 目录，并在 `~/.workbuddy/settings.json` 中启用。安装器默认写入 `cb_teams_marketplace`。
+
+### 安装（推荐：一键脚本）
+
+```bash
+npx spec-superflow@latest install-workbuddy
+```
+
+本地仓库调试：
+
+```bash
+node /absolute/path/to/spec-superflow/scripts/spec-superflow.mjs install-workbuddy --local /absolute/path/to/spec-superflow
+```
+
+### 升级
+
+重新运行安装命令即可覆盖旧技能并保留已有 `enabledPlugins` 配置。
+
+### 卸载
+
+删除 WorkBuddy marketplace 中的 spec-superflow skill 目录，并从 `~/.workbuddy/settings.json` 的 `enabledPlugins` 中移除对应键：
+
+```text
+workflow-start@cb_teams_marketplace
+need-explorer@cb_teams_marketplace
+spec-writer@cb_teams_marketplace
+contract-builder@cb_teams_marketplace
+build-executor@cb_teams_marketplace
+bug-investigator@cb_teams_marketplace
+code-reviewer@cb_teams_marketplace
+release-archivist@cb_teams_marketplace
+spec-merger@cb_teams_marketplace
+```
+
+---
+
 ## Trae
 
-### 安装
+Trae IDE / TRAE Work 原生支持 `SKILL.md`。项目技能目录是 `.trae/skills/`，全局技能目录是 `~/.trae/skills/`；TRAE Work 也支持上传包含根级 `SKILL.md` 的 zip 或 `.skill` 文件，并可从内置 skill marketplace 安装。
+
+### 安装（本地目录）
 
 ```bash
 git clone https://github.com/MageByte-Zero/spec-superflow.git
+mkdir -p .trae/skills
+cp -R spec-superflow/skills/* .trae/skills/
+```
+
+全局安装：
+
+```bash
 mkdir -p ~/.trae/skills
 cp -R spec-superflow/skills/* ~/.trae/skills/
 ```
@@ -293,12 +372,13 @@ cp -R spec-superflow/skills/* ~/.trae/skills/
 
 ```bash
 cd /path/to/spec-superflow && git pull
-cp -R spec-superflow/skills/* ~/.trae/skills/
+cp -R skills/* ~/.trae/skills/
 ```
 
 ### 卸载
 
 ```bash
+rm -rf .trae/skills/
 rm -rf ~/.trae/skills/
 ```
 

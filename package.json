@@ -29,7 +29,8 @@
     "codex",
     "gemini-cli",
     "copilot-cli",
-    "opencode"
+    "opencode",
+    "workbuddy"
   ],
   "author": "MageByte",
   "license": "MIT",

@@ -39,9 +39,9 @@ The agent inspects your current artifacts, performs **content-level detection** 
 
 ## Installation
 
-### Claude Code (Primary)
+### Claude Code (Marketplace)
 
-Via the official plugin marketplace:
+Claude Code's primary installation path is the plugin marketplace:
 
 ```bash
 /plugin marketplace add MageByte-Zero/spec-superflow
@@ -49,13 +49,37 @@ Via the official plugin marketplace:
 /plugin update spec-superflow@spec-superflow   # upgrade
 ```
 
-### Cursor
+### Cursor (Skills directories / GitHub import)
 
 ```bash
 npx spec-superflow@latest install-cursor
 
-# Or via marketplace (submitted, pending review):
-# /add-plugin spec-superflow
+# Or run the installer directly:
+curl -fsSL https://raw.githubusercontent.com/MageByte-Zero/spec-superflow/main/scripts/install-cursor.mjs | node -
+```
+
+Cursor discovers `.cursor/skills/`, `.agents/skills/`, `~/.cursor/skills/`, and compatible Claude/Codex skill directories. You can also import a GitHub repo from Customize → Rules → Remote Rule (Github).
+
+### OpenAI Codex CLI / App
+
+Codex uses the Plugin Directory / marketplace model. This repo ships `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`.
+
+```bash
+codex
+/plugins
+
+# Or add the community marketplace and install:
+codex plugin marketplace add hashgraph-online/awesome-codex-plugins
+codex plugin add spec-superflow@spec-superflow
+```
+
+In the Codex app, open **Plugins** and install or enable `spec-superflow`. If installed from the CLI, restart the app and enable it in the Plugins panel.
+
+### GitHub Copilot CLI
+
+```bash
+copilot plugin marketplace add MageByte-Zero/spec-superflow
+copilot plugin install spec-superflow@spec-superflow
 ```
 
 ### Gemini CLI
@@ -65,19 +89,13 @@ gemini extensions install https://github.com/MageByte-Zero/spec-superflow
 gemini extensions update spec-superflow   # upgrade
 ```
 
-### GitHub Copilot CLI
-
-```bash
-copilot plugin marketplace add MageByte-Zero/spec-superflow-marketplace
-copilot plugin install spec-superflow@spec-superflow-marketplace
-```
-
-### Other Platforms
+### OpenCode / WorkBuddy / Trae
 
 | Platform | Method | Status |
 |----------|--------|--------|
-| **OpenAI Codex CLI** | Community: `codex plugin marketplace add hashgraph-online/awesome-codex-plugins` | PR submitted |
-| **OpenCode / Trae** | `git clone` → symlink `skills/` | Manual setup |
+| **OpenCode** | `.opencode/plugins/spec-superflow.js` or `.agents/skills -> skills/` | Entry provided |
+| **WorkBuddy** | `npx spec-superflow@latest install-workbuddy` | Installer provided |
+| **Trae IDE / TRAE Work** | `.trae/skills/`, `~/.trae/skills/`, or zip/.skill upload | Manual/import |
 
 > Full installation guide: [INSTALL.md](../INSTALL.md)
 
@@ -97,6 +115,7 @@ npm install -g spec-superflow
 | `ssf inject <dir>` | Generate multi-platform phase-guard artifacts |
 | `ssf audit <dir>` | Generate decision-point audit report |
 | `ssf install-cursor` | Deploy to `.cursor/` directory |
+| `ssf install-workbuddy` | Deploy to WorkBuddy marketplace and enable skills |
 
 ### Version
 

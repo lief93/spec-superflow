@@ -15,24 +15,28 @@ function checkVersionConsistency(root) {
     { name: '.claude-plugin/plugin.json', path: ['version'] },
     { name: '.claude-plugin/marketplace.json', path: ['plugins', '0', 'version'] },
     { name: '.cursor-plugin/plugin.json', path: ['version'] },
+    { name: '.cursor-plugin/marketplace.json', path: ['metadata', 'version'] },
     { name: '.codex-plugin/plugin.json', path: ['version'] },
     { name: 'gemini-extension.json', path: ['version'] },
+    { name: '.github/plugin/marketplace.json', path: ['metadata', 'version'] },
+    { name: '.github/plugin/marketplace.json', path: ['plugins', '0', 'version'] },
   ];
 
   const versions = {};
   for (const f of files) {
+    const key = `${f.name}:${f.path.join('.')}`;
     const data = readJsonIfExists(join(root, f.name));
-    if (!data) { versions[f.name] = null; continue; }
+    if (!data) { versions[key] = null; continue; }
     let val = data;
     for (const p of f.path) val = val?.[p];
-    versions[f.name] = val || null;
+    versions[key] = val || null;
   }
 
   const uniqueVersions = [...new Set(Object.values(versions).filter(Boolean))];
-  const pkgVersion = versions['package.json'];
+  const pkgVersion = versions['package.json:version'];
 
   if (uniqueVersions.length <= 1) {
-    return { pass: true, message: `Version: ${pkgVersion} (consistent across ${Object.keys(versions).filter(k => versions[k]).length} manifests)` };
+    return { pass: true, message: `Version: ${pkgVersion} (consistent across ${Object.keys(versions).filter(k => versions[k]).length} manifest fields)` };
   }
   const mismatches = Object.entries(versions)
     .filter(([, v]) => v !== pkgVersion)

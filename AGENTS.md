@@ -4,7 +4,7 @@ This file provides guidance to Codex (codex.ai) when working with code in this r
 
 ## What This Is
 
-A self-contained Codex plugin that integrates OpenSpec-style planning + Superpowers execution discipline. Zero runtime dependencies, supports 7 platforms (Claude Code, Cursor, Codex, OpenCode, Copilot CLI, Gemini CLI, Trae).
+A self-contained Codex plugin that integrates OpenSpec-style planning + Superpowers execution discipline. Zero runtime dependencies, supports 9 installation surfaces (Claude Code, Cursor, OpenAI Codex CLI, OpenAI Codex App, GitHub Copilot CLI, Gemini CLI, OpenCode, WorkBuddy, Trae).
 
 ## Commands
 
@@ -93,7 +93,7 @@ exploring → specifying → bridging → approved-for-build → executing → c
 ### Hooks (`hooks/`)
 
 - `hooks/session-start` — Detects platform and injects `workflow-start/SKILL.md` as session context.
-- `hooks/hooks.json` — Claude Code hook config (triggers on Startup | Clear | Compact).
+- `hooks/hooks.json` — Claude Code hook config (SessionStart).
 - `hooks/hooks-cursor.json` — Cursor equivalent.
 
 ### Key Files
@@ -116,7 +116,7 @@ exploring → specifying → bridging → approved-for-build → executing → c
 - **Content-level stale detection** — `workflow-start` compares proposal scope vs contract intent lock, not file timestamps.
 - **Self-contained** — does not require OpenSpec or Superpowers to be installed. Absorbed concepts are reimplemented here.
 - **Zero runtime dependencies** — only TypeScript as devDependency.
-- **Multi-platform, single source** — Same 9 skills across 7 platforms. Platform-specific wiring is isolated to hooks and plugin manifests (`.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.opencode/`, `gemini-extension.json`).
+- **Multi-platform, single source** — Same 9 skills across Claude Code, Cursor, Codex CLI/App, Copilot CLI, Gemini CLI, OpenCode, WorkBuddy, and Trae. Platform-specific wiring is isolated to hooks, plugin manifests, local skill directories, and installers (`.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.github/plugin/`, `.opencode/`, `.agents/`, `gemini-extension.json`, `scripts/lib/cmd-install-workbuddy.mjs`).
 
 ## CI/CD (`.github/workflows/ci.yml`)
 
@@ -133,7 +133,7 @@ Test data lives in `docs/examples/` — real proposal/spec/design artifacts from
 ## Release Checklist
 
 Refer to `docs/release-checklist.md` before publishing. Key items:
-- Keep `README.md`, `docs/README_en.md`, `INSTALL.md`, `CHANGELOG.md`, and all 7 plugin manifests in sync. Use `ssf version <semver>`.
+- Keep `README.md`, `docs/README_en.md`, `INSTALL.md`, `CHANGELOG.md`, and all plugin manifests/installers in sync. Use `ssf version <semver>`.
 - Verify all examples are complete (proposal + specs + design + tasks + execution-contract + README)
 - No stray `TODO` or `TBD` markers
 - `package.json` version matches `.claude-plugin/plugin.json` version

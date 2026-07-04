@@ -83,6 +83,7 @@ function main() {
   console.log('Upgrade commands:');
   console.log('  Claude Code: /plugin update spec-superflow@spec-superflow');
   console.log('  Cursor:      re-run the install-cursor.mjs script');
+  console.log('  WorkBuddy:   npx spec-superflow@latest install-workbuddy');
   console.log('  npm:         npm install -g spec-superflow@latest');
   process.exit(1);
 }
