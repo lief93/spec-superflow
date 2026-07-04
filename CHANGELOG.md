@@ -4,6 +4,22 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [0.8.9] - 2026-07-04
+
+### Added
+
+- **WorkBuddy installer** — New `ssf install-workbuddy` command deploys all 9 skills into WorkBuddy's marketplace plugin directory and enables them in `~/.workbuddy/settings.json`.
+- **WorkBuddy installer tests** — Covers target path planning, skill copy behavior, settings preservation, and package-root resolution for `npx` usage.
+
+### Changed
+
+- **Installation docs** — Updated README, English README, INSTALL.md, OpenCode notes, AGENTS.md, and llms.txt to reflect current mainstream installation paths for Claude Code, Cursor, OpenAI Codex CLI/App, GitHub Copilot CLI, Gemini CLI, OpenCode, WorkBuddy, and Trae.
+- **Update guidance** — Added WorkBuddy upgrade command to the version reminder output.
+
+### Fixed
+
+- **Doctor manifest coverage** — `ssf doctor` now checks `.cursor-plugin/marketplace.json` and `.github/plugin/marketplace.json`, and correctly handles multiple version fields in the same manifest file.
+
 ## [0.8.8] - 2026-07-03
 
 ### Changed
