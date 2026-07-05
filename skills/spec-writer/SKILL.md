@@ -69,6 +69,31 @@ Generate one at a time. Confirm each before next. This prevents scope drift — 
 
 **If any artifact fails validation, fix before handing off to contract-builder.**
 
+## Validation Repair Loop
+
+After all non-skipped planning artifacts are written, run:
+
+```bash
+ssf validate <change-dir>
+```
+
+If validation fails, do not hand off to `contract-builder`. Regenerate the failing planning artifacts from DP-0, the approved requirement discussion, and the current artifact set; do not patch symptoms with isolated lines.
+
+Regeneration rules:
+
+- `proposal.md` failure: regenerate `proposal.md`; because proposal scope drives downstream artifacts, re-check and regenerate `specs/`, `design.md`, and `tasks.md` if scope, capabilities, or out-of-scope items changed.
+- `specs/` failure: regenerate the affected `specs/<capability>/spec.md` files using the required `spec.md` filename and delta headers; if requirement names or behaviors change, regenerate `design.md` and `tasks.md`.
+- `design.md` failure: regenerate `design.md` from the current proposal/specs; if decisions, interfaces, or constraints change, regenerate `tasks.md`.
+- `tasks.md` failure: regenerate `tasks.md` from the current proposal/specs/design, ensuring every requirement maps to concrete batches and TDD steps.
+- `specs/ layout` failure: move or rewrite misplaced markdown into `specs/<capability>/spec.md`; remove duplicate or orphan spec files created by your failed generation attempt.
+
+After regenerating, run `ssf validate <change-dir>` once more.
+
+- If it passes: present the final artifact summary and proceed to DP-2 approval.
+- If it still fails: stop, report the exact remaining validation errors, and do not route to `contract-builder`.
+
+Limit: one automatic regeneration cycle per artifact family (`proposal`, `specs`, `design`, `tasks`) before stopping for user input. This prevents silent churn and keeps the repair auditable.
+
 ## DP-2: Artifact Review Gate
 
 Present summary of all 4 artifacts (2-3 sentences each). Ask user for adjustments. After approval:
@@ -86,4 +111,4 @@ Do not start implementation after writing planning artifacts. Once stable, valid
 - **Parse failures**: Report specific file/error; don't generate from corrupted templates
 - **Missing templates**: Fall back to artifact structure defined in this skill
 - **User interruption**: Artifacts on disk are the recovery checkpoint; resume from first missing/incomplete one
-- **Validation failure**: Fix before handoff — do not hand off broken artifacts
+- **Validation failure**: Run the Validation Repair Loop. If the second validation fails, report the exact remaining failures and stop before handoff.
