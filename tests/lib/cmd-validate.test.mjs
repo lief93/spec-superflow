@@ -19,7 +19,7 @@ function writeValidPlanningArtifacts(changeDir) {
 }
 
 function writeValidExecutionContract(changeDir) {
-  writeFileSync(join(changeDir, 'execution-contract.md'), '# Execution Contract\n\n## Intent Lock\n\nAdd request rate limiting.\n\n## Approved Behavior\n\nRate limit requests when clients exceed configured limits.\n\n## Design Constraints\n\nUse shared middleware.\n\n## Task Batches\n\n### Batch 1\n\n- Add tests and middleware.\n\n## Test Obligations\n\n- Start with failing tests for Rate limit requests.\n\n## Execution Mode\n\n- Mode: Inline\n\n## Verification Dimensions\n\n| Dimension | Status | Findings |\n|---|---|---|\n| Completeness | Pending | - |\n\n## Review Gates\n\n- Review before closure.\n\n## Escalation Rules\n\n- Return to bridging if middleware shape changes.\n');
+  writeFileSync(join(changeDir, 'execution-contract.md'), '# Execution Contract\n\n## Intent Lock\n\nAdd request rate limiting.\n\n## Approved Behavior\n\nRate limit requests when clients exceed configured limits.\n\n## Requirement Traceability\n\n| Requirement | Approved Behavior | Test Obligation | Batch |\n|---|---|---|---|\n| Rate limit requests | Reject over-limit requests before expensive handlers run | Focused tests for HTTP 429 and service-call prevention | Batch 1 |\n\n## Design Constraints\n\nUse shared middleware.\n\n## Task Batches\n\n### Batch 1\n\n- Add tests and middleware.\n\n## Test Obligations\n\n- Start with failing tests for Rate limit requests.\n\n## Execution Mode\n\n- Mode: Inline\n\n## Verification Dimensions\n\n| Dimension | Status | Findings |\n|---|---|---|\n| Completeness | Pending | - |\n\n## Review Gates\n\n- Review before closure.\n\n## Escalation Rules\n\n- Return to bridging if middleware shape changes.\n');
 }
 
 function runValidate(changeDir) {
@@ -76,16 +76,43 @@ describe('cmd-validate', () => {
     assert.ok(result.stdout.includes('Spec files must be named spec.md'));
   });
 
-  it('fails when execution-contract does not reflect a spec requirement', () => {
+  it('fails when requirement titles appear without a traceability table', () => {
     const changeDir = join(tempDir, 'contract-missing-requirement');
     mkdirSync(changeDir, { recursive: true });
     writeValidPlanningArtifacts(changeDir);
     writeValidExecutionContract(changeDir);
-    writeFileSync(join(changeDir, 'execution-contract.md'), '# Execution Contract\n\n## Intent Lock\n\nAdd request protection.\n\n## Approved Behavior\n\nHandle excessive traffic.\n\n## Design Constraints\n\nUse shared middleware.\n\n## Task Batches\n\n### Batch 1\n\n- Add tests.\n\n## Test Obligations\n\n- Start with failing tests.\n\n## Review Gates\n\n- Review before closure.\n\n## Escalation Rules\n\n- Return to bridging if design changes.\n');
+    writeFileSync(join(changeDir, 'execution-contract.md'), '# Execution Contract\n\n## Intent Lock\n\nAdd request protection.\n\n## Approved Behavior\n\nRate limit requests appears here but is not mapped.\n\n## Design Constraints\n\nUse shared middleware.\n\n## Task Batches\n\n### Batch 1\n\n- Add tests.\n\n## Test Obligations\n\n- Start with failing tests.\n\n## Review Gates\n\n- Review before closure.\n\n## Escalation Rules\n\n- Return to bridging if design changes.\n');
 
     const result = runValidate(changeDir);
 
     assert.equal(result.exitCode, 1);
-    assert.ok(result.stdout.includes('Requirement not reflected in execution contract: Rate limit requests'));
+    assert.ok(result.stdout.includes('Missing required section: ## Requirement Traceability'));
+    assert.ok(result.stdout.includes('Missing Requirement Traceability table'));
+  });
+
+  it('fails when a traceability row omits test obligations', () => {
+    const changeDir = join(tempDir, 'contract-empty-test-obligation');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    writeFileSync(join(changeDir, 'execution-contract.md'), '# Execution Contract\n\n## Intent Lock\n\nAdd request protection.\n\n## Approved Behavior\n\nRate limit requests when clients exceed configured limits.\n\n## Requirement Traceability\n\n| Requirement | Approved Behavior | Test Obligation | Batch |\n|---|---|---|---|\n| Rate limit requests | Reject over-limit requests before expensive handlers run |  | Batch 1 |\n\n## Design Constraints\n\nUse shared middleware.\n\n## Task Batches\n\n### Batch 1\n\n- Add tests.\n\n## Test Obligations\n\n- Start with failing tests.\n\n## Review Gates\n\n- Review before closure.\n\n## Escalation Rules\n\n- Return to bridging if design changes.\n');
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(result.stdout.includes('must map to non-empty Test Obligation'));
+  });
+
+  it('fails when a traceability row references a missing task batch', () => {
+    const changeDir = join(tempDir, 'contract-missing-batch');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    writeFileSync(join(changeDir, 'execution-contract.md'), '# Execution Contract\n\n## Intent Lock\n\nAdd request protection.\n\n## Approved Behavior\n\nRate limit requests when clients exceed configured limits.\n\n## Requirement Traceability\n\n| Requirement | Approved Behavior | Test Obligation | Batch |\n|---|---|---|---|\n| Rate limit requests | Reject over-limit requests before expensive handlers run | Focused tests for HTTP 429 | Batch 9 |\n\n## Design Constraints\n\nUse shared middleware.\n\n## Task Batches\n\n### Batch 1\n\n- Add tests.\n\n## Test Obligations\n\n- Start with failing tests.\n\n## Review Gates\n\n- Review before closure.\n\n## Escalation Rules\n\n- Return to bridging if design changes.\n');
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(result.stdout.includes('references missing task batch: batch 9'));
   });
 });

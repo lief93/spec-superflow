@@ -13,6 +13,12 @@
 - **关键场景**：
 - **验收检查**：
 
+## Requirement Traceability
+
+| Requirement | Approved Behavior | Test Obligation | Batch |
+|---|---|---|---|
+|  |  |  | Batch 1 |
+
 ## Design Constraints
 
 - **架构约束**：
