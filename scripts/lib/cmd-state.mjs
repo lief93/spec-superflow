@@ -2,7 +2,7 @@
 import { parseArgs } from 'node:util';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readState, writeState, updateField, rebuildState } from './state-loader.mjs';
 import { computeArtifactsHash, computeContractHash } from './hash.mjs';
@@ -45,18 +45,20 @@ export async function run(args) {
     process.exit(2);
   }
 
+  const changePath = resolve(changeDir);
+
   switch (sub) {
     case 'init': {
-      if (!existsSync(changeDir)) {
-        mkdirSync(changeDir, { recursive: true });
+      if (!existsSync(changePath)) {
+        mkdirSync(changePath, { recursive: true });
       }
-      const hash = computeArtifactsHash(changeDir);
-      const ch = computeContractHash(changeDir);
-      const state = readState(changeDir);
+      const hash = computeArtifactsHash(changePath);
+      const ch = computeContractHash(changePath);
+      const state = readState(changePath);
       state.artifacts_hash = hash;
       state.contract_hash = ch;
       state.last_transition = new Date().toISOString();
-      writeState(changeDir, state);
+      writeState(changePath, state);
       if (values.json) {
         console.log(JSON.stringify({ ok: true, artifacts_hash: hash, contract_hash: ch }));
       } else {
@@ -65,8 +67,8 @@ export async function run(args) {
       break;
     }
     case 'check': {
-      const state = readState(changeDir);
-      const currentHash = computeArtifactsHash(changeDir);
+      const state = readState(changePath);
+      const currentHash = computeArtifactsHash(changePath);
       const consistent = state.artifacts_hash === currentHash;
       if (values.json) {
         console.log(JSON.stringify({
@@ -100,7 +102,7 @@ export async function run(args) {
         process.exit(1);
       }
 
-      const state = readState(changeDir);
+      const state = readState(changePath);
       const fromState = state.state;
 
       // Run guard before allowing transition (H-2: enforce guard)
@@ -108,7 +110,7 @@ export async function run(args) {
       const rawWorkflow = state.workflow || 'full';
       // Normalize: guard only accepts full/hotfix/tweak, not "auto"
       const workflow = rawWorkflow === 'auto' ? 'full' : rawWorkflow;
-      const guardResult = spawnSync('node', [guardScript, 'check', changeDir, fromState, toState, '--json', '--workflow', workflow], {
+      const guardResult = spawnSync('node', [guardScript, 'check', changePath, fromState, toState, '--json', '--workflow', workflow], {
         cwd: join(__dirname, '..', '..'),
         timeout: 10_000,
       });
@@ -137,7 +139,7 @@ export async function run(args) {
       state.last_transition_from = fromState;
       state.last_transition_to = toState;
       state.last_transition = new Date().toISOString();
-      writeState(changeDir, state);
+      writeState(changePath, state);
       if (values.json) {
         console.log(JSON.stringify({ ok: true, from: fromState, to: toState }));
       } else {
@@ -151,7 +153,7 @@ export async function run(args) {
         console.error('Usage: ssf state get <change-dir> <field>');
         process.exit(2);
       }
-      const state = readState(changeDir);
+      const state = readState(changePath);
       if (!Object.prototype.hasOwnProperty.call(state, field) && field in state) {
         console.error(`Field '${field}' is not a valid state field`);
         process.exit(1);
@@ -165,7 +167,7 @@ export async function run(args) {
       break;
     }
     case 'rebuild': {
-      const state = rebuildState(changeDir, { computeArtifactsHash, computeContractHash });
+      const state = rebuildState(changePath, { computeArtifactsHash, computeContractHash });
       if (values.json) {
         console.log(JSON.stringify({ ok: true, state: state.state }));
       } else {
@@ -185,7 +187,7 @@ export async function run(args) {
         console.error(`⛔ Field '${field}' is not settable (use 'transition' for state, or check SETTABLE_FIELDS)`);
         process.exit(1);
       }
-      updateField(changeDir, field, value);
+      updateField(changePath, field, value);
       if (values.json) {
         console.log(JSON.stringify({ ok: true, field, value }));
       } else {

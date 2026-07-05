@@ -1,10 +1,14 @@
 // tests/lib/cmd-inject.test.mjs
 // Tests for scripts/lib/cmd-inject.mjs
-import { describe, it, before } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 let generatePhaseGuard, toCursorMdc, toCopilotInstructions;
+const CLI_PATH = join(process.cwd(), 'scripts/spec-superflow.mjs');
 
 describe('cmd-inject: generatePhaseGuard()', () => {
   before(async () => {
@@ -112,5 +116,80 @@ describe('cmd-inject: toCopilotInstructions()', () => {
     assert.ok(result.includes('## Allowed'));
     // Should NOT contain the change name in heading
     assert.ok(!result.includes('# Phase Guard: test-change'));
+  });
+});
+
+describe('cmd-inject: CLI platform selection', () => {
+  let tempDir;
+
+  before(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'ssf-inject-cli-'));
+  });
+
+  after(() => {
+    if (tempDir) rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function makeChangeDir(name) {
+    const changeDir = join(tempDir, 'changes', name);
+    mkdirSync(changeDir, { recursive: true });
+    writeFileSync(join(changeDir, '.spec-superflow.yaml'), 'state: exploring\nworkflow: full\nchange_name: test\n');
+    return changeDir;
+  }
+
+  function runInject(args, cwd = tempDir) {
+    try {
+      const stdout = execFileSync(process.execPath, [CLI_PATH, 'inject', ...args], {
+        cwd,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return { exitCode: 0, stdout: stdout.trim(), stderr: '' };
+    } catch (err) {
+      return {
+        exitCode: err.status || 1,
+        stdout: err.stdout?.toString().trim() || '',
+        stderr: err.stderr?.toString().trim() || err.message,
+      };
+    }
+  }
+
+  it('requires explicit platforms instead of generating every supported platform', () => {
+    const projectRoot = join(tempDir, 'no-default-platforms');
+    mkdirSync(projectRoot, { recursive: true });
+    const changeDir = makeChangeDir('no-default-platforms');
+
+    const result = runInject([changeDir], projectRoot);
+
+    assert.equal(result.exitCode, 2);
+    assert.ok(result.stderr.includes('No platforms specified'));
+    assert.equal(existsSync(join(projectRoot, '.cursor')), false);
+    assert.equal(existsSync(join(projectRoot, '.github', 'copilot-instructions.md')), false);
+    assert.equal(existsSync(join(projectRoot, 'GEMINI.md')), false);
+  });
+
+  it('rejects an empty platform list', () => {
+    const projectRoot = join(tempDir, 'empty-platforms');
+    mkdirSync(projectRoot, { recursive: true });
+    const changeDir = makeChangeDir('empty-platforms');
+
+    const result = runInject([changeDir, '--platforms', ','], projectRoot);
+
+    assert.equal(result.exitCode, 2);
+    assert.ok(result.stderr.includes('No valid platforms specified'));
+  });
+
+  it('writes only the explicitly requested platform', () => {
+    const projectRoot = join(tempDir, 'explicit-claude');
+    mkdirSync(projectRoot, { recursive: true });
+    const changeDir = makeChangeDir('explicit-claude');
+
+    const result = runInject([changeDir, '--platforms', 'claude'], projectRoot);
+
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.equal(existsSync(join(projectRoot, '.claude', 'always', 'phase-guard.md')), true);
+    assert.equal(existsSync(join(projectRoot, '.cursor')), false);
+    assert.equal(existsSync(join(projectRoot, '.github', 'copilot-instructions.md')), false);
+    assert.equal(existsSync(join(projectRoot, 'GEMINI.md')), false);
   });
 });
