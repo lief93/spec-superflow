@@ -46,6 +46,108 @@ function hasSection(content, title) {
   return new RegExp(`^##\\s+.*${escaped}.*$`, 'im').test(content);
 }
 
+function extractSection(content, title) {
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  const heading = new RegExp(`^##\\s+.*${escaped}.*$`, 'im');
+  const match = heading.exec(content);
+  if (!match) return null;
+
+  const start = match.index + match[0].length;
+  const rest = content.slice(start);
+  const next = rest.search(/^##\s+/m);
+  return (next === -1 ? rest : rest.slice(0, next)).trim();
+}
+
+function normalizeCell(value) {
+  return String(value || '')
+    .replace(/\\\|/g, '|')
+    .replace(/[`*_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeRequirementName(value) {
+  return normalizeCell(value).toLowerCase();
+}
+
+function isMeaningfulCell(value) {
+  const normalized = normalizeCell(value).toLowerCase();
+  return normalized !== '' && !['-', '—', 'n/a', 'na', 'none', 'tbd', 'todo', 'pending'].includes(normalized);
+}
+
+function splitMarkdownTableRow(line) {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('|')) return null;
+  return trimmed
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map(normalizeCell);
+}
+
+function isTableDelimiter(cells) {
+  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, '')));
+}
+
+function normalizeHeader(value) {
+  return normalizeCell(value).toLowerCase().replace(/s$/, '');
+}
+
+function parseTraceabilityTable(sectionContent) {
+  const lines = sectionContent.split('\n').map(line => line.trim()).filter(Boolean);
+
+  for (let i = 0; i < lines.length - 1; i++) {
+    const headerCells = splitMarkdownTableRow(lines[i]);
+    const delimiterCells = splitMarkdownTableRow(lines[i + 1]);
+    if (!headerCells || !delimiterCells || !isTableDelimiter(delimiterCells)) continue;
+
+    const headers = headerCells.map(normalizeHeader);
+    const requiredHeaders = ['requirement', 'approved behavior', 'test obligation', 'batch'];
+    const indexes = {};
+    for (const required of requiredHeaders) {
+      const idx = headers.indexOf(required);
+      if (idx === -1) return { error: `Requirement Traceability table must include columns: ${requiredHeaders.join(', ')}` };
+      indexes[required] = idx;
+    }
+
+    const rows = [];
+    for (let j = i + 2; j < lines.length; j++) {
+      const cells = splitMarkdownTableRow(lines[j]);
+      if (!cells) break;
+      rows.push({
+        requirement: cells[indexes.requirement] || '',
+        approvedBehavior: cells[indexes['approved behavior']] || '',
+        testObligation: cells[indexes['test obligation']] || '',
+        batch: cells[indexes.batch] || '',
+      });
+    }
+    return { rows };
+  }
+
+  return { error: 'Requirement Traceability section must contain a markdown table' };
+}
+
+function extractBatchNames(contractContent) {
+  const section = extractSection(contractContent, 'Task Batches') || '';
+  const names = new Set();
+  const regex = /^###\s*(Batch\s+\d+)/gim;
+  let match;
+  while ((match = regex.exec(section)) !== null) {
+    names.add(match[1].toLowerCase());
+  }
+  return names;
+}
+
+function referencedBatches(value) {
+  const names = [];
+  const regex = /\bBatch\s+\d+\b/gi;
+  let match;
+  while ((match = regex.exec(value)) !== null) {
+    names.push(match[0].toLowerCase());
+  }
+  return names;
+}
+
 function validateSpecsLayout(changeDir, specsDir, specFiles) {
   const mdFiles = findFiles(specsDir, /\.md$/);
   const issues = [];
@@ -75,6 +177,7 @@ function validateExecutionContract(contractContent, requirementNames) {
   const requiredSections = [
     'Intent Lock',
     'Approved Behavior',
+    'Requirement Traceability',
     'Design Constraints',
     'Task Batches',
     'Test Obligations',
@@ -104,12 +207,94 @@ function validateExecutionContract(contractContent, requirementNames) {
     }
   }
 
-  for (const requirementName of requirementNames) {
-    if (!contractContent.includes(requirementName)) {
+  const traceabilitySection = extractSection(contractContent, 'Requirement Traceability');
+  if (!traceabilitySection) {
+    issues.push({
+      level: 'ERROR',
+      path: 'execution-contract.md',
+      message: 'Missing Requirement Traceability table. Regenerate execution-contract.md with contract-builder so every spec requirement maps to behavior, tests, and batches.',
+    });
+    return makeReport(issues);
+  }
+
+  const table = parseTraceabilityTable(traceabilitySection);
+  if (table.error) {
+    issues.push({
+      level: 'ERROR',
+      path: 'execution-contract.md',
+      message: table.error,
+    });
+    return makeReport(issues);
+  }
+
+  const batchNames = extractBatchNames(contractContent);
+  const rowsByRequirement = new Map();
+  for (const row of table.rows) {
+    const key = normalizeRequirementName(row.requirement);
+    if (!key) continue;
+    if (rowsByRequirement.has(key)) {
       issues.push({
         level: 'ERROR',
         path: 'execution-contract.md',
-        message: `Requirement not reflected in execution contract: ${requirementName}`,
+        message: `Duplicate Requirement Traceability row: ${row.requirement}`,
+      });
+      continue;
+    }
+    rowsByRequirement.set(key, row);
+  }
+
+  for (const requirementName of requirementNames) {
+    const row = rowsByRequirement.get(normalizeRequirementName(requirementName));
+    if (!row) {
+      issues.push({
+        level: 'ERROR',
+        path: 'execution-contract.md',
+        message: `Requirement missing from traceability table: ${requirementName}`,
+      });
+      continue;
+    }
+
+    if (!isMeaningfulCell(row.approvedBehavior)) {
+      issues.push({
+        level: 'ERROR',
+        path: 'execution-contract.md',
+        message: `Traceability row for "${requirementName}" must map to non-empty Approved Behavior`,
+      });
+    }
+    if (!isMeaningfulCell(row.testObligation)) {
+      issues.push({
+        level: 'ERROR',
+        path: 'execution-contract.md',
+        message: `Traceability row for "${requirementName}" must map to non-empty Test Obligation`,
+      });
+    }
+
+    const batches = referencedBatches(row.batch);
+    if (batches.length === 0) {
+      issues.push({
+        level: 'ERROR',
+        path: 'execution-contract.md',
+        message: `Traceability row for "${requirementName}" must reference at least one Task Batches heading such as Batch 1`,
+      });
+    }
+    for (const batch of batches) {
+      if (!batchNames.has(batch)) {
+        issues.push({
+          level: 'ERROR',
+          path: 'execution-contract.md',
+          message: `Traceability row for "${requirementName}" references missing task batch: ${batch}`,
+        });
+      }
+    }
+  }
+
+  for (const row of table.rows) {
+    const key = normalizeRequirementName(row.requirement);
+    if (key && !requirementNames.some(name => normalizeRequirementName(name) === key)) {
+      issues.push({
+        level: 'WARNING',
+        path: 'execution-contract.md',
+        message: `Traceability row has no matching spec requirement: ${row.requirement}`,
       });
     }
   }

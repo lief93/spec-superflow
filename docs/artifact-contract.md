@@ -51,6 +51,7 @@ Defines:
 
 - the approved intent lock
 - the approved behavior summary
+- requirement traceability from each spec requirement to behavior, test obligation, and execution batch
 - implementation constraints
 - task batches
 - test obligations

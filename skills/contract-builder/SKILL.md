@@ -27,6 +27,20 @@ Before finalizing:
 3. Flag unmapped requirements in Escalation Rules
 4. Note cross-batch dependencies
 
+## Requirement Traceability Table
+
+`execution-contract.md` must include a `## Requirement Traceability` table with these exact columns:
+
+| Requirement | Approved Behavior | Test Obligation | Batch |
+|---|---|---|---|
+
+Rules:
+- Include one row for every `### Requirement:` from `specs/**/spec.md`.
+- `Requirement` must use the exact requirement name from the spec.
+- `Approved Behavior`, `Test Obligation`, and `Batch` must be non-empty.
+- `Batch` must reference an existing `### Batch N` heading from `## Task Batches`.
+- Do not satisfy traceability by listing requirement names without behavior/test/batch mappings.
+
 ## Contract Structure
 
 Must make obvious: approved behavior, out-of-scope, constraints, batches, test obligations, review gates, and conditions that force a rewind to planning. Prefer compression over repeating planning details.
@@ -58,6 +72,9 @@ Generate minimal contract: Intent Lock (one sentence), Task List (numbered), App
 ## Post-Generation
 
 Run `node scripts/spec-superflow.mjs state init <change-dir>` to create `.spec-superflow.yaml` with hashes.
+Run `node scripts/spec-superflow.mjs validate <change-dir>` after writing the contract.
+
+If validation fails on `execution-contract.md` traceability, regenerate the whole `execution-contract.md` from `proposal.md`, `specs/`, `design.md`, and `tasks.md`; do not append a bare list of requirement names. Re-run validate once. If it still fails, report the exact unmapped requirements or missing batches before asking for approval.
 
 ## Exception Handling
 
