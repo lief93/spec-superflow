@@ -10,11 +10,11 @@ import { execSync } from 'node:child_process';
 const CLI_PATH = join(process.cwd(), 'scripts/spec-superflow.mjs');
 let tempDir;
 
-function ssf(args) {
+function ssf(args, options = {}) {
   try {
     const result = execSync(
       `node ${CLI_PATH} ${args}`,
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], cwd: options.cwd || process.cwd() }
     );
     return { exitCode: 0, stdout: result.trim(), stderr: '' };
   } catch (err) {
@@ -134,6 +134,29 @@ describe('cmd-state: transition', () => {
     const parsed = JSON.parse(result.stdout);
     assert.equal(parsed.state, 'specifying');
   });
+
+  it('accepts relative change directories when running guard checks', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ssf-state-relative-root-'));
+    const relChangeDir = join('changes', 'relative-transition');
+    const changeDir = join(projectDir, relChangeDir);
+
+    try {
+      mkdirSync(join(changeDir, 'specs'), { recursive: true });
+      writeFileSync(join(changeDir, 'proposal.md'), '## Why\nRelative path transition should resolve against the caller working directory before invoking guard checks.\n## What Changes\n- Exercise relative change paths.');
+      writeFileSync(join(changeDir, 'design.md'), '# Design\n## Context\nRelative path guard check.\n## Goals\nResolve paths before guard execution.');
+      writeFileSync(join(changeDir, 'tasks.md'), '# Tasks\n- [x] Prepare relative path fixture');
+      writeFileSync(join(changeDir, 'specs', 'test.md'), '## ADDED Requirements\n### Requirement: Relative state transition\nThe system SHALL resolve relative change directories before guard checks.\n#### Scenario: Relative path\n- **WHEN** transition receives a relative path\n- **THEN** guard checks read the caller project artifacts');
+
+      const init = ssf(`state init ${relChangeDir}`, { cwd: projectDir });
+      assert.equal(init.exitCode, 0, init.stderr);
+
+      const transition = ssf(`state transition ${relChangeDir} specifying`, { cwd: projectDir });
+      assert.equal(transition.exitCode, 0, transition.stderr);
+      assert.ok(transition.stdout.includes('exploring -> specifying'));
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('cmd-state: get', () => {
@@ -195,6 +218,13 @@ describe('cmd-state: set', () => {
     ssf(`state set ${tempDir} dp_1_result "confirmed: csv export"`);
     const get = ssf(`state get ${tempDir} dp_1_result`);
     assert.ok(get.stdout.includes('confirmed: csv export'));
+  });
+
+  it('persists dp_0_result when set through the CLI', () => {
+    ssf(`state init ${tempDir}`);
+    ssf(`state set ${tempDir} dp_0_result "confirmed: scope locked"`);
+    const get = ssf(`state get ${tempDir} dp_0_result`);
+    assert.ok(get.stdout.includes('confirmed: scope locked'));
   });
 
   it('rejects non-settable fields', () => {

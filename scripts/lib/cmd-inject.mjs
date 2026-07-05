@@ -221,9 +221,26 @@ export async function run(args) {
     process.exit(2);
   }
 
-  const requested = values.platforms
-    ? values.platforms.split(',').map(p => p.trim().toLowerCase())
-    : SUPPORTED_PLATFORMS;
+  if (!values.platforms) {
+    const message = `No platforms specified. Pass --platforms with one or more of: ${SUPPORTED_PLATFORMS.join(', ')}`;
+    if (values.json) {
+      console.log(JSON.stringify({ ok: false, error: message, supported: SUPPORTED_PLATFORMS }));
+    } else {
+      console.error(message);
+    }
+    process.exit(2);
+  }
+
+  const requested = values.platforms.split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
+  if (requested.length === 0) {
+    const message = `No valid platforms specified. Pass --platforms with one or more of: ${SUPPORTED_PLATFORMS.join(', ')}`;
+    if (values.json) {
+      console.log(JSON.stringify({ ok: false, error: message, supported: SUPPORTED_PLATFORMS }));
+    } else {
+      console.error(message);
+    }
+    process.exit(2);
+  }
 
   const invalid = requested.filter(p => !SUPPORTED_PLATFORMS.includes(p));
   if (invalid.length > 0) {
