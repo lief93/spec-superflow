@@ -81,7 +81,7 @@ describe('cmd-install-workbuddy', () => {
     process.chdir(tempDir);
     try {
       const plan = planInstall({ homeDir: join(tempDir, 'home') });
-      assert.equal(plan.skillNames.length, 10);
+      assert.equal(plan.skillNames.length, 11);
       assert.ok(plan.skillsDir.endsWith('spec-superflow/skills'));
     } finally {
       process.chdir(previousCwd);

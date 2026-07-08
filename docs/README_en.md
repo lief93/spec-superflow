@@ -169,6 +169,7 @@ AI coding sessions fail in one of two ways:
 | 8 | `release-archivist` | Closing | Verification-before-completion + archive + risk summary |
 | 9 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
 | 10 | `figma-mcp-high-fidelity` | Design implementation | High-fidelity Figma MCP implementation with screenshot grounding and adaptive drilldown |
+| 11 | `figma-compose-implementation` | Android UI | design_context → visual render spec → Jetpack Compose → screenshot regression |
 
 ---
 

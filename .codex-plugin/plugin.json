@@ -26,7 +26,7 @@
   "interface": {
     "displayName": "spec-superflow",
     "shortDescription": "Spec-first workflow with guarded execution.",
-    "longDescription": "A self-contained Codex workflow plugin with ten skills for intent exploration, planning artifacts, execution contracts, TDD execution, review gates, systematic debugging, closure, delta spec sync, and Figma MCP high-fidelity implementation.",
+    "longDescription": "A self-contained Codex workflow plugin with eleven skills for intent exploration, planning artifacts, execution contracts, TDD execution, review gates, systematic debugging, closure, delta spec sync, Figma MCP high-fidelity implementation, and Figma-to-Compose visual-spec workflows.",
     "developerName": "MageByte",
     "category": "Developer Tools",
     "composerIcon": "./assets/icon.svg",

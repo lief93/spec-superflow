@@ -174,6 +174,7 @@ npx spec-superflow list          # 或通过 npx 使用
 | 8 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
 | 9 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
 | 10 | `figma-mcp-high-fidelity` | 设计实现 | Figma MCP 高保真还原，截图定标 + 自适应下钻 |
+| 11 | `figma-compose-implementation` | Android UI | design_context → visual render spec → Jetpack Compose → 截图回归 |
 
 ---
 

@@ -21,6 +21,7 @@ const TARGETS = [
   { path: 'skills/release-archivist/SKILL.md', label: 'skill: release-archivist' },
   { path: 'skills/spec-merger/SKILL.md', label: 'skill: spec-merger' },
   { path: 'skills/figma-mcp-high-fidelity/SKILL.md', label: 'skill: figma-mcp-high-fidelity' },
+  { path: 'skills/figma-compose-implementation/SKILL.md', label: 'skill: figma-compose-implementation' },
 ];
 
 /**
