@@ -1,7 +1,7 @@
 {
   "name": "spec-superflow",
   "version": "0.8.9",
-  "description": "Spec-first workflow: integrates OpenSpec planning engine + Superpowers execution discipline. 9 collaborative skills with embedded TDD, SDD, code review, debugging, and delta spec sync.",
+  "description": "Spec-first workflow: integrates OpenSpec planning engine + Superpowers execution discipline. 10 collaborative skills with embedded TDD, SDD, code review, debugging, delta spec sync, and Figma MCP high-fidelity implementation.",
   "source": "./",
   "author": {
     "name": "MageByte",

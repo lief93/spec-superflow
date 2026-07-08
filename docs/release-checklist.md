@@ -45,7 +45,7 @@ For each example in `docs/examples/`:
 - `node scripts/spec-superflow.mjs version <version> --dry-run` — reports all files in sync
 - `node scripts/check-version-consistency.mjs` — exits 0
 - `node scripts/spec-superflow.mjs --help` — all subcommands listed
-- `node scripts/spec-superflow.mjs install-workbuddy --dry-run` — finds all 9 skills and target paths
+- `node scripts/spec-superflow.mjs install-workbuddy --dry-run` — finds all 10 skills and target paths
 - `spec-superflow.config.json` absence still works (backward compatible defaults)
 - `package.json` `bin` field points to correct entry script
 

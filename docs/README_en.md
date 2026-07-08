@@ -168,6 +168,7 @@ AI coding sessions fail in one of two ways:
 | 7 | `code-reviewer` | Review | Structured review with 3-level severity classification |
 | 8 | `release-archivist` | Closing | Verification-before-completion + archive + risk summary |
 | 9 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
+| 10 | `figma-mcp-high-fidelity` | Design implementation | High-fidelity Figma MCP implementation with screenshot grounding and adaptive drilldown |
 
 ---
 

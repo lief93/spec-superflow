@@ -173,6 +173,7 @@ npx spec-superflow list          # 或通过 npx 使用
 | 7 | `code-reviewer` | 审查 | 结构化审查，三级问题分级 |
 | 8 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
 | 9 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
+| 10 | `figma-mcp-high-fidelity` | 设计实现 | Figma MCP 高保真还原，截图定标 + 自适应下钻 |
 
 ---
 
