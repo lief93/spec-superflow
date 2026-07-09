@@ -1,0 +1,4 @@
+interface:
+  display_name: "Figma MCP Design"
+  short_description: "Implement Figma designs from raw MCP facts"
+  default_prompt: "Use Figma MCP raw node data, deterministic summaries, and screenshot box comparisons to implement this design accurately."

@@ -41,7 +41,7 @@ TypeScript interfaces + regex-based parsers. Compiles to `dist/` (ES2022 + NodeN
 
 ### Skills (`skills/`)
 
-11 skills, one per directory. Each contains a `SKILL.md` that Codex loads as an instruction set:
+13 skills, one per directory. Each contains a `SKILL.md` that Codex loads as an instruction set:
 
 | Skill | Phase | Purpose |
 |-------|-------|---------|
@@ -56,6 +56,8 @@ TypeScript interfaces + regex-based parsers. Compiles to `dist/` (ES2022 + NodeN
 | `spec-merger` | Sync | Delta Spec → intelligent merge into main specs, conflict detection |
 | `figma-mcp-high-fidelity` | Design implementation | Figma MCP high-fidelity workflow with screenshot grounding and adaptive drilldown |
 | `figma-compose-implementation` | Android UI | Converts Figma MCP context into a visual render spec before Jetpack Compose implementation |
+| `lanhu-android-ui` | Android UI | Rebuild Android screens from Lanhu exports using deterministic JSON facts and screenshot measurements |
+| `figma-mcp-design` | Design implementation | Stabilizes noisy Figma MCP context with raw node summaries and measured screenshot box comparisons |
 
 ### Skill Sub-Prompts
 
@@ -118,7 +120,7 @@ exploring → specifying → bridging → approved-for-build → executing → c
 - **Content-level stale detection** — `workflow-start` compares proposal scope vs contract intent lock, not file timestamps.
 - **Self-contained** — does not require OpenSpec or Superpowers to be installed. Absorbed concepts are reimplemented here.
 - **Zero runtime dependencies** — only TypeScript as devDependency.
-- **Multi-platform, single source** — Same 11 skills across Claude Code, Cursor, Codex CLI/App, Copilot CLI, Gemini CLI, OpenCode, WorkBuddy, and Trae. Platform-specific wiring is isolated to hooks, plugin manifests, local skill directories, and installers (`.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.github/plugin/`, `.opencode/`, `.agents/`, `gemini-extension.json`, `scripts/lib/cmd-install-workbuddy.mjs`).
+- **Multi-platform, single source** — Same 13 skills across Claude Code, Cursor, Codex CLI/App, Copilot CLI, Gemini CLI, OpenCode, WorkBuddy, and Trae. Platform-specific wiring is isolated to hooks, plugin manifests, local skill directories, and installers (`.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.github/plugin/`, `.opencode/`, `.agents/`, `gemini-extension.json`, `scripts/lib/cmd-install-workbuddy.mjs`).
 
 ## CI/CD (`.github/workflows/ci.yml`)
 

@@ -175,6 +175,8 @@ npx spec-superflow list          # 或通过 npx 使用
 | 9 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
 | 10 | `figma-mcp-high-fidelity` | 设计实现 | Figma MCP 高保真还原，截图定标 + 自适应下钻 |
 | 11 | `figma-compose-implementation` | Android UI | design_context → visual render spec → Jetpack Compose → 截图回归 |
+| 12 | `lanhu-android-ui` | Android UI | 蓝湖导出 → JSON 事实表 → 原生 Android UI → 截图量化回归 |
+| 13 | `figma-mcp-design` | 设计实现 | noisy Figma MCP context → raw node 摘要 → box 截图对比 |
 
 ---
 
