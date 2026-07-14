@@ -14,7 +14,7 @@ const DEFAULTS = {
   execution: {
     inlineThreshold: 3,
     abandonmentReasonMinLength: 50,
-    defaultLanguage: 'auto',
+    defaultLanguage: 'zh',
   },
   verification: {
     language: 'auto',
