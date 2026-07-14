@@ -1,32 +1,32 @@
-# 执行合同
+# 执行契约
 
-## Intent Lock
+## 意图锁定（Intent Lock）
 
 - **变更名称**：
 - **要解决的问题**：
 - **范围内**：
 - **范围外**：
 
-## Approved Behavior
+## 已批准行为（Approved Behavior）
 
 - **已批准需求摘要**：
 - **关键场景**：
 - **验收检查**：
 
-## Requirement Traceability
+## 需求可追溯性（Requirement Traceability）
 
 | Requirement | Approved Behavior | Test Obligation | Batch |
 |---|---|---|---|
 |  |  |  | Batch 1 |
 
-## Design Constraints
+## 设计约束（Design Constraints）
 
 - **架构约束**：
 - **接口约束**：
 - **依赖约束**：
 - **数据约束**：
 
-## Task Batches
+## 任务批次（Task Batches）
 
 ### Batch 1
 
@@ -42,33 +42,33 @@
 - **输出**：
 - **完成标准**：
 
-## Test Obligations
+## 测试义务（Test Obligations）
 
 - **必须先从失败测试开始的行为**：
 - **必需的边界情况**：
 - **回归敏感区域**：
 
-## Execution Mode
+## 执行模式（Execution Mode）
 
 - **模式**：`Inline` | `Batch Inline` | `SDD`
 - **选择理由**：
 
-## Verification Dimensions
+## 验证维度（Verification Dimensions）
 
 | 维度 | 状态 | 发现 |
-|------|------|------|
-| Completeness | Pending | — |
-| Correctness | Pending | — |
-| Coherence | Pending | — |
+|---|---|---|
+| 完整性（Completeness） | Pending | — |
+| 正确性（Correctness） | Pending | — |
+| 一致性（Coherence） | Pending | — |
 
 **总体结论**：Pending
 
-## Review Gates
+## 审查门（Review Gates）
 
 - **强制审查点**：
 - **阻塞类别**：
 
-## Escalation Rules
+## 升级与回退规则（Escalation Rules）
 
 - **何时回退到 `specifying`**：
 - **何时回退到 `bridging`**：

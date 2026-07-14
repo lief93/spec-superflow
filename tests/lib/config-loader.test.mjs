@@ -31,7 +31,7 @@ describe('config-loader: getDefaults()', () => {
     assert.ok(defaults.execution);
     assert.equal(defaults.execution.inlineThreshold, 3);
     assert.equal(defaults.execution.abandonmentReasonMinLength, 50);
-    assert.equal(defaults.execution.defaultLanguage, 'auto');
+    assert.equal(defaults.execution.defaultLanguage, 'zh');
     assert.ok(defaults.verification);
     assert.equal(defaults.verification.language, 'auto');
   });
