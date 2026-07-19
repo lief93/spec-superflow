@@ -1,29 +1,29 @@
-# 放弃变更摘要
+# Abandonment Summary
 
-## 变更
+## Change
 
-- **名称**：[变更名称]
-- **原始目标**：[一句话目标]
+- **Name**: [change name]
+- **Original goal**: [one sentence]
 
-## 放弃原因
+## Reason
 
-[至少 50 个字符，说明为什么放弃本次变更]
+[At least 50 characters explaining why this change was abandoned]
 
-## 已尝试内容
+## What Was Tried
 
-- [操作 1 及其结果]
-- [操作 2 及其结果]
+- [Action 1 and its outcome]
+- [Action 2 and its outcome]
 
-## 经验总结
+## Lessons Learned
 
-- [一条可帮助后续工作的具体经验]
+- [Concrete insight 1 that may help future attempts]
 
-## 后续建议
+## Recommendations
 
-- [建议的下一步或替代方案]
+- [Suggested next step or alternative approach]
 
-## 保留的工作
+## Preserved Work
 
-- [ ] 不保留任何工作，已丢弃全部变更
-- [ ] 保留部分工作：
-  - 提交 `[hash]`：[说明]
+- [ ] No work preserved (all changes discarded)
+- [ ] Partial work preserved:
+  - Commit `[hash]`: [description]

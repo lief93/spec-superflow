@@ -18,12 +18,12 @@
 // 带精确断言的测试代码
 ```
 
-**文件（Files）**：`Create/Modify: 精确路径`
+**Files**: `Create/Modify: exact/path`
 
 - [ ] **1.2 运行测试并确认失败**
 
-运行：`精确命令`
-预期：以“具体错误信息”失败
+Run: `exact command`
+Expected: FAIL with "specific error message"
 
 - [ ] **1.3 实现最小化代码**
 
@@ -31,13 +31,13 @@
 // 实现代码
 ```
 
-**文件（Files）**：`Create/Modify: 精确路径`
-**接口（Interfaces）**：Produces `name(type): returnType` — 被 Batch N 使用
+**Files**: `Create/Modify: exact/path`
+**Interfaces**: Produces `name(type): returnType` — 被 Batch N 消费
 
 - [ ] **1.4 运行测试并确认通过**
 
-运行：`精确命令`
-预期：通过
+Run: `exact command`
+Expected: PASS
 
 - [ ] **1.5 提交**
 

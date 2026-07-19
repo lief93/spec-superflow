@@ -1,122 +1,115 @@
 ---
 name: workflow-start
-description: spec-superflow 状态机工作流的统一入口。当工作区存在 .spec-superflow.yaml、changes/change-name/、proposal.md、specs/、design.md、tasks.md 或 execution-contract.md，且用户要求开始、继续、恢复、实现、规划或判断下一阶段时使用；用户明确要求启动 spec-superflow 变更时也使用。普通编码任务不得误触发。
+description: Primary entry point for the spec-superflow state-machine workflow. Invoke when the user is inside an active spec-superflow change directory (look for .spec-superflow.yaml, changes/<name>/, proposal.md, specs/, design.md, tasks.md, or execution-contract.md) and asks to start, continue, resume, implement, plan, or figure out the next workflow step. Also invoke when the user explicitly asks to start a new spec-superflow change or route through the spec-superflow workflow. Do not invoke for unrelated coding tasks that happen to use words like start, continue, implement, or plan.
 ---
 
-# 工作流入口
+# Workflow Start
 
-负责检查变更上下文、检查更新、确认 DP-0、识别状态、路由到正确 skill，并阻止非法状态迁移。
+Primary entry point for `spec-superflow`. Jobs: inspect change context, check for updates, confirm DP-0, determine state, route to correct skill, block invalid transitions.
 
-## 适用条件
+## Use This Skill When
 
-仅在存在 spec-superflow 上下文，或用户明确指定 spec-superflow 时调用。拿不准时先检查 `.spec-superflow.yaml`。普通编码、闲聊和无关工作不得调用。
+Only invoke when spec-superflow context is present: `.spec-superflow.yaml` exists, artifacts like `proposal.md`/`specs/`/`design.md`/`tasks.md`/`execution-contract.md` are present, or user explicitly invokes spec-superflow by name. When in doubt, check for `.spec-superflow.yaml` first.
 
-## 状态
+Do NOT invoke for: general coding tasks outside spec-superflow changes, casual questions, unrelated work.
 
-`exploring` → `specifying` → `bridging` → `approved-for-build` → `executing` → `closing`。`executing` 可进入 `debugging` 支路，`abandoned` 为终态。迁移含义不清时读取 `docs/state-machine.md`。
+## States
 
-## 初始化
+`exploring` → `specifying` → `bridging` → `approved-for-build` → `executing` → `closing`, with `debugging` side-path from `executing`, and `abandoned` as terminal. Read `docs/state-machine.md` if transition is ambiguous.
 
-1. **检查更新**：运行 `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-update.mjs"`。退出码 0 继续；1 仅提示升级，不阻塞；2 跳过。
-2. **检查变更目录**：检查 `proposal.md`、`specs/`、`design.md`、`tasks.md`、`execution-contract.md`。判断需求是否明确、工件是否缺失或不稳定、契约是否存在且获批、实现是否进行中或受阻、是否进入验证收口。
+## Initialization
 
-## DP-0：用户确认门
+1. **Update check**: Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-update.mjs"`. Exit 0 → continue. Exit 1 → non-blocking upgrade reminder. Exit 2 → skip.
+2. **Inspect change folder**: Check for `proposal.md`, `specs/`, `design.md`, `tasks.md`, `execution-contract.md`. Answer: Is the change fuzzy? Artifacts missing/unstable? Contract exist? User approved contract? Execution in progress or blocked? In verification/wrap-up?
 
-变更目录不存在、规划工件缺失或为空、或者 `dp_0_confirmed` 不为 `true` 时执行 DP-0；已经确认则跳过。
+## DP-0: User Confirmation Gate
 
-DP-0 前运行 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/get-config" execution.defaultLanguage`。`zh` 表示中文，`en` 表示英文，`auto` 跟随用户请求的主要语言。把解析后的文档语言写入 `dp_0_decisions`，不得让模板语言或 Schema 关键词覆盖该结果。
+Run DP-0 when: change folder doesn't exist, planning artifacts missing/empty, or `dp_0_confirmed` ≠ `true`. Skip if `dp_0_confirmed` is `true`.
 
-向用户确认：变更名称和一句话意图、已知约束、相关优化是否纳入、沟通方式是逐项确认还是先起草再评审。
+Ask: change name + one-sentence intent, known constraints, related optimizations (include or stay focused?), communication preference (ask per decision or draft for review).
 
-确认后运行：
-
+After confirmation:
 ```bash
-ssf state set <change-dir> dp_0_decisions "<确认摘要>"
+ssf state set <change-dir> dp_0_decisions "<summary>"
 ssf state set <change-dir> dp_0_confirmed true
 ssf state set <change-dir> dp_0_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
 
-再根据项目配置检查 `artifacts.order` 和 `artifacts.skip`。
+Config-aware routing: check `artifacts.order` and `artifacts.skip` from project config.
 
-## 工作流模式识别
+## Mode Detection
 
-`workflow` 为 `auto`、`null` 或未设置时，运行 `node "${CLAUDE_PLUGIN_ROOT}/scripts/infer-workflow.mjs" <change-dir>`：
+If workflow is `auto`/`null`/unset: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/infer-workflow.mjs" <change-dir>`. Inference: **hotfix** (≤2 tasks, ≤2 files, no schema/API/new modules), **tweak** (≤4 tasks, config/doc only), **full** (anything larger). Persist with `ssf state set <dir> workflow <mode>`.
 
-- **hotfix**：不超过 2 个任务、2 个文件，且不涉及 Schema、API 或新模块。
-- **tweak**：不超过 4 个任务，且仅修改配置或文档。
-- **full**：其他情况。
+Validate mode against artifact content. If hotfix/tweak criteria not met → upgrade to `full` and output reason. Don't overwrite explicit mode unless user asks.
 
-使用 `ssf state set <dir> workflow <mode>` 持久化。若工件内容不符合 hotfix/tweak 条件，升级为 `full` 并说明原因；除非用户要求，不覆盖显式模式。
+## Routing Rules
 
-## 路由规则
+### Route to need-explorer
+Change is fuzzy, scope unclear, comparing options, no stable change name.
 
-### need-explorer
+### Route to spec-writer
+Guard: `node "${CLAUDE_PLUGIN_ROOT}/scripts/guard/guard.mjs" check <dir> exploring specifying --json` → fail = BLOCK. User knows what they want, artifacts missing/incomplete.
 
-需求模糊、范围不清、正在比较方案或没有稳定的变更名称。
+### Route to contract-builder
+Guard: `... check <dir> specifying bridging --json` → fail = BLOCK. Artifacts exist, implementation requested, contract missing/stale. Include `DP-3: 契约批准`.
 
-### spec-writer
+### Route to build-executor
+Guard: `... check <dir> approved-for-build executing --json` → fail = BLOCK. Contract exists and approved, contract matches artifacts. Include `DP-4: 执行模式选择`.
 
-执行守卫：`node "${CLAUDE_PLUGIN_ROOT}/scripts/guard/guard.mjs" check <dir> exploring specifying --json`。用户目标明确，但规划工件缺失或不完整。
+### Route to bug-investigator
+Execution hit blockage: test failure, unexpected behavior, build error, task cannot proceed. After debugging, route back to build-executor.
 
-### contract-builder
+### Route to code-reviewer
+Batch completed, batch ready for spec-compliance + code-quality verification.
 
-执行守卫：`... check <dir> specifying bridging --json`。规划工件已存在，用户要求实现，但执行契约缺失或过期。包含 `DP-3：契约批准`。
+### Route to release-archivist
+Guard: `... check <dir> executing closing --json` → fail = BLOCK. Implementation complete, verification complete/nearly complete. Include `DP-7: 归档确认`.
 
-### build-executor
+### Route to spec-merger
+Delta specs exist that need merging, change closing with ADDED/MODIFIED/REMOVED/RENAMED specs.
 
-执行守卫：`... check <dir> approved-for-build executing --json`。契约存在、已批准且与规划工件一致。包含 `DP-4：执行模式选择`。
+### Route to abandoned
+User explicitly requests, bug-investigator escalates after 3+ failures AND user chooses, scope change makes change no longer worthwhile AND user confirms. Block from `closing` or `abandoned`.
 
-### bug-investigator
+### Fast-Path Routing
+- **Hotfix**: Route to contract-builder (minimal), skip need-explorer + spec-writer, guard check `exploring bridging --workflow hotfix`, after DP-3 → build-executor (inline), after → release-archivist (lightweight)
+- **Tweak**: Route to build-executor (direct edit), skip need-explorer + spec-writer + contract-builder, guard check `exploring approved-for-build --workflow tweak`, after → release-archivist (lightweight)
 
-实现阶段遇到测试失败、异常行为、构建错误或任务阻塞。诊断完成后回到 `build-executor`。
+Post-transition: 💡 `ssf inject <change-dir>` to update phase-guard artifacts.
 
-### code-reviewer
+## Staleness Detection
 
-一个执行批次完成，准备进行规格符合性和代码质量审查。
+Use content inspection, not timestamps.
 
-### release-archivist
+**Stale contract**: proposal scope expanded beyond contract scope fence, or contract references capabilities no longer in proposal → route back to `contract-builder`.
 
-执行守卫：`... check <dir> executing closing --json`。实现和验证已完成或接近完成。包含 `DP-7：归档确认`。
+**Stale planning artifacts**: capability in proposal has no spec file, or spec exists for capability not in proposal → drift detected.
 
-### spec-merger
+**Stale tasks**: requirement in specs has no corresponding task → stale tasks.
 
-收口时存在需要合并到长期规格的 delta specs。
+## Guardrails
 
-### abandoned
+- No implementation before planning artifacts or contract exist
+- No "continue" without state inspection
+- No implementation past stale contract
+- No implementation past bug without investigation
+- No closure without code review
+- No closure with unsynced delta specs
+- No transitions from `abandoned` (terminal)
+- No transition to `abandoned` from `closing` or `abandoned`
+- No auto-abandon without user confirmation
+- No merging delta specs from abandoned change
 
-仅在用户明确要求，或同一问题连续失败至少 3 次且用户选择放弃，或范围变化导致变更失去价值并经用户确认时进入。不得从 `closing` 或 `abandoned` 进入。
+## Output Standard
 
-### 快速路径
+Always state: (1) current detected state, (2) why (cite file/content/condition), (3) which skill should run next. If blocking, explain missing artifact/approval.
 
-- **Hotfix**：直接进入 `contract-builder`，守卫为 `exploring bridging --workflow hotfix`；DP-3 后内联执行，再轻量收口。
-- **Tweak**：直接进入 `build-executor`，守卫为 `exploring approved-for-build --workflow tweak`；完成后轻量收口。
+Decision point references when routing:
+- contract-builder → DP-3, build-executor → DP-4, bug-investigator (escalation) → DP-5, release-archivist (verification failure) → DP-6, release-archivist → DP-7
 
-状态迁移后运行 `ssf inject <change-dir>` 更新阶段守卫文件。
+## Exception Handling
 
-## 过期检测
-
-- **契约过期**：proposal 范围超出契约边界，或契约引用 proposal 中不存在的能力，返回 `contract-builder`。
-- **规划工件过期**：proposal 中的能力没有对应 spec，或 spec 中存在 proposal 未声明的能力。
-- **任务过期**：spec 中的需求没有对应任务。
-
-## 约束
-
-- 规划工件或契约完成前不得实现。
-- 未检查状态不得直接“继续”。
-- 契约过期或实现遇到故障时不得绕过对应处理阶段。
-- 未完成代码审查不得收口。
-- delta specs 未同步不得结束。
-- `abandoned` 不得迁出，也不得自动进入。
-- 不得合并已放弃变更的 delta specs。
-
-## 输出要求
-
-始终说明：当前识别状态、判断依据、下一步应调用的 skill。若阻塞，说明缺少的工件或批准。
-
-决策点映射：`contract-builder` → DP-3，`build-executor` → DP-4，`bug-investigator` 升级 → DP-5，`release-archivist` 验证失败 → DP-6，归档 → DP-7。
-
-## 异常处理
-
-- **解析失败**：改用工件内容判断状态。
-- **文件缺失**：路由到负责生成该文件的 skill。
-- **用户中断**：恢复时重新读取变更目录，不使用缓存判断。
+- **Parse failures**: Fall back to content-level detection if `.spec-superflow.yaml` is malformed
+- **Missing files**: Route to the skill that generates the missing files
+- **User interruption**: Re-inspect change directory content (not cached state) on resume
