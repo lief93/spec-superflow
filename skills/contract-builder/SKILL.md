@@ -7,7 +7,7 @@ description: Convert approved planning artifacts into an execution contract. Inv
 
 Converts planning artifacts into a single execution handshake: `execution-contract.md`. Use `templates/execution-contract.md` as the baseline structure.
 
-Read before generating: `proposal.md`, `specs/`, `design.md`, `tasks.md`, `docs/artifact-contract.md`.
+Read before generating: `proposal.md`, `specs/`, `design.md`, `tasks.md`, `docs/artifact-contract.md`, and `.spec-superflow/project-development-rules.md` when present.
 
 ## Artifact Mapping
 
@@ -17,6 +17,7 @@ Read before generating: `proposal.md`, `specs/`, `design.md`, `tasks.md`, `docs/
 | `proposal.md` → `## Scope > ### Out of Scope` | Scope Fence |
 | `specs/` → each `### Requirement:` | Approved Requirements, Scenarios, Test Obligations |
 | `design.md` → `## Decisions` | Architecture, Interface, Dependency Constraints |
+| Project rules + design compliance plan | Applicable project development constraints |
 | `tasks.md` → numbered task groups | Execution Batches, Completion Definitions, Review Timing |
 
 ## Cross-Check: Requirement Coverage
@@ -43,7 +44,7 @@ Rules:
 
 ## Contract Structure
 
-Must make obvious: approved behavior, out-of-scope, constraints, batches, test obligations, review gates, and conditions that force a rewind to planning. Prefer compression over repeating planning details.
+Must make obvious: approved behavior, out-of-scope, constraints, applicable project rules, batches, test obligations, review gates, and conditions that force a rewind to planning. Put applicable rules and the rules-file reference in Design Constraints. Prefer compression over repeating planning details.
 
 ## Approval Model (DP-3)
 

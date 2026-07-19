@@ -164,15 +164,16 @@ npx spec-superflow list          # 或通过 npx 使用
 
 | # | Skill | 阶段 | 职责 |
 |---|---|---|---|
-| 1 | `workflow-start` | 入口 | 内容级状态检测、8 状态路由、阻止非法跳转 |
-| 2 | `need-explorer` | 探索 | 一次一问 + 方案对比 + 推荐 |
-| 3 | `spec-writer` | 规格 | 产出 proposal/specs/design/tasks，Schema 引擎实时验证 |
-| 4 | `contract-builder` | 桥接 | 解析引擎自动提取 4 工件 → 压缩为 execution-contract.md |
-| 5 | `build-executor` | 执行 | TDD 铁律 + SDD 子代理驱动 + Review Gate |
-| 6 | `bug-investigator` | 调试 | 4 阶段根因分析，3+ 修复失败 → 质疑架构 |
-| 7 | `code-reviewer` | 审查 | 结构化审查，三级问题分级 |
-| 8 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
-| 9 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
+| 1 | `project-initializer` | 项目初始化 | 生成架构边界、复用规则和项目特有规则 |
+| 2 | `workflow-start` | 入口 | 内容级状态检测、8 状态路由、阻止非法跳转 |
+| 3 | `need-explorer` | 探索 | 一次一问 + 方案对比 + 推荐 |
+| 4 | `spec-writer` | 规格 | 产出 proposal/specs/design/tasks，Schema 引擎实时验证 |
+| 5 | `contract-builder` | 桥接 | 解析引擎自动提取 4 工件 → 压缩为 execution-contract.md |
+| 6 | `build-executor` | 执行 | TDD 铁律 + SDD 子代理驱动 + Review Gate |
+| 7 | `bug-investigator` | 调试 | 4 阶段根因分析，3+ 修复失败 → 质疑架构 |
+| 8 | `code-reviewer` | 审查 | 结构化审查，三级问题分级 |
+| 9 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
+| 10 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
 
 ---
 

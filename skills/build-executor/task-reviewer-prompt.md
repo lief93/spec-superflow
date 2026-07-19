@@ -25,6 +25,9 @@ Subagent (general-purpose):
     Global constraints from the spec/design that bind this task:
     [GLOBAL_CONSTRAINTS]
 
+    Project development rules:
+    [PROJECT_RULES]
+
     ## What the Implementer Claims They Built
 
     Read the implementer's report: [REPORT_FILE]
@@ -104,6 +107,9 @@ Subagent (general-purpose):
 
     **Structure:**
     - Does each file have one clear responsibility with a well-defined interface?
+    - Does each changed responsibility remain in the layer required by the project rules?
+    - Did the task reuse existing project abstractions where the rules require it?
+    - Is every project-rule exception explicitly approved?
     - Are units decomposed so they can be understood and tested independently?
     - Is the implementation following the file structure from the plan?
     - Did this change create new files that are already large, or
@@ -163,12 +169,18 @@ Subagent (general-purpose):
     **Task quality:** [Approved | Needs fixes]
 
     **Reasoning:** [1-2 sentence technical assessment]
+
+    ### Project Rules
+
+    - ✅ Compliant | ❌ Issues found | ⚪ Not configured
+    - Evidence: [file:line for each applicable rule or finding]
 ```
 
 **Placeholders:**
 - `[MODEL]` — REQUIRED: reviewer model per build-executor Model Selection
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path; same file the implementer worked from)
 - `[GLOBAL_CONSTRAINTS]` — the binding requirements copied verbatim from the plan's Global Constraints section or the spec: exact values, formats, and stated relationships between components (not process rules — those are already in this template)
+- `[PROJECT_RULES]` — `.spec-superflow/project-development-rules.md` path, or `Not configured`
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed report to
 - `[BASE_SHA]` — commit before this task
 - `[HEAD_SHA]` — current commit

@@ -19,6 +19,13 @@ Subagent (general-purpose):
 
     [Scene-setting: where this fits, dependencies, architectural context]
 
+    ## Project Development Rules
+
+    Read [PROJECT_RULES] before changing code. Treat applicable architecture
+    boundaries and reuse rules as implementation constraints. If the value is
+    `Not configured`, follow the approved design and established codebase patterns.
+    If a required exception is not already approved, stop and report it.
+
     ## Before You Begin
 
     If you have questions about:
@@ -142,6 +149,7 @@ Subagent (general-purpose):
 - `[task name]` — short name for the task
 - `[MODEL]` — REQUIRED: implementer model per build-executor Model Selection
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path)
+- `[PROJECT_RULES]` — `.spec-superflow/project-development-rules.md` path, or `Not configured`
 - `[directory]` — working directory for the implementation
 - `[REPORT_FILE]` — REQUIRED: the file path where the implementer writes its full report
 

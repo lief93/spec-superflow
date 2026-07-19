@@ -5,7 +5,7 @@ description: Primary entry point for the spec-superflow state-machine workflow. 
 
 # Workflow Start
 
-Primary entry point for `spec-superflow`. Jobs: inspect change context, check for updates, confirm DP-0, determine state, route to correct skill, block invalid transitions.
+Primary entry point for `spec-superflow`. Jobs: inspect project rules and change context, check for updates, confirm DP-0, determine state, route to correct skill, block invalid transitions.
 
 ## Use This Skill When
 
@@ -20,7 +20,8 @@ Do NOT invoke for: general coding tasks outside spec-superflow changes, casual q
 ## Initialization
 
 1. **Update check**: Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-update.mjs"`. Exit 0 → continue. Exit 1 → non-blocking upgrade reminder. Exit 2 → skip.
-2. **Inspect change folder**: Check for `proposal.md`, `specs/`, `design.md`, `tasks.md`, `execution-contract.md`. Answer: Is the change fuzzy? Artifacts missing/unstable? Contract exist? User approved contract? Execution in progress or blocked? In verification/wrap-up?
+2. **Inspect project rules**: If `.spec-superflow/project-development-rules.md` exists, read it as a project-level constraint for planning, implementation, and review. If the user explicitly asks to init project context or coding standards, route to `project-initializer`. A missing rules file does not block an ordinary change; mention initialization once.
+3. **Inspect change folder**: Check for `proposal.md`, `specs/`, `design.md`, `tasks.md`, `execution-contract.md`. Answer: Is the change fuzzy? Artifacts missing/unstable? Contract exist? User approved contract? Execution in progress or blocked? In verification/wrap-up?
 
 ## DP-0: User Confirmation Gate
 
