@@ -159,15 +159,16 @@ AI coding sessions fail in one of two ways:
 
 | # | Skill | Stage | Purpose |
 |---|-------|-------|---------|
-| 1 | `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
-| 2 | `need-explorer` | Exploring | One question at a time, approach comparison, recommendation |
-| 3 | `spec-writer` | Specifying | Generate proposal/specs/design/tasks with Schema engine validation |
-| 4 | `contract-builder` | Bridging | Parse 4 artifacts → compress into execution-contract.md |
-| 5 | `build-executor` | Executing | TDD Iron Law + SDD subagent-driven + Review Gates |
-| 6 | `bug-investigator` | Debugging | 4-phase root cause analysis; 3+ failures → escalate |
-| 7 | `code-reviewer` | Review | Structured review with 3-level severity classification |
-| 8 | `release-archivist` | Closing | Verification-before-completion + archive + risk summary |
-| 9 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
+| 1 | `project-initializer` | Project init | Generate architecture boundaries, reuse rules, and project-specific rules |
+| 2 | `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
+| 3 | `need-explorer` | Exploring | One question at a time, approach comparison, recommendation |
+| 4 | `spec-writer` | Specifying | Generate proposal/specs/design/tasks with Schema engine validation |
+| 5 | `contract-builder` | Bridging | Parse 4 artifacts → compress into execution-contract.md |
+| 6 | `build-executor` | Executing | TDD Iron Law + SDD subagent-driven + Review Gates |
+| 7 | `bug-investigator` | Debugging | 4-phase root cause analysis; 3+ failures → escalate |
+| 8 | `code-reviewer` | Review | Structured review with 3-level severity classification |
+| 9 | `release-archivist` | Closing | Verification-before-completion + archive + risk summary |
+| 10 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
 
 ---
 

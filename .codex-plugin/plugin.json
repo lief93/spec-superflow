@@ -26,7 +26,7 @@
   "interface": {
     "displayName": "spec-superflow",
     "shortDescription": "Spec-first workflow with guarded execution.",
-    "longDescription": "A self-contained Codex workflow plugin with nine skills for intent exploration, planning artifacts, execution contracts, TDD execution, review gates, systematic debugging, closure, and delta spec sync.",
+    "longDescription": "A self-contained Codex workflow plugin with ten skills for project rules, intent exploration, planning artifacts, execution contracts, TDD execution, review gates, systematic debugging, closure, and delta spec sync.",
     "developerName": "MageByte",
     "category": "Developer Tools",
     "composerIcon": "./assets/icon.svg",

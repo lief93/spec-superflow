@@ -14,9 +14,13 @@ Two responsibilities: requesting review (dispatching a reviewer subagent) and re
 
 ### Procedure
 1. Get SHAs: `BASE_SHA=$(git rev-parse HEAD~1)` and `HEAD_SHA=$(git rev-parse HEAD)`
-2. Dispatch `general-purpose` subagent using template at `skills/code-reviewer/code-reviewer-prompt.md`
-3. Fill placeholders: `[DESCRIPTION]` (what was built), `[PLAN_OR_REQUIREMENTS]` (contract/spec reference), `[BASE_SHA]`, `[HEAD_SHA]`
-4. Act on feedback: fix Critical immediately, fix Important before proceeding, note Minor for later, push back with reasoning if reviewer is wrong
+2. Read `.spec-superflow/project-development-rules.md` when present.
+3. Dispatch an independent `general-purpose` reviewer subagent using `skills/code-reviewer/code-reviewer-prompt.md`.
+4. Fill placeholders: `[DESCRIPTION]`, `[PLAN_OR_REQUIREMENTS]`, `[PROJECT_RULES]`, `[BASE_SHA]`, `[HEAD_SHA]`.
+5. Act on feedback: fix Critical immediately, fix Important before proceeding, note Minor for later, push back with reasoning if reviewer is wrong.
+6. Create or update `<change-dir>/pr-summary.md` from `templates/pr-summary.md`. Record delivered scope, verification evidence, and one row per applicable rule with `Pass`, `Fail`, or `N/A` plus concrete evidence.
+
+`pr-summary.md` is a result artifact, not a self-attestation. A `Pass` without diff-based evidence is invalid. When no rules file exists, record `Not configured` instead of inventing checks.
 
 ## Part 2: Receiving Review Feedback
 

@@ -9,7 +9,7 @@ Create or refine planning artifacts when the change has moved beyond exploration
 
 ## Required Inputs
 
-Read `.spec-superflow.yaml` (especially `dp_0_decisions`, `dp_0_confirmed`) and any existing planning artifacts. If `dp_0_confirmed` is not `true`, stop and route back to `workflow-start` for DP-0.
+Read `.spec-superflow.yaml` (especially `dp_0_decisions`, `dp_0_confirmed`) and any existing planning artifacts. If `.spec-superflow/project-development-rules.md` exists, read it and map applicable rules into the design and relevant tasks. If `dp_0_confirmed` is not `true`, stop and route back to `workflow-start` for DP-0.
 
 ## Config Check
 
@@ -33,7 +33,7 @@ Must state: problem, what changes, capabilities affected, impact areas.
 Every requirement must be testable. Use SHALL or MUST. Every requirement must have at least one `#### Scenario:` with WHEN/THEN. Group under ADDED/MODIFIED/REMOVED Requirements headers.
 
 ### design.md
-Must have: Context (current state, constraints, stakeholders), Goals, Decisions (Choice + Rationale + Alternatives considered), Risks And Trade-Offs.
+Must have: Context (current state, constraints, stakeholders), Goals, Decisions (Choice + Rationale + Alternatives considered), Project Rules Compliance Plan, Risks And Trade-Offs. The compliance plan lists only applicable rules, planned code placement, and reuse targets. If rules are not configured, record `Not configured`; do not invent rules.
 
 ### tasks.md
 Must include:
@@ -62,7 +62,7 @@ Generate one at a time. Confirm each before next. This prevents scope drift — 
 - SHALL/MUST for required behavior, `#### Scenario:` with WHEN/THEN per requirement, grouped under delta headers, no contradictions
 
 ### design.md
-- `## Context`, `## Goals`, `## Decisions` (≥1, with Choice+Rationale+Alternatives), `## Risks And Trade-Offs`
+- `## Context`, `## Goals`, `## Decisions` (≥1, with Choice+Rationale+Alternatives), `## Project Rules Compliance Plan`, `## Risks And Trade-Offs`
 
 ### tasks.md
 - `## File Structure`, `## Interfaces`, numbered tasks, exact file paths, TDD phases, ≤5 min steps, no placeholders, every requirement mapped, explicit dependencies

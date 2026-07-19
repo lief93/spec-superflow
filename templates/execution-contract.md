@@ -21,6 +21,8 @@
 
 ## Design Constraints
 
+- **项目规则来源**：`.spec-superflow/project-development-rules.md` | Not configured
+- **本次适用的项目规则**：
 - **架构约束**：
 - **接口约束**：
 - **依赖约束**：
