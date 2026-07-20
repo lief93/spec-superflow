@@ -119,6 +119,7 @@ npx spec-superflow list          # 或通过 npx 使用
 | `ssf state <sub> <dir>` | 管理 `.spec-superflow.yaml` 状态文件 |
 | `ssf inject <dir>` | 生成多平台 phase-guard 产物 |
 | `ssf audit <dir>` | 生成决策点审计报告 |
+| `ssf memories list` / `ssf memories check` | 列出 Memory 或检查 `mem:` 引用完整性 |
 | `ssf install-cursor` | 部署到 Cursor `.cursor/` 目录 |
 | `ssf install-workbuddy` | 部署到 WorkBuddy marketplace 并启用技能 |
 
@@ -164,7 +165,7 @@ npx spec-superflow list          # 或通过 npx 使用
 
 | # | Skill | 阶段 | 职责 |
 |---|---|---|---|
-| 1 | `project-initializer` | 项目初始化 | 生成架构边界、复用规则和项目特有规则 |
+| 1 | `memory-manager` | 项目 Memory | 初始化、渐进读取并维护长期项目知识，无需 MCP |
 | 2 | `workflow-start` | 入口 | 内容级状态检测、8 状态路由、阻止非法跳转 |
 | 3 | `need-explorer` | 探索 | 一次一问 + 方案对比 + 推荐 |
 | 4 | `spec-writer` | 规格 | 产出 proposal/specs/design/tasks，Schema 引擎实时验证 |

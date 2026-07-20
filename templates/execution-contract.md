@@ -21,12 +21,13 @@
 
 ## Design Constraints
 
-- **项目规则来源**：`.spec-superflow/project-development-rules.md` | Not configured
-- **本次适用的项目规则**：
+- **项目 Memory 来源**：`.spec-superflow/memories/core.md` + relevant `mem:` references | Not configured
+- **技术约束**：
 - **架构约束**：
-- **接口约束**：
+- **数据与接口约束**：
 - **依赖约束**：
-- **数据约束**：
+- **复用对象与扩展点**：
+- **运行时与平台事实**：
 
 ## Task Batches
 

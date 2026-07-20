@@ -39,8 +39,17 @@ Before executing, detect:
 ### Step 4: Execute Merge
 Apply changes. Do NOT delete delta specs — they remain for traceability. After merge, validate: no duplicate requirement names, no orphaned references, REMOVED section clearly separated.
 
-### Step 5: Report
-Output sync report table: Capability, ADDED/MODIFIED/REMOVED/RENAMED counts, Status (✓/⚠). Summary with totals and unresolved conflicts.
+### Step 5: Maintain Project Memory
+After specs reflect current behavior, invoke `memory-manager` in maintenance mode. Inspect the final diff, implementation reports, test evidence, and review findings, then record `ADD`, `UPDATE`, or `NONE`.
+
+- Leave business behavior in `spec.md`; Memory contains only stable, non-obvious implementation knowledge.
+- Update an existing conclusion instead of appending task history.
+- Create a focused memory only when the knowledge is expensive to rediscover.
+- Update graph references when discovery changes.
+- Run `ssf memories check` after any memory change.
+
+### Step 6: Report
+Output sync report table: Capability, ADDED/MODIFIED/REMOVED/RENAMED counts, Memory (Added/Updated/None), Status (✓/⚠). Summary with totals and unresolved conflicts.
 
 ## Guardrails
 
@@ -48,6 +57,7 @@ Output sync report table: Capability, ADDED/MODIFIED/REMOVED/RENAMED counts, Sta
 - Do not auto-resolve conflicts across changes
 - Do not merge specs for unverified changes
 - Validate main spec consistency after each capability merge
+- Do not copy progress logs, failed attempts, or task summaries into project memory
 
 ## Post-Sync
 

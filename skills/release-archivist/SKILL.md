@@ -35,22 +35,18 @@ Run full test suite. Record total/passed/failed/skipped. Zero failures = PASS.
 Compare contract batches against actual diff. Every SHALL/MUST must have implementation evidence. Missing = Critical severity.
 
 ### Step 3: Coherence
-Compare design decisions against code. Check naming consistency. Inconsistencies = IMPORTANT.
+Compare design decisions against code. Read relevant project memories to evaluate architecture, boundary, and convention consistency. Check naming consistency. Inconsistencies = IMPORTANT.
 
 ### Step 4: Unintended Scope
 Check for files modified outside scope fence, new dependencies not in design. Unplanned = WARN.
 
-### Step 5: Project Rules Compliance
-If `.spec-superflow/project-development-rules.md` exists, require `<change-dir>/pr-summary.md` and verify its Development Rules Check against the actual diff. Every applicable rule needs concrete evidence. A missing check, unsupported `Pass`, or unapproved exception is FAIL. If no rules file exists, record `Not configured` without blocking closure.
-
-### Step 6: Report
+### Step 5: Report
 
 | Dimension | Status | Findings |
 |-----------|--------|----------|
 | Completeness | PASS/FAIL/WARN | [list] |
 | Correctness | PASS/FAIL/WARN | [list] |
 | Coherence | PASS/FAIL/WARN | [list] |
-| Project rules | PASS/FAIL/WARN/NOT CONFIGURED | [diff-based evidence or reason] |
 
 **Verdict**: PASS (all PASS) / CONDITIONAL (WARN only) / FAIL (any FAIL).
 - FAIL → fix issues or route back to build-executor
@@ -63,7 +59,6 @@ If `.spec-superflow/project-development-rules.md` exists, require `<change-dir>/
 - All batches complete? (cite batch status)
 - Scope added without artifact updates?
 - Unresolved blockers or known risks?
-- Project rules check complete with diff-based evidence?
 - Delta specs exist that need merging?
 - Run `ssf audit <change-dir>` — include `decision-point-audit.md` in archive
 

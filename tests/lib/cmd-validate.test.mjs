@@ -61,6 +61,19 @@ describe('cmd-validate', () => {
     assert.ok(result.stdout.includes('All artifacts validated'));
   });
 
+  it('rejects context.md beside a capability spec.md', () => {
+    const changeDir = join(tempDir, 'invalid-capability-context');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    writeFileSync(join(changeDir, 'specs', 'rate-limit', 'context.md'), '# Rate Limit Context\n\n- **When changing counters**: Preserve atomic increments.\n');
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(result.stdout.includes('Capability markdown files must be named spec.md'));
+  });
+
   it('fails when specs markdown is not placed at specs/<capability>/spec.md', () => {
     const changeDir = join(tempDir, 'misnamed-spec');
     mkdirSync(join(changeDir, 'specs'), { recursive: true });
@@ -73,7 +86,7 @@ describe('cmd-validate', () => {
 
     assert.equal(result.exitCode, 1);
     assert.ok(result.stdout.includes('specs/rate-limit.md'));
-    assert.ok(result.stdout.includes('Spec files must be named spec.md'));
+    assert.ok(result.stdout.includes('Capability markdown files must be named spec.md'));
   });
 
   it('fails when requirement titles appear without a traceability table', () => {
