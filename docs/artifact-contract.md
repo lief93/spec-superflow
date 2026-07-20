@@ -10,6 +10,8 @@
 
 The first four are planning artifacts. The fifth is the execution handshake.
 
+At the project root, each long-term capability lives under `specs/<capability>/spec.md`, which defines current behavior. Durable implementation knowledge is stored separately as a progressive graph under `.spec-superflow/memories/`; Memory does not replace capability Specs.
+
 ## Artifact Roles
 
 ### `proposal.md`

@@ -20,9 +20,14 @@ Subagent (general-purpose):
 
     [PLAN_OR_REQUIREMENTS]
 
-    ## Project Development Rules
+    ## Project Memories
 
-    [PROJECT_RULES]
+    [PROJECT_MEMORIES]
+
+    ## Capability Baseline
+
+    Read the current capability specs listed here:
+    [CAPABILITY_SPECS]
 
     ## Git Range to Review
 
@@ -54,9 +59,9 @@ Subagent (general-purpose):
 
     **Architecture:**
     - Sound design decisions?
-    - Does each changed responsibility remain in the layer required by the project rules?
-    - Did the implementation reuse existing project abstractions where required?
-    - Does any project-rule exception lack explicit approval?
+    - Is each changed responsibility consistent with documented architecture and ownership boundaries?
+    - Did the implementation reuse documented project abstractions where they fit the requested behavior?
+    - Does the implementation conflict with confirmed runtime, data, state, or interface facts?
     - Reasonable scalability and performance?
     - Security concerns?
     - Integrates cleanly with surrounding code?
@@ -109,14 +114,6 @@ Subagent (general-purpose):
     ### Recommendations
     [Improvements for code quality, architecture, or process]
 
-    ### Development Rules Check
-
-    | Rule | Result | Evidence |
-    |---|---|---|
-    | [Applicable project rule] | Pass / Fail / N/A | [File:line, symbol, test, or reason for N/A] |
-
-    Do not mark a rule Pass without inspecting the relevant diff and surrounding implementation.
-
     ### Assessment
 
     **Ready to merge?** [Yes | No | With fixes]
@@ -143,7 +140,8 @@ Subagent (general-purpose):
 **Placeholders:**
 - `[DESCRIPTION]` — brief summary of what was built
 - `[PLAN_OR_REQUIREMENTS]` — what it should do (execution-contract.md file path, spec file path, or requirements)
-- `[PROJECT_RULES]` — `.spec-superflow/project-development-rules.md` path, or `Not configured`
+- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/memory_maintenance.md`, `core.md`, and only the focused memory paths relevant to the diff, or `Not configured`
+- `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[BASE_SHA]` — starting commit
 - `[HEAD_SHA]` — ending commit
 

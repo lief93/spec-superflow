@@ -9,7 +9,7 @@ Controls the implementation phase. Uses `execution-contract.md` as the workflow 
 
 ## Required Inputs
 
-Read: `execution-contract.md`, `tasks.md`, relevant `specs/`, relevant `design.md`, and `.spec-superflow/project-development-rules.md` when present. (Skip contract/spec requirements when workflow is `tweak`.)
+Read: `execution-contract.md`, `tasks.md`, relevant change-local `specs/`, relevant `design.md`, and matching project-root `specs/<capability>/spec.md`. List project memory names, read `memory_maintenance` and `core`, then follow only references relevant to the execution batches. (Skip contract/spec requirements when workflow is `tweak`.)
 
 Check workflow mode first: `ssf state get <change-dir> workflow`. If `tweak` → direct edit mode. If `hotfix` or `full` → standard contract-first discipline.
 
@@ -31,8 +31,8 @@ Block on: logic defects, spec violations, missing required tests, unintended sco
 ### Law 4: Rewind on Contract Break
 Return to `specifying` or `bridging` if: new behavior appears, interfaces change materially, design assumptions fail, artifacts no longer define intended implementation.
 
-### Law 5: Project Rules Are Execution Constraints
-Follow applicable architecture boundaries and reuse rules. If implementation requires an exception, stop and return to planning or obtain explicit approval; do not silently choose a locally convenient structure.
+### Law 5: Project Memory Grounds Implementation
+Use relevant memory invariants when implementing. If the approved design or required implementation conflicts with a verified project memory, stop and return to planning or request clarification.
 
 ## Execution Mode Selection
 
@@ -59,9 +59,9 @@ Boundaries: if any task touches >1 module, involves schema/API/config changes, o
 For changes with multiple execution batches. Dispatch implementer subagent per task, review each task, final broad review after all batches.
 
 ### Per-Task Loop
-1. **Dispatch implementer**: Use `${CLAUDE_PLUGIN_ROOT}/skills/build-executor/implementer-prompt.md` template. Extract task brief with `scripts/task-brief PLAN_FILE N`. Include: where task fits, brief path, interfaces from prior tasks, project rules path or `Not configured`, report file path.
+1. **Dispatch implementer**: Use `${CLAUDE_PLUGIN_ROOT}/skills/build-executor/implementer-prompt.md` template. Extract task brief with `scripts/task-brief PLAN_FILE N`. Include: where the task fits, brief path, interfaces from prior tasks, relevant memory paths or `Not configured`, relevant capability `spec.md` paths, and report file path.
 2. **Handle response**: DONE → generate review package + dispatch reviewer. DONE_WITH_CONCERNS → assess. NEEDS_CONTEXT → provide context. BLOCKED → re-dispatch with better model or escalate.
-3. **Review**: Use `skills/build-executor/task-reviewer-prompt.md`. Pass the project rules path or `Not configured`. Reviewer returns spec compliance + code quality verdicts.
+3. **Review**: Use `skills/build-executor/task-reviewer-prompt.md`. Pass the relevant memory paths or `Not configured` and relevant capability `spec.md` paths. Reviewer returns spec compliance + code quality verdicts.
 4. **Fix**: If Critical or Important issues, dispatch fix subagent, re-review.
 5. **Mark complete**: Append to `.superpowers/sdd/progress.md`: `Task N: complete (commits <base7>..<head7>, review clean)`
 
@@ -90,7 +90,7 @@ DP-5 (debug escalation): `ssf state set <change-dir> dp_5_result "<resolution>"`
 
 ## Completion Standard
 
-Don't report completion until: tests pass, contract obligations satisfied, applicable project rules checked against the diff, review blockers resolved, all batches reviewed (per-task + final), workflow ready for `release-archivist`.
+Don't report completion until: tests pass, contract obligations satisfied, review blockers resolved, all batches reviewed (per-task + final), workflow ready for `release-archivist`.
 
 ## Exception Handling
 

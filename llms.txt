@@ -16,7 +16,7 @@ Current version: v0.8.9.
 - CONTRIBUTING.md: Contribution guidelines
 
 ## Core Skills (in skills/)
-- project-initializer: Generates project architecture boundaries, reuse rules, and user-maintained project-specific rules
+- memory-manager: Initializes and maintains progressive project memory without MCP
 - workflow-start: Entry point, content-level state detection, 8-state routing, blocks illegal transitions
 - need-explorer: Clarifies intent, scope, constraints, and success criteria
 - spec-writer: Generates proposal, specs, design, and tasks with Schema validation
@@ -27,14 +27,15 @@ Current version: v0.8.9.
 - release-archivist: Verification-before-completion, archiving, risk summary
 - spec-merger: Merges delta specs into main specs with conflict detection
 
-## Templates (in templates/)
-- project-development-rules.md: Project-level implementation constraints
+## Templates And Skill Resources
+- skills/memory-manager/references/memory_maintenance.md: Rules for progressive discovery and memory admission
+- .spec-superflow/memories/: Durable project knowledge organized as a `mem:` reference graph
 - proposal.md: Change proposal template
 - spec.md: Capability specification template
 - design.md: Technical design template
 - tasks.md: Implementation tasks template
 - execution-contract.md: Bridge artifact template
-- pr-summary.md: Delivery, verification, and project-rules review evidence
+- pr-summary.md: Delivery, verification, exceptions, and known risks
 
 ## Examples (in docs/examples/)
 - add-dark-mode: New UI feature example (dark mode)

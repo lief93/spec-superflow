@@ -17,6 +17,8 @@ Use for ANY technical issue: test failures, bugs, unexpected behavior, performan
 
 Don't skip because issue "seems simple" or you're "in a hurry" — systematic debugging is faster than thrashing.
 
+Before investigating, read matching project-root `specs/<capability>/spec.md` for intended behavior. List project memory names, read `memory_maintenance` and `core`, then follow references relevant to the failing module or symptom. Use them to distinguish an actual defect from intended behavior or a known implementation constraint.
+
 ## The Four Phases
 
 Complete each phase before proceeding.

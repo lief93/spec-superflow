@@ -114,6 +114,7 @@ npm install -g spec-superflow
 | `ssf state <sub> <dir>` | Manage `.spec-superflow.yaml` state file |
 | `ssf inject <dir>` | Generate multi-platform phase-guard artifacts |
 | `ssf audit <dir>` | Generate decision-point audit report |
+| `ssf memories list` / `ssf memories check` | List memories or validate `mem:` reference integrity |
 | `ssf install-cursor` | Deploy to `.cursor/` directory |
 | `ssf install-workbuddy` | Deploy to WorkBuddy marketplace and enable skills |
 
@@ -159,7 +160,7 @@ AI coding sessions fail in one of two ways:
 
 | # | Skill | Stage | Purpose |
 |---|-------|-------|---------|
-| 1 | `project-initializer` | Project init | Generate architecture boundaries, reuse rules, and project-specific rules |
+| 1 | `memory-manager` | Project memory | Initialize, progressively read, and maintain durable project knowledge without MCP |
 | 2 | `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
 | 3 | `need-explorer` | Exploring | One question at a time, approach comparison, recommendation |
 | 4 | `spec-writer` | Specifying | Generate proposal/specs/design/tasks with Schema engine validation |

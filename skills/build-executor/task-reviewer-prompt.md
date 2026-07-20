@@ -25,8 +25,11 @@ Subagent (general-purpose):
     Global constraints from the spec/design that bind this task:
     [GLOBAL_CONSTRAINTS]
 
-    Project development rules:
-    [PROJECT_RULES]
+    Relevant project memories:
+    [PROJECT_MEMORIES]
+
+    Read these current capability specs:
+    [CAPABILITY_SPECS]
 
     ## What the Implementer Claims They Built
 
@@ -107,9 +110,9 @@ Subagent (general-purpose):
 
     **Structure:**
     - Does each file have one clear responsibility with a well-defined interface?
-    - Does each changed responsibility remain in the layer required by the project rules?
-    - Did the task reuse existing project abstractions where the rules require it?
-    - Is every project-rule exception explicitly approved?
+    - Is each changed responsibility consistent with the documented architecture and ownership boundaries?
+    - Does the task reuse documented project abstractions where they fit the requested behavior?
+    - Does the implementation conflict with any confirmed runtime, data, state, or interface fact?
     - Are units decomposed so they can be understood and tested independently?
     - Is the implementation following the file structure from the plan?
     - Did this change create new files that are already large, or
@@ -170,17 +173,14 @@ Subagent (general-purpose):
 
     **Reasoning:** [1-2 sentence technical assessment]
 
-    ### Project Rules
-
-    - ✅ Compliant | ❌ Issues found | ⚪ Not configured
-    - Evidence: [file:line for each applicable rule or finding]
 ```
 
 **Placeholders:**
 - `[MODEL]` — REQUIRED: reviewer model per build-executor Model Selection
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path; same file the implementer worked from)
 - `[GLOBAL_CONSTRAINTS]` — the binding requirements copied verbatim from the plan's Global Constraints section or the spec: exact values, formats, and stated relationships between components (not process rules — those are already in this template)
-- `[PROJECT_RULES]` — `.spec-superflow/project-development-rules.md` path, or `Not configured`
+- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/memory_maintenance.md`, `core.md`, and only the focused memory paths relevant to the diff, or `Not configured`
+- `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed report to
 - `[BASE_SHA]` — commit before this task
 - `[HEAD_SHA]` — current commit

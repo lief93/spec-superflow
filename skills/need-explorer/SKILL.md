@@ -13,9 +13,9 @@ Agree on: problem, scope, non-goals, success criteria, whether to split before s
 
 ## Process
 
-### 1. Inspect Context First
+### 1. Inspect Existing Knowledge First
 
-Before asking questions, understand what exists and what constraints are in place.
+Before asking questions, understand what exists and what constraints are in place. Infer the likely affected capabilities and read each matching project-root `specs/<capability>/spec.md` as current behavior. If project memories exist, list their names, read `memory_maintenance` and `core`, then follow only `mem:` references relevant to those capabilities or affected modules. If the capability is unclear, inspect names first and read only likely matches before narrowing with the user.
 
 ### 2. One Question at a Time
 

@@ -157,7 +157,7 @@ function validateSpecsLayout(changeDir, specsDir, specFiles) {
       issues.push({
         level: 'ERROR',
         path: relative(changeDir, mdFile),
-        message: 'Spec files must be named spec.md inside a capability directory, for example specs/rate-limit/spec.md',
+        message: 'Capability markdown files must be named spec.md inside a capability directory, for example specs/rate-limit/spec.md',
       });
     }
   }

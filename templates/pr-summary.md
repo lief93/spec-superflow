@@ -11,12 +11,6 @@
 |---|---|---|
 |  |  |  |
 
-## Development Rules Check
-
-| Rule | Result | Evidence |
-|---|---|---|
-|  | Pass / Fail / N/A | File, symbol, test, or reason for N/A |
-
 ## Exceptions And Known Risks
 
 - None.
