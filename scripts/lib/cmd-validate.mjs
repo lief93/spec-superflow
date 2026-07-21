@@ -338,6 +338,36 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
         issues.push(...validateFileChanges(scopeName, fileChanges));
       }
 
+      const testPlan = extractNestedSection(ac.content, 'TDD Test Plan', 4);
+      if (!testPlan) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} is missing #### TDD Test Plan` });
+      } else {
+        const table = parseMarkdownTable(testPlan, ['layer', 'action', 'target', 'prove'], 'TDD Test Plan');
+        if (table.error) {
+          issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} ${table.error}` });
+        } else if (table.rows.length === 0) {
+          issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} TDD Test Plan requires at least one test row` });
+        } else {
+          const allowedLayers = new Set(['unit', 'component', 'integration', 'ui']);
+          const allowedActions = new Set(['add', 'update', 'run existing', 'unavailable', 'not applicable']);
+          table.rows.forEach((row, index) => {
+            const rowName = `${scopeName} TDD Test Plan row ${index + 1}`;
+            if (!allowedLayers.has(normalizeRequirementName(row.layer))) {
+              issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Layer must be Unit, Component, Integration, or UI` });
+            }
+            if (!allowedActions.has(normalizeRequirementName(row.action))) {
+              issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Action must be Add, Update, Run existing, Unavailable, or Not applicable` });
+            }
+            if (!isMeaningfulCell(row.target)) {
+              issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} requires a concrete Target` });
+            }
+            if (!isMeaningfulCell(row.prove)) {
+              issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} requires a concrete Proves statement` });
+            }
+          });
+        }
+      }
+
       const tddSteps = extractNestedSection(ac.content, 'TDD Steps', 4);
       if (!tddSteps) {
         issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} is missing #### TDD Steps` });
@@ -377,6 +407,55 @@ function referencedBatches(value) {
   return names;
 }
 
+function validateFrontendVerification(sectionContent) {
+  const issues = [];
+  const impact = normalizeRequirementName(extractLabeledValue(sectionContent, 'Frontend Impact'));
+  const reason = extractLabeledValue(sectionContent, 'Reason');
+  if (!['yes', 'no'].includes(impact)) {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Verification requires - **Frontend Impact**: Yes or No' });
+    return issues;
+  }
+  if (!isMeaningfulCell(reason)) {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Verification requires a concrete Reason' });
+  }
+  if (impact === 'no') return issues;
+
+  const table = parseMarkdownTable(
+    sectionContent,
+    ['check', 'obligation', 'scope', 'target environment', 'command or procedure', 'evidence required'],
+    'Frontend Verification',
+  );
+  if (table.error) {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: table.error });
+    return issues;
+  }
+
+  const rowsByCheck = new Map(table.rows.map(row => [normalizeRequirementName(row.check), row]));
+  const uiRow = rowsByCheck.get('ui test');
+  const deviceRow = rowsByCheck.get('device test');
+  if (!uiRow) issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Verification requires a UI Test row' });
+  if (!deviceRow) issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Verification requires a Device Test row' });
+
+  for (const [name, row] of [['UI Test', uiRow], ['Device Test', deviceRow]]) {
+    if (!row) continue;
+    for (const field of ['scope', 'target environment', 'command or procedure', 'evidence required']) {
+      if (!isMeaningfulCell(row[field])) {
+        issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `${name} requires ${field}` });
+      }
+    }
+  }
+
+  const allowedUiObligations = new Set(['add', 'update', 'run existing', 'unavailable']);
+  if (uiRow && !allowedUiObligations.has(normalizeRequirementName(uiRow.obligation))) {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'UI Test obligation must be Add, Update, Run existing, or Unavailable' });
+  }
+  if (deviceRow && normalizeRequirementName(deviceRow.obligation) !== 'required') {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Device Test obligation must be Required for frontend work' });
+  }
+
+  return issues;
+}
+
 function validateSpecsLayout(changeDir, specsDir, specFiles) {
   const mdFiles = findFiles(specsDir, /\.md$/);
   const issues = [];
@@ -410,6 +489,7 @@ function validateExecutionContract(contractContent, requirementNames) {
     'Design Constraints',
     'Task Batches',
     'Test Obligations',
+    'Frontend Verification',
     'Review Gates',
     'Escalation Rules',
   ];
@@ -435,6 +515,9 @@ function validateExecutionContract(contractContent, requirementNames) {
       });
     }
   }
+
+  const frontendVerification = extractSection(contractContent, 'Frontend Verification');
+  if (frontendVerification) issues.push(...validateFrontendVerification(frontendVerification));
 
   const traceabilitySection = extractSection(contractContent, 'Requirement Traceability');
   if (!traceabilitySection) {

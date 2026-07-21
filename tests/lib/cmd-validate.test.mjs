@@ -42,6 +42,10 @@ Depends on: None
 - **Responsibility**: Enforce the shared request limit before handlers run.
 - **Add**: Add the middleware entry point and bounded counter storage.
 - **Used by**: HTTP route registration.
+#### TDD Test Plan
+| Layer | Action | Target | Proves |
+|---|---|---|---|
+| Unit | Add | \`test/rate-limit.test.ts#rejects over-limit requests\` | Over-limit requests are rejected before handlers run. |
 #### TDD Steps
 - [ ] Write the failing over-limit request test.
 - [ ] Run it and confirm the expected failure.
@@ -53,7 +57,22 @@ Depends on: None
 }
 
 function writeValidExecutionContract(changeDir) {
-  writeFileSync(join(changeDir, 'execution-contract.md'), '# Execution Contract\n\n## Intent Lock\n\nAdd request rate limiting.\n\n## Approved Behavior\n\nRate limit requests when clients exceed configured limits.\n\n## Requirement Traceability\n\n| Requirement | Approved Behavior | Test Obligation | Batch |\n|---|---|---|---|\n| Rate limit requests | Reject over-limit requests before expensive handlers run | Focused tests for HTTP 429 and service-call prevention | Batch 1 |\n\n## Design Constraints\n\nUse shared middleware.\n\n## Task Batches\n\n### Batch 1\n\n- Add tests and middleware.\n\n## Test Obligations\n\n- Start with failing tests for Rate limit requests.\n\n## Execution Mode\n\n- Mode: Inline\n\n## Verification Dimensions\n\n| Dimension | Status | Findings |\n|---|---|---|\n| Completeness | Pending | - |\n\n## Review Gates\n\n- Review before closure.\n\n## Escalation Rules\n\n- Return to bridging if middleware shape changes.\n');
+  writeFileSync(join(changeDir, 'execution-contract.md'), '# Execution Contract\n\n## Intent Lock\n\nAdd request rate limiting.\n\n## Approved Behavior\n\nRate limit requests when clients exceed configured limits.\n\n## Requirement Traceability\n\n| Requirement | Approved Behavior | Test Obligation | Batch |\n|---|---|---|---|\n| Rate limit requests | Reject over-limit requests before expensive handlers run | Focused tests for HTTP 429 and service-call prevention | Batch 1 |\n\n## Design Constraints\n\nUse shared middleware.\n\n## Task Batches\n\n### Batch 1\n\n- Add tests and middleware.\n\n## Test Obligations\n\n- Start with failing tests for Rate limit requests.\n\n## Frontend Verification\n\n- **Frontend Impact**: No\n- **Reason**: This change only affects server-side HTTP middleware.\n\n## Execution Mode\n\n- Mode: Inline\n\n## Verification Dimensions\n\n| Dimension | Status | Findings |\n|---|---|---|\n| Completeness | Pending | - |\n\n## Review Gates\n\n- Review before closure.\n\n## Escalation Rules\n\n- Return to bridging if middleware shape changes.\n');
+}
+
+function writeFrontendVerification(changeDir, rows) {
+  const contractPath = join(changeDir, 'execution-contract.md');
+  const contract = readFileSync(contractPath, 'utf-8');
+  const section = `## Frontend Verification
+
+- **Frontend Impact**: Yes
+- **Reason**: The change affects a user-visible client screen.
+
+| Check | Obligation | Scope | Target Environment | Command Or Procedure | Evidence Required |
+|---|---|---|---|---|---|
+${rows}
+`;
+  writeFileSync(contractPath, contract.replace(/## Frontend Verification[\s\S]*?(?=\n## Execution Mode)/, section));
 }
 
 function runValidate(changeDir) {
@@ -153,6 +172,58 @@ Rate limiting runs before handlers.
     assert.ok(result.stdout.includes('Batch 1 AC "Request exceeds limit" is missing #### File Changes'));
   });
 
+  it('fails when an AC omits its TDD Test Plan', () => {
+    const changeDir = join(tempDir, 'tasks-missing-test-coverage');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    const tasksPath = join(changeDir, 'tasks.md');
+    const tasks = readFileSync(tasksPath, 'utf-8');
+    writeFileSync(tasksPath, tasks.replace(/#### TDD Test Plan[\s\S]*?(?=#### TDD Steps)/, ''));
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(result.stdout.includes('is missing #### TDD Test Plan'));
+  });
+
+  it('fails when an AC uses an unsupported TDD test action', () => {
+    const changeDir = join(tempDir, 'tasks-invalid-ui-test-action');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    const tasksPath = join(changeDir, 'tasks.md');
+    const tasks = readFileSync(tasksPath, 'utf-8');
+    writeFileSync(tasksPath, tasks.replace('| Unit | Add |', '| UI | Maybe |'));
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(result.stdout.includes('Action must be Add, Update, Run existing, Unavailable, or Not applicable'));
+  });
+
+  it('accepts Unit and UI as layers in the same AC TDD plan', () => {
+    const changeDir = join(tempDir, 'tasks-unit-and-ui-layers');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    const tasksPath = join(changeDir, 'tasks.md');
+    const tasks = readFileSync(tasksPath, 'utf-8');
+    writeFileSync(tasksPath, tasks.replace(
+      '| Unit | Add | `test/rate-limit.test.ts#rejects over-limit requests` | Over-limit requests are rejected before handlers run. |',
+      '| Unit | Add | `test/rate-limit.test.ts#rejects over-limit requests` | Limit decisions reject oversized requests. |\n| UI | Add | `ui/rate-limit.spec.ts#shows rejection` | The user sees the rejection state. |',
+    ));
+    writeFrontendVerification(changeDir, [
+      '| UI Test | Add | Rate-limit screen | Desktop browser | npm run test:ui -- rate-limit | Test report path |',
+      '| Device Test | Required | Changed user path | Chrome desktop | Launch and exercise the changed path | Manual evidence note |',
+    ].join('\n'));
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.ok(result.stdout.includes('All artifacts validated'));
+  });
+
   it('allows a configured fast path to omit design while retaining AC-owned tasks', () => {
     const changeDir = join(tempDir, 'tasks-without-design-change');
     mkdirSync(changeDir, { recursive: true });
@@ -166,6 +237,10 @@ Rate limiting runs before handlers.
 #### File Changes
 ##### Modify \`src/rate-limit.ts\`
 - **Change**: Adjust the existing response text without changing middleware behavior.
+#### TDD Test Plan
+| Layer | Action | Target | Proves |
+|---|---|---|---|
+| Unit | Update | \`test/rate-limit.test.ts#returns revised copy\` | The middleware returns the revised response text. |
 #### TDD Steps
 - [ ] Update the focused assertion and implementation text.
 `);
@@ -188,6 +263,10 @@ Rate limiting runs before handlers.
 #### File Changes
 ##### Create \`src/rate-limit.ts\`
 - **Add**: Add the shared middleware.
+#### TDD Test Plan
+| Layer | Action | Target | Proves |
+|---|---|---|---|
+| Unit | Add | \`test/rate-limit.test.ts#rejects over-limit requests\` | The middleware rejects over-limit requests. |
 #### TDD Steps
 - [ ] Add focused tests and implementation.
 ## Batch 2: Repeat request rate limiting
@@ -196,6 +275,10 @@ Rate limiting runs before handlers.
 #### File Changes
 ##### Modify \`src/rate-limit.ts\`
 - **Change**: Repeat the same behavior in another batch.
+#### TDD Test Plan
+| Layer | Action | Target | Proves |
+|---|---|---|---|
+| Unit | Update | \`test/rate-limit.test.ts#rejects over-limit requests\` | The repeated behavior remains covered. |
 #### TDD Steps
 - [ ] Repeat the focused verification.
 `);
@@ -272,5 +355,34 @@ Rate limiting runs before handlers.
 
     assert.equal(result.exitCode, 1);
     assert.ok(result.stdout.includes('references missing task batch: batch 9'));
+  });
+
+  it('fails when frontend verification omits the Device Test row', () => {
+    const changeDir = join(tempDir, 'frontend-missing-device-test');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    writeFrontendVerification(changeDir, '| UI Test | Run existing | Rate-limit screen | Desktop browser | npm run test:ui -- rate-limit | Test report path |');
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(result.stdout.includes('Frontend Verification requires a Device Test row'));
+  });
+
+  it('fails when frontend Device Test is not required', () => {
+    const changeDir = join(tempDir, 'frontend-device-test-optional');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    writeFrontendVerification(changeDir, [
+      '| UI Test | Add | Rate-limit screen | Desktop browser | npm run test:ui -- rate-limit | Test report path |',
+      '| Device Test | Optional | Changed user path | Chrome desktop | Launch and exercise the changed path | Manual evidence note |',
+    ].join('\n'));
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(result.stdout.includes('Device Test obligation must be Required for frontend work'));
   });
 });

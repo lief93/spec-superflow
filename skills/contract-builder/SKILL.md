@@ -19,6 +19,7 @@ Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `task
 | `design.md` → coverage map + `## Decisions` | Scenario-to-decision mapping, Architecture, Interface, Dependency Constraints |
 | Relevant project memories + `design.md` | Implementation-relevant architecture, boundary, reuse, and runtime constraints |
 | `tasks.md` → Batch AC sections + AC-owned file changes | Execution Batches, Requirement/Scenario ownership, concrete file changes, Completion Definitions, Review Timing |
+| `tasks.md` → each AC's TDD Test Plan | Unit, Component, Integration, and UI test obligations and targets |
 
 ## Cross-Check: Requirement Coverage
 
@@ -28,6 +29,18 @@ Before finalizing:
 3. Verify each Requirement is reflected in Approved Behavior, has a test obligation, and appears in at least one batch
 4. Flag unmapped Requirements or Scenarios in Escalation Rules
 5. Note cross-batch dependencies
+
+## Frontend Verification
+
+Classify the repository as frontend when it contains a Web, Android, HarmonyOS, iOS, desktop, or other user-interface client, even when the current change is an internal refactor. Fill `## Frontend Verification` in the contract:
+
+- `Frontend Impact: Yes`: include `UI Test` and `Device Test` rows.
+- Aggregate the `UI` rows from the AC TDD Test Plans into the contract's UI Test obligation. Prefer focused existing tests; use the nearest module smoke/regression set when there is no direct match. Shared navigation, shared UI, or global state changes may require a broader UI suite.
+- If no UI framework exists, use `Unavailable`, record the inspected test locations/configuration, and do not silently introduce a framework.
+- Device Test is always `Required`. Default to one project baseline simulator/device per affected native platform, or the default browser and desktop viewport for Web. Add environments only when an AC depends on system version, screen size, Market, permission, or device capability.
+- Read commands and runtime prerequisites from project memory, build files, package scripts, and existing tests. Do not invent commands.
+- `Frontend Impact: No`: state the reason; the table is not required.
+- Screenshot tests are not part of this version.
 
 ## Requirement Traceability Table
 
@@ -45,7 +58,7 @@ Rules:
 
 ## Contract Structure
 
-Must make obvious: approved behavior, out-of-scope, implementation constraints, batches, test obligations, review gates, and conditions that force a rewind to planning. In Design Constraints, reference only the memories actually read and copy only the applicable invariants into the matching fields. Prefer compression over repeating memory content.
+Must make obvious: approved behavior, out-of-scope, implementation constraints, batches, test obligations, frontend verification, review gates, and conditions that force a rewind to planning. In Design Constraints, reference only the memories actually read and copy only the applicable invariants into the matching fields. Prefer compression over repeating memory content.
 
 ## Approval Model (DP-3)
 

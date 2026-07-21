@@ -31,6 +31,27 @@ Claiming work is complete without verification is dishonesty, not efficiency. Be
 ### Step 1: Test Suite
 Run full test suite. Record total/passed/failed/skipped. Zero failures = PASS.
 
+### Step 1A: Frontend Verification
+
+Read `## Frontend Verification` from `execution-contract.md`.
+
+When `Frontend Impact: Yes`:
+
+1. Run the planned affected UI regression set fresh. This includes added/updated UI tests or the related historical UI tests named by each AC. If there is no direct historical match, run the planned module smoke/regression set. Do not default to the entire project suite unless shared navigation, shared UI, global state, or acceptable test cost justifies it.
+2. Run Device Test after all Batches are complete: build, install/launch, and exercise each affected user path on at least one project baseline simulator/device per affected native platform. For Web, use the default real browser and desktop viewport; add a mobile viewport only when responsive behavior is affected.
+3. Record actual results in `pr-summary.md > Frontend Verification Evidence`: planned obligation, result, environment, command/procedure, and evidence.
+4. UI Test result must be `Pass` when the contract says `Add`, `Update`, or `Run existing`. A missing or failing required UI Test is FAIL.
+5. `Unavailable` is CONDITIONAL, not PASS. Record searched locations/configuration and the missing capability; proceed only after developer acceptance. Do not introduce a framework during release verification.
+6. Device Test must be `Pass`. Missing evidence, build/install/launch failure, or an unverified affected path is FAIL.
+
+Screenshot testing is outside this version and is not required by this gate.
+
+For an accepted `Unavailable` UI Test, record the decision before closure:
+```bash
+ssf state set <change-dir> dp_6_result "confirmed conditional: <developer acceptance and capability-gap summary>; Device Test passed"
+ssf state set <change-dir> dp_6_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
+```
+
 ### Step 2: Completeness
 Compare contract batches against actual diff. Every SHALL/MUST must have implementation evidence. Missing = Critical severity.
 
@@ -60,14 +81,17 @@ Check for files modified outside scope fence, new dependencies not in design. Un
 - Scope added without artifact updates?
 - Unresolved blockers or known risks?
 - Delta specs exist that need merging?
+- Frontend contract obligations have matching `pr-summary.md` evidence?
 - Run `ssf audit <change-dir>` — include `decision-point-audit.md` in archive
 
 ### DP-6 (Verification Outcome)
 ```bash
-ssf state set <change-dir> dp_6_result "<pass|conditional|fail>: <summary>"
+ssf state set <change-dir> dp_6_result "<pass|confirmed conditional|fail>: <summary>"
 ssf state set <change-dir> dp_6_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
 If FAIL, do NOT proceed to DP-7. Route back or ask about abandonment.
+
+After all mandatory checks pass, set `ssf state set <change-dir> test_result pass`. Do not set it from a successful build, code-level tests alone, or planned-but-unrun frontend checks.
 
 ### DP-7 (Archive Confirmation)
 ```bash
@@ -86,7 +110,7 @@ Run `node scripts/spec-superflow.mjs state transition <change-dir> closing`. If 
 
 ## Lightweight Closure (hotfix/tweak)
 
-Verify files exist and are non-empty, run `node --check` on code files, skip 5-step verification. Still record DP-6 and DP-7.
+Verify files exist and are non-empty, run `node --check` on code files, skip the general 5-step verification. Frontend hotfix/tweak changes still require the contract's UI Test and Device Test obligations. Still record DP-6 and DP-7.
 
 ## Exception Handling
 

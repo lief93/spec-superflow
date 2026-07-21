@@ -48,6 +48,7 @@ Defines:
 - implementation ordering
 - one owning Batch AC section for every Requirement/Scenario
 - concrete file changes under each AC, including methods or types when known
+- one TDD test plan per AC, with unit, component, integration, and UI tests treated as selectable test layers
 - dependency-aware work breakdown
 - completion units that can become execution batches
 
@@ -61,8 +62,11 @@ Defines:
 - implementation constraints
 - task batches
 - test obligations
+- frontend UI and device verification requirements when the project has a user interface
 - review gates
 - escalation rules
+
+`pr-summary.md` records the commands, environments, results, and evidence that satisfy the approved test obligations. For frontend changes, UI Test and Device Test evidence stays there rather than in a separate report artifact.
 
 ## Mapping
 

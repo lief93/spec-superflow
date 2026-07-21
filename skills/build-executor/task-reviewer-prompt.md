@@ -107,6 +107,9 @@ Subagent (general-purpose):
     **Tests:**
     - Do the new and changed tests verify real behavior, not mocks?
     - Are the task's edge cases covered?
+    - Does the implementation report satisfy every applicable row in the AC's TDD Test Plan, including the exact UI action and target?
+    - For `Run existing`, is the historical test related to the affected page, route, component, feature, or module?
+    - For `Unavailable`, is the missing framework supported by concrete repository evidence and no test infrastructure was added without approval?
 
     **Structure:**
     - Does each file have one clear responsibility with a well-defined interface?

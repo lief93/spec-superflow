@@ -34,6 +34,9 @@ Return to `specifying` or `bridging` if: new behavior appears, interfaces change
 ### Law 5: Project Memory Grounds Implementation
 Use relevant memory invariants when implementing. If the approved design or required implementation conflicts with a verified project memory, stop and return to planning or request clarification.
 
+### Law 6: Frontend Verification Is Contract Work
+When `execution-contract.md` says `Frontend Impact: Yes`, UI and device obligations are part of completion, not optional polish. Do not replace them with unit tests or a successful build.
+
 ## Execution Mode Selection
 
 Auto-selection based on: task count, cross-module dependencies, risk indicators (new API/schema/config, open questions, unimplemented dependencies).
@@ -56,14 +59,23 @@ Boundaries: if any task touches >1 module, involves schema/API/config changes, o
 
 ## SDD Workflow
 
-For changes with multiple execution batches. Dispatch implementer subagent per task, review each task, final broad review after all batches.
+For changes with multiple execution batches. Dispatch an implementer subagent per AC, review each AC, then run a broad review after all batches.
 
-### Per-Task Loop
-1. **Dispatch implementer**: Use `${CLAUDE_PLUGIN_ROOT}/skills/build-executor/implementer-prompt.md` template. Extract task brief with `scripts/task-brief PLAN_FILE N`. Include: where the task fits, brief path, interfaces from prior tasks, relevant memory paths or `Not configured`, relevant capability `spec.md` paths, and report file path.
+### Per-AC Loop
+1. **Dispatch implementer**: Use `${CLAUDE_PLUGIN_ROOT}/skills/build-executor/implementer-prompt.md` template. Extract the Nth AC brief with `scripts/task-brief PLAN_FILE N` (legacy `Task N` plans remain supported). Include: where the AC fits, brief path, interfaces from prior work, relevant memory paths or `Not configured`, relevant capability `spec.md` paths, and report file path.
 2. **Handle response**: DONE → generate review package + dispatch reviewer. DONE_WITH_CONCERNS → assess. NEEDS_CONTEXT → provide context. BLOCKED → re-dispatch with better model or escalate.
 3. **Review**: Use `skills/build-executor/task-reviewer-prompt.md`. Pass the relevant memory paths or `Not configured` and relevant capability `spec.md` paths. Reviewer returns spec compliance + code quality verdicts.
 4. **Fix**: If Critical or Important issues, dispatch fix subagent, re-review.
-5. **Mark complete**: Append to `.superpowers/sdd/progress.md`: `Task N: complete (commits <base7>..<head7>, review clean)`
+5. **Mark complete**: Append to `.superpowers/sdd/progress.md`: `AC N: complete (commits <base7>..<head7>, review clean)`
+
+Use every row in the AC's `TDD Test Plan` to drive execution. `Add` and `Update` belong inside RED → GREEN → REFACTOR; `Run existing` establishes the baseline before work and verifies regression afterward. For frontend UI rows:
+
+- `Add`/`Update`: implement and run the named UI Test.
+- `Run existing`: run the related historical UI Test; if no direct test exists, run the named module smoke/regression target.
+- `Unavailable`: do not add a framework silently; preserve the recorded capability gap for release verification.
+- `Not applicable` is valid only when `Frontend Impact: No`.
+
+For `Add`/`Update`, confirm the UI test is RED before the behavior exists and GREEN afterward; `Run existing` establishes and protects the regression baseline but does not need an artificial failure. After each relevant Batch, run the focused UI tests for that Batch. After all Batches, run the affected UI regression set once. Leave the final Device Test to `release-archivist`, after the implementation and review are stable.
 
 ### Model Selection
 Use least powerful model per role: mechanical (cheap), integration/judgment (standard), architecture/design (most capable), review (match diff), final review (most capable). Always specify model explicitly.
@@ -75,7 +87,7 @@ Track in `.superpowers/sdd/progress.md`. Check for existing ledger — completed
 
 For ≤3 tasks, no cross-module deps. Executes in current session.
 
-Per-task: extract brief → write failing test → confirm failure → implement → confirm green → checkpoint review (done-when criteria, SHALL/MUST verification) → commit → append to progress ledger.
+Per AC: extract brief → write failing test → confirm failure → implement → confirm green → run the AC's UI Test obligation when applicable → checkpoint review (done-when criteria, SHALL/MUST verification) → commit → append to progress ledger.
 
 If task hits BLOCKED (3+ fix failures or changes outside declared scope), escalate to SDD.
 
@@ -90,7 +102,7 @@ DP-5 (debug escalation): `ssf state set <change-dir> dp_5_result "<resolution>"`
 
 ## Completion Standard
 
-Don't report completion until: tests pass, contract obligations satisfied, review blockers resolved, all batches reviewed (per-task + final), workflow ready for `release-archivist`.
+Don't report completion until: code tests pass, planned UI tests pass or an approved `Unavailable` gap is preserved, contract obligations are satisfied, review blockers are resolved, all batches are reviewed (per-task + final), and the workflow is ready for `release-archivist` to run final UI regression and Device Test.
 
 ## Exception Handling
 
