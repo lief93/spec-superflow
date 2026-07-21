@@ -14,9 +14,17 @@
 
 - 本设计刻意不解决什么
 
+## Requirement And Scenario Coverage
+
+使用 Spec 中完全一致的 Requirement 和 Scenario 标题。每个 Scenario 对应一个设计决策；没有设计影响时填写 `No design change`。
+
+| Requirement | Scenario | Design Decision | Affected Area | Why Here |
+|---|---|---|---|---|
+| 需求标题 | 场景标题 | 决策标题或 `No design change` | 模块、组件或职责边界 | 为什么由这里负责 |
+
 ## 决策
 
-### 决策 1
+### Decision: 决策标题
 
 - **选择**：
 - **理由**：

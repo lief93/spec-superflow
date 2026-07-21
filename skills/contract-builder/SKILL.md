@@ -16,17 +16,18 @@ Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `task
 | `proposal.md` → `## Why` + `## What Changes` | Intent Lock (problem + scope) |
 | `proposal.md` → `## Scope > ### Out of Scope` | Scope Fence |
 | `specs/` → each `### Requirement:` | Approved Requirements, Scenarios, Test Obligations |
-| `design.md` → `## Decisions` | Architecture, Interface, Dependency Constraints |
+| `design.md` → coverage map + `## Decisions` | Scenario-to-decision mapping, Architecture, Interface, Dependency Constraints |
 | Relevant project memories + `design.md` | Implementation-relevant architecture, boundary, reuse, and runtime constraints |
-| `tasks.md` → numbered task groups | Execution Batches, Completion Definitions, Review Timing |
+| `tasks.md` → Batch AC sections + AC-owned file changes | Execution Batches, Requirement/Scenario ownership, concrete file changes, Completion Definitions, Review Timing |
 
 ## Cross-Check: Requirement Coverage
 
 Before finalizing:
 1. List every SHALL/MUST from `specs/`
-2. Verify each is reflected in Approved Behavior, has a test obligation, and appears in at least one batch
-3. Flag unmapped requirements in Escalation Rules
-4. Note cross-batch dependencies
+2. Verify every Scenario is mapped through design coverage and exactly one task Batch AC section
+3. Verify each Requirement is reflected in Approved Behavior, has a test obligation, and appears in at least one batch
+4. Flag unmapped Requirements or Scenarios in Escalation Rules
+5. Note cross-batch dependencies
 
 ## Requirement Traceability Table
 
