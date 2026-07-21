@@ -9,7 +9,7 @@
     {
       "name": "spec-superflow",
       "description": "8-state workflow engine with 10 collaborative skills. Bridges progressive project memory, planning, and execution via execution-contract.md. Embedded schema validation, TDD, SDD, code review, systematic debugging, and delta spec sync.",
-      "version": "0.8.9",
+      "version": "0.9.2",
       "source": "./",
       "author": {
         "name": "MageByte",
