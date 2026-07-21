@@ -36,6 +36,8 @@ Defines:
 Defines:
 
 - architecture and component boundaries
+- which Requirement and Scenario each decision serves
+- which area owns the change and why it belongs there
 - interface and dependency decisions
 - trade-offs and risk areas
 
@@ -44,6 +46,8 @@ Defines:
 Defines:
 
 - implementation ordering
+- one owning Batch AC section for every Requirement/Scenario
+- concrete file changes under each AC, including methods or types when known
 - dependency-aware work breakdown
 - completion units that can become execution batches
 
@@ -66,8 +70,8 @@ Defines:
 
 - `proposal.md` -> intent lock and scope fence
 - `specs/` -> test obligations and acceptance checks
-- `design.md` -> implementation constraints
-- `tasks.md` -> execution batches
+- `design.md` -> Requirement/Scenario-to-decision mapping and implementation constraints
+- `tasks.md` -> Scenario-owned concrete file changes and execution batches
 
 ## Guardrail
 

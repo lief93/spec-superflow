@@ -33,13 +33,17 @@ Must state: problem, what changes, capabilities affected, impact areas.
 Every requirement must be testable. Use SHALL or MUST. Every requirement must have at least one `#### Scenario:` with WHEN/THEN. Group under ADDED/MODIFIED/REMOVED Requirements headers.
 
 ### design.md
-Must have: Context (current state, constraints, stakeholders), Goals, Decisions (Choice + Rationale + Alternatives considered), Risks And Trade-Offs. Use relevant project memories to justify code placement, responsibility boundaries, data flow, and reuse choices without copying the memories into the design.
+Must have: Context (current state, constraints, stakeholders), Goals, Requirement And Scenario Coverage, Decisions (Choice + Rationale + Alternatives considered), Risks And Trade-Offs. The coverage table uses the exact Requirement and Scenario titles from the spec and maps each Scenario to a Design Decision, affected area, and reason that area owns the change. Use `No design change` when a Scenario needs no technical decision. Use relevant project memories to justify code placement, responsibility boundaries, data flow, and reuse choices without copying the memories into the design.
 
 ### tasks.md
 Must include:
-- **File Structure**: all files with one-sentence responsibility (Create/Modify)
+- **ACs inside each Batch**: one `### AC: <exact Scenario title>` section for each covered Scenario, with the exact Requirement title; no synthetic IDs are required
+- **Single ownership**: every spec Scenario belongs to exactly one Batch AC section
+- **File Changes per AC**: each Create/Modify/Delete file sits under the AC it serves, with a concrete explanation of what changes, what is added, and what is reused; when one file serves multiple ACs, repeat the file under each AC with only that AC's change
+- **AC as the join key**: derive file changes from `design.md`, but do not repeat Design Decision metadata in `tasks.md`; the exact Requirement/Scenario titles connect Spec, Design, and Tasks
+- **Stable anchors**: use file paths and method/type names when known; do not use line numbers and do not split each method into a separate task
 - **Interfaces**: cross-batch Consumes/Produces with exact types
-- **Per-task**: exact file paths, expanded TDD phases (5 steps), Interfaces block
+- **Per-AC execution**: exact file paths and expanded TDD phases (5 steps)
 - **Granularity**: each step 2-5 min, atomic
 - **Zero placeholders**: no TBD, TODO, "figure out", "add appropriate"
 - **Dependency ordering**: depends only on prior tasks, explicit "Depends on: Batch N"
@@ -62,10 +66,10 @@ Generate one at a time. Confirm each before next. This prevents scope drift — 
 - SHALL/MUST for required behavior, `#### Scenario:` with WHEN/THEN per requirement, grouped under delta headers, no contradictions
 
 ### design.md
-- `## Context`, `## Goals`, `## Decisions` (≥1, with Choice+Rationale+Alternatives), `## Risks And Trade-Offs`
+- `## Context`, `## Goals`, `## Requirement And Scenario Coverage`, `## Decisions` (≥1 when design changes exist, with Choice+Rationale+Alternatives), `## Risks And Trade-Offs`; every spec Scenario appears in the coverage table
 
 ### tasks.md
-- `## File Structure`, `## Interfaces`, numbered tasks, exact file paths, TDD phases, ≤5 min steps, no placeholders, every requirement mapped, explicit dependencies
+- `## Interfaces`, numbered Batches, one `### AC` section per Scenario, `#### File Changes`, exact file paths, concrete per-file change descriptions, TDD phases, ≤5 min steps, no placeholders, every Scenario mapped exactly once, explicit dependencies
 
 **If any artifact fails validation, fix before handing off to contract-builder.**
 
@@ -84,7 +88,7 @@ Regeneration rules:
 - `proposal.md` failure: regenerate `proposal.md`; because proposal scope drives downstream artifacts, re-check and regenerate `specs/`, `design.md`, and `tasks.md` if scope, capabilities, or out-of-scope items changed.
 - `specs/` failure: regenerate the affected `specs/<capability>/spec.md` files using the required `spec.md` filename and delta headers; if requirement names or behaviors change, regenerate `design.md` and `tasks.md`.
 - `design.md` failure: regenerate `design.md` from the current proposal/specs; if decisions, interfaces, or constraints change, regenerate `tasks.md`.
-- `tasks.md` failure: regenerate `tasks.md` from the current proposal/specs/design, ensuring every requirement maps to concrete batches and TDD steps.
+- `tasks.md` failure: regenerate `tasks.md` from the current proposal/specs/design, ensuring every Scenario has one owning Batch AC section with its files and TDD steps.
 - `specs/ layout` failure: move or rewrite misplaced markdown into `specs/<capability>/spec.md`; remove duplicate or orphan spec files created by your failed generation attempt.
 
 After regenerating, run `ssf validate <change-dir>` once more.

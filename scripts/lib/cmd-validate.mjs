@@ -41,6 +41,23 @@ function extractRequirementNames(content) {
   return names;
 }
 
+function extractRequirementScenarioPairs(content) {
+  const pairs = [];
+  let requirement = null;
+  for (const line of content.split('\n')) {
+    const requirementMatch = line.match(/^###\s*Requirement:\s*(.+?)\s*$/i);
+    if (requirementMatch) {
+      requirement = requirementMatch[1].trim();
+      continue;
+    }
+    const scenarioMatch = line.match(/^####\s*Scenario:\s*(.+?)\s*$/i);
+    if (requirement && scenarioMatch) {
+      pairs.push({ requirement, scenario: scenarioMatch[1].trim() });
+    }
+  }
+  return pairs;
+}
+
 function hasSection(content, title) {
   const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
   return new RegExp(`^##\\s+.*${escaped}.*$`, 'im').test(content);
@@ -70,6 +87,10 @@ function normalizeRequirementName(value) {
   return normalizeCell(value).toLowerCase();
 }
 
+function normalizeDecisionName(value) {
+  return normalizeCell(value).replace(/^decision\s*:\s*/i, '').toLowerCase();
+}
+
 function isMeaningfulCell(value) {
   const normalized = normalizeCell(value).toLowerCase();
   return normalized !== '' && !['-', '—', 'n/a', 'na', 'none', 'tbd', 'todo', 'pending'].includes(normalized);
@@ -93,7 +114,7 @@ function normalizeHeader(value) {
   return normalizeCell(value).toLowerCase().replace(/s$/, '');
 }
 
-function parseTraceabilityTable(sectionContent) {
+function parseMarkdownTable(sectionContent, requiredHeaders, tableName = 'Markdown') {
   const lines = sectionContent.split('\n').map(line => line.trim()).filter(Boolean);
 
   for (let i = 0; i < lines.length - 1; i++) {
@@ -102,11 +123,10 @@ function parseTraceabilityTable(sectionContent) {
     if (!headerCells || !delimiterCells || !isTableDelimiter(delimiterCells)) continue;
 
     const headers = headerCells.map(normalizeHeader);
-    const requiredHeaders = ['requirement', 'approved behavior', 'test obligation', 'batch'];
     const indexes = {};
     for (const required of requiredHeaders) {
       const idx = headers.indexOf(required);
-      if (idx === -1) return { error: `Requirement Traceability table must include columns: ${requiredHeaders.join(', ')}` };
+      if (idx === -1) return { error: `${tableName} table must include columns: ${requiredHeaders.join(', ')}` };
       indexes[required] = idx;
     }
 
@@ -114,17 +134,226 @@ function parseTraceabilityTable(sectionContent) {
     for (let j = i + 2; j < lines.length; j++) {
       const cells = splitMarkdownTableRow(lines[j]);
       if (!cells) break;
-      rows.push({
-        requirement: cells[indexes.requirement] || '',
-        approvedBehavior: cells[indexes['approved behavior']] || '',
-        testObligation: cells[indexes['test obligation']] || '',
-        batch: cells[indexes.batch] || '',
-      });
+      const row = {};
+      for (const required of requiredHeaders) row[required] = cells[indexes[required]] || '';
+      rows.push(row);
     }
     return { rows };
   }
 
-  return { error: 'Requirement Traceability section must contain a markdown table' };
+  return { error: `${tableName} section must contain a markdown table` };
+}
+
+function parseTraceabilityTable(sectionContent) {
+  const parsed = parseMarkdownTable(sectionContent, ['requirement', 'approved behavior', 'test obligation', 'batch'], 'Requirement Traceability');
+  if (parsed.error) return parsed;
+  return {
+    rows: parsed.rows.map(row => ({
+      requirement: row.requirement,
+      approvedBehavior: row['approved behavior'],
+      testObligation: row['test obligation'],
+      batch: row.batch,
+    })),
+  };
+}
+
+function coverageKey(requirement, scenario) {
+  return `${normalizeRequirementName(requirement)}\u0000${normalizeRequirementName(scenario)}`;
+}
+
+function extractNestedSection(content, title, level) {
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  const hashes = '#'.repeat(level);
+  const heading = new RegExp(`^${hashes}\\s+${escaped}\\s*$`, 'im');
+  const match = heading.exec(content);
+  if (!match) return null;
+  const start = match.index + match[0].length;
+  const rest = content.slice(start);
+  const next = rest.search(new RegExp(`^#{1,${level}}\\s+`, 'm'));
+  return (next === -1 ? rest : rest.slice(0, next)).trim();
+}
+
+function extractLabeledValue(content, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  const match = new RegExp(`^-\\s*\\*\\*${escaped}\\*\\*:\\s*(.+?)\\s*$`, 'im').exec(content);
+  return match ? normalizeCell(match[1]) : '';
+}
+
+function validateDesignStructure(content, scenarioPairs) {
+  const issues = [];
+  if (content.trim().length < 50) {
+    issues.push({ level: 'ERROR', path: 'design.md', message: 'design.md is too short (< 50 chars) — provide decisions, coverage, trade-offs, and affected areas' });
+  }
+
+  const coverageSection = extractSection(content, 'Requirement And Scenario Coverage');
+  if (!coverageSection) {
+    issues.push({ level: 'ERROR', path: 'design.md', message: 'Missing ## Requirement And Scenario Coverage' });
+    return { ...makeReport(issues), coverageRows: new Map() };
+  }
+
+  const table = parseMarkdownTable(coverageSection, ['requirement', 'scenario', 'design decision', 'affected area', 'why here'], 'Design coverage');
+  if (table.error) {
+    issues.push({ level: 'ERROR', path: 'design.md', message: table.error });
+    return { ...makeReport(issues), coverageRows: new Map() };
+  }
+
+  const coverageRows = new Map();
+  for (const row of table.rows) {
+    const key = coverageKey(row.requirement, row.scenario);
+    for (const field of ['requirement', 'scenario']) {
+      if (!isMeaningfulCell(row[field])) {
+        issues.push({ level: 'ERROR', path: 'design.md', message: `Design coverage row requires ${field}` });
+      }
+    }
+    if (coverageRows.has(key)) {
+      issues.push({ level: 'ERROR', path: 'design.md', message: `Duplicate design coverage row: ${row.requirement} / ${row.scenario}` });
+      continue;
+    }
+    coverageRows.set(key, row);
+    for (const field of ['design decision', 'affected area', 'why here']) {
+      if (!isMeaningfulCell(row[field])) {
+        issues.push({ level: 'ERROR', path: 'design.md', message: `Design coverage for "${row.requirement} / ${row.scenario}" requires ${field}` });
+      }
+    }
+  }
+
+  const decisionsSection = extractSection(content, 'Decisions') || extractSection(content, '决策') || '';
+  const decisionNames = new Set();
+  const decisionRegex = /^###\s+(?:Decision:\s*)?(.+?)\s*$/gim;
+  let decisionMatch;
+  while ((decisionMatch = decisionRegex.exec(decisionsSection)) !== null) {
+    decisionNames.add(normalizeRequirementName(decisionMatch[1]));
+  }
+
+  for (const pair of scenarioPairs) {
+    const row = coverageRows.get(coverageKey(pair.requirement, pair.scenario));
+    if (!row) {
+      issues.push({ level: 'ERROR', path: 'design.md', message: `Scenario missing from design coverage: ${pair.requirement} / ${pair.scenario}` });
+      continue;
+    }
+    const decision = normalizeDecisionName(row['design decision']);
+    if (decision !== 'no design change' && !decisionNames.has(decision)) {
+      issues.push({ level: 'ERROR', path: 'design.md', message: `Design coverage references missing decision: ${row['design decision']}` });
+    }
+  }
+
+  const expectedKeys = new Set(scenarioPairs.map(pair => coverageKey(pair.requirement, pair.scenario)));
+  for (const row of coverageRows.values()) {
+    if (!expectedKeys.has(coverageKey(row.requirement, row.scenario))) {
+      issues.push({ level: 'WARNING', path: 'design.md', message: `Design coverage row has no matching spec Scenario: ${row.requirement} / ${row.scenario}` });
+    }
+  }
+
+  return { ...makeReport(issues), coverageRows };
+}
+
+function extractTaskBatches(content) {
+  const headings = [];
+  const regex = /^##\s+(?:\d+\.\s*)?(Batch\s+\d+)\b[^\n]*$/gim;
+  let match;
+  while ((match = regex.exec(content)) !== null) headings.push({ name: match[1], start: match.index, bodyStart: regex.lastIndex });
+  return headings.map((heading, index) => ({
+    name: heading.name,
+    content: content.slice(heading.bodyStart, headings[index + 1]?.start ?? content.length),
+  }));
+}
+
+function extractTaskAcs(content) {
+  const headings = [];
+  const regex = /^###\s+AC:\s*(.+?)\s*$/gim;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    headings.push({ scenario: normalizeCell(match[1]), start: match.index, bodyStart: regex.lastIndex });
+  }
+  return headings.map((heading, index) => ({
+    scenario: heading.scenario,
+    content: content.slice(heading.bodyStart, headings[index + 1]?.start ?? content.length),
+  }));
+}
+
+function validateFileChanges(scopeName, content, headingLevel = 5) {
+  const issues = [];
+  const hashes = '#'.repeat(headingLevel);
+  const fileRegex = new RegExp('^' + hashes + '\\s+(Create|Modify|Delete)\\s+`([^`]+)`\\s*$', 'gim');
+  const files = [];
+  let match;
+  while ((match = fileRegex.exec(content)) !== null) files.push({ action: match[1], path: match[2], bodyStart: fileRegex.lastIndex, headingStart: match.index });
+  if (files.length === 0) {
+    issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} File Changes must contain at least one ${hashes} Create/Modify/Delete \`path\` heading` });
+    return issues;
+  }
+  files.forEach((file, index) => {
+    const body = content.slice(file.bodyStart, files[index + 1]?.headingStart ?? content.length);
+    if (!/\*\*(?:Change|Add|Responsibility)\*\*:\s*\S+/i.test(body)) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} file ${file.path} needs a concrete Change, Add, or Responsibility explanation` });
+    }
+  });
+  return issues;
+}
+
+function validateTasksStructure(content, scenarioPairs, designCoverageRows, designExists) {
+  const issues = [];
+  if (content.trim().length < 50) {
+    issues.push({ level: 'ERROR', path: 'tasks.md', message: 'tasks.md is too short (< 50 chars) — provide covered scenarios, concrete file changes, and ordered TDD steps' });
+  }
+
+  const batches = extractTaskBatches(content);
+  if (batches.length === 0) issues.push({ level: 'ERROR', path: 'tasks.md', message: 'tasks.md must contain at least one ## Batch N heading' });
+  const covered = new Map();
+  const expectedKeys = new Set(scenarioPairs.map(pair => coverageKey(pair.requirement, pair.scenario)));
+
+  for (const batch of batches) {
+    const acs = extractTaskAcs(batch.content);
+    if (acs.length === 0) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${batch.name} must contain at least one ### AC: <Scenario title> section` });
+      continue;
+    }
+
+    for (const ac of acs) {
+      const requirement = extractLabeledValue(ac.content, 'Requirement');
+      const scopeName = `${batch.name} AC "${ac.scenario}"`;
+      if (!isMeaningfulCell(requirement)) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} requires - **Requirement**: <exact Requirement title>` });
+        continue;
+      }
+
+      const key = coverageKey(requirement, ac.scenario);
+      if (covered.has(key)) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `Scenario assigned to multiple Batch AC sections: ${requirement} / ${ac.scenario}` });
+      } else {
+        covered.set(key, { requirement, scenario: ac.scenario, batch: batch.name });
+      }
+
+      if (!expectedKeys.has(key)) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `Task AC has no matching spec Scenario: ${requirement} / ${ac.scenario}` });
+      }
+      if (designExists && !designCoverageRows.has(key)) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `Task AC has no matching design.md coverage row: ${requirement} / ${ac.scenario}` });
+      }
+
+      const fileChanges = extractNestedSection(ac.content, 'File Changes', 4);
+      if (!fileChanges) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} is missing #### File Changes` });
+      } else {
+        issues.push(...validateFileChanges(scopeName, fileChanges));
+      }
+
+      const tddSteps = extractNestedSection(ac.content, 'TDD Steps', 4);
+      if (!tddSteps) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} is missing #### TDD Steps` });
+      } else if (!/-\s*\[[ xX]\]\s+\S+/.test(tddSteps)) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} TDD Steps must contain executable checklist items` });
+      }
+    }
+  }
+
+  for (const pair of scenarioPairs) {
+    if (!covered.has(coverageKey(pair.requirement, pair.scenario))) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `Scenario missing from task coverage: ${pair.requirement} / ${pair.scenario}` });
+    }
+  }
+
+  return makeReport(issues);
 }
 
 function extractBatchNames(contractContent) {
@@ -347,6 +576,7 @@ export async function run(args) {
   // Validate specs/*/spec.md
   const specsDir = join(changeDir, 'specs');
   const requirementNames = [];
+  const scenarioPairs = [];
   if (existsSync(specsDir)) {
     const specFiles = findFiles(specsDir, /^spec\.md$/);
     const layoutReport = validateSpecsLayout(changeDir, specsDir, specFiles);
@@ -361,6 +591,7 @@ export async function run(args) {
       printReport(rel, report);
       if (!report.valid) hasErrors = true;
       requirementNames.push(...extractRequirementNames(content));
+      scenarioPairs.push(...extractRequirementScenarioPairs(content));
     }
   }
 
@@ -372,26 +603,20 @@ export async function run(args) {
     if (!report.valid) hasErrors = true;
   }
 
-  // Basic structural validation for design.md and tasks.md (shared pattern)
-  const STRUCTURAL_CHECKS = [
-    { file: 'design.md', errorMsg: 'design.md is too short (< 50 chars) — provide architecture decisions, trade-offs, and data flow', warningMsg: 'design.md has no section headings — consider adding ## Architecture, ## Data Flow, ## Error Handling' },
-    { file: 'tasks.md', errorMsg: 'tasks.md is too short (< 50 chars) — provide actionable, ordered implementation tasks', warningMsg: 'tasks.md has no section headings — consider adding ## File Structure and ## Tasks' },
-  ];
+  let designCoverageRows = new Map();
+  const designPath = join(changeDir, 'design.md');
+  const designExists = existsSync(designPath);
+  if (designExists) {
+    const report = validateDesignStructure(readFileSync(designPath, 'utf-8'), scenarioPairs);
+    designCoverageRows = report.coverageRows;
+    printReport('design.md', report);
+    if (!report.valid) hasErrors = true;
+  }
 
-  for (const { file, errorMsg, warningMsg } of STRUCTURAL_CHECKS) {
-    const filePath = join(changeDir, file);
-    if (!existsSync(filePath)) continue;
-
-    const content = readFileSync(filePath, 'utf-8').trim();
-    const issues = [];
-    if (content.length < 50) issues.push({ level: 'ERROR', path: file, message: errorMsg });
-    if (!content.includes('##')) issues.push({ level: 'WARNING', path: file, message: warningMsg });
-    const report = {
-      valid: issues.filter(i => i.level === 'ERROR').length === 0,
-      issues,
-      summary: { errors: issues.filter(i => i.level === 'ERROR').length, warnings: issues.filter(i => i.level === 'WARNING').length, info: 0 },
-    };
-    printReport(file, report);
+  const tasksPath = join(changeDir, 'tasks.md');
+  if (existsSync(tasksPath)) {
+    const report = validateTasksStructure(readFileSync(tasksPath, 'utf-8'), scenarioPairs, designCoverageRows, designExists);
+    printReport('tasks.md', report);
     if (!report.valid) hasErrors = true;
   }
 
