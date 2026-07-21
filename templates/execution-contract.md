@@ -51,6 +51,18 @@
 - **必需的边界情况**：
 - **回归敏感区域**：
 
+## Frontend Verification
+
+- **Frontend Impact**: `Yes` | `No`
+- **Reason**: 判断依据；`No` 时说明为什么不涉及用户界面客户端
+
+`Frontend Impact: Yes` 时保留下表；`No` 时删除表格。
+
+| Check | Obligation | Scope | Target Environment | Command Or Procedure | Evidence Required |
+|---|---|---|---|---|---|
+| UI Test | `Add` / `Update` / `Run existing` / `Unavailable` | 受影响页面、流程或相关历史回归集合 | UI 测试运行环境 | 精确命令；不可用时记录查找范围和能力缺口 | 通过数量、失败数量、报告路径或不可用原因 |
+| Device Test | `Required` | 本次改动影响的用户关键路径 | 项目基准模拟器、真机或浏览器环境 | 构建、安装/启动和操作步骤 | 运行结果、环境信息和必要日志 |
+
 ## Execution Mode
 
 - **模式**：`Inline` | `Batch Inline` | `SDD`

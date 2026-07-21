@@ -115,6 +115,8 @@ Subagent (general-purpose):
     - Did I follow TDD if required?
     - Are tests comprehensive?
     - Is the test output pristine (no stray warnings or noise)?
+    - Did I execute every applicable row in the AC's `TDD Test Plan`, including the exact UI action and target?
+    - If it says `Unavailable`, did I avoid silently adding test infrastructure and preserve the documented reason?
 
     If you find issues during self-review, fix them now before reporting.
 
@@ -132,6 +134,7 @@ Subagent (general-purpose):
     - **TDD Evidence** (if TDD was required for this task):
       - RED: command run, relevant failing output before implementation, and why the failure was expected
       - GREEN: command run and relevant passing output after implementation
+    - **TDD Test Evidence**: for each applicable Unit, Component, Integration, or UI row, record action, target, RED/GREEN commands and results; `Run existing` records the baseline/regression result, and `Unavailable` records inspected locations and the missing capability
     - Files changed
     - Self-review findings (if any)
     - Any issues or concerns

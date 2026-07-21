@@ -71,6 +71,8 @@ Subagent (general-purpose):
     - Edge cases covered?
     - Integration tests where they matter?
     - All tests passing?
+    - For frontend work, do changed UI behaviors have added/updated UI tests, or do unchanged UI behaviors run relevant historical UI tests as planned?
+    - Is any claimed `Unavailable` UI Test backed by repository evidence rather than convenience?
 
     **Production readiness:**
     - Migration strategy if schema changed?

@@ -41,12 +41,24 @@ Must include:
 - **Single ownership**: every spec Scenario belongs to exactly one Batch AC section
 - **File Changes per AC**: each Create/Modify/Delete file sits under the AC it serves, with a concrete explanation of what changes, what is added, and what is reused; when one file serves multiple ACs, repeat the file under each AC with only that AC's change
 - **AC as the join key**: derive file changes from `design.md`, but do not repeat Design Decision metadata in `tasks.md`; the exact Requirement/Scenario titles connect Spec, Design, and Tasks
+- **TDD Test Plan per AC**: use one table with `Layer | Action | Target | Proves`; select only the Unit, Component, Integration, or UI layers that efficiently prove the AC, and classify each as `Add`, `Update`, `Run existing`, `Unavailable`, or `Not applicable`
 - **Stable anchors**: use file paths and method/type names when known; do not use line numbers and do not split each method into a separate task
 - **Interfaces**: cross-batch Consumes/Produces with exact types
 - **Per-AC execution**: exact file paths and expanded TDD phases (5 steps)
 - **Granularity**: each step 2-5 min, atomic
 - **Zero placeholders**: no TBD, TODO, "figure out", "add appropriate"
 - **Dependency ordering**: depends only on prior tasks, explicit "Depends on: Batch N"
+
+For Web, Android, HarmonyOS, iOS, desktop, or another user-interface client:
+
+- Unit, Component, Integration, and UI tests are all part of the AC's TDD strategy; do not treat UI Test as post-TDD evidence.
+- Put each behavior at the lowest stable test layer that proves it. Do not duplicate the same assertion across layers without a distinct regression risk.
+- User-visible rendering, interaction, navigation, input, state, or error behavior → include an `Add` or `Update` UI row and use it as the outer RED/GREEN loop.
+- No new UI Test needed → locate and use the related historical UI Test for the affected page, route, component, feature, or module and mark `Run existing`.
+- No direct match → use the nearest module UI smoke/regression suite.
+- No UI framework exists → mark `Unavailable`, record where you searched, and do not add dependencies, runners, or CI setup without developer approval.
+- Do not plan the final Device Test inside each AC; contract-builder aggregates it after all Batches.
+- Screenshot tests are outside this rule until separately enabled.
 
 ## Artifact Generation
 
@@ -69,7 +81,7 @@ Generate one at a time. Confirm each before next. This prevents scope drift — 
 - `## Context`, `## Goals`, `## Requirement And Scenario Coverage`, `## Decisions` (≥1 when design changes exist, with Choice+Rationale+Alternatives), `## Risks And Trade-Offs`; every spec Scenario appears in the coverage table
 
 ### tasks.md
-- `## Interfaces`, numbered Batches, one `### AC` section per Scenario, `#### File Changes`, exact file paths, concrete per-file change descriptions, TDD phases, ≤5 min steps, no placeholders, every Scenario mapped exactly once, explicit dependencies
+- `## Interfaces`, numbered Batches, one `### AC` section per Scenario, `#### File Changes`, `#### TDD Test Plan`, exact test targets and behaviors, concrete per-file change descriptions, RED/GREEN/REFACTOR phases, ≤5 min steps, no placeholders, every Scenario mapped exactly once, explicit dependencies
 
 **If any artifact fails validation, fix before handing off to contract-builder.**
 

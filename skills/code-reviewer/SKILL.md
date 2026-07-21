@@ -18,7 +18,7 @@ Two responsibilities: requesting review (dispatching a reviewer subagent) and re
 3. Dispatch an independent `general-purpose` reviewer subagent using `skills/code-reviewer/code-reviewer-prompt.md`.
 4. Fill placeholders: `[DESCRIPTION]`, `[PLAN_OR_REQUIREMENTS]`, `[PROJECT_MEMORIES]`, `[CAPABILITY_SPECS]`, `[BASE_SHA]`, `[HEAD_SHA]`.
 5. Act on feedback: fix Critical immediately, fix Important before proceeding, note Minor for later, push back with reasoning if reviewer is wrong.
-6. Create or update `<change-dir>/pr-summary.md` from `templates/pr-summary.md`. Record delivered scope, verification evidence, exceptions, and known risks.
+6. Create or update `<change-dir>/pr-summary.md` from `templates/pr-summary.md`. Record delivered scope, verification evidence, exceptions, and known risks. Preserve the contract's frontend classification and planned UI/Device obligations; implementation-time UI results may be added now, while release-archivist records the fresh final UI regression and Device Test evidence.
 
 ## Part 2: Receiving Review Feedback
 

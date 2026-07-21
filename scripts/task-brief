@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Extract one task's full text from an implementation plan into a file the
-# implementer reads in one call, so the task text never has to be pasted
+# Extract one task or AC's full text from an implementation plan into a file
+# the implementer reads in one call, so the text never has to be pasted
 # through the controller's context.
 #
-# Usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]
+# Usage: task-brief PLAN_FILE TASK_OR_AC_NUMBER [OUTFILE]
 # Default OUTFILE: <repo-root>/.superpowers/sdd/task-<N>-brief.md
 # (per worktree; concurrent runs in the same working tree share it).
 set -euo pipefail
 
 if [ $# -lt 2 ] || [ $# -gt 3 ]; then
-  echo "usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]" >&2
+  echo "usage: task-brief PLAN_FILE TASK_OR_AC_NUMBER [OUTFILE]" >&2
   exit 2
 fi
 
@@ -33,7 +33,26 @@ awk -v n="$n" '
 ' "$plan" > "$out"
 
 if [ ! -s "$out" ]; then
-  echo "task ${n} not found in ${plan} (no heading matching 'Task ${n}')" >&2
+  awk -v n="$n" '
+    /^```/ { infence = !infence }
+    !infence && /^##[ \t]+Batch[ \t]+[0-9]+/ { batch = $0 }
+    !infence && /^###[ \t]+AC:/ {
+      ac += 1
+      if (inac) exit
+      if (ac == n) {
+        if (batch != "") print batch
+        print
+        inac = 1
+        next
+      }
+    }
+    !infence && inac && /^##[ \t]+Batch[ \t]+[0-9]+/ { exit }
+    inac { print }
+  ' "$plan" > "$out"
+fi
+
+if [ ! -s "$out" ]; then
+  echo "task or AC ${n} not found in ${plan}" >&2
   exit 3
 fi
 
