@@ -4,6 +4,27 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [0.9.2] - 2026-07-21
+
+### Added
+
+- **Progressive project memory** — Added `memory-manager`, `.spec-superflow/memories/`, and `ssf memories list|check` for durable, progressively loaded project knowledge without Serena, MCP, or a language server.
+- **Memory maintenance at closure** — Verified implementation findings can add, update, or skip long-term memory after spec synchronization, while task history and transient logs remain outside memory.
+- **Frontend verification contract** — Frontend work now records UI Test obligations and requires final Device Test evidence on a baseline browser, simulator, or device.
+
+### Changed
+
+- **End-to-end planning traceability** — Requirements and Scenarios now map through Design Decisions, AC-owned file changes, TDD test plans, execution batches, and final review evidence.
+- **Structured TDD planning** — Every AC can select Unit, Component, Integration, and UI test layers with explicit `Add`, `Update`, `Run existing`, `Unavailable`, or `Not applicable` actions.
+- **Execution task extraction** — `task-brief` extracts the current AC-based task format with Batch context while preserving legacy numbered Task support.
+- **Planning repair and validation** — Planning artifacts can be repaired before execution, and validators enforce stronger contract, traceability, frontend evidence, and state consistency.
+- **Canonical spec synchronization** — Capability specs can synchronize against explicit canonical targets.
+
+### Fixed
+
+- **Workflow state hardening** — Improved CLI state transitions, audit data handling, and validation edge cases.
+- **Codex hook discovery** — Prevented unintended hook auto-discovery in Codex installations.
+
 ## [0.8.9] - 2026-07-04
 
 ### Added
