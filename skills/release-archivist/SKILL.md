@@ -56,7 +56,7 @@ ssf state set <change-dir> dp_6_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Compare contract batches against actual diff. Every SHALL/MUST must have implementation evidence. Missing = Critical severity.
 
 ### Step 3: Coherence
-Compare design decisions against code. Read relevant project memories to evaluate architecture, boundary, and convention consistency. Check naming consistency. Inconsistencies = IMPORTANT.
+Compare design decisions against code. Read the configured project development baseline and selected classic implementation, then read relevant project memories for non-duplicated facts. Evaluate architecture, ownership, source-of-truth, reuse, boundary, and convention consistency. Check naming consistency. Unapproved baseline deviations or inconsistencies = IMPORTANT.
 
 ### Step 4: Unintended Scope
 Check for files modified outside scope fence, new dependencies not in design. Unplanned = WARN.

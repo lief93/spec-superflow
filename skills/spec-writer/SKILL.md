@@ -9,7 +9,7 @@ Create or refine planning artifacts when the change has moved beyond exploration
 
 ## Required Inputs
 
-Read `.spec-superflow.yaml` (especially `dp_0_decisions`, `dp_0_confirmed`) and existing planning artifacts. For every affected capability, read the project-root `specs/<capability>/spec.md` as the current behavior baseline. List project memory names, read `memory_maintenance` and `core`, and follow only references relevant to affected modules or design decisions. Use applicable memory invariants when shaping design and tasks without copying whole memories into planning artifacts. If `dp_0_confirmed` is not `true`, stop and route back to `workflow-start` for DP-0.
+Read `.spec-superflow.yaml` (especially `dp_0_decisions`, `dp_0_confirmed`) and existing planning artifacts. If `docs/project/project-guidelines.md` exists, read the applicable technology/architecture rules and classic implementation recipes. For every affected capability, read the project-root `specs/<capability>/spec.md` as the current behavior baseline. List project memory names, read `memory_maintenance` and `core`, and follow only references relevant to affected modules or design decisions. Use the project baseline for normative code placement and implementation patterns; use memory for non-duplicated durable facts. If `dp_0_confirmed` is not `true`, stop and route back to `workflow-start` for DP-0.
 
 ## Config Check
 
@@ -26,6 +26,8 @@ Run: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/get-config" artifacts.order` — gener
 
 **Honor DP-0**: Read `dp_0_decisions`, respect confirmed constraints, don't silently expand scope. Pause on unconfirmed decisions.
 
+**Keep Spec behavioral**: Project baseline rules do not belong in `specs/`. Apply them in `design.md` and `tasks.md`.
+
 ### proposal.md
 Must state: problem, what changes, capabilities affected, impact areas.
 
@@ -33,13 +35,14 @@ Must state: problem, what changes, capabilities affected, impact areas.
 Every requirement must be testable. Use SHALL or MUST. Every requirement must have at least one `#### Scenario:` with WHEN/THEN. Group under ADDED/MODIFIED/REMOVED Requirements headers.
 
 ### design.md
-Must have: Context (current state, constraints, stakeholders), Goals, Requirement And Scenario Coverage, Decisions (Choice + Rationale + Alternatives considered), Risks And Trade-Offs. The coverage table uses the exact Requirement and Scenario titles from the spec and maps each Scenario to a Design Decision, affected area, and reason that area owns the change. Use `No design change` when a Scenario needs no technical decision. Use relevant project memories to justify code placement, responsibility boundaries, data flow, and reuse choices without copying the memories into the design.
+Must have: Context (current state, constraints, stakeholders), Goals, Project Baseline Alignment, Requirement And Scenario Coverage, Decisions (Choice + Rationale + Alternatives considered), Risks And Trade-Offs. Project Baseline Alignment maps each Scenario to an applicable classic implementation and architecture rules, and records any deliberate deviation. The coverage table uses the exact Requirement and Scenario titles from the spec and maps each Scenario to a Design Decision, affected area, and reason that area owns the change. Use `No design change` when a Scenario needs no technical decision. Use relevant project memories to justify non-duplicated runtime or domain facts without copying whole memories into the design.
 
 ### tasks.md
 Must include:
 - **ACs inside each Batch**: one `### AC: <exact Scenario title>` section for each covered Scenario, with the exact Requirement title; no synthetic IDs are required
 - **Single ownership**: every spec Scenario belongs to exactly one Batch AC section
 - **File Changes per AC**: each Create/Modify/Delete file sits under the AC it serves, with a concrete explanation of what changes, what is added, and what is reused; when one file serves multiple ACs, repeat the file under each AC with only that AC's change
+- **Baseline-derived files**: derive ownership, implementation order, and reuse candidates from the selected classic implementation; explain deviations in `design.md` rather than silently choosing another pattern
 - **AC as the join key**: derive file changes from `design.md`, but do not repeat Design Decision metadata in `tasks.md`; the exact Requirement/Scenario titles connect Spec, Design, and Tasks
 - **TDD Test Plan per AC**: use one table with `Layer | Action | Target | Proves`; select only the Unit, Component, Integration, or UI layers that efficiently prove the AC, and classify each as `Add`, `Update`, `Run existing`, `Unavailable`, or `Not applicable`
 - **Stable anchors**: use file paths and method/type names when known; do not use line numbers and do not split each method into a separate task
@@ -78,7 +81,7 @@ Generate one at a time. Confirm each before next. This prevents scope drift — 
 - SHALL/MUST for required behavior, `#### Scenario:` with WHEN/THEN per requirement, grouped under delta headers, no contradictions
 
 ### design.md
-- `## Context`, `## Goals`, `## Requirement And Scenario Coverage`, `## Decisions` (≥1 when design changes exist, with Choice+Rationale+Alternatives), `## Risks And Trade-Offs`; every spec Scenario appears in the coverage table
+- `## Context`, `## Goals`, `## Project Baseline Alignment`, `## Requirement And Scenario Coverage`, `## Decisions` (≥1 when design changes exist, with Choice+Rationale+Alternatives), `## Risks And Trade-Offs`; every spec Scenario appears in both mapping tables
 
 ### tasks.md
 - `## Interfaces`, numbered Batches, one `### AC` section per Scenario, `#### File Changes`, `#### TDD Test Plan`, exact test targets and behaviors, concrete per-file change descriptions, RED/GREEN/REFACTOR phases, ≤5 min steps, no placeholders, every Scenario mapped exactly once, explicit dependencies

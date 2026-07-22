@@ -1,7 +1,7 @@
 {
   "name": "spec-superflow",
   "version": "0.9.2",
-  "description": "Spec-first workflow: integrates progressive project memory, OpenSpec planning, and Superpowers execution discipline via 10 collaborative skills.",
+  "description": "Spec-first workflow: integrates project baselines, progressive memory, OpenSpec planning, and Superpowers execution discipline via 11 collaborative skills.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

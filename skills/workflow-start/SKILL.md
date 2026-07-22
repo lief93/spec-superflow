@@ -5,7 +5,7 @@ description: Primary entry point for the spec-superflow state-machine workflow. 
 
 # Workflow Start
 
-Primary entry point for `spec-superflow`. Jobs: load relevant project memories and change artifacts, check for updates, confirm DP-0, determine state, route to the correct skill, and block invalid transitions.
+Primary entry point for `spec-superflow`. Jobs: load the project development baseline, relevant project memories, and change artifacts; check for updates; confirm DP-0; determine state; route to the correct skill; and block invalid transitions.
 
 ## Use This Skill When
 
@@ -20,8 +20,9 @@ Do NOT invoke for: general coding tasks outside spec-superflow changes, casual q
 ## Initialization
 
 1. **Update check**: Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-update.mjs"`. Exit 0 → continue. Exit 1 → non-blocking upgrade reminder. Exit 2 → skip.
-2. **Load project memory progressively**: If `.spec-superflow/memories/` exists, list memory names, read `memory_maintenance` and `core`, then follow only references relevant to the current request. If the user asks to initialize or refresh project memory, route to `memory-manager`. Missing memories do not block an ordinary change; mention initialization once.
-3. **Inspect change folder**: Check for `proposal.md`, `specs/`, `design.md`, `tasks.md`, `execution-contract.md`. Answer: Is the change fuzzy? Artifacts missing/unstable? Contract exist? User approved contract? Execution in progress or blocked? In verification/wrap-up?
+2. **Load project baseline**: If `docs/project/project-guidelines.md` exists, read its technology and architecture tables, inspect the classic implementation index, and read only recipes relevant to the request. If the user explicitly asks to initialize or refresh the project baseline, route to `project-init`. A missing baseline does not block an ordinary change; mention `/project-init` once.
+3. **Load project memory progressively**: If `.spec-superflow/memories/` exists, list memory names, read `memory_maintenance` and `core`, then follow only references relevant to the current request. If the user asks to initialize or refresh project memory, route to `memory-manager`. Missing memories do not block an ordinary change; mention initialization once.
+4. **Inspect change folder**: Check for `proposal.md`, `specs/`, `design.md`, `tasks.md`, `execution-contract.md`. Answer: Is the change fuzzy? Artifacts missing/unstable? Contract exist? User approved contract? Execution in progress or blocked? In verification/wrap-up?
 
 ## DP-0: User Confirmation Gate
 
@@ -45,6 +46,9 @@ If workflow is `auto`/`null`/unset: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/inf
 Validate mode against artifact content. If hotfix/tweak criteria not met → upgrade to `full` and output reason. Don't overwrite explicit mode unless user asks.
 
 ## Routing Rules
+
+### Route to project-init
+The user explicitly asks to initialize or refresh project coding rules, architecture guidance, canonical implementations, or Copilot project context.
 
 ### Route to need-explorer
 Change is fuzzy, scope unclear, comparing options, no stable change name.

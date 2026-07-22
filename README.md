@@ -31,6 +31,14 @@
 用 workflow-start 开始
 ```
 
+首次接入已有项目时，可先在支持 Agent Skills 的 Copilot/Agent Chat 中运行：
+
+```text
+/spec-superflow:project-init
+```
+
+它会生成 `.github/copilot-instructions.md` 和 `docs/project/project-guidelines.md`，为后续 Spec、Design、实现与 Review 提供同一份项目开发基线。
+
 Agent 会自动检查当前工件目录，**内容级判断**（不看文件时间戳，而是比较 proposal 范围 vs 契约意图锁）你处于哪个阶段，然后路由到正确的下一个 skill。
 
 - 启动新的变更 → `用 workflow-start 开始`
@@ -120,6 +128,7 @@ npx spec-superflow list          # 或通过 npx 使用
 | `ssf inject <dir>` | 生成多平台 phase-guard 产物 |
 | `ssf audit <dir>` | 生成决策点审计报告 |
 | `ssf memories list` / `ssf memories check` | 列出 Memory 或检查 `mem:` 引用完整性 |
+| `ssf project check` | 校验项目开发基线的结构、路径和符号引用 |
 | `ssf install-cursor` | 部署到 Cursor `.cursor/` 目录 |
 | `ssf install-workbuddy` | 部署到 WorkBuddy marketplace 并启用技能 |
 
@@ -165,16 +174,17 @@ npx spec-superflow list          # 或通过 npx 使用
 
 | # | Skill | 阶段 | 职责 |
 |---|---|---|---|
-| 1 | `memory-manager` | 项目 Memory | 初始化、渐进读取并维护长期项目知识，无需 MCP |
-| 2 | `workflow-start` | 入口 | 内容级状态检测、8 状态路由、阻止非法跳转 |
-| 3 | `need-explorer` | 探索 | 一次一问 + 方案对比 + 推荐 |
-| 4 | `spec-writer` | 规格 | 产出 proposal/specs/design/tasks，Schema 引擎实时验证 |
-| 5 | `contract-builder` | 桥接 | 解析引擎自动提取 4 工件 → 压缩为 execution-contract.md |
-| 6 | `build-executor` | 执行 | TDD 铁律 + SDD 子代理驱动 + Review Gate |
-| 7 | `bug-investigator` | 调试 | 4 阶段根因分析，3+ 修复失败 → 质疑架构 |
-| 8 | `code-reviewer` | 审查 | 结构化审查，三级问题分级 |
-| 9 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
-| 10 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
+| 1 | `project-init` | 项目初始化 | 生成 Copilot 指令和项目开发基线，可通过 `/` 命令触发 |
+| 2 | `memory-manager` | 项目 Memory | 初始化、渐进读取并维护长期项目知识，无需 MCP |
+| 3 | `workflow-start` | 入口 | 内容级状态检测、8 状态路由、阻止非法跳转 |
+| 4 | `need-explorer` | 探索 | 一次一问 + 方案对比 + 推荐 |
+| 5 | `spec-writer` | 规格 | 产出 proposal/specs/design/tasks，Schema 引擎实时验证 |
+| 6 | `contract-builder` | 桥接 | 解析引擎自动提取 4 工件 → 压缩为 execution-contract.md |
+| 7 | `build-executor` | 执行 | TDD 铁律 + SDD 子代理驱动 + Review Gate |
+| 8 | `bug-investigator` | 调试 | 4 阶段根因分析，3+ 修复失败 → 质疑架构 |
+| 9 | `code-reviewer` | 审查 | 结构化审查，三级问题分级 |
+| 10 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
+| 11 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
 
 ---
 
