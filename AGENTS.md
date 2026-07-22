@@ -41,10 +41,11 @@ TypeScript interfaces + regex-based parsers. Compiles to `dist/` (ES2022 + NodeN
 
 ### Skills (`skills/`)
 
-10 skills, one per directory. Each contains a `SKILL.md` that Codex loads as an instruction set:
+11 skills, one per directory. Each contains a `SKILL.md` that Codex loads as an instruction set:
 
 | Skill | Phase | Purpose |
 |-------|-------|---------|
+| `project-init` | Project setup | Generates Copilot instructions and an actionable project development baseline |
 | `memory-manager` | Project memory | Initializes and maintains a progressive graph of durable project knowledge without MCP |
 | `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
 | `need-explorer` | Exploring | One-question-at-a-time elicitation, 2-3 approach comparison with recommendation |
@@ -117,7 +118,7 @@ exploring → specifying → bridging → approved-for-build → executing → c
 - **Content-level stale detection** — `workflow-start` compares proposal scope vs contract intent lock, not file timestamps.
 - **Self-contained** — does not require OpenSpec or Superpowers to be installed. Absorbed concepts are reimplemented here.
 - **Zero runtime dependencies** — only TypeScript as devDependency.
-- **Multi-platform, single source** — Same 10 skills across Claude Code, Cursor, Codex CLI/App, Copilot CLI, Gemini CLI, OpenCode, WorkBuddy, and Trae. Platform-specific wiring is isolated to hooks, plugin manifests, local skill directories, and installers (`.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.github/plugin/`, `.opencode/`, `.agents/`, `gemini-extension.json`, `scripts/lib/cmd-install-workbuddy.mjs`).
+- **Multi-platform, single source** — Same 11 skills across Claude Code, Cursor, Codex CLI/App, Copilot CLI, Gemini CLI, OpenCode, WorkBuddy, and Trae. Platform-specific wiring is isolated to hooks, plugin manifests, local skill directories, and installers (`.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.github/plugin/`, `.opencode/`, `.agents/`, `gemini-extension.json`, `scripts/lib/cmd-install-workbuddy.mjs`).
 
 ## CI/CD (`.github/workflows/ci.yml`)
 

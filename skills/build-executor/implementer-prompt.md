@@ -19,6 +19,13 @@ Subagent (general-purpose):
 
     [Scene-setting: where this fits, dependencies, architectural context]
 
+    ## Project Development Baseline
+
+    Read [PROJECT_BASELINE] before changing code. Follow the selected classic
+    implementation and applicable architecture, state, data, and reuse rules
+    recorded in the contract. If the task requires a deviation that the design
+    did not approve, stop and report the conflict.
+
     ## Project Memories
 
     Read [PROJECT_MEMORIES] before changing code. These are the relevant files
@@ -159,6 +166,7 @@ Subagent (general-purpose):
 - `[task name]` — short name for the task
 - `[MODEL]` — REQUIRED: implementer model per build-executor Model Selection
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path)
+- `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation, or `Not configured`
 - `[PROJECT_MEMORIES]` — `.spec-superflow/memories/memory_maintenance.md`, `core.md`, and only the relevant focused memory paths, or `Not configured`
 - `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[directory]` — working directory for the implementation

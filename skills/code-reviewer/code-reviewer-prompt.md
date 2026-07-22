@@ -20,6 +20,11 @@ Subagent (general-purpose):
 
     [PLAN_OR_REQUIREMENTS]
 
+    ## Project Development Baseline
+
+    Read the baseline and selected classic implementation listed here:
+    [PROJECT_BASELINE]
+
     ## Project Memories
 
     [PROJECT_MEMORIES]
@@ -65,6 +70,8 @@ Subagent (general-purpose):
     - Reasonable scalability and performance?
     - Security concerns?
     - Integrates cleanly with surrounding code?
+    - Follows the selected classic implementation and applicable project baseline rules?
+    - Any deviation is explicitly approved by design and the execution contract?
 
     **Testing:**
     - Tests verify real behavior, not mocks?
@@ -142,6 +149,7 @@ Subagent (general-purpose):
 **Placeholders:**
 - `[DESCRIPTION]` — brief summary of what was built
 - `[PLAN_OR_REQUIREMENTS]` — what it should do (execution-contract.md file path, spec file path, or requirements)
+- `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation and approved deviations, or `Not configured`
 - `[PROJECT_MEMORIES]` — `.spec-superflow/memories/memory_maintenance.md`, `core.md`, and only the focused memory paths relevant to the diff, or `Not configured`
 - `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[BASE_SHA]` — starting commit

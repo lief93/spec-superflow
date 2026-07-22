@@ -31,6 +31,12 @@ Once installed, just tell your agent:
 use workflow-start to begin
 ```
 
+For the first use in an existing repository, initialize its development baseline:
+
+```text
+/spec-superflow:project-init
+```
+
 The agent inspects your current artifacts, performs **content-level detection** (comparing proposal scope vs. contract intent lock, not just file timestamps), determines your workflow stage, and routes to the correct next skill.
 
 - New change → `use workflow-start to begin`
@@ -115,6 +121,7 @@ npm install -g spec-superflow
 | `ssf inject <dir>` | Generate multi-platform phase-guard artifacts |
 | `ssf audit <dir>` | Generate decision-point audit report |
 | `ssf memories list` / `ssf memories check` | List memories or validate `mem:` reference integrity |
+| `ssf project check` | Validate project baseline structure, paths, and symbol references |
 | `ssf install-cursor` | Deploy to `.cursor/` directory |
 | `ssf install-workbuddy` | Deploy to WorkBuddy marketplace and enable skills |
 
@@ -160,16 +167,17 @@ AI coding sessions fail in one of two ways:
 
 | # | Skill | Stage | Purpose |
 |---|-------|-------|---------|
-| 1 | `memory-manager` | Project memory | Initialize, progressively read, and maintain durable project knowledge without MCP |
-| 2 | `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
-| 3 | `need-explorer` | Exploring | One question at a time, approach comparison, recommendation |
-| 4 | `spec-writer` | Specifying | Generate proposal/specs/design/tasks with Schema engine validation |
-| 5 | `contract-builder` | Bridging | Parse 4 artifacts → compress into execution-contract.md |
-| 6 | `build-executor` | Executing | TDD Iron Law + SDD subagent-driven + Review Gates |
-| 7 | `bug-investigator` | Debugging | 4-phase root cause analysis; 3+ failures → escalate |
-| 8 | `code-reviewer` | Review | Structured review with 3-level severity classification |
-| 9 | `release-archivist` | Closing | Verification-before-completion + archive + risk summary |
-| 10 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
+| 1 | `project-init` | Project setup | Generate Copilot instructions and an actionable project development baseline |
+| 2 | `memory-manager` | Project memory | Initialize, progressively read, and maintain durable project knowledge without MCP |
+| 3 | `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
+| 4 | `need-explorer` | Exploring | One question at a time, approach comparison, recommendation |
+| 5 | `spec-writer` | Specifying | Generate proposal/specs/design/tasks with Schema engine validation |
+| 6 | `contract-builder` | Bridging | Parse 4 artifacts → compress into execution-contract.md |
+| 7 | `build-executor` | Executing | TDD Iron Law + SDD subagent-driven + Review Gates |
+| 8 | `bug-investigator` | Debugging | 4-phase root cause analysis; 3+ failures → escalate |
+| 9 | `code-reviewer` | Review | Structured review with 3-level severity classification |
+| 10 | `release-archivist` | Closing | Verification-before-completion + archive + risk summary |
+| 11 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
 
 ---
 

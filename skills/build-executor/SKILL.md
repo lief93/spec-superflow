@@ -9,7 +9,7 @@ Controls the implementation phase. Uses `execution-contract.md` as the workflow 
 
 ## Required Inputs
 
-Read: `execution-contract.md`, `tasks.md`, relevant change-local `specs/`, relevant `design.md`, and matching project-root `specs/<capability>/spec.md`. List project memory names, read `memory_maintenance` and `core`, then follow only references relevant to the execution batches. (Skip contract/spec requirements when workflow is `tweak`.)
+Read: `execution-contract.md`, `tasks.md`, relevant change-local `specs/`, relevant `design.md`, and matching project-root `specs/<capability>/spec.md`. Read the project baseline path named in the contract and the selected classic implementation before changing code. List project memory names, read `memory_maintenance` and `core`, then follow only references relevant to the execution batches. (Skip contract/spec requirements when workflow is `tweak`.)
 
 Check workflow mode first: `ssf state get <change-dir> workflow`. If `tweak` → direct edit mode. If `hotfix` or `full` → standard contract-first discipline.
 
@@ -34,7 +34,10 @@ Return to `specifying` or `bridging` if: new behavior appears, interfaces change
 ### Law 5: Project Memory Grounds Implementation
 Use relevant memory invariants when implementing. If the approved design or required implementation conflicts with a verified project memory, stop and return to planning or request clarification.
 
-### Law 6: Frontend Verification Is Contract Work
+### Law 6: Project Baseline Governs Code Shape
+Follow the contract's selected classic implementation and applicable architecture rules. A necessary deviation must return to design/contract approval; do not silently choose a locally convenient pattern.
+
+### Law 7: Frontend Verification Is Contract Work
 When `execution-contract.md` says `Frontend Impact: Yes`, UI and device obligations are part of completion, not optional polish. Do not replace them with unit tests or a successful build.
 
 ## Execution Mode Selection
@@ -62,9 +65,9 @@ Boundaries: if any task touches >1 module, involves schema/API/config changes, o
 For changes with multiple execution batches. Dispatch an implementer subagent per AC, review each AC, then run a broad review after all batches.
 
 ### Per-AC Loop
-1. **Dispatch implementer**: Use `${CLAUDE_PLUGIN_ROOT}/skills/build-executor/implementer-prompt.md` template. Extract the Nth AC brief with `scripts/task-brief PLAN_FILE N` (legacy `Task N` plans remain supported). Include: where the AC fits, brief path, interfaces from prior work, relevant memory paths or `Not configured`, relevant capability `spec.md` paths, and report file path.
+1. **Dispatch implementer**: Use `${CLAUDE_PLUGIN_ROOT}/skills/build-executor/implementer-prompt.md` template. Extract the Nth AC brief with `scripts/task-brief PLAN_FILE N` (legacy `Task N` plans remain supported). Include: where the AC fits, brief path, project baseline path and selected recipe, interfaces from prior work, relevant memory paths or `Not configured`, relevant capability `spec.md` paths, and report file path.
 2. **Handle response**: DONE → generate review package + dispatch reviewer. DONE_WITH_CONCERNS → assess. NEEDS_CONTEXT → provide context. BLOCKED → re-dispatch with better model or escalate.
-3. **Review**: Use `skills/build-executor/task-reviewer-prompt.md`. Pass the relevant memory paths or `Not configured` and relevant capability `spec.md` paths. Reviewer returns spec compliance + code quality verdicts.
+3. **Review**: Use `skills/build-executor/task-reviewer-prompt.md`. Pass the project baseline path and selected recipe, relevant memory paths or `Not configured`, and relevant capability `spec.md` paths. Reviewer returns spec compliance + baseline compliance + code quality verdicts.
 4. **Fix**: If Critical or Important issues, dispatch fix subagent, re-review.
 5. **Mark complete**: Append to `.superpowers/sdd/progress.md`: `AC N: complete (commits <base7>..<head7>, review clean)`
 

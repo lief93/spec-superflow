@@ -15,6 +15,7 @@ const COMMANDS = {
   inject:         () => import('./lib/cmd-inject.mjs'),
   audit:          () => import('./lib/cmd-audit.mjs'),
   memories:       () => import('./lib/cmd-memories.mjs'),
+  project:        () => import('./lib/cmd-project.mjs'),
   'install-cursor': () => import('./lib/cmd-install-cursor.mjs'),
   'install-workbuddy': () => import('./lib/cmd-install-workbuddy.mjs'),
 };
@@ -34,6 +35,7 @@ Commands:
   inject <dir>          Generate phase-guard artifacts for Claude/Cursor/Copilot/Gemini
   audit <dir>           Generate decision-point-audit.md from .spec-superflow.yaml
   memories <sub> [root] List or check .spec-superflow/memories (list|check)
+  project check [root]  Validate project development baseline documents
   install-cursor        Deploy skills/scripts/docs to .cursor/ (local Cursor setup)
   install-workbuddy     Deploy skills to WorkBuddy marketplace and enable them
 
@@ -54,6 +56,7 @@ Examples:
   ssf state transition changes/my-change/ approved-for-build
   ssf state get changes/my-change/ batches_completed
   ssf memories check
+  ssf project check
   ssf install-cursor
   ssf install-workbuddy
 `;

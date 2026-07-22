@@ -25,6 +25,9 @@ Subagent (general-purpose):
     Global constraints from the spec/design that bind this task:
     [GLOBAL_CONSTRAINTS]
 
+    Project development baseline and selected classic implementation:
+    [PROJECT_BASELINE]
+
     Relevant project memories:
     [PROJECT_MEMORIES]
 
@@ -122,6 +125,11 @@ Subagent (general-purpose):
       significantly grow existing files? (Don't flag pre-existing file
       sizes — focus on what this change contributed.)
 
+    **Project baseline:**
+    - Does the implementation follow the selected classic implementation?
+    - Are ownership, dependency, state, model, source-of-truth, and reuse rules preserved?
+    - Is every deviation explicitly approved in design and the execution contract?
+
     Your report should point at evidence: file:line references for every
     finding and for any check you would otherwise answer with a bare
     "yes." A tight report that cites lines gives the controller everything
@@ -182,6 +190,7 @@ Subagent (general-purpose):
 - `[MODEL]` — REQUIRED: reviewer model per build-executor Model Selection
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path; same file the implementer worked from)
 - `[GLOBAL_CONSTRAINTS]` — the binding requirements copied verbatim from the plan's Global Constraints section or the spec: exact values, formats, and stated relationships between components (not process rules — those are already in this template)
+- `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation and approved deviations, or `Not configured`
 - `[PROJECT_MEMORIES]` — `.spec-superflow/memories/memory_maintenance.md`, `core.md`, and only the focused memory paths relevant to the diff, or `Not configured`
 - `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed report to

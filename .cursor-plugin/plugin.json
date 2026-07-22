@@ -1,7 +1,7 @@
 {
   "name": "spec-superflow",
   "displayName": "spec-superflow",
-  "description": "Spec-first workflow: integrates progressive project memory, OpenSpec planning, and Superpowers execution discipline. 10 collaborative skills with embedded TDD, SDD, code review, debugging, and delta spec sync.",
+  "description": "Spec-first workflow: integrates project baselines, progressive project memory, OpenSpec planning, and Superpowers execution discipline. 11 collaborative skills with embedded TDD, SDD, code review, debugging, and delta spec sync.",
   "version": "0.9.2",
   "author": {
     "name": "MageByte",

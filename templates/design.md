@@ -14,6 +14,14 @@
 
 - 本设计刻意不解决什么
 
+## Project Baseline Alignment
+
+使用 Spec 中完全一致的 Scenario 标题。项目未初始化基线时，在来源中填写 `Not configured`，不要虚构规则。
+
+| Scenario | Baseline Source | Classic Implementation | Applied Constraints | Deviation |
+|---|---|---|---|---|
+| 场景标题 | `docs/project/project-guidelines.md` | 经典实现标题 | 本场景适用的架构、状态、数据和复用规则 | `None` 或已批准偏离及理由 |
+
 ## Requirement And Scenario Coverage
 
 使用 Spec 中完全一致的 Requirement 和 Scenario 标题。每个 Scenario 对应一个设计决策；没有设计影响时填写 `No design change`。

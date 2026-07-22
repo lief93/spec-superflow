@@ -7,7 +7,7 @@ description: Convert approved planning artifacts into an execution contract. Inv
 
 Converts planning artifacts into a single execution handshake: `execution-contract.md`. Use `templates/execution-contract.md` as the baseline structure.
 
-Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `tasks.md`, and `docs/artifact-contract.md`. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. List project memory names, read `memory_maintenance` and `core`, then follow only references relevant to the design and affected modules.
+Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `tasks.md`, and `docs/artifact-contract.md`. Read `docs/project/project-guidelines.md` when configured and select only baseline rules and classic implementations mapped by the design. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. List project memory names, read `memory_maintenance` and `core`, then follow only references relevant to the design and affected modules.
 
 ## Artifact Mapping
 
@@ -17,6 +17,7 @@ Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `task
 | `proposal.md` → `## Scope > ### Out of Scope` | Scope Fence |
 | `specs/` → each `### Requirement:` | Approved Requirements, Scenarios, Test Obligations |
 | `design.md` → coverage map + `## Decisions` | Scenario-to-decision mapping, Architecture, Interface, Dependency Constraints |
+| Project baseline + `design.md` alignment map | Normative technology, ownership, data/state, reuse, and classic implementation constraints |
 | Relevant project memories + `design.md` | Implementation-relevant architecture, boundary, reuse, and runtime constraints |
 | `tasks.md` → Batch AC sections + AC-owned file changes | Execution Batches, Requirement/Scenario ownership, concrete file changes, Completion Definitions, Review Timing |
 | `tasks.md` → each AC's TDD Test Plan | Unit, Component, Integration, and UI test obligations and targets |
@@ -58,7 +59,7 @@ Rules:
 
 ## Contract Structure
 
-Must make obvious: approved behavior, out-of-scope, implementation constraints, batches, test obligations, frontend verification, review gates, and conditions that force a rewind to planning. In Design Constraints, reference only the memories actually read and copy only the applicable invariants into the matching fields. Prefer compression over repeating memory content.
+Must make obvious: approved behavior, out-of-scope, implementation constraints, batches, test obligations, frontend verification, review gates, and conditions that force a rewind to planning. In Design Constraints, record the project baseline separately from project memories, copy only applicable constraints, and preserve any approved deviation. Prefer compression over repeating source documents.
 
 ## Approval Model (DP-3)
 

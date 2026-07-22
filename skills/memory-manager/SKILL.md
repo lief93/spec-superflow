@@ -7,6 +7,8 @@ description: Initialize, read, and maintain spec-superflow project memories with
 
 Maintain `.spec-superflow/memories/` as a progressive graph of durable project knowledge. Use ordinary file listing, search, reading, and editing; do not require Serena, MCP, or a language server.
 
+When `docs/project/project-guidelines.md` exists, treat it as the normative source for technology choices, architecture/coding rules, and classic implementations. Memory supplements that baseline; it does not copy or override it.
+
 ## Storage Contract
 
 `mem:<name>` maps to `.spec-superflow/memories/<name>.md`.
@@ -72,6 +74,7 @@ After editing, update `core` or topic references where discovery changed and run
 
 - Read `memory_maintenance.md` before every write or structural change.
 - Operational instructions for the current client or workflow are not project facts.
+- Coding rules, architecture ownership, and canonical implementation recipes belong in the project baseline, not project memory.
 - Write dense agent notes: invariants and terse bullets, not prose reports.
 - Do not save task history, chat, progress logs, failed attempts, generic framework knowledge, file inventories, or volatile line-level details.
 - Do not describe a command as verified unless it ran successfully; record necessary permissions, devices, variants, or environment prerequisites.
