@@ -7,7 +7,7 @@ description: Convert approved planning artifacts into an execution contract. Inv
 
 Converts planning artifacts into a single execution handshake: `execution-contract.md`. Use `templates/execution-contract.md` as the baseline structure.
 
-Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `tasks.md`, and `docs/artifact-contract.md`. Read `docs/project/project-guidelines.md` when configured and select only baseline rules and classic implementations mapped by the design. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. List project memory names, read `memory_maintenance` and `core`, then follow only references relevant to the design and affected modules.
+Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `tasks.md`, and `docs/artifact-contract.md`. Read `docs/project/project-guidelines.md` when configured and select only baseline rules and classic implementations mapped by the design. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. If `.spec-superflow/memories/MEMORY.md` exists, read the entrypoint and only topic links relevant to the design, affected modules, runtime conditions, or verification environment.
 
 ## Artifact Mapping
 
@@ -18,7 +18,7 @@ Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `task
 | `specs/` → each `### Requirement:` | Approved Requirements, Scenarios, Test Obligations |
 | `design.md` → coverage map + `## Decisions` | Scenario-to-decision mapping, Architecture, Interface, Dependency Constraints |
 | Project baseline + `design.md` alignment map | Normative technology, ownership, data/state, reuse, and classic implementation constraints |
-| Relevant project memories + `design.md` | Implementation-relevant architecture, boundary, reuse, and runtime constraints |
+| Relevant auto-memory topics + `design.md` | Non-obvious runtime, environment, debugging, and repeated project learnings |
 | `tasks.md` → Batch AC sections + AC-owned file changes | Execution Batches, Requirement/Scenario ownership, concrete file changes, Completion Definitions, Review Timing |
 | `tasks.md` → each AC's TDD Test Plan | Unit, Component, Integration, and UI test obligations and targets |
 
@@ -39,7 +39,7 @@ Classify the repository as frontend when it contains a Web, Android, HarmonyOS, 
 - Aggregate the `UI` rows from the AC TDD Test Plans into the contract's UI Test obligation. Prefer focused existing tests; use the nearest module smoke/regression set when there is no direct match. Shared navigation, shared UI, or global state changes may require a broader UI suite.
 - If no UI framework exists, use `Unavailable`, record the inspected test locations/configuration, and do not silently introduce a framework.
 - Device Test is always `Required`. Default to one project baseline simulator/device per affected native platform, or the default browser and desktop viewport for Web. Add environments only when an AC depends on system version, screen size, Market, permission, or device capability.
-- Read commands and runtime prerequisites from project memory, build files, package scripts, and existing tests. Do not invent commands.
+- Read commands and runtime prerequisites from relevant shared-memory topics, build files, package scripts, and existing tests. Do not invent commands.
 - `Frontend Impact: No`: state the reason; the table is not required.
 - Screenshot tests are not part of this version.
 
@@ -59,7 +59,7 @@ Rules:
 
 ## Contract Structure
 
-Must make obvious: approved behavior, out-of-scope, implementation constraints, batches, test obligations, frontend verification, review gates, and conditions that force a rewind to planning. In Design Constraints, record the project baseline separately from project memories, copy only applicable constraints, and preserve any approved deviation. Prefer compression over repeating source documents.
+Must make obvious: approved behavior, out-of-scope, implementation constraints, batches, test obligations, frontend verification, review gates, and conditions that force a rewind to planning. In Design Constraints, record the project baseline separately from relevant shared-memory topics, copy only applicable constraints, and preserve any approved deviation. Prefer compression over repeating source documents.
 
 ## Approval Model (DP-3)
 

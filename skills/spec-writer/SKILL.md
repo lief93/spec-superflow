@@ -9,7 +9,7 @@ Create or refine planning artifacts when the change has moved beyond exploration
 
 ## Required Inputs
 
-Read `.spec-superflow.yaml` (especially `dp_0_decisions`, `dp_0_confirmed`) and existing planning artifacts. If `docs/project/project-guidelines.md` exists, read the applicable technology/architecture rules and classic implementation recipes. For every affected capability, read the project-root `specs/<capability>/spec.md` as the current behavior baseline. List project memory names, read `memory_maintenance` and `core`, and follow only references relevant to affected modules or design decisions. Use the project baseline for normative code placement and implementation patterns; use memory for non-duplicated durable facts. If `dp_0_confirmed` is not `true`, stop and route back to `workflow-start` for DP-0.
+Read `.spec-superflow.yaml` (especially `dp_0_decisions`, `dp_0_confirmed`) and existing planning artifacts. If `docs/project/project-guidelines.md` exists, read the applicable technology/architecture rules and classic implementation recipes. For every affected capability, read the project-root `specs/<capability>/spec.md` as the current behavior baseline. If `.spec-superflow/memories/MEMORY.md` exists, read its concise entrypoint and only linked topics relevant to affected modules, runtime conditions, or design decisions. Use the project baseline for normative code placement and implementation patterns; use Memory only for non-duplicated recalled learnings. If `dp_0_confirmed` is not `true`, stop and route back to `workflow-start` for DP-0.
 
 ## Config Check
 

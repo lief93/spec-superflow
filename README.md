@@ -127,7 +127,7 @@ npx spec-superflow list          # 或通过 npx 使用
 | `ssf state <sub> <dir>` | 管理 `.spec-superflow.yaml` 状态文件 |
 | `ssf inject <dir>` | 生成多平台 phase-guard 产物 |
 | `ssf audit <dir>` | 生成决策点审计报告 |
-| `ssf memories list` / `ssf memories check` | 列出 Memory 或检查 `mem:` 引用完整性 |
+| `ssf memories init` / `list` / `check` | 创建 Claude 式共享 Memory 索引、列出主题或检查类型、容量和链接 |
 | `ssf project check` | 校验项目开发基线的结构、路径和符号引用 |
 | `ssf install-cursor` | 部署到 Cursor `.cursor/` 目录 |
 | `ssf install-workbuddy` | 部署到 WorkBuddy marketplace 并启用技能 |
@@ -175,7 +175,7 @@ npx spec-superflow list          # 或通过 npx 使用
 | # | Skill | 阶段 | 职责 |
 |---|---|---|---|
 | 1 | `project-init` | 项目初始化 | 生成 Copilot 指令和项目开发基线，可通过 `/` 命令触发 |
-| 2 | `memory-manager` | 项目 Memory | 初始化、渐进读取并维护长期项目知识，无需 MCP |
+| 2 | `memory-manager` | 共享 Auto Memory | 参考 Claude，按需记录和读取团队反馈、非显性项目上下文与外部引用 |
 | 3 | `workflow-start` | 入口 | 内容级状态检测、8 状态路由、阻止非法跳转 |
 | 4 | `need-explorer` | 探索 | 一次一问 + 方案对比 + 推荐 |
 | 5 | `spec-writer` | 规格 | 产出 proposal/specs/design/tasks，Schema 引擎实时验证 |

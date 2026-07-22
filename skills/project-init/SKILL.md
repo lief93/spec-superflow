@@ -23,7 +23,7 @@ Use [Copilot instructions](./references/copilot-instructions.md) and [project gu
 
 - Project baseline: normative technology choices, architecture ownership, coding boundaries, and canonical implementation paths.
 - Task Spec: requested behavior and scenarios for one change.
-- Project Memory: durable, non-obvious findings that are expensive to rediscover; it must not duplicate the baseline.
+- Shared Auto Memory: typed team feedback, code-invisible project context, and external references that are useful in future work; it must not duplicate the baseline.
 - Build commands, progress, chat logs, task history, and generic framework advice do not belong in this baseline.
 
 ## Discovery
@@ -51,7 +51,7 @@ Exclude generated output, build caches, binaries, vendored dependencies, and tas
 
 ### Copilot instructions
 
-Keep this concise and operational. Tell the agent to read `docs/project/project-guidelines.md`, locate the relevant classic implementation, preserve ownership and source-of-truth rules, reuse existing mechanisms, and verify the affected path.
+Keep this concise and operational. Tell the agent to read `docs/project/project-guidelines.md`, locate the relevant classic implementation, preserve ownership and source-of-truth rules, reuse existing mechanisms, and verify the affected path. Also tell it to read `.spec-superflow/memories/MEMORY.md` and relevant topic links when present, and to record only verified, non-personal, future-useful shared learnings through `memory-manager`.
 
 ### Project guideline
 

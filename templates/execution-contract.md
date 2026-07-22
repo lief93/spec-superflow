@@ -24,7 +24,7 @@
 - **项目开发基线来源**：`docs/project/project-guidelines.md` | Not configured
 - **采用的经典实现**：
 - **已批准偏离**：`None` | 偏离及理由
-- **项目 Memory 来源**：`.spec-superflow/memories/core.md` + relevant `mem:` references | Not configured
+- **项目 Memory 来源**：`.spec-superflow/memories/MEMORY.md` + relevant topic files | Not configured
 - **技术约束**：
 - **架构约束**：
 - **数据与接口约束**：

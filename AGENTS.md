@@ -46,7 +46,7 @@ TypeScript interfaces + regex-based parsers. Compiles to `dist/` (ES2022 + NodeN
 | Skill | Phase | Purpose |
 |-------|-------|---------|
 | `project-init` | Project setup | Generates Copilot instructions and an actionable project development baseline |
-| `memory-manager` | Project memory | Initializes and maintains a progressive graph of durable project knowledge without MCP |
+| `memory-manager` | Shared auto memory | Selectively records typed team feedback, project context, and references in a concise index plus on-demand topics |
 | `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
 | `need-explorer` | Exploring | One-question-at-a-time elicitation, 2-3 approach comparison with recommendation |
 | `spec-writer` | Specifying | Generate planning artifacts + Schema engine validation |

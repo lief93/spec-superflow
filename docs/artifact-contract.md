@@ -10,7 +10,7 @@
 
 The first four are planning artifacts. The fifth is the execution handshake.
 
-At the project root, each long-term capability lives under `specs/<capability>/spec.md`, which defines current behavior. Normative implementation rules and canonical paths live in `docs/project/project-guidelines.md`. Durable non-duplicated implementation knowledge is stored separately as a progressive graph under `.spec-superflow/memories/`; neither the project baseline nor Memory replaces capability Specs.
+At the project root, each long-term capability lives under `specs/<capability>/spec.md`, which defines current behavior. Normative implementation rules and canonical paths live in `docs/project/project-guidelines.md`. Verified team feedback, code-invisible project context, and external references are recalled separately through `.spec-superflow/memories/MEMORY.md` and typed on-demand topic files; neither the project baseline nor shared Auto Memory replaces capability Specs.
 
 ## Artifact Roles
 

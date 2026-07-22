@@ -84,6 +84,10 @@ Check for files modified outside scope fence, new dependencies not in design. Un
 - Frontend contract obligations have matching `pr-summary.md` evidence?
 - Run `ssf audit <change-dir>` — include `decision-point-audit.md` in archive
 
+### Auto Memory Pass
+
+After verification establishes the final result, invoke `memory-manager` once as a catch-up pass over team-wide feedback, code-invisible project context, external references, and verified runtime or debugging conclusions that remain expensive to rediscover. Exclude personal feedback and ordinary fix recipes. Write only items that pass every admission condition. `NONE` is the normal result and must not block closure.
+
 ### DP-6 (Verification Outcome)
 ```bash
 ssf state set <change-dir> dp_6_result "<pass|confirmed conditional|fail>: <summary>"
