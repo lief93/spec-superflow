@@ -191,7 +191,7 @@ Subagent (general-purpose):
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path; same file the implementer worked from)
 - `[GLOBAL_CONSTRAINTS]` — the binding requirements copied verbatim from the plan's Global Constraints section or the spec: exact values, formats, and stated relationships between components (not process rules — those are already in this template)
 - `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation and approved deviations, or `Not configured`
-- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/memory_maintenance.md`, `core.md`, and only the focused memory paths relevant to the diff, or `Not configured`
+- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/MEMORY.md` and only linked topic files relevant to the diff, or `Not configured`
 - `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed report to
 - `[BASE_SHA]` — commit before this task

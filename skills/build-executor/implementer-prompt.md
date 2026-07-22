@@ -29,10 +29,10 @@ Subagent (general-purpose):
     ## Project Memories
 
     Read [PROJECT_MEMORIES] before changing code. These are the relevant files
-    selected by reading `memory_maintenance`, `core`, and task-specific `mem:`
-    references. If the value is `Not configured`, follow the approved design
-    and established codebase patterns. If the task conflicts with a verified
-    memory invariant, stop and report the conflict.
+    selected from the concise `MEMORY.md` entrypoint and its topic links. If the
+    value is `Not configured`, follow the approved design and established
+    codebase patterns. Memory is recalled context, not a rule source; report
+    stale Memory when current evidence contradicts it.
 
     ## Capability Baseline
 
@@ -167,7 +167,7 @@ Subagent (general-purpose):
 - `[MODEL]` — REQUIRED: implementer model per build-executor Model Selection
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path)
 - `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation, or `Not configured`
-- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/memory_maintenance.md`, `core.md`, and only the relevant focused memory paths, or `Not configured`
+- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/MEMORY.md` and only the relevant linked topic files, or `Not configured`
 - `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[directory]` — working directory for the implementation
 - `[REPORT_FILE]` — REQUIRED: the file path where the implementer writes its full report

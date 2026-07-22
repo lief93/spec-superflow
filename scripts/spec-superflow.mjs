@@ -34,7 +34,7 @@ Commands:
   state <sub> <dir>     Manage .spec-superflow.yaml state (init|check|transition|get|rebuild)
   inject <dir>          Generate phase-guard artifacts for Claude/Cursor/Copilot/Gemini
   audit <dir>           Generate decision-point-audit.md from .spec-superflow.yaml
-  memories <sub> [root] List or check .spec-superflow/memories (list|check)
+  memories <sub> [root] Manage Claude-style shared auto memory (init|list|check)
   project check [root]  Validate project development baseline documents
   install-cursor        Deploy skills/scripts/docs to .cursor/ (local Cursor setup)
   install-workbuddy     Deploy skills to WorkBuddy marketplace and enable them
@@ -55,6 +55,7 @@ Examples:
   ssf state check changes/my-change/
   ssf state transition changes/my-change/ approved-for-build
   ssf state get changes/my-change/ batches_completed
+  ssf memories init
   ssf memories check
   ssf project check
   ssf install-cursor

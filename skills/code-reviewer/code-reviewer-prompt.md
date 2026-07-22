@@ -150,7 +150,7 @@ Subagent (general-purpose):
 - `[DESCRIPTION]` — brief summary of what was built
 - `[PLAN_OR_REQUIREMENTS]` — what it should do (execution-contract.md file path, spec file path, or requirements)
 - `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation and approved deviations, or `Not configured`
-- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/memory_maintenance.md`, `core.md`, and only the focused memory paths relevant to the diff, or `Not configured`
+- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/MEMORY.md` and only linked topic files relevant to the diff, or `Not configured`
 - `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[BASE_SHA]` — starting commit
 - `[HEAD_SHA]` — ending commit

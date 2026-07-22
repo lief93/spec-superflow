@@ -16,7 +16,8 @@ Current version: v0.9.2.
 - CONTRIBUTING.md: Contribution guidelines
 
 ## Core Skills (in skills/)
-- memory-manager: Initializes and maintains progressive project memory without MCP
+- project-init: Generates project coding instructions and an actionable development baseline
+- memory-manager: Selectively records and recalls Claude-style shared auto memory without MCP
 - workflow-start: Entry point, content-level state detection, 8-state routing, blocks illegal transitions
 - need-explorer: Clarifies intent, scope, constraints, and success criteria
 - spec-writer: Generates proposal, specs, design, and tasks with Schema validation
@@ -28,8 +29,10 @@ Current version: v0.9.2.
 - spec-merger: Merges delta specs into main specs with conflict detection
 
 ## Templates And Skill Resources
-- skills/memory-manager/references/memory_maintenance.md: Rules for progressive discovery and memory admission
-- .spec-superflow/memories/: Durable project knowledge organized as a `mem:` reference graph
+- skills/project-init/references/: Copilot instruction and project guideline templates
+- skills/memory-manager/references/MEMORY.md: Concise shared-memory index template
+- skills/memory-manager/references/TOPIC.md: Typed feedback/project/reference topic template
+- .spec-superflow/memories/: Project-shared `MEMORY.md` plus on-demand topic files
 - proposal.md: Change proposal template
 - spec.md: Capability specification template
 - design.md: Technical design template

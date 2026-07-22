@@ -14,11 +14,12 @@ Two responsibilities: requesting review (dispatching a reviewer subagent) and re
 
 ### Procedure
 1. Get SHAs: `BASE_SHA=$(git rev-parse HEAD~1)` and `HEAD_SHA=$(git rev-parse HEAD)`
-2. Read project-root `specs/<capability>/spec.md` for each affected capability. Read `docs/project/project-guidelines.md` and the classic implementation selected by the design/contract when configured. List project memory names, read `memory_maintenance` and `core`, then follow only references relevant to the diff.
+2. Read project-root `specs/<capability>/spec.md` for each affected capability. Read `docs/project/project-guidelines.md` and the classic implementation selected by the design/contract when configured. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only linked topics relevant to the diff.
 3. Dispatch an independent `general-purpose` reviewer subagent using `skills/code-reviewer/code-reviewer-prompt.md`.
 4. Fill placeholders: `[DESCRIPTION]`, `[PLAN_OR_REQUIREMENTS]`, `[PROJECT_BASELINE]`, `[PROJECT_MEMORIES]`, `[CAPABILITY_SPECS]`, `[BASE_SHA]`, `[HEAD_SHA]`.
 5. Act on feedback: fix Critical immediately, fix Important before proceeding, note Minor for later, push back with reasoning if reviewer is wrong.
 6. Create or update `<change-dir>/pr-summary.md` from `templates/pr-summary.md`. Record delivered scope, verification evidence, exceptions, and known risks. Preserve the contract's frontend classification and planned UI/Device obligations; implementation-time UI results may be added now, while release-archivist records the fresh final UI regression and Device Test evidence.
+7. If review and the resulting fix establish a reusable non-obvious project learning, invoke `memory-manager`; ordinary review findings stay in the review/PR artifacts.
 
 ## Part 2: Receiving Review Feedback
 

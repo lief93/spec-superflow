@@ -47,7 +47,43 @@ describe('project baseline workflow integration', () => {
 
   it('keeps project rules in the baseline instead of project memory', () => {
     const memory = read('skills/memory-manager/SKILL.md');
-    assert.match(memory, /normative source/);
-    assert.match(memory, /not project memory/);
+    assert.match(memory, /docs\/project\/project-guidelines\.md.*architecture\/coding rules/);
+    assert.match(memory, /coding standards, architecture ownership, classic implementations/);
+  });
+
+  it('uses Claude-style selective recall throughout the workflow', () => {
+    const workflowFiles = [
+      'skills/workflow-start/SKILL.md',
+      'skills/need-explorer/SKILL.md',
+      'skills/spec-writer/SKILL.md',
+      'skills/contract-builder/SKILL.md',
+      'skills/build-executor/SKILL.md',
+      'skills/bug-investigator/SKILL.md',
+      'skills/code-reviewer/SKILL.md',
+      'skills/release-archivist/SKILL.md',
+    ];
+
+    for (const file of workflowFiles) {
+      assert.match(read(file), /MEMORY\.md|memory-manager/);
+    }
+
+    assert.match(read('skills/release-archivist/SKILL.md'), /Auto Memory Pass/);
+    assert.doesNotMatch(workflowFiles.map(read).join('\n'), /memory_maintenance|`core`|core\.md|`mem:/);
+  });
+
+  it('keeps shared auto memory typed, indexed, and free of private user memory', () => {
+    const memory = read('skills/memory-manager/SKILL.md');
+    const entrypoint = read('skills/memory-manager/references/MEMORY.md');
+    const topic = read('skills/memory-manager/references/TOPIC.md');
+
+    assert.match(memory, /`feedback`.*`project`.*`reference`/s);
+    assert.match(memory, /Private `user` memory and personal feedback are not supported/);
+    assert.match(memory, /MEMORY\.md.*concise index/);
+    assert.match(memory, /Candidate-First Evaluation/);
+    assert.match(memory, /return `NONE` without a repository scan/);
+    assert.equal(entrypoint, '# Project Memory\n');
+    for (const field of ['name:', 'description:', 'type:', 'modified:']) {
+      assert.match(topic, new RegExp(field));
+    }
   });
 });

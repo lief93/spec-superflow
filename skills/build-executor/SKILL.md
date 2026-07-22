@@ -9,7 +9,7 @@ Controls the implementation phase. Uses `execution-contract.md` as the workflow 
 
 ## Required Inputs
 
-Read: `execution-contract.md`, `tasks.md`, relevant change-local `specs/`, relevant `design.md`, and matching project-root `specs/<capability>/spec.md`. Read the project baseline path named in the contract and the selected classic implementation before changing code. List project memory names, read `memory_maintenance` and `core`, then follow only references relevant to the execution batches. (Skip contract/spec requirements when workflow is `tweak`.)
+Read: `execution-contract.md`, `tasks.md`, relevant change-local `specs/`, relevant `design.md`, and matching project-root `specs/<capability>/spec.md`. Read the project baseline path named in the contract and the selected classic implementation before changing code. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only linked topics relevant to the execution batches. (Skip contract/spec requirements when workflow is `tweak`.)
 
 Check workflow mode first: `ssf state get <change-dir> workflow`. If `tweak` → direct edit mode. If `hotfix` or `full` → standard contract-first discipline.
 
@@ -31,8 +31,8 @@ Block on: logic defects, spec violations, missing required tests, unintended sco
 ### Law 4: Rewind on Contract Break
 Return to `specifying` or `bridging` if: new behavior appears, interfaces change materially, design assumptions fail, artifacts no longer define intended implementation.
 
-### Law 5: Project Memory Grounds Implementation
-Use relevant memory invariants when implementing. If the approved design or required implementation conflicts with a verified project memory, stop and return to planning or request clarification.
+### Law 5: Auto Memory Provides Recalled Context
+Use relevant Memory as prior project learning, not as a rule source. If current code, tests, Specs, ADRs, or project guidelines conflict with a memory, treat the memory as stale and repair it through `memory-manager`.
 
 ### Law 6: Project Baseline Governs Code Shape
 Follow the contract's selected classic implementation and applicable architecture rules. A necessary deviation must return to design/contract approval; do not silently choose a locally convenient pattern.
@@ -70,6 +70,7 @@ For changes with multiple execution batches. Dispatch an implementer subagent pe
 3. **Review**: Use `skills/build-executor/task-reviewer-prompt.md`. Pass the project baseline path and selected recipe, relevant memory paths or `Not configured`, and relevant capability `spec.md` paths. Reviewer returns spec compliance + baseline compliance + code quality verdicts.
 4. **Fix**: If Critical or Important issues, dispatch fix subagent, re-review.
 5. **Mark complete**: Append to `.superpowers/sdd/progress.md`: `AC N: complete (commits <base7>..<head7>, review clean)`
+6. **Remember selectively**: If this AC produced verified team-wide feedback, code-invisible project context, an external reference, or an expensive-to-rediscover runtime or debugging conclusion, invoke `memory-manager` immediately. Personal feedback and ordinary fix recipes do not qualify. Most ACs should produce no Memory.
 
 Use every row in the AC's `TDD Test Plan` to drive execution. `Add` and `Update` belong inside RED → GREEN → REFACTOR; `Run existing` establishes the baseline before work and verifies regression afterward. For frontend UI rows:
 

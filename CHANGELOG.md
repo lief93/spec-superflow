@@ -4,6 +4,17 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [Unreleased]
+
+### Changed
+
+- **Claude-style shared Auto Memory** — Replaced the Serena-inspired memory graph with a concise `MEMORY.md` index and typed `feedback`, `project`, and `reference` topics that are recalled only when relevant.
+- **Selective memory admission** — Memory is now optional and limited to verified, shared, project-specific, non-obvious learnings; project rules, current behavior, decisions, and task history remain in their existing authoritative artifacts.
+
+### Removed
+
+- **Serena memory files and references** — Removed `memory_maintenance.md`, `core.md`, and `mem:` traversal from the active workflow. Migration preserves useful content before removing only the legacy Serena Memory files.
+
 ## [0.9.2] - 2026-07-21
 
 ### Added
