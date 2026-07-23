@@ -4,7 +4,7 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
-## [Unreleased]
+## [0.11.0] - 2026-07-23
 
 ### Changed
 

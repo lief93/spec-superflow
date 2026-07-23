@@ -134,7 +134,7 @@ npx spec-superflow list          # 或通过 npx 使用
 
 ### 版本
 
-- 当前版本：`v0.9.2`
+- 当前版本：`v0.11.0`
 - 自包含插件，不需要运行时安装 OpenSpec 或 Superpowers
 - 上游来源：[Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) 和 [obra/superpowers](https://github.com/obra/superpowers)
 - 版本历史见 [CHANGELOG.md](CHANGELOG.md)
