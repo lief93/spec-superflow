@@ -57,10 +57,10 @@ Change is fuzzy, scope unclear, comparing options, no stable change name.
 Guard: `node "${CLAUDE_PLUGIN_ROOT}/scripts/guard/guard.mjs" check <dir> exploring specifying --json` → fail = BLOCK. User knows what they want, artifacts missing/incomplete.
 
 ### Route to contract-builder
-Guard: `... check <dir> specifying bridging --json` → fail = BLOCK. Artifacts exist, implementation requested, contract missing/stale. Include `DP-3: 契约批准`.
+Guard: `... check <dir> specifying bridging --json` → fail = BLOCK. Artifacts exist, implementation requested, contract missing/stale. Include `DP-3: Contract Approval`.
 
 ### Route to build-executor
-Guard: `... check <dir> approved-for-build executing --json` → fail = BLOCK. Contract exists and approved, contract matches artifacts. Include `DP-4: 执行模式选择`.
+Guard: `... check <dir> approved-for-build executing --json` → fail = BLOCK. Contract exists and approved, contract matches artifacts. Include `DP-4: Execution Mode Selection`.
 
 ### Route to bug-investigator
 Execution hit blockage: test failure, unexpected behavior, build error, task cannot proceed. After debugging, route back to build-executor.
@@ -69,7 +69,7 @@ Execution hit blockage: test failure, unexpected behavior, build error, task can
 Batch completed, batch ready for spec-compliance + code-quality verification.
 
 ### Route to release-archivist
-Guard: `... check <dir> executing closing --json` → fail = BLOCK. Implementation complete, verification complete/nearly complete. Include `DP-7: 归档确认`.
+Guard: `... check <dir> executing closing --json` → fail = BLOCK. Implementation complete, verification complete/nearly complete. Include `DP-7: Archive Confirmation`.
 
 ### Route to spec-merger
 Delta specs exist that need merging, change closing with ADDED/MODIFIED/REMOVED/RENAMED specs.

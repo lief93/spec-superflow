@@ -1,37 +1,37 @@
-# 变更提案
+# Change Proposal
 
-## 背景（Why）
+## Why
 
-- 这个变更要解决什么问题或抓住什么机会？
-- 为什么现在需要解决？
+- What problem or opportunity does this change address?
+- Why should it be addressed now?
 
-## 变更内容（What Changes）
+## What Changes
 
-- 列出本次工作引入的具体变更。
-- 说明行为变更、移除项以及对用户可见的差异。
+- List the concrete changes introduced by this work.
+- Describe behavioral changes, removals, and user-visible differences.
 
-## 能力（Capabilities）
+## Capabilities
 
-### 新增能力
+### New Capabilities
 
-- 用短横线连接的小写名称列出每个新能力。
+- List each new capability using a lowercase hyphenated name.
 
-### 修改能力
+### Modified Capabilities
 
-- 列出每个 approved behavior 会发生变化的现有能力。
+- List each existing capability whose approved behavior changes.
 
-## 范围（Scope）
+## Scope
 
-### 范围内（In Scope）
+### In Scope
 
-- 本次变更包含什么
+- What this change includes
 
-### 范围外（Out of Scope）
+### Out of Scope
 
-- 明确不包含什么
+- What this change explicitly excludes
 
-## 影响（Impact）
+## Impact
 
-- 影响的代码区域：
-- 影响的 API 或接口：
-- 依赖或涉及的外部系统：
+- Affected code areas:
+- Affected APIs or interfaces:
+- External systems or dependencies involved:

@@ -4,13 +4,20 @@ import { extname, join, resolve } from 'node:path';
 
 const GUIDELINE = 'docs/project/project-guidelines.md';
 const INSTRUCTIONS = '.github/copilot-instructions.md';
-const REQUIRED_HEADINGS = [
-  '# 项目开发基线',
-  '## 技术与框架约束',
-  '## 架构与编码规则',
-  '## 经典实现索引',
+const REQUIRED_HEADING_GROUPS = [
+  ['# Project Development Baseline', '# 项目开发基线'],
+  ['## Technology And Framework Constraints', '## 技术与框架约束'],
+  ['## Architecture And Coding Rules', '## 架构与编码规则'],
+  ['## Classic Implementation Index', '## 经典实现索引'],
 ];
-const RECIPE_FIELDS = ['适用条件', '新建或修改', '实现顺序', '必须保持', '完成标准', '参考实现'];
+const RECIPE_FIELD_GROUPS = [
+  ['Applies when', '适用条件'],
+  ['Create or modify', '新建或修改'],
+  ['Implementation order', '实现顺序'],
+  ['Must preserve', '必须保持'],
+  ['Done when', '完成标准'],
+  ['Reference implementation', '参考实现'],
+];
 const SOURCE_EXTENSIONS = new Set([
   '.c', '.cc', '.cpp', '.cs', '.ets', '.go', '.gradle', '.h', '.hpp', '.java', '.js',
   '.json', '.json5', '.kt', '.kts', '.md', '.mjs', '.mm', '.properties', '.py', '.rs',
@@ -49,8 +56,10 @@ function check(projectRoot) {
   }
 
   const headings = new Set(guideline.split('\n').filter(line => /^#{1,3} /.test(line.trim())).map(line => line.trim()));
-  for (const heading of REQUIRED_HEADINGS) {
-    if (!headings.has(heading)) issues.push(`Missing heading in ${GUIDELINE}: ${heading}`);
+  for (const [preferred, legacy] of REQUIRED_HEADING_GROUPS) {
+    if (!headings.has(preferred) && !headings.has(legacy)) {
+      issues.push(`Missing heading in ${GUIDELINE}: ${preferred}`);
+    }
   }
 
   const placeholders = [...`${instructions}\n${guideline}`.matchAll(/<([a-z][^>\n]*)>/gi)].map(match => match[0]);
@@ -60,8 +69,12 @@ function check(projectRoot) {
   if (recipeBlocks.length === 0) issues.push(`${GUIDELINE} must contain at least one classic implementation recipe`);
   for (const block of recipeBlocks) {
     const title = block.split('\n', 1)[0].trim();
-    for (const field of RECIPE_FIELDS) {
-      if (!block.includes(`- ${field}：`)) issues.push(`Recipe "${title}" missing field: ${field}`);
+    for (const [preferred, legacy] of RECIPE_FIELD_GROUPS) {
+      const hasPreferred = block.includes(`- ${preferred}:`);
+      const hasLegacy = block.includes(`- ${legacy}：`);
+      if (!hasPreferred && !hasLegacy) {
+        issues.push(`Recipe "${title}" missing field: ${preferred}`);
+      }
     }
   }
 

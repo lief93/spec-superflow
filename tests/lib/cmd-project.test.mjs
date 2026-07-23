@@ -20,31 +20,31 @@ function fixture() {
   );
   writeFileSync(
     join(root, 'docs/project/project-guidelines.md'),
-    `# 项目开发基线
+    `# Project Development Baseline
 
-## 技术与框架约束
+## Technology And Framework Constraints
 
-| 实现问题 | 项目统一机制 | 开发时怎么做 | 适用范围 | 参考 |
+| Implementation Concern | Project-Standard Mechanism | How To Implement | Scope | Reference |
 |---|---|---|---|---|
-| 加载 | Kotlin | 调用 load | app | \`src/App.kt#load\` |
+| Loading | Kotlin | Call load | app | \`src/App.kt#load\` |
 
-## 架构与编码规则
+## Architecture And Coding Rules
 
-| 要实现的改动 | 由谁负责 | 应该如何协作 | 不应该出现 | 参考 |
+| Change Type | Owner | Required Collaboration | Must Not Occur | Reference |
 |---|---|---|---|---|
-| 页面 | App | 调用 load | 重复实现 | \`src/App.kt#App\` |
+| Page | App | Call load | Duplicate implementation | \`src/App.kt#App\` |
 
-## 经典实现索引
+## Classic Implementation Index
 
-### 新增页面
+### Add a page
 
-- 适用条件：新增页面
-- 新建或修改：App
-- 实现顺序：
-  1. 调用 load
-- 必须保持：单一职责
-- 完成标准：页面可见
-- 参考实现：\`src/App.kt#load\`
+- Applies when: Adding a page
+- Create or modify: App
+- Implementation order:
+  1. Call load
+- Must preserve: Single responsibility
+- Done when: The page is visible
+- Reference implementation: \`src/App.kt#load\`
 `,
   );
   return root;
@@ -62,15 +62,45 @@ describe('ssf project check', () => {
     assert.equal(result.checkedSymbols, 3);
   });
 
+  it('continues to accept an existing Chinese baseline', () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, 'docs/project/project-guidelines.md'),
+      `# 项目开发基线
+
+## 技术与框架约束
+
+## 架构与编码规则
+
+## 经典实现索引
+
+### 新增页面
+
+- 适用条件：新增页面
+- 新建或修改：App
+- 实现顺序：
+  1. 调用 load
+- 必须保持：单一职责
+- 完成标准：页面可见
+- 参考实现：\`src/App.kt#load\`
+`,
+    );
+
+    const result = check(root);
+    assert.deepEqual(result.issues, []);
+    assert.equal(result.checkedPaths, 1);
+    assert.equal(result.checkedSymbols, 1);
+  });
+
   it('reports missing recipe fields and broken references', () => {
     const root = fixture();
     const guideline = join(root, 'docs/project/project-guidelines.md');
     writeFileSync(
       guideline,
-      '# 项目开发基线\n\n## 技术与框架约束\n\n## 架构与编码规则\n\n## 经典实现索引\n\n### 新增页面\n\n- 适用条件：页面\n- 参考实现：`src/Missing.kt#load`\n',
+      '# Project Development Baseline\n\n## Technology And Framework Constraints\n\n## Architecture And Coding Rules\n\n## Classic Implementation Index\n\n### Add a page\n\n- Applies when: Page\n- Reference implementation: `src/Missing.kt#load`\n',
     );
     const result = check(root);
-    assert.ok(result.issues.some(issue => issue.includes('missing field: 实现顺序')));
+    assert.ok(result.issues.some(issue => issue.includes('missing field: Implementation order')));
     assert.ok(result.issues.some(issue => issue.includes('Missing referenced path')));
   });
 
