@@ -12,6 +12,7 @@ Depends on: None
 ### AC: [Spec 中完全一致的 Scenario 标题]
 
 - **Requirement**: [Spec 中完全一致的 Requirement 标题]
+- **User-visible**: `Yes` | `No`
 
 #### File Changes
 
@@ -32,15 +33,15 @@ Depends on: None
 
 #### TDD Test Plan
 
-只保留能证明当前 AC 的测试层，不要求每层都写；同一行为放在最低成本且稳定的层验证，避免重复覆盖。
+只保留能证明当前 AC 的测试层，不要求每层都写；同一行为放在最低成本且稳定的层验证，避免重复覆盖。多行合起来必须覆盖 Scenario 中每个可观察的 WHEN/THEN/AND：内部状态、调用、持久化、顺序和并发由 Unit/Component/Integration 证明，可见状态和用户交互由 UI 证明。`Proves` 写明精确结果，不能只写“覆盖当前 AC”。UI 行必须通过已渲染控件执行用户动作；直接调用 ViewModel、callback、repository 或 reducer 只能用于准备条件或模拟系统/生命周期事件，不能替代用户 WHEN。每一行只对应一个平台测试源码文件和一个具体测试方法/标题。不得使用 Markdown、普通业务源码、命令、目录、通配符或“相关回归集合”作为 Test File。
 
-| Layer | Action | Target | Proves |
-|---|---|---|---|
-| `Unit` / `Component` / `Integration` / `UI` | `Add` / `Update` / `Run existing` / `Unavailable` / `Not applicable` | 精确测试文件、用例或相关回归集合 | 对应的行为、边界或回归风险 |
+| Layer | Platform | Action | Test File | Test Case | Proves |
+|---|---|---|---|---|---|
+| `Unit` / `Component` / `Integration` / `UI` | `Android` / `HarmonyOS` / `iOS` / `Web` / 实际平台 | `Add` / `Update` / `Run existing` / `Unavailable` | 项目相对路径下的平台测试源码；`Unavailable` 时为 `Not configured` | 精确测试方法/标题；`Unavailable` 时记录查找位置和能力缺口 | 测试断言能够证明的当前 AC 可观察结果 |
 
 #### TDD Steps
 
-- [ ] **1.1 RED：编写或更新计划中的测试并确认失败**
+- [ ] **1.1 RED / Baseline：编写或更新计划中的测试并确认真实起点**
 
 ```language
 // 带精确断言的测试代码
@@ -49,9 +50,9 @@ Depends on: None
 **Files**: `Create/Modify: exact/path`
 
 Run: `exact command`
-Expected: FAIL with the behavior-specific assertion because production behavior is absent
+Expected: 新增或变更行为时，因该行为尚未实现而得到真实的 behavior-specific FAIL；仅为已有行为补充或加强测试时，记录 baseline PASS，不得使用 sentinel 或故意失败制造 RED
 
-- [ ] **1.2 GREEN：实现使当前测试通过的最小代码**
+- [ ] **1.2 GREEN / Preserve：实现使当前测试通过的最小代码；仅补测试时保持生产行为不变**
 
 ```language
 // 实现代码
@@ -60,10 +61,10 @@ Expected: FAIL with the behavior-specific assertion because production behavior 
 **Files**: `Create/Modify: exact/path`
 **Interfaces**: Produces `name(type): returnType` — 被 Batch N 消费
 
-- [ ] **1.3 对其余 `Add` / `Update` 测试重复 RED → GREEN**
+- [ ] **1.3 对其余 `Add` / `Update` 测试重复真实 RED → GREEN，或记录已有行为的 baseline PASS**
 
 Run: `exact command per planned test`
-Expected: each new or changed test fails before its behavior exists, then passes
+Expected: new or changed behavior fails before implementation and then passes; existing behavior coverage passes without an artificial failure
 
 - [ ] **1.4 REFACTOR：运行当前 AC 的全部计划测试和相关回归**
 

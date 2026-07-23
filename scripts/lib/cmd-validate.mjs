@@ -1,6 +1,6 @@
 // ssf validate <dir> — validate artifacts in a change directory
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, basename, relative } from 'node:path';
+import { join, basename, dirname, extname, relative, resolve, sep } from 'node:path';
 
 async function getValidator() {
   const mod = await import('../../dist/index.js');
@@ -96,6 +96,126 @@ function isMeaningfulCell(value) {
   return normalized !== '' && !['-', '—', 'n/a', 'na', 'none', 'tbd', 'todo', 'pending'].includes(normalized);
 }
 
+const TEST_SOURCE_EXTENSIONS = new Set([
+  '.c', '.cc', '.cpp', '.cs', '.dart', '.ets', '.feature', '.go', '.java', '.js', '.jsx',
+  '.kt', '.kts', '.m', '.mm', '.php', '.py', '.rb', '.rs', '.swift', '.ts', '.tsx',
+]);
+
+function findProjectRoot(startDir) {
+  let current = resolve(startDir);
+  while (true) {
+    if (existsSync(join(current, '.git'))) return current;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+function isProjectRelativePath(filePath) {
+  if (!filePath || filePath.startsWith('/') || filePath.startsWith('~') || /^[A-Za-z]:[\\/]/.test(filePath)) return false;
+  return !filePath.replace(/\\/g, '/').split('/').includes('..');
+}
+
+function isTestSourcePath(filePath) {
+  const slashPath = filePath.replace(/\\/g, '/');
+  const normalized = slashPath.toLowerCase();
+  const fileName = basename(slashPath);
+  if (/(^|\/)(docs?|specs?|changes|\.spec-superflow)(\/|$)/.test(normalized)) return false;
+  const hasTestRoot = /(^|\/)(test|tests|__tests__|androidtest|ohostest|uitests?|e2e|cypress|playwright|integration_test)(\/|$)/.test(normalized);
+  const hasTestName = /\.(test|spec)\.[^.]+$/i.test(fileName)
+    || /(?:Test|Tests|UITest)\.[^.]+$/.test(fileName)
+    || /^(test_|tests_)/i.test(fileName)
+    || /(^|[_-])(test|tests)\.[^.]+$/i.test(fileName);
+  return TEST_SOURCE_EXTENSIONS.has(extname(normalized)) && (hasTestRoot || hasTestName);
+}
+
+function uiTestMatchesPlatform(platform, filePath) {
+  const normalizedPlatform = normalizeRequirementName(platform);
+  const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
+  if (normalizedPlatform.includes('android')) {
+    return /(^|\/)src\/androidtest\//.test(normalizedPath);
+  }
+  if (/(harmony|openharmony|ohos)/.test(normalizedPlatform)) {
+    return /(^|\/)src\/ohostest\//.test(normalizedPath);
+  }
+  if (/(^|\s)(ios|ipados|macos)(\s|$)/.test(normalizedPlatform)) {
+    return /(^|\/)[^/]*uitests?\//.test(normalizedPath) || /uitests?\.[^.]+$/.test(normalizedPath);
+  }
+  if (/(web|browser)/.test(normalizedPlatform)) {
+    return /(^|\/)(e2e|cypress|playwright)(\/|$)/.test(normalizedPath) || /\.(spec|test)\.[^.]+$/.test(normalizedPath);
+  }
+  return isTestSourcePath(filePath);
+}
+
+function isConcreteTestCase(value) {
+  const normalized = normalizeCell(value).toLowerCase();
+  if (normalized.length < 4) return false;
+  return ![
+    'all tests', 'all ui tests', 'related tests', 'regression tests', 'smoke tests',
+    'test suite', 'ui test', 'device test', '相关测试', '回归测试', '冒烟测试', '全部测试',
+  ].includes(normalized);
+}
+
+function isConcreteProof(value) {
+  const normalized = normalizeCell(value).toLowerCase();
+  const minimumLength = /[\u3400-\u9fff]/.test(normalized) ? 6 : 12;
+  if (normalized.length < minimumLength) return false;
+  return !/^(covers?|verifies?|tests?)\s+(the\s+)?(ac|scenario|requirement|behavior)\.?$/.test(normalized)
+    && !/^(覆盖|验证|测试)(当前)?(ac|需求|场景|功能)(即可|通过|成功|正常)?[。.]?$/.test(normalized);
+}
+
+function validateTestPlanRow(rowName, row, projectRoot) {
+  const issues = [];
+  const layer = normalizeRequirementName(row.layer);
+  const action = normalizeRequirementName(row.action);
+  const testFile = normalizeCell(row['test file']);
+  const testCase = normalizeCell(row['test case']);
+  const unavailable = action === 'unavailable';
+
+  if (!isMeaningfulCell(row.platform)) {
+    issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} requires a concrete Platform` });
+  }
+  if (unavailable) {
+    if (normalizeRequirementName(testFile) !== 'not configured') {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Unavailable must use Test File "Not configured", not a document or source file` });
+    }
+    if (!isConcreteTestCase(testCase)) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Unavailable requires the searched test roots/configuration and concrete capability gap in Test Case` });
+    }
+  } else {
+    if (!isProjectRelativePath(testFile)) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Test File must be one project-relative path` });
+    } else if (testFile.includes('#')) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} must put the file path in Test File and the test method/title in Test Case` });
+    } else if (!isTestSourcePath(testFile)) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Test File must be a platform test source file, not documentation, production source, a command, or a regression-set label` });
+    } else if (layer === 'ui' && !uiTestMatchesPlatform(row.platform, testFile)) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} UI Test File does not match the declared platform test location` });
+    }
+
+    if (!isConcreteTestCase(testCase)) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} requires one exact test method or test title in Test Case` });
+    }
+
+    if (['update', 'run existing'].includes(action) && isProjectRelativePath(testFile) && projectRoot) {
+      const absolutePath = resolve(projectRoot, testFile);
+      const insideProject = absolutePath === projectRoot || absolutePath.startsWith(`${projectRoot}${sep}`);
+      if (!insideProject || !existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} ${row.action} requires an existing test file: ${testFile}` });
+      } else if (isConcreteTestCase(testCase) && !readFileSync(absolutePath, 'utf-8').includes(testCase)) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Test Case was not found in existing test file: ${testCase}` });
+      }
+    } else if (['update', 'run existing'].includes(action) && !projectRoot) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} cannot verify an existing test file because no Git project root was found` });
+    }
+  }
+
+  if (!isConcreteProof(row.prove)) {
+    issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Proves must state the observable AC outcome asserted by this test` });
+  }
+  return issues;
+}
+
 function splitMarkdownTableRow(line) {
   const trimmed = line.trim();
   if (!trimmed.startsWith('|')) return null;
@@ -155,6 +275,55 @@ function parseTraceabilityTable(sectionContent) {
       batch: row.batch,
     })),
   };
+}
+
+const AC_TEST_MATRIX_HEADERS = ['requirement', 'ac', 'layer', 'platform', 'action', 'test file', 'test case', 'prove'];
+
+function testRowKey(row) {
+  return AC_TEST_MATRIX_HEADERS.map(header => normalizeRequirementName(row[header])).join('\u0000');
+}
+
+function validateAcTestMatrix(contractContent, taskTestRows) {
+  const issues = [];
+  const section = extractSection(contractContent, 'AC Test Matrix');
+  if (!section) {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Missing ## AC Test Matrix copied from tasks.md' });
+    return issues;
+  }
+  const parsed = parseMarkdownTable(section, AC_TEST_MATRIX_HEADERS, 'AC Test Matrix');
+  if (parsed.error) {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: parsed.error });
+    return issues;
+  }
+
+  const planned = new Map();
+  for (const row of taskTestRows) {
+    const key = testRowKey(row);
+    if (planned.has(key)) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `Duplicate AC test obligation: ${row.requirement} / ${row.ac} / ${row['test file']} / ${row['test case']}` });
+    }
+    planned.set(key, row);
+  }
+  const contracted = new Map();
+  for (const row of parsed.rows) {
+    const key = testRowKey(row);
+    if (contracted.has(key)) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `Duplicate AC Test Matrix row: ${row.requirement} / ${row.ac} / ${row['test file']} / ${row['test case']}` });
+    }
+    contracted.set(key, row);
+  }
+
+  for (const [key, row] of planned) {
+    if (!contracted.has(key)) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `AC Test Matrix is missing tasks.md obligation: ${row.requirement} / ${row.ac} / ${row['test file']} / ${row['test case']}` });
+    }
+  }
+  for (const [key, row] of contracted) {
+    if (!planned.has(key)) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `AC Test Matrix row has no exact tasks.md obligation: ${row.requirement} / ${row.ac} / ${row['test file']} / ${row['test case']}` });
+    }
+  }
+  return issues;
 }
 
 function coverageKey(requirement, scenario) {
@@ -291,8 +460,9 @@ function validateFileChanges(scopeName, content, headingLevel = 5) {
   return issues;
 }
 
-function validateTasksStructure(content, scenarioPairs, designCoverageRows, designExists) {
+function validateTasksStructure(content, scenarioPairs, designCoverageRows, designExists, projectRoot) {
   const issues = [];
+  const testRows = [];
   if (content.trim().length < 50) {
     issues.push({ level: 'ERROR', path: 'tasks.md', message: 'tasks.md is too short (< 50 chars) — provide covered scenarios, concrete file changes, and ordered TDD steps' });
   }
@@ -311,6 +481,7 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
 
     for (const ac of acs) {
       const requirement = extractLabeledValue(ac.content, 'Requirement');
+      const userVisible = normalizeRequirementName(extractLabeledValue(ac.content, 'User-visible'));
       const scopeName = `${batch.name} AC "${ac.scenario}"`;
       if (!isMeaningfulCell(requirement)) {
         issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} requires - **Requirement**: <exact Requirement title>` });
@@ -330,6 +501,9 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
       if (designExists && !designCoverageRows.has(key)) {
         issues.push({ level: 'ERROR', path: 'tasks.md', message: `Task AC has no matching design.md coverage row: ${requirement} / ${ac.scenario}` });
       }
+      if (!['yes', 'no'].includes(userVisible)) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} requires - **User-visible**: Yes or No` });
+      }
 
       const fileChanges = extractNestedSection(ac.content, 'File Changes', 4);
       if (!fileChanges) {
@@ -342,29 +516,34 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
       if (!testPlan) {
         issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} is missing #### TDD Test Plan` });
       } else {
-        const table = parseMarkdownTable(testPlan, ['layer', 'action', 'target', 'prove'], 'TDD Test Plan');
+        const table = parseMarkdownTable(testPlan, ['layer', 'platform', 'action', 'test file', 'test case', 'prove'], 'TDD Test Plan');
         if (table.error) {
           issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} ${table.error}` });
         } else if (table.rows.length === 0) {
           issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} TDD Test Plan requires at least one test row` });
         } else {
           const allowedLayers = new Set(['unit', 'component', 'integration', 'ui']);
-          const allowedActions = new Set(['add', 'update', 'run existing', 'unavailable', 'not applicable']);
+          const allowedActions = new Set(['add', 'update', 'run existing', 'unavailable']);
           table.rows.forEach((row, index) => {
             const rowName = `${scopeName} TDD Test Plan row ${index + 1}`;
             if (!allowedLayers.has(normalizeRequirementName(row.layer))) {
               issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Layer must be Unit, Component, Integration, or UI` });
             }
             if (!allowedActions.has(normalizeRequirementName(row.action))) {
-              issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Action must be Add, Update, Run existing, Unavailable, or Not applicable` });
+              issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Action must be Add, Update, Run existing, or Unavailable` });
             }
-            if (!isMeaningfulCell(row.target)) {
-              issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} requires a concrete Target` });
-            }
-            if (!isMeaningfulCell(row.prove)) {
-              issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} requires a concrete Proves statement` });
-            }
+            issues.push(...validateTestPlanRow(rowName, row, projectRoot));
+            testRows.push({
+              requirement,
+              ac: ac.scenario,
+              userVisible,
+              batch: batch.name,
+              ...row,
+            });
           });
+          if (userVisible === 'yes' && !table.rows.some(row => normalizeRequirementName(row.layer) === 'ui')) {
+            issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} is user-visible and requires an AC-specific UI test row` });
+          }
         }
       }
 
@@ -383,7 +562,7 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
     }
   }
 
-  return makeReport(issues);
+  return { ...makeReport(issues), testRows };
 }
 
 function extractBatchNames(contractContent) {
@@ -407,7 +586,7 @@ function referencedBatches(value) {
   return names;
 }
 
-function validateFrontendVerification(sectionContent) {
+function validateFrontendVerification(sectionContent, taskTestRows) {
   const issues = [];
   const impact = normalizeRequirementName(extractLabeledValue(sectionContent, 'Frontend Impact'));
   const reason = extractLabeledValue(sectionContent, 'Reason');
@@ -435,6 +614,9 @@ function validateFrontendVerification(sectionContent) {
   const deviceRow = rowsByCheck.get('device test');
   if (!uiRow) issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Verification requires a UI Test row' });
   if (!deviceRow) issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Verification requires a Device Test row' });
+  if (!taskTestRows.some(row => normalizeRequirementName(row.layer) === 'ui')) {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Impact: Yes requires at least one UI row in the AC Test Matrix' });
+  }
 
   for (const [name, row] of [['UI Test', uiRow], ['Device Test', deviceRow]]) {
     if (!row) continue;
@@ -445,9 +627,8 @@ function validateFrontendVerification(sectionContent) {
     }
   }
 
-  const allowedUiObligations = new Set(['add', 'update', 'run existing', 'unavailable']);
-  if (uiRow && !allowedUiObligations.has(normalizeRequirementName(uiRow.obligation))) {
-    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'UI Test obligation must be Add, Update, Run existing, or Unavailable' });
+  if (uiRow && normalizeRequirementName(uiRow.obligation) !== 'required by ac test matrix') {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'UI Test obligation must be Required by AC Test Matrix' });
   }
   if (deviceRow && normalizeRequirementName(deviceRow.obligation) !== 'required') {
     issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Device Test obligation must be Required for frontend work' });
@@ -481,11 +662,12 @@ function validateSpecsLayout(changeDir, specsDir, specFiles) {
   return makeReport(issues);
 }
 
-function validateExecutionContract(contractContent, requirementNames) {
+function validateExecutionContract(contractContent, requirementNames, taskTestRows) {
   const requiredSections = [
     'Intent Lock',
     'Approved Behavior',
     'Requirement Traceability',
+    'AC Test Matrix',
     'Design Constraints',
     'Task Batches',
     'Test Obligations',
@@ -517,7 +699,8 @@ function validateExecutionContract(contractContent, requirementNames) {
   }
 
   const frontendVerification = extractSection(contractContent, 'Frontend Verification');
-  if (frontendVerification) issues.push(...validateFrontendVerification(frontendVerification));
+  if (frontendVerification) issues.push(...validateFrontendVerification(frontendVerification, taskTestRows));
+  issues.push(...validateAcTestMatrix(contractContent, taskTestRows));
 
   const traceabilitySection = extractSection(contractContent, 'Requirement Traceability');
   if (!traceabilitySection) {
@@ -678,14 +861,6 @@ export async function run(args) {
     }
   }
 
-  const contractPath = join(changeDir, 'execution-contract.md');
-  if (existsSync(contractPath)) {
-    const content = readFileSync(contractPath, 'utf-8');
-    const report = validateExecutionContract(content, requirementNames);
-    printReport('execution-contract.md', report);
-    if (!report.valid) hasErrors = true;
-  }
-
   let designCoverageRows = new Map();
   const designPath = join(changeDir, 'design.md');
   const designExists = existsSync(designPath);
@@ -696,10 +871,21 @@ export async function run(args) {
     if (!report.valid) hasErrors = true;
   }
 
+  const projectRoot = findProjectRoot(changeDir);
+  let taskTestRows = [];
   const tasksPath = join(changeDir, 'tasks.md');
   if (existsSync(tasksPath)) {
-    const report = validateTasksStructure(readFileSync(tasksPath, 'utf-8'), scenarioPairs, designCoverageRows, designExists);
+    const report = validateTasksStructure(readFileSync(tasksPath, 'utf-8'), scenarioPairs, designCoverageRows, designExists, projectRoot);
+    taskTestRows = report.testRows;
     printReport('tasks.md', report);
+    if (!report.valid) hasErrors = true;
+  }
+
+  const contractPath = join(changeDir, 'execution-contract.md');
+  if (existsSync(contractPath)) {
+    const content = readFileSync(contractPath, 'utf-8');
+    const report = validateExecutionContract(content, requirementNames, taskTestRows);
+    printReport('execution-contract.md', report);
     if (!report.valid) hasErrors = true;
   }
 

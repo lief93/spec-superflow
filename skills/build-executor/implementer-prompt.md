@@ -122,7 +122,11 @@ Subagent (general-purpose):
     - Did I follow TDD if required?
     - Are tests comprehensive?
     - Is the test output pristine (no stray warnings or noise)?
-    - Did I execute every applicable row in the AC's `TDD Test Plan`, including the exact UI action and target?
+    - Did I execute every row using its exact Platform, Test File, and Test Case?
+    - Does each test case assert the AC's WHEN/THEN outcome rather than merely render, launch, compile, or read a document?
+    - Across the planned rows, does every observable WHEN/THEN/AND outcome have an explicit assertion, including internal state/calls/persistence and visible behavior?
+    - For a user-triggered UI WHEN, did the UI test act through the rendered control rather than call the ViewModel, callback, repository, or reducer directly?
+    - After an action that may recompose, rerender, refresh, or navigate, did I reacquire UI nodes with stable semantic selectors instead of reusing stale node handles?
     - If it says `Unavailable`, did I avoid silently adding test infrastructure and preserve the documented reason?
 
     If you find issues during self-review, fix them now before reporting.
@@ -139,9 +143,9 @@ Subagent (general-purpose):
     - What you implemented (or what you attempted, if blocked)
     - What you tested and test results
     - **TDD Evidence** (if TDD was required for this task):
-      - RED: command run, relevant failing output before implementation, and why the failure was expected
+      - RED: command run, relevant failing output before new or changed production behavior, and why the failure was expected; for test-only coverage of existing behavior, record the baseline PASS instead and never manufacture a failure
       - GREEN: command run and relevant passing output after implementation
-    - **TDD Test Evidence**: for each applicable Unit, Component, Integration, or UI row, record action, target, RED/GREEN commands and results; `Run existing` records the baseline/regression result, and `Unavailable` records inspected locations and the missing capability
+    - **TDD Test Evidence**: for each Unit, Component, Integration, or UI row, record Requirement, AC, Platform, Test File, Test Case, action, and RED/GREEN results for new or changed behavior; test-only coverage and `Run existing` record the baseline/regression result, and `Unavailable` records inspected locations and the missing capability
     - Files changed
     - Self-review findings (if any)
     - Any issues or concerns

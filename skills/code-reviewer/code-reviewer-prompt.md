@@ -78,7 +78,11 @@ Subagent (general-purpose):
     - Edge cases covered?
     - Integration tests where they matter?
     - All tests passing?
-    - For frontend work, do changed UI behaviors have added/updated UI tests, or do unchanged UI behaviors run relevant historical UI tests as planned?
+    - For frontend work, does every user-visible AC map to an exact platform UI test file and case, and do that case's actions/assertions prove the AC's WHEN/THEN?
+    - Across Unit, Component, Integration, and UI rows, does every observable WHEN/THEN/AND outcome have an explicit assertion rather than only a passing row count?
+    - Does each user-triggered UI WHEN act through the rendered control rather than call a ViewModel, callback, repository, or reducer directly?
+    - Do UI tests reacquire nodes after recomposition, rerender, refresh, or navigation instead of retaining stale node handles?
+    - Reject Markdown, builds, launch-only checks, unrelated test cases, and aggregate suite counts as substitutes for AC test evidence.
     - Is any claimed `Unavailable` UI Test backed by repository evidence rather than convenience?
 
     **Production readiness:**

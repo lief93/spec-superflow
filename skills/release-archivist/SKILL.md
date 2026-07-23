@@ -37,10 +37,10 @@ Read `## Frontend Verification` from `execution-contract.md`.
 
 When `Frontend Impact: Yes`:
 
-1. Run the planned affected UI regression set fresh. This includes added/updated UI tests or the related historical UI tests named by each AC. If there is no direct historical match, run the planned module smoke/regression set. Do not default to the entire project suite unless shared navigation, shared UI, global state, or acceptable test cost justifies it.
-2. Run Device Test after all Batches are complete: build, install/launch, and exercise each affected user path on at least one project baseline simulator/device per affected native platform. For Web, use the default real browser and desktop viewport; add a mobile viewport only when responsive behavior is affected.
-3. Record actual results in `pr-summary.md > Frontend Verification Evidence`: planned obligation, result, environment, command/procedure, and evidence.
-4. UI Test result must be `Pass` when the contract says `Add`, `Update`, or `Run existing`. A missing or failing required UI Test is FAIL.
+1. Run every exact UI Test File and Test Case in `## AC Test Matrix` fresh. A broader smoke/regression suite may be additional evidence, never a replacement.
+2. Run Device Test after all Batches are complete: execute the same AC-linked UI cases on at least one project baseline simulator/device per affected native platform, then cover only the remaining non-automatable user paths manually. For Web, use the default real browser and desktop viewport; add a mobile viewport only when responsive behavior is affected.
+3. Record one row per matrix obligation in `pr-summary.md > AC Test Evidence`, plus the aggregate UI and Device results in `Frontend Verification Evidence`.
+4. Each matrix row with `Add`, `Update`, or `Run existing` must be `Pass`. Any missing or failing required UI case is FAIL.
 5. `Unavailable` is CONDITIONAL, not PASS. Record searched locations/configuration and the missing capability; proceed only after developer acceptance. Do not introduce a framework during release verification.
 6. Device Test must be `Pass`. Missing evidence, build/install/launch failure, or an unverified affected path is FAIL.
 
