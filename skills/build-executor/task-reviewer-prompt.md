@@ -110,8 +110,12 @@ Subagent (general-purpose):
     **Tests:**
     - Do the new and changed tests verify real behavior, not mocks?
     - Are the task's edge cases covered?
-    - Does the implementation report satisfy every applicable row in the AC's TDD Test Plan, including the exact UI action and target?
-    - For `Run existing`, is the historical test related to the affected page, route, component, feature, or module?
+    - For every TDD Test Plan row, open the exact changed/existing Test File and locate the named Test Case; a report claim alone is insufficient.
+    - Map the Test Case setup, action, and assertions to the AC's WHEN/THEN. Rendering a screen, launching an app, checking that no exception occurred, or reading Markdown does not prove a behavioral AC unless that is the stated outcome.
+    - Across all planned rows, map every observable WHEN/THEN/AND outcome to an explicit assertion. Verify internal state/calls/persistence/order/concurrency at Unit/Component/Integration level and visible state/user interaction at UI level where applicable; row counts alone are not coverage.
+    - A user-triggered UI WHEN must act through the rendered control. Direct ViewModel, callback, repository, or reducer calls are acceptable only for setup or genuine system/lifecycle events, not as substitutes for user interaction.
+    - After an action that may recompose, rerender, refresh, or navigate, verify the test reacquires nodes with stable semantic selectors instead of reusing a stale node handle.
+    - For `Run existing`, does the named historical test case actually assert the affected AC rather than merely belonging to the same page or module?
     - For `Unavailable`, is the missing framework supported by concrete repository evidence and no test infrastructure was added without approval?
 
     **Structure:**

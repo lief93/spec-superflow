@@ -30,13 +30,14 @@ Before finalizing:
 3. Verify each Requirement is reflected in Approved Behavior, has a test obligation, and appears in at least one batch
 4. Flag unmapped Requirements or Scenarios in Escalation Rules
 5. Note cross-batch dependencies
+6. Copy every TDD Test Plan row unchanged into `## AC Test Matrix`; do not collapse files/cases into a suite label
 
 ## Frontend Verification
 
 Classify the repository as frontend when it contains a Web, Android, HarmonyOS, iOS, desktop, or other user-interface client, even when the current change is an internal refactor. Fill `## Frontend Verification` in the contract:
 
 - `Frontend Impact: Yes`: include `UI Test` and `Device Test` rows.
-- Aggregate the `UI` rows from the AC TDD Test Plans into the contract's UI Test obligation. Prefer focused existing tests; use the nearest module smoke/regression set when there is no direct match. Shared navigation, shared UI, or global state changes may require a broader UI suite.
+- Set the aggregate UI obligation to `Required by AC Test Matrix`; the matrix retains each row's `Add`/`Update`/`Run existing`/`Unavailable` action. Shared navigation, shared UI, or global state changes may add broader tests, but cannot replace AC-specific rows.
 - If no UI framework exists, use `Unavailable`, record the inspected test locations/configuration, and do not silently introduce a framework.
 - Device Test is always `Required`. Default to one project baseline simulator/device per affected native platform, or the default browser and desktop viewport for Web. Add environments only when an AC depends on system version, screen size, Market, permission, or device capability.
 - Read commands and runtime prerequisites from relevant shared-memory topics, build files, package scripts, and existing tests. Do not invent commands.
@@ -59,7 +60,7 @@ Rules:
 
 ## Contract Structure
 
-Must make obvious: approved behavior, out-of-scope, implementation constraints, batches, test obligations, frontend verification, review gates, and conditions that force a rewind to planning. In Design Constraints, record the project baseline separately from relevant shared-memory topics, copy only applicable constraints, and preserve any approved deviation. Prefer compression over repeating source documents.
+Must make obvious: approved behavior, out-of-scope, implementation constraints, batches, the exact AC Test Matrix, frontend verification, review gates, and conditions that force a rewind to planning. In Design Constraints, record the project baseline separately from relevant shared-memory topics, copy only applicable constraints, and preserve any approved deviation. Prefer compression over repeating source documents, except the AC Test Matrix must preserve exact rows for deterministic validation.
 
 ## Approval Model (DP-3)
 

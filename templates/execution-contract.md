@@ -19,6 +19,14 @@
 |---|---|---|---|
 |  |  |  | Batch 1 |
 
+## AC Test Matrix
+
+从 `tasks.md` 原样复制每个 AC 的全部测试义务。一个测试文件或用例占一行，不合并为“相关测试”或“回归集合”。
+
+| Requirement | AC | Layer | Platform | Action | Test File | Test Case | Proves |
+|---|---|---|---|---|---|---|---|
+|  |  |  |  |  |  |  |  |
+
 ## Design Constraints
 
 - **项目开发基线来源**：`docs/project/project-guidelines.md` | Not configured
@@ -63,8 +71,8 @@
 
 | Check | Obligation | Scope | Target Environment | Command Or Procedure | Evidence Required |
 |---|---|---|---|---|---|
-| UI Test | `Add` / `Update` / `Run existing` / `Unavailable` | 受影响页面、流程或相关历史回归集合 | UI 测试运行环境 | 精确命令；不可用时记录查找范围和能力缺口 | 通过数量、失败数量、报告路径或不可用原因 |
-| Device Test | `Required` | 本次改动影响的用户关键路径 | 项目基准模拟器、真机或浏览器环境 | 构建、安装/启动和操作步骤 | 运行结果、环境信息和必要日志 |
+| UI Test | `Required by AC Test Matrix` | `AC Test Matrix` 中所有 UI 行 | UI 测试运行环境 | 能运行矩阵中精确文件/用例的命令；不可用时记录查找范围和能力缺口 | 每个 AC 的通过/失败结果和报告路径 |
+| Device Test | `Required` | `AC Test Matrix` 中所有 User-visible AC | 项目基准模拟器、真机或浏览器环境 | 在目标环境运行矩阵中的 UI 文件/用例；无法自动化的路径另列人工步骤 | 每个 AC 的运行结果、环境信息和必要日志 |
 
 ## Execution Mode
 

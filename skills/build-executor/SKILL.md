@@ -72,14 +72,17 @@ For changes with multiple execution batches. Dispatch an implementer subagent pe
 5. **Mark complete**: Append to `.superpowers/sdd/progress.md`: `AC N: complete (commits <base7>..<head7>, review clean)`
 6. **Remember selectively**: If this AC produced verified team-wide feedback, code-invisible project context, an external reference, or an expensive-to-rediscover runtime or debugging conclusion, invoke `memory-manager` immediately. Personal feedback and ordinary fix recipes do not qualify. Most ACs should produce no Memory.
 
-Use every row in the AC's `TDD Test Plan` to drive execution. `Add` and `Update` belong inside RED → GREEN → REFACTOR; `Run existing` establishes the baseline before work and verifies regression afterward. For frontend UI rows:
+Use every exact file/case row in the AC's `TDD Test Plan` to drive execution. Never substitute documentation checks, builds, another test, or an aggregate suite result for the named case. `Add` and `Update` use RED → GREEN → REFACTOR when production behavior is new or changing. When the AC only adds or strengthens coverage for behavior that already works, record a baseline PASS and preserve that behavior; never inject a sentinel or deliberate failure to manufacture RED. `Run existing` establishes the baseline before work and verifies regression afterward. For frontend UI rows:
 
 - `Add`/`Update`: implement and run the named UI Test.
-- `Run existing`: run the related historical UI Test; if no direct test exists, run the named module smoke/regression target.
+- `Run existing`: run the exact historical UI test file and case named by the AC.
 - `Unavailable`: do not add a framework silently; preserve the recorded capability gap for release verification.
-- `Not applicable` is valid only when `Frontend Impact: No`.
+- Execute a user-triggered WHEN through the rendered control. A direct ViewModel, callback, repository, or reducer call may arrange a precondition or simulate a system/lifecycle event, but cannot substitute for the planned user action.
+- Reacquire UI nodes with a stable semantic selector after any action that may recompose, rerender, refresh, or navigate. Do not retain a node handle across a render-tree change.
 
-For `Add`/`Update`, confirm the UI test is RED before the behavior exists and GREEN afterward; `Run existing` establishes and protects the regression baseline but does not need an artificial failure. After each relevant Batch, run the focused UI tests for that Batch. After all Batches, run the affected UI regression set once. Leave the final Device Test to `release-archivist`, after the implementation and review are stable.
+Before marking the AC complete, map every observable WHEN/THEN/AND outcome to actual assertions in one or more planned rows. Internal state, calls, persistence, ordering, and concurrency need Unit/Component/Integration proof; visible state and user interaction need UI proof. Passing row counts do not establish complete AC coverage.
+
+For `Add`/`Update` that cover new or changed behavior, confirm the named UI case is RED before the behavior exists and GREEN afterward. For test-only coverage of existing behavior, record the named case as baseline PASS and do not change production solely to create a RED phase. `Run existing` also establishes and protects the regression baseline without an artificial failure. After each relevant Batch, run its exact UI cases. After all Batches, run the affected UI regression set once in addition to, not instead of, those cases. Leave the final Device Test to `release-archivist`, after the implementation and review are stable.
 
 ### Model Selection
 Use least powerful model per role: mechanical (cheap), integration/judgment (standard), architecture/design (most capable), review (match diff), final review (most capable). Always specify model explicitly.
