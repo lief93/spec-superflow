@@ -4,6 +4,14 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [0.12.0] - 2026-07-23
+
+### Changed
+
+- **AC-linked test planning** — Every acceptance scenario now maps to exact platform test files, test cases, and asserted outcomes across Unit, Component, Integration, and UI layers.
+- **Deterministic test contracts and evidence** — Test obligations flow unchanged from `tasks.md` into the execution contract and PR evidence, with validation and closure gates rejecting missing, vague, duplicated, or aggregate-only results.
+- **Reliable frontend verification** — User actions must run through rendered controls, system events remain explicitly simulated, UI nodes are reacquired after render-tree changes, and exact UI/device cases are rerun before release.
+
 ## [0.11.0] - 2026-07-23
 
 ### Changed
