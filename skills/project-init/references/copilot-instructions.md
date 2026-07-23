@@ -1,20 +1,20 @@
-# 项目开发指令
+# Project Development Instructions
 
-规划、实现和 Review 代码前，根据改动范围读取 `docs/project/project-guidelines.md`，先定位需求对应的经典实现和端到端链路。
+Before planning, implementing, or reviewing code, read the parts of `docs/project/project-guidelines.md` relevant to the change. First locate the matching classic implementation and its end-to-end path.
 
-## 执行要求
+## Execution Requirements
 
-- 如果存在 `.spec-superflow/memories/MEMORY.md`，先读取简短入口，再按任务需要读取主题文件。
-- 先确定输入或 UI 入口、事件处理者、状态所有者、数据接口、模型转换和存储边界。
-- 遵守项目开发基线中的职责、依赖、状态、模型和复用规则。
-- 新建页面、状态、接口、数据能力、公共组件或错误处理前，先检查对应经典实现。
-- 不为项目补造不存在的框架、分层或公共抽象。
-- 需求与项目规则冲突或规则适用范围不清楚时，交给开发人员确认。
+- If `.spec-superflow/memories/MEMORY.md` exists, read the concise entry point first, then open only the topic files relevant to the task.
+- Identify the input or UI entry point, event handler, state owner, data interface, model conversion, and storage boundary before making changes.
+- Follow the responsibility, dependency, state, model, and reuse rules in the project baseline.
+- Before adding a page, state, interface, data capability, shared component, or error-handling path, inspect the corresponding classic implementation.
+- Do not invent frameworks, layers, or shared abstractions that the project does not use.
+- Ask a developer to resolve conflicts between the requirement and project rules, or ambiguity about a rule's scope.
 
-## 完成前检查
+## Pre-Completion Check
 
-- 代码是否放在正确职责和模块中。
-- 依赖方向、状态所有权和模型转换是否符合项目规则。
-- 从输入到结果、从用户操作到状态更新的链路是否完整。
-- 是否复用了已有项目机制并运行了相关测试。
-- 经过验证、对团队有用且未来有复用价值的非显性项目知识，按需写入共享 Auto Memory；个人偏好和普通任务过程不写入。
+- Confirm that code is placed in the correct responsibility and module.
+- Confirm that dependency direction, state ownership, and model conversion follow project rules.
+- Confirm that the input-to-result path and user-action-to-state-update path are complete.
+- Confirm that existing project mechanisms were reused and relevant tests were run.
+- Record verified, team-useful, future-reusable, non-obvious project knowledge in Shared Auto Memory when needed. Do not record personal preferences or ordinary task progress.

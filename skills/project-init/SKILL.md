@@ -57,20 +57,20 @@ Keep this concise and operational. Tell the agent to read `docs/project/project-
 
 Keep exactly these top-level sections:
 
-1. `技术与框架约束`
-2. `架构与编码规则`
-3. `经典实现索引`
+1. `Technology And Framework Constraints`
+2. `Architecture And Coding Rules`
+3. `Classic Implementation Index`
 
 Use the repository's actual terminology. Do not force ViewModel, Reducer, Repository, UseCase, or another role that the project does not use.
 
 For each classic implementation include:
 
-- 适用条件
-- 新建或修改
-- 实现顺序
-- 必须保持
-- 完成标准
-- 参考实现
+- Applies when
+- Create or modify
+- Implementation order
+- Must preserve
+- Done when
+- Reference implementation
 
 For application repositories, the implementation steps must answer where relevant:
 

@@ -4,6 +4,14 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [0.12.1] - 2026-07-23
+
+### Changed
+
+- **English-only workflow artifacts** - Converted proposal, spec, design, tasks, execution contract, and PR summary templates to English while preserving their existing SDD and test-traceability structure.
+- **English project initialization guidance** - Converted the `project-init` skill, Copilot instructions, project development baseline, and workflow decision labels to English.
+- **Backward-compatible baseline validation** - New English project baselines are validated by default, existing Chinese baselines remain supported, and a regression test prevents CJK text from returning to published skills or templates.
+
 ## [0.12.0] - 2026-07-23
 
 ### Changed

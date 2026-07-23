@@ -1,53 +1,53 @@
-# 技术设计
+# Technical Design
 
-## 上下文
+## Context
 
-- 当前状态：
-- 约束条件：
-- 利益相关者：
+- Current state:
+- Constraints:
+- Stakeholders:
 
-## 目标
+## Goals
 
-- 本设计必须达成什么
+- What this design must achieve
 
-## 非目标
+## Non-Goals
 
-- 本设计刻意不解决什么
+- What this design intentionally does not address
 
 ## Project Baseline Alignment
 
-使用 Spec 中完全一致的 Scenario 标题。项目未初始化基线时，在来源中填写 `Not configured`，不要虚构规则。
+Use the exact Scenario titles from the Spec. If the project baseline is not initialized, enter `Not configured` as the source; do not invent rules.
 
 | Scenario | Baseline Source | Classic Implementation | Applied Constraints | Deviation |
 |---|---|---|---|---|
-| 场景标题 | `docs/project/project-guidelines.md` | 经典实现标题 | 本场景适用的架构、状态、数据和复用规则 | `None` 或已批准偏离及理由 |
+| Scenario title | `docs/project/project-guidelines.md` | Classic implementation title | Architecture, state, data, and reuse rules that apply to this Scenario | `None` or an approved deviation with rationale |
 
 ## Requirement And Scenario Coverage
 
-使用 Spec 中完全一致的 Requirement 和 Scenario 标题。每个 Scenario 对应一个设计决策；没有设计影响时填写 `No design change`。
+Use the exact Requirement and Scenario titles from the Spec. Map every Scenario to a design decision; enter `No design change` when it has no design impact.
 
 | Requirement | Scenario | Design Decision | Affected Area | Why Here |
 |---|---|---|---|---|
-| 需求标题 | 场景标题 | 决策标题或 `No design change` | 模块、组件或职责边界 | 为什么由这里负责 |
+| Requirement title | Scenario title | Decision title or `No design change` | Module, component, or responsibility boundary | Why this area owns the change |
 
-## 决策
+## Decisions
 
-### Decision: 决策标题
+### Decision: Decision title
 
-- **选择**：
-- **理由**：
-- **考虑的替代方案**：
+- **Choice**:
+- **Rationale**:
+- **Alternatives considered**:
 
-## 风险与权衡
+## Risks And Trade-Offs
 
-- 风险 → 缓解措施
+- Risk -> Mitigation
 
-## 迁移计划
+## Migration Plan
 
-- 上线步骤：
-- 回滚步骤：
+- Rollout steps:
+- Rollback steps:
 
-## 待明确问题
+## Open Questions
 
-- 问题：
-- 决策负责人：
+- Question:
+- Decision owner:

@@ -21,9 +21,9 @@ describe('project baseline workflow integration', () => {
     assert.match(design, /\| Scenario \| Baseline Source \| Classic Implementation \|/);
 
     const contract = read('templates/execution-contract.md');
-    assert.match(contract, /项目开发基线来源/);
-    assert.match(contract, /采用的经典实现/);
-    assert.match(contract, /已批准偏离/);
+    assert.match(contract, /Project baseline source/);
+    assert.match(contract, /Selected classic implementations/);
+    assert.match(contract, /Approved deviations/);
   });
 
   it('passes the selected baseline through implementation and independent review', () => {
