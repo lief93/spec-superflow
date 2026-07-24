@@ -78,7 +78,7 @@ function extractSection(content, title) {
 function normalizeCell(value) {
   return String(value || '')
     .replace(/\\\|/g, '|')
-    .replace(/[`*_]/g, '')
+    .replace(/[`*]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
