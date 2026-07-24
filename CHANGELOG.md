@@ -4,6 +4,13 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [0.12.2] - 2026-07-24
+
+### Fixed
+
+- **Underscore-safe artifact validation** - `cmd-validate` now preserves underscores in test paths, test cases, Requirement names, and AC names instead of rewriting identifiers during Markdown normalization.
+- **Existing-test regression coverage** - Added validation coverage for `Run existing` entries whose real test file and method names contain underscores.
+
 ## [0.12.1] - 2026-07-23
 
 ### Changed

@@ -271,6 +271,36 @@ Rate limiting runs before handlers.
     assert.ok(result.stdout.includes('All artifacts validated'));
   });
 
+  it('preserves underscores in existing test file and case names', () => {
+    const changeDir = join(tempDir, 'tasks-existing-test-with-underscores');
+    mkdirSync(changeDir, { recursive: true });
+    mkdirSync(join(tempDir, 'test'), { recursive: true });
+    writeFileSync(
+      join(tempDir, 'test', 'existing_rate_limit_test.ts'),
+      'function rejects_existing_over_limit_requests() {}\n',
+    );
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+
+    const oldTaskRow = '| Unit | Node | Add | `test/rate-limit.test.ts` | `rejects over-limit requests` | Over-limit requests are rejected before handlers run. |';
+    const newTaskRow = '| Unit | Node | Run existing | `test/existing_rate_limit_test.ts` | `rejects_existing_over_limit_requests` | Over-limit requests are rejected before handlers run. |';
+    const tasksPath = join(changeDir, 'tasks.md');
+    writeFileSync(tasksPath, readFileSync(tasksPath, 'utf-8').replace(oldTaskRow, newTaskRow));
+
+    const oldContractRow = '| Rate limit requests | Request exceeds limit | Unit | Node | Add | `test/rate-limit.test.ts` | `rejects over-limit requests` | Over-limit requests are rejected before handlers run. |';
+    const newContractRow = '| Rate limit requests | Request exceeds limit | Unit | Node | Run existing | `test/existing_rate_limit_test.ts` | `rejects_existing_over_limit_requests` | Over-limit requests are rejected before handlers run. |';
+    const contractPath = join(changeDir, 'execution-contract.md');
+    writeFileSync(
+      contractPath,
+      readFileSync(contractPath, 'utf-8').replace(oldContractRow, newContractRow),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.ok(result.stdout.includes('All artifacts validated'));
+  });
+
   it('rejects an Android UI test outside src/androidTest', () => {
     const changeDir = join(tempDir, 'tasks-invalid-android-ui-location');
     mkdirSync(changeDir, { recursive: true });
