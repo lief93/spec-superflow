@@ -88,6 +88,21 @@ copilot plugin marketplace add MageByte-Zero/spec-superflow
 copilot plugin install spec-superflow@spec-superflow
 ```
 
+### VS Code GitHub Copilot (Agent Plugin)
+
+Run **Chat: Install Plugin From Source** from the VS Code Command Palette and
+enter this repository's Git URL. Select **Spec Superflow** from the agent picker
+when the workflow is needed; switching to another agent stops applying its
+agent-specific instructions. Install the matching global `ssf` CLI for state,
+validation, and synchronization commands used by the Agent.
+
+The plugin is installed once per user profile and works across repositories.
+Business repositories keep their own Copilot instructions and repository
+skills; they do not need copies of the central `agents/`, `skills/`, `scripts/`,
+or `templates/` directories. See
+[vscode-agent-plugin.md](vscode-agent-plugin.md) for the complete ownership and
+runtime model.
+
 ### Gemini CLI
 
 ```bash
@@ -118,6 +133,11 @@ npm install -g spec-superflow
 | `ssf doctor` | Health check (versions, hooks, skills, docs) |
 | `ssf version <semver>` | Sync version across all manifests |
 | `ssf state <sub> <dir>` | Manage `.spec-superflow.yaml` state file |
+| `ssf check-update` | Check for a spec-superflow update |
+| `ssf infer-workflow <dir>` | Infer hotfix, tweak, or full workflow mode |
+| `ssf guard check ...` | Validate a workflow state transition |
+| `ssf task-brief ...` | Extract one Task or AC execution brief |
+| `ssf review-package ...` | Generate a bounded review package |
 | `ssf inject <dir>` | Generate multi-platform phase-guard artifacts |
 | `ssf audit <dir>` | Generate decision-point audit report |
 | `ssf memories init` / `list` / `check` | Create a Claude-style shared-memory index, list topics, or validate types, limits, and links |
@@ -127,7 +147,7 @@ npm install -g spec-superflow
 
 ### Version
 
-- Current: `v0.12.2`
+- Current: `v0.13.0`
 - Self-contained — no OpenSpec or Superpowers runtime required
 - Upstream: [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec), [obra/superpowers](https://github.com/obra/superpowers)
 - Changelog: [CHANGELOG.md](../CHANGELOG.md)

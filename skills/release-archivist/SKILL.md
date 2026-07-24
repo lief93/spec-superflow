@@ -110,7 +110,7 @@ If implementation diverged from the contract, return to `bridging` before closur
 
 ## Post-Verification
 
-Run `node scripts/spec-superflow.mjs state transition <change-dir> closing`. If delta specs exist, route to `spec-merger`.
+Run `ssf state transition <change-dir> closing`. If delta specs exist, route to `spec-merger`.
 
 ## Lightweight Closure (hotfix/tweak)
 

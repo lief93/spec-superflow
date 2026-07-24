@@ -10,7 +10,7 @@ After a change completes, delta specs (ADDED/MODIFIED/REMOVED/RENAMED) must be m
 ## Pre-Flight Checks
 
 ### Conflict Detection
-Run `node scripts/spec-superflow.mjs sync <change-dir>`. If conflicts are detected (same requirement modified by multiple changes), present the conflict list to the user for resolution order.
+Run `ssf sync <change-dir>`. If conflicts are detected (same requirement modified by multiple changes), present the conflict list to the user for resolution order.
 
 ### Abandoned Change Guard
 Check if the change is `abandoned`. If so → STOP: "Abandoned changes cannot be synced. Delta specs are preserved for reference but must not be merged."

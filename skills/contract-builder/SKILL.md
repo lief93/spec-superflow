@@ -88,8 +88,8 @@ Generate minimal contract: Intent Lock (one sentence), Task List (numbered), App
 
 ## Post-Generation
 
-Run `node scripts/spec-superflow.mjs state init <change-dir>` to create `.spec-superflow.yaml` with hashes.
-Run `node scripts/spec-superflow.mjs validate <change-dir>` after writing the contract.
+Run `ssf state init <change-dir>` to create `.spec-superflow.yaml` with hashes.
+Run `ssf validate <change-dir>` after writing the contract.
 
 If validation fails on `execution-contract.md` traceability, regenerate the whole `execution-contract.md` from `proposal.md`, `specs/`, `design.md`, and `tasks.md`; do not append a bare list of requirement names. Re-run validate once. If it still fails, report the exact unmapped requirements or missing batches before asking for approval.
 

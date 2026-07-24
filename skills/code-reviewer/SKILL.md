@@ -75,5 +75,5 @@ Suggestion breaks existing functionality, reviewer lacks context, violates YAGNI
 ## Exception Handling
 
 - **Parse failures**: Report specific file, request regenerated review package
-- **Missing files**: Regenerate via `scripts/review-package`. Empty diff = nothing to review
+- **Missing files**: Regenerate via `ssf review-package`. Empty diff = nothing to review
 - **User interruption**: Re-read review report on resume, continue from next unreviewed batch

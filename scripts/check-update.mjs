@@ -5,6 +5,13 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 function readLocalVersion() {
+  try {
+    const json = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
+    if (json.name === 'spec-superflow' && json.version) {
+      return json.version;
+    }
+  } catch { /* ignore */ }
+
   const candidates = ['package.json', 'plugin.json'];
   for (const file of candidates) {
     const path = join(process.cwd(), file);
