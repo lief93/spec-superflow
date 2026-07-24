@@ -3,6 +3,8 @@
 // Usage: ssf <command> [options]
 
 import { parseArgs } from 'node:util';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const COMMANDS = {
   list:           () => import('./lib/cmd-list.mjs'),
@@ -18,6 +20,14 @@ const COMMANDS = {
   project:        () => import('./lib/cmd-project.mjs'),
   'install-cursor': () => import('./lib/cmd-install-cursor.mjs'),
   'install-workbuddy': () => import('./lib/cmd-install-workbuddy.mjs'),
+};
+
+const BUNDLED_HELPERS = {
+  'check-update': { path: './check-update.mjs', runner: 'node' },
+  'infer-workflow': { path: './infer-workflow.mjs', runner: 'node' },
+  guard: { path: './guard/guard.mjs', runner: 'node' },
+  'task-brief': { path: './task-brief', runner: 'bash' },
+  'review-package': { path: './review-package', runner: 'bash' },
 };
 
 const HELP = `spec-superflow (ssf) — Spec-first workflow CLI
@@ -36,6 +46,11 @@ Commands:
   audit <dir>           Generate decision-point-audit.md from .spec-superflow.yaml
   memories <sub> [root] Manage Claude-style shared auto memory (init|list|check)
   project check [root]  Validate project development baseline documents
+  check-update          Check for a newer spec-superflow release
+  infer-workflow <dir>  Infer hotfix, tweak, or full workflow mode
+  guard check ...       Validate a workflow state transition
+  task-brief ...        Extract one task or AC into a brief file
+  review-package ...    Generate a bounded review package
   install-cursor        Deploy skills/scripts/docs to .cursor/ (local Cursor setup)
   install-workbuddy     Deploy skills to WorkBuddy marketplace and enable them
 
@@ -55,12 +70,28 @@ Examples:
   ssf state check changes/my-change/
   ssf state transition changes/my-change/ approved-for-build
   ssf state get changes/my-change/ batches_completed
+  ssf infer-workflow changes/my-change/
+  ssf guard check changes/my-change/ specifying bridging --json
+  ssf task-brief changes/my-change/tasks.md 1
+  ssf review-package HEAD~1 HEAD
   ssf memories init
   ssf memories check
   ssf project check
   ssf install-cursor
   ssf install-workbuddy
 `;
+
+function runBundledHelper(helper, args) {
+  const script = fileURLToPath(new URL(helper.path, import.meta.url));
+  const command = helper.runner === 'bash' ? 'bash' : process.execPath;
+  const result = spawnSync(command, [script, ...args], { stdio: 'inherit' });
+
+  if (result.error) {
+    console.error(`Failed to run helper: ${result.error.message}`);
+    process.exit(1);
+  }
+  process.exit(result.status ?? 1);
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -82,6 +113,10 @@ async function main() {
 
   const command = args[0];
   const commandArgs = args.slice(1);
+
+  if (BUNDLED_HELPERS[command]) {
+    runBundledHelper(BUNDLED_HELPERS[command], commandArgs);
+  }
 
   if (!COMMANDS[command]) {
     console.error(`Unknown command: ${command}`);

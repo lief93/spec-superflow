@@ -7,7 +7,7 @@
 - [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) — 规划引擎（Schema 验证、Delta Spec、工件解析）
 - [obra/superpowers](https://github.com/obra/superpowers) — 执行纪律（TDD 铁律、SDD、系统化调试、代码审查）
 
-当前发布版本：**v0.12.2**。
+当前发布版本：**v0.13.0**。
 
 ---
 
@@ -20,6 +20,7 @@
 | OpenAI Codex CLI | Plugin Directory / marketplace | `codex plugin update` | `codex plugin remove` |
 | OpenAI Codex App | Plugins 面板 / marketplace | CLI 更新后 App 面板启用 | App 面板禁用 |
 | GitHub Copilot CLI | marketplace | `copilot plugin update` | `copilot plugin uninstall` |
+| VS Code GitHub Copilot | Agent Plugin Git 源 | VS Code 检查 Plugin 更新 | 按 workspace 禁用或卸载 Plugin |
 | Gemini CLI | `gemini extensions install` | `gemini extensions update` | `gemini extensions uninstall` |
 | OpenCode | plugin entry / skills 目录 | `git pull` | 删除 plugin/skills |
 | WorkBuddy | `ssf install-workbuddy` | 重新运行安装器 | 删除 marketplace 插件并禁用 |
@@ -235,6 +236,44 @@ copilot plugin uninstall spec-superflow
 ```
 
 > 如果安装失败，请检查根目录 `plugin.json` 的 `author` 字段是否为对象格式（`{ "name": "..." }`），而非字符串。
+
+---
+
+## VS Code GitHub Copilot
+
+VS Code Agent Plugin 将可选择的 Agent、中央 Skills、scripts、templates 和
+MCP 配置作为一个安装单元提供。Agent 从中央 Plugin 解析运行资源，不要求业务
+仓库保存副本。Agent 使用全局安装的同版本 `ssf` CLI 执行状态、校验和同步命令。
+
+### 安装
+
+在 VS Code 命令面板运行 **Chat: Install Plugin From Source**，输入本仓库的
+Git 地址。安装完成后：
+
+1. 在 Extensions 中搜索 `@agentPlugins @installed` 确认 Plugin 已启用。
+2. 在 Agent 选择器中选择 **Spec Superflow**。
+3. 用普通对话启动一个测试需求，确认 Agent 从 Plugin 读取 Skill、脚本和模板，
+   并把任务产物写入当前业务仓库。
+
+Plugin 在用户环境安装一次即可供多个仓库使用。业务仓库只保留项目
+Instructions、项目专属 Skills、任务产物、Memory 和代码。切换到其他 Agent
+即可停止使用 Spec Superflow Agent 的专属指令，不需要卸载公司其他 Agent。
+
+安装与 Plugin 版本一致的 CLI：
+
+```bash
+npm install -g spec-superflow
+ssf --version
+```
+
+MCP 尚未确定时，仓库中的 `.mcp.json` 保持空的 `mcpServers` 配置；不要填写
+不可执行的示例服务。详细设计见
+[`docs/vscode-agent-plugin-zh.md`](docs/vscode-agent-plugin-zh.md)。
+
+### 更新和停用
+
+从 VS Code 的 Agent Plugins 视图检查更新。Plugin 可以全局启用，也可以按
+workspace 禁用；禁用后其 Agent、Skills 和 MCP 都不再可用。
 
 ---
 

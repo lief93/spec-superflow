@@ -23,9 +23,11 @@ git rev-parse --verify --quiet "$head" >/dev/null || { echo "bad HEAD: $head" >&
 if [ $# -eq 3 ]; then
   out=$3
 else
-  dir="$(cd "$(dirname "$0")" && pwd)/sdd-workspace"
+  dir="$(git rev-parse --show-toplevel)/.superpowers/sdd"
   out="$dir/review-$(git rev-parse --short "$base")..$(git rev-parse --short "$head").diff"
 fi
+
+mkdir -p "$(dirname "$out")"
 
 {
   echo "# Review package: ${base}..${head}"

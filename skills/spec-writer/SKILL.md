@@ -13,7 +13,7 @@ Read `.spec-superflow.yaml` (especially `dp_0_decisions`, `dp_0_confirmed`) and 
 
 ## Config Check
 
-Run: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/get-config" artifacts.order` — generate in configured order (default: proposal → specs → design → tasks). Run with `artifacts.skip` — skip any listed artifacts.
+Run `ssf config --get artifacts.order` and `ssf config --get artifacts.skip`. Generate in configured order (default: proposal → specs → design → tasks) and skip any listed artifacts.
 
 ## Artifact Roles
 

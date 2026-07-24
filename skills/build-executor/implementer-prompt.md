@@ -169,7 +169,7 @@ Subagent (general-purpose):
 **Placeholders:**
 - `[task name]` — short name for the task
 - `[MODEL]` — REQUIRED: implementer model per build-executor Model Selection
-- `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path)
+- `[BRIEF_FILE]` — REQUIRED: the task brief file (`ssf task-brief PLAN N` prints the path)
 - `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation, or `Not configured`
 - `[PROJECT_MEMORIES]` — `.spec-superflow/memories/MEMORY.md` and only the relevant linked topic files, or `Not configured`
 - `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`

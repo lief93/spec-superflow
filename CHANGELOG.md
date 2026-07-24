@@ -4,6 +4,19 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [0.13.0] - 2026-07-24
+
+### Added
+
+- **Selectable VS Code workflow agent** - Added an opt-in Spec Superflow custom agent distributed by the root Agent Plugin manifest.
+- **Central plugin deployment guidance** - Documented one-time installation across business repositories, repository-owned customization boundaries, and an empty MCP configuration template.
+- **Multi-project VS Code guide** - Added a Chinese setup and operations guide for sharing one Agent Plugin and global CLI across business repositories.
+
+### Changed
+
+- **Global CLI execution** - Workflow Skills use the globally installed, matching-version `ssf` CLI for state, validation, and synchronization commands.
+- **Global helper commands** - Exposed update checks, workflow inference, transition guards, task briefs, and review packages through `ssf`, removing shell-command dependence on plugin-relative script paths.
+
 ## [0.12.2] - 2026-07-24
 
 ### Fixed

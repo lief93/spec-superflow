@@ -94,6 +94,18 @@ copilot plugin marketplace add MageByte-Zero/spec-superflow
 copilot plugin install spec-superflow@spec-superflow
 ```
 
+### VS Code GitHub Copilot（Agent Plugin）
+
+在 VS Code 命令面板运行 **Chat: Install Plugin From Source**，输入本仓库的
+Git 地址。安装后从 Agent 选择器中选择 **Spec Superflow**；切换回其他 Agent
+即停止应用该工作流 Agent 的专属指令，不需要卸载其他 Agent。Agent 使用全局
+安装的同版本 `ssf` CLI 执行状态、校验和同步命令。
+
+Plugin 在用户环境只安装一次，可供多个业务仓库使用。业务仓库继续维护自己的
+Copilot Instructions 和项目专属 Skills，不需要复制中央 `agents/`、`skills/`、
+`scripts/` 或 `templates/`。完整说明见
+[VS Code Agent Plugin 多项目复用指南](docs/vscode-agent-plugin-zh.md)。
+
 ### Gemini CLI
 
 ```bash
@@ -125,6 +137,11 @@ npx spec-superflow list          # 或通过 npx 使用
 | `ssf doctor` | 健康检查（版本、hooks、skills、文档一致性） |
 | `ssf version <semver>` | 一键同步版本号到所有 manifest |
 | `ssf state <sub> <dir>` | 管理 `.spec-superflow.yaml` 状态文件 |
+| `ssf check-update` | 检查 spec-superflow 更新 |
+| `ssf infer-workflow <dir>` | 推断 hotfix、tweak 或 full 工作流 |
+| `ssf guard check ...` | 校验工作流状态转换 |
+| `ssf task-brief ...` | 提取单个 Task 或 AC 的执行摘要 |
+| `ssf review-package ...` | 生成限定范围的 Review 包 |
 | `ssf inject <dir>` | 生成多平台 phase-guard 产物 |
 | `ssf audit <dir>` | 生成决策点审计报告 |
 | `ssf memories init` / `list` / `check` | 创建 Claude 式共享 Memory 索引、列出主题或检查类型、容量和链接 |
@@ -134,7 +151,7 @@ npx spec-superflow list          # 或通过 npx 使用
 
 ### 版本
 
-- 当前版本：`v0.12.2`
+- 当前版本：`v0.13.0`
 - 自包含插件，不需要运行时安装 OpenSpec 或 Superpowers
 - 上游来源：[Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) 和 [obra/superpowers](https://github.com/obra/superpowers)
 - 版本历史见 [CHANGELOG.md](CHANGELOG.md)
