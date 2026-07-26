@@ -4,20 +4,18 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 const ROOT = process.cwd();
-const read = (path) => readFileSync(join(ROOT, path), 'utf8');
+const read = path => readFileSync(join(ROOT, path), 'utf8');
 
-describe('VS Code Plugin evidence boundary', () => {
-  it('reports the production MCP as not configured', () => {
+describe('VS Code Plugin documentation boundary', () => {
+  it('documents one self-contained repository without external installation', () => {
     const productionMcp = JSON.parse(read('.mcp.json'));
     const english = read('docs/vscode-agent-plugin.md');
     const chinese = read('docs/vscode-agent-plugin-zh.md');
-    const evidence = read('validation/evidence/offline-install-upgrade.md');
 
-    assert.deepEqual(productionMcp, { mcpServers: {} });
-    assert.match(english, /Not Configured/);
-    assert.match(chinese, /Not Configured/);
-    assert.match(evidence, /Production Plugin MCP.*Not Configured/);
-    assert.doesNotMatch(english, /Plugin-bundled test MCP starts[\s\S]*exposes its tool/);
-    assert.doesNotMatch(chinese, /测试 MCP 能[\s\S]*被 Chat 调用/);
+    assert.ok(productionMcp.mcpServers['spec-superflow']);
+    assert.match(english, /bundled MCP bridge/);
+    assert.match(chinese, /内置 MCP bridge/);
+    assert.doesNotMatch(english, /npm install|offline package/i);
+    assert.doesNotMatch(chinese, /npm install|离线包|全局 CLI|公司|内网/i);
   });
 });

@@ -33,16 +33,13 @@ function json(path, content) {
   write(path, `${JSON.stringify(content, null, 2)}\n`);
 }
 
-function workflowInit(version, tgzVersion = version) {
-  return `<!-- spec-superflow-cli-version: ${version} -->
-If the installed CLI reports version \`${version}\`, skip installation.
-The package must be named \`spec-superflow-${tgzVersion}.tgz\`.
-Run \`npm install -g spec-superflow@${version}\`.
-Initialization succeeds only when it reports version \`${version}\`.
+function workflowInit(version) {
+  return `<!-- spec-superflow-plugin-version: ${version} -->
+The bundled Plugin runtime must report version \`${version}\`.
 `;
 }
 
-function createVersionFixture(root, version, tgzVersion = version) {
+function createVersionFixture(root, version) {
   json(join(root, 'package.json'), { version });
   json(join(root, 'plugin.json'), { version });
   json(join(root, '.plugin/plugin.json'), { version });
@@ -63,7 +60,7 @@ function createVersionFixture(root, version, tgzVersion = version) {
   write(join(root, 'llms.txt'), `Current version: v${version}.\n`);
   write(join(root, '.claude/always/phase-guard.md'), `# spec-superflow v${version} | guard\n`);
   write(join(root, 'GEMINI.md'), `# spec-superflow v${version} | guard\n`);
-  write(join(root, 'commands/workflow-init.md'), workflowInit(version, tgzVersion));
+  write(join(root, 'commands/workflow-init.md'), workflowInit(version));
 }
 
 afterEach(() => {
@@ -84,7 +81,7 @@ describe('maintenance CLI behavior', () => {
     assert.match(result.stdout, /Some checks need attention/);
   });
 
-  it('updates every workflow-init reference from 0.14.0 to 0.15.0', () => {
+  it('updates every bundled Plugin version reference from 0.14.0 to 0.15.0', () => {
     const root = tempRoot('ssf-version-sync-');
     createVersionFixture(root, '0.14.0');
     const runner = `import(${JSON.stringify(`file://${VERSION_MODULE}`)}).then(m => m.run(['0.15.0']))`;
@@ -96,12 +93,14 @@ describe('maintenance CLI behavior', () => {
     assert.equal(result.status, 0, result.stderr);
     const command = readFileSync(join(root, 'commands/workflow-init.md'), 'utf8');
     assert.doesNotMatch(command, /0\.14\.0/);
-    assert.match(command, /spec-superflow-0\.15\.0\.tgz/);
+    assert.match(command, /spec-superflow-plugin-version: 0\.15\.0/);
+    assert.match(command, /version `0\.15\.0`/);
   });
 
-  it('consistency check rejects a stale workflow-init tgz filename', () => {
+  it('consistency check rejects a stale workflow-init Plugin version', () => {
     const root = tempRoot('ssf-version-consistency-');
-    createVersionFixture(root, '0.15.0', '0.14.0');
+    createVersionFixture(root, '0.15.0');
+    write(join(root, 'commands/workflow-init.md'), workflowInit('0.14.0'));
     const copiedScript = join(root, 'scripts/check-version-consistency.mjs');
     mkdirSync(dirname(copiedScript), { recursive: true });
     copyFileSync(CONSISTENCY_SCRIPT, copiedScript);

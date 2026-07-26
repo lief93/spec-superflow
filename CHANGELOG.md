@@ -8,23 +8,20 @@ The format loosely follows Keep a Changelog.
 
 ### Added
 
-- **OpenPlugin manifest** - Added `.plugin/plugin.json` so Plugin-bundled MCP servers can resolve files through `${PLUGIN_ROOT}` outside business repositories.
-- **Plugin MCP regression fixture** - Added a dependency-free stdio protocol fixture for initialization, tool-list/call messages, and Plugin-relative path resolution; it is not production VS Code runtime evidence.
-- **Workflow initialization command** - Added `/workflow-init` to install and verify the global CLI version required by the selected Spec Superflow Plugin.
-- **Offline installation bundle** - Added a reproducible package, checksum manifest, and verifier for direct local tgz CLI installation and upgrades without public npm access.
-- **Deployment and demo evidence** - Added an intranet AI execution checklist, workflow briefing, demo runbook, and locally reproduced installation and requirement evidence.
+- **Self-contained VS Code runtime** - Added a production MCP bridge that runs the deterministic workflow scripts bundled in the Plugin.
+- **Workflow initialization command** - Added `/workflow-init` to verify the bundled Plugin runtime without installing another package.
+- **Plugin repository guide** - Documented the required manifest, directory layout, component naming, installation, update, and runtime verification steps.
 
 ### Changed
 
-- **VS Code deployment guidance** - Documented default-branch source installation, pinned marketplace sources, local branch registration, and the runtime boundary for bundled and externally installed MCP servers.
-- **Evidence classification** - Local evidence now reports only executed package and CLI primitives; VS Code `/workflow-init` remains pending and the empty production MCP remains not configured.
+- **VS Code command execution** - The selected Agent maps logical `ssf` commands to the bundled `spec_superflow_run` MCP tool instead of relying on a PATH-installed CLI.
+- **Single-source distribution** - Installing the Git repository now supplies Agent, Skills, Commands, templates, scripts, and runtime together.
 
 ### Fixed
 
-- **Fail-closed bundle integrity** - Verify manifest identity, checksum sidecars, actual package digest, archive readability, internal package identity, and forbidden entries before extraction.
 - **Maintenance command status** - `ssf doctor` now returns non-zero when source-checkout checks fail, and is no longer used as installed CLI evidence.
-- **Workflow-init version drift** - Version synchronization and consistency checks now include the offline tgz filename.
-- **Package hygiene** - Exclude change history, tests, validation evidence, release bundles, `.DS_Store`, AppleDouble, and editor temporary `.DS_Store` files from npm packages.
+- **Workflow-init version drift** - Version synchronization and consistency checks include the bundled Plugin version declared by `/workflow-init`.
+- **Package hygiene** - Exclude change history, tests, validation evidence, `.DS_Store`, AppleDouble, and editor temporary files from npm packages.
 
 ## [0.13.0] - 2026-07-24
 

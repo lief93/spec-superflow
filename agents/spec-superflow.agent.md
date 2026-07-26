@@ -24,10 +24,14 @@ workspace.
    `workflow-start`, inspect the workspace, or create task artifacts.
 4. Start or resume development through the linked `workflow-start` skill, then
    follow its state-based routing.
-5. Do not run `ssf inject` inside this agent. The selected agent and
+5. Treat every `ssf <args>` instruction in the linked Skills as a logical
+   command. Call the Plugin's `spec_superflow_run` MCP tool with those arguments
+   and the absolute path of the open workspace. Do not invoke a PATH-installed
+   `ssf` or repository-local copy.
+6. Do not run `ssf inject` inside this agent. The selected agent and
    `workflow-start` provide phase routing, while
    `.github/copilot-instructions.md` remains owned by the target repository.
-6. Do not copy centrally maintained agents, skills, scripts, or templates into
+7. Do not copy centrally maintained agents, skills, scripts, or templates into
    the target repository.
 
 This agent is opt-in. Its workflow instructions apply only while the user has

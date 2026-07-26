@@ -93,11 +93,11 @@ copilot plugin install spec-superflow@spec-superflow
 Run **Chat: Install Plugin From Source** from the VS Code Command Palette and
 enter this repository's Git URL. Select **Spec Superflow** from the agent picker
 when the workflow is needed; switching to another agent stops applying its
-agent-specific instructions. Install the matching global `ssf` CLI for state,
-validation, and synchronization commands used by the Agent.
+agent-specific instructions. The Plugin bundles its Agent, Skills, Commands,
+scripts, templates, and MCP bridge; no separate `ssf` installation is needed.
 
 The plugin is installed once per user profile and works across repositories.
-Business repositories keep their own Copilot instructions and repository
+Target repositories keep their own Copilot instructions and repository
 skills; they do not need copies of the central `agents/`, `skills/`, `scripts/`,
 or `templates/` directories. See
 [vscode-agent-plugin.md](vscode-agent-plugin.md) for the complete ownership and
