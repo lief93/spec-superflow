@@ -134,7 +134,7 @@ npx spec-superflow list          # 或通过 npx 使用
 |------|------|
 | `ssf list` | 列出所有 changes 及状态 |
 | `ssf validate <dir>` | 验证工件完整性 |
-| `ssf doctor` | 健康检查（版本、hooks、skills、文档一致性） |
+| `ssf doctor` | 源码仓库维护检查（版本、hooks、skills、文档一致性） |
 | `ssf version <semver>` | 一键同步版本号到所有 manifest |
 | `ssf state <sub> <dir>` | 管理 `.spec-superflow.yaml` 状态文件 |
 | `ssf check-update` | 检查 spec-superflow 更新 |

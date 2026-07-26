@@ -1,0 +1,7 @@
+release-assets/
+changes/
+tests/
+validation/
+**/.DS_Store
+**/._*
+**/.!*.DS_Store

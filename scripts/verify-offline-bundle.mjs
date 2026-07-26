@@ -6,13 +6,13 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyOfflineBundleIntegrity } from './lib/offline-bundle-integrity.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
@@ -26,11 +26,17 @@ const evidenceArg = process.argv.indexOf('--evidence');
 const evidencePath = evidenceArg >= 0 && process.argv[evidenceArg + 1]
   ? resolve(process.argv[evidenceArg + 1])
   : null;
-const currentPackage = readdirSync(bundleDir)
-  .find((file) => file === `spec-superflow-${pkg.version}.tgz`);
+const integrityOnly = process.argv.includes('--integrity-only');
+const integrity = verifyOfflineBundleIntegrity(bundleDir, {
+  name: pkg.name,
+  version: pkg.version,
+  node: pkg.engines.node,
+});
+const currentPackagePath = integrity.packagePath;
 
-if (!currentPackage) {
-  throw new Error(`Missing spec-superflow-${pkg.version}.tgz in ${bundleDir}`);
+if (integrityOnly) {
+  console.log(`Integrity: PASS (${integrity.manifest.package})`);
+  process.exit(0);
 }
 
 function run(command, args, options = {}) {
@@ -62,7 +68,6 @@ function installOffline(packagePath, prefix, cache) {
 }
 
 const tempRoot = mkdtempSync(join(tmpdir(), 'spec-superflow-offline-'));
-const currentPackagePath = join(bundleDir, currentPackage);
 const extractedDir = join(tempRoot, 'extracted');
 const previousSource = join(tempRoot, 'previous-source');
 const previousPack = join(tempRoot, 'previous-pack');
@@ -86,6 +91,7 @@ try {
     'utf8',
   );
 
+  checks.push(['Bundle integrity before extraction', 'passed', 'passed']);
   checks.push(['Plugin manifest version', pluginManifest.version, pkg.version]);
   checks.push(['OpenPlugin manifest version', openPluginManifest.version, pkg.version]);
   checks.push([
@@ -101,12 +107,16 @@ try {
     'present',
   ]);
   checks.push([
-    'Plugin MCP configuration',
-    existsSync(join(pluginRoot, '.mcp.json')) ? 'present' : 'missing',
-    'present',
+    'Production Plugin MCP',
+    existsSync(join(pluginRoot, '.mcp.json'))
+      && Object.keys(JSON.parse(readFileSync(join(pluginRoot, '.mcp.json'), 'utf8')).mcpServers || {}).length === 0
+      ? 'Not Configured'
+      : 'Unexpected configuration',
+    'Not Configured',
+    'NOT CONFIGURED',
   ]);
   checks.push([
-    'Clean environment before workflow-init',
+    'Clean environment before local tgz CLI installation',
     existsSync(join(cleanPrefix, 'bin', 'ssf')) ? 'CLI present' : 'CLI missing',
     'CLI missing',
   ]);
@@ -117,15 +127,16 @@ try {
     ['--version'],
   );
   checks.push([
-    'Plugin-only plus explicit local package to CLI installation',
+    'Explicit local tgz CLI installation',
     cleanInstalledVersion,
     pkg.version,
   ]);
-  checks.push([
-    'workflow-init READY result',
-    cleanInstalledVersion === pkg.version ? 'READY' : 'BLOCKED',
-    'READY',
-  ]);
+  installOffline(currentPackagePath, cleanPrefix, cache);
+  const repeatedInstalledVersion = run(
+    join(cleanPrefix, 'bin', 'ssf'),
+    ['--version'],
+  );
+  checks.push(['Repeated local tgz CLI installation', repeatedInstalledVersion, pkg.version]);
 
   mkdirSync(previousSource);
   const archive = execFileSync(
@@ -160,19 +171,34 @@ try {
     ['--version'],
   );
   checks.push(['Offline CLI upgrade', installedCurrent, pkg.version]);
-  const doctorOutput = run(join(upgradePrefix, 'bin', 'ssf'), ['doctor']);
   checks.push([
-    'Installed CLI doctor',
-    doctorOutput.includes('All checks passed') ? 'passed' : 'failed',
-    'passed',
+    'VS Code command discovery and invocation',
+    'Pending VS Code runtime',
+    'Pending VS Code runtime',
+    'PENDING',
   ]);
   checks.push([
-    'Idempotent second workflow-init',
-    installedCurrent === pkg.version ? 'skip install' : 'install required',
-    'skip install',
+    'VS Code missing-CLI install and READY rendering',
+    'Pending VS Code runtime',
+    'Pending VS Code runtime',
+    'PENDING',
+  ]);
+  checks.push([
+    'VS Code 0.13.0 upgrade and READY rendering',
+    'Pending VS Code runtime',
+    'Pending VS Code runtime',
+    'PENDING',
+  ]);
+  checks.push([
+    'VS Code second invocation and idempotent message',
+    'Pending VS Code runtime',
+    'Pending VS Code runtime',
+    'PENDING',
   ]);
 
-  const failures = checks.filter(([, actual, expected]) => actual !== expected);
+  const failures = checks.filter(([, actual, expected, status]) => (
+    status !== 'PENDING' && status !== 'NOT CONFIGURED' && actual !== expected
+  ));
   const evidence = [
     `# Offline Install and Upgrade Evidence`,
     '',
@@ -181,14 +207,20 @@ try {
     '- Network mode: npm `--offline` with registry forced to `127.0.0.1:9`',
     '- Installation prefix: isolated temporary directory',
     '- User global CLI and VS Code settings: unchanged',
+    '- Scope: local package integrity and CLI installation primitives only',
+    '- VS Code Plugin Chat runtime: PENDING',
+    '- Production Plugin MCP: NOT CONFIGURED',
     '',
     '| Check | Actual | Expected | Result |',
     '|---|---|---|---|',
-    ...checks.map(([name, actual, expected]) => (
-      `| ${name} | \`${actual}\` | \`${expected}\` | ${actual === expected ? 'PASS' : 'FAIL'} |`
+    ...checks.map(([name, actual, expected, status]) => (
+      `| ${name} | \`${actual}\` | \`${expected}\` | ${status || (actual === expected ? 'PASS' : 'FAIL')} |`
     )),
     '',
-    `Overall: **${failures.length === 0 ? 'PASS' : 'FAIL'}**`,
+    `Executed local checks: **${failures.length === 0 ? 'PASS' : 'FAIL'}**`,
+    '',
+    'This evidence does not claim that VS Code discovered or executed',
+    '`/workflow-init`, rendered `READY`, or called a production MCP tool.',
     '',
   ].join('\n');
 

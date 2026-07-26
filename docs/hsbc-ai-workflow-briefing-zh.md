@@ -110,7 +110,9 @@ changes/empty-state-refresh/
 
 | 主线 | 当前证据 | 状态 |
 |---|---|---|
-| Plugin 安装与更新 | Plugin-only 到 CLI `0.14.0`、`0.13.0` 升级、断网本地 tgz 安装、二次执行幂等 | 本地 PASS |
+| 离线包与 CLI 安装原语 | 最终 tgz 完整性、断网本地安装、`0.13.0` 升级、重复本地安装 | 本地 PASS |
+| VS Code `/workflow-init` | 命令发现、缺失 CLI 安装、升级、READY 和二次调用 | Pending VS Code runtime |
+| 正式 Plugin MCP | 默认 `.mcp.json` 为空；fixture 仅验证协议和路径 | Not Configured |
 | 普通需求 SDD | Android 空状态需求：完整规划、真实 Unit/UI RED、3 个 Unit、3 个 Compose UI、lint、API 29 设备执行、审查与 closing | 本地 PASS |
 | Android 到鸿蒙 | 6 页面、功能一致、UI 接近、Android 测试迁移 | 项目阶段证据；完整 Code Review 和鸿蒙 UI Test 需单独给出最终结果 |
 

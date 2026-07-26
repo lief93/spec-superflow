@@ -70,6 +70,7 @@ const TEXT_CHECKS = [
   { file: 'commands/workflow-init.md', extract: /spec-superflow-cli-version: (\d+\.\d+\.\d+)/ },
   { file: 'commands/workflow-init.md', extract: /spec-superflow@(\d+\.\d+\.\d+)/ },
   { file: 'commands/workflow-init.md', extract: /version `(\d+\.\d+\.\d+)`/ },
+  { file: 'commands/workflow-init.md', extract: /spec-superflow-(\d+\.\d+\.\d+)\.tgz/ },
 ];
 
 for (const check of TEXT_CHECKS) {

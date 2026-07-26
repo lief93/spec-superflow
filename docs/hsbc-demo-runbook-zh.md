@@ -32,6 +32,8 @@
 
 ### 预期
 
+以下结果需要在真实 VS Code Plugin Chat 中现场执行，不能由离线脚本替代：
+
 ```text
 READY
 Node: PASS
@@ -42,7 +44,6 @@ CLI: 0.14.0
 
 ```bash
 ssf --version
-ssf doctor
 ```
 
 讲解：
@@ -133,7 +134,7 @@ ANDROID_SERIAL=<serial> ./gradlew \
 | 风险 | 现场处理 | 直接展示的证据 |
 |---|---|---|
 | 无公网或 npm 不可用 | 使用本地 tgz，不修改公司 registry | `offline-install-upgrade.md`、SHA256、离线验证结果 |
-| `/workflow-init` 安装慢 | 展示已匹配版本的幂等运行 | `ssf --version`、READY 结果 |
+| `/workflow-init` 安装慢 | 展示本地 CLI 安装原语，Chat 结果保持 Pending | `ssf --version`、CLI 安装 evidence |
 | Android 模拟器未启动 | 不现场冷启动，直接读 XML 和 HTML report | `ordinary-requirement-sdd.md` |
 | 鸿蒙设备或内网服务不可用 | 展示已保存的测试结果、页面证据和明确未完成项 | 公司项目 evidence 索引 |
 | Chat 路由错误 | 重新选择 Spec Superflow Agent，再执行命令 | Agent 名称、Plugin 版本、命令建议 |
@@ -143,8 +144,10 @@ ANDROID_SERIAL=<serial> ./gradlew \
 
 | 环节 | 预期 | 结果 | 证据 |
 |---|---|---|---|
-| Plugin-only → `/workflow-init` | CLI `0.14.0`, READY | 本地 PASS | `validation/evidence/offline-install-upgrade.md` |
-| 旧版 → 当前版 | `0.13.0` 升到 `0.14.0` | 本地 PASS | `validation/evidence/offline-install-upgrade.md` |
+| 最终 tgz 完整性与直接 CLI 安装 | CLI `0.14.0` | 本地 PASS | `validation/evidence/offline-install-upgrade.md` |
+| 直接 CLI 旧版升级 | `0.13.0` 升到 `0.14.0` | 本地 PASS | `validation/evidence/offline-install-upgrade.md` |
+| `/workflow-init` 发现、执行、READY 与二次调用 | 真实 VS Code Plugin Chat | Pending VS Code runtime | 内网 `installation.md` |
+| 正式 Plugin MCP | 公司批准的真实 Server 和 tool call | Not Configured | 内网 `plugin-runtime.md` |
 | 普通需求工件校验 | 全部 valid、状态 consistent | 本地 PASS，0.08 秒 | `validation/evidence/local-demo-rehearsal.md` |
 | 普通需求 Unit/UI/Device | 0 failures | 本地 PASS，约 20 秒 | `validation/evidence/local-demo-rehearsal.md` |
 | 公司 Plugin/CLI/业务 Skills | 公司环境实际执行 | 内网下载后按门禁执行 | 公司环境 evidence |

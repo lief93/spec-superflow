@@ -32,10 +32,10 @@ npm registry。也可以在离线目录直接执行等价的终端命令：
 ```bash
 npm install -g ./spec-superflow-<version>.tgz
 ssf --version
-ssf doctor
 ```
 
 命令只读取本地 tgz，不需要修改 npm registry。升级时执行相同命令覆盖旧版本。
+`ssf doctor` 检查的是 spec-superflow 源码仓库，不是已安装 CLI 的健康检查。
 
 ## 安装 Plugin
 
@@ -67,7 +67,8 @@ tar -xzf spec-superflow-<version>.tgz \
 2. 用新 tgz 执行 `npm install -g`。
 3. 解压到新的版本目录。
 4. 将 `chat.pluginLocations` 改为新目录并重新加载 VS Code。
-5. 运行 `/workflow-init package=<absolute-tgz-path>`、`ssf --version` 和 `ssf doctor`。
+5. 在真实 VS Code Chat 中运行
+   `/workflow-init package=<absolute-tgz-path>`，再运行 `ssf --version`。
 6. 验证完成后再删除旧版本目录，保留旧 tgz 作为回退包。
 
 ## 验收
@@ -75,5 +76,6 @@ tar -xzf spec-superflow-<version>.tgz \
 - Plugin 页面显示目标版本。
 - `/workflow-init` 返回 `READY`。
 - `ssf --version` 与 Plugin 版本一致。
-- `ssf doctor` 全部通过。
-- 空白业务仓库中能选择 Spec Superflow Agent、发现 Skills 和 Plugin MCP。
+- 空白业务仓库中能选择 Spec Superflow Agent 并发现中央 Skills。
+- 默认 MCP 结果是 `Not Configured`；只有另行配置并真实调用公司批准的 Server
+  后才能记为 Pass。

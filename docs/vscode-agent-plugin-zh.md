@@ -150,6 +150,10 @@ Plugin 根目录的 `.mcp.json` 是中央 MCP 配置入口。当前默认配置�
 }
 ```
 
+因此当前正式 Plugin 的 MCP 状态是 **Not Configured**，本版本没有内置可调用的
+MCP Server。仓库中的 MCP fixture 只验证 stdio 协议和 `${PLUGIN_ROOT}` 路径，
+不能作为 VS Code 发现 Server 或 Chat 真实调用工具的证据。
+
 Plugin 使用 `.plugin/plugin.json` 作为 OpenPlugin manifest。如果 MCP Server
 代码随 Plugin 一起发布，路径必须通过 `${PLUGIN_ROOT}` 引用，不能依赖业务
 仓库或当前工作目录：
@@ -198,8 +202,9 @@ Server 可以复用这一基础环境。Python、Java、原生程序、本地模
 4. 生成的任务文档和代码只出现在当前业务仓库。
 5. 两个仓库分别读取自己的 Copilot Instructions 和项目 Skills。
 6. 切换到其他 Agent 后，不再应用 Spec Superflow 工作流。
-7. Plugin 内测试 MCP 能从 `${PLUGIN_ROOT}` 启动、在 Configure Tools 中出现并
-   被 Chat 调用；业务仓库中没有 MCP 文件或中央 Plugin 文件副本。
+7. 默认 MCP 显示为 **Not Configured**。只有配置公司批准的真实 Server，并在
+   VS Code 中完成工具发现和调用后，才能记录为 Pass；fixture 测试不能替代该
+   运行时证据。
 
 ## 常见问题
 

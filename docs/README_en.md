@@ -130,7 +130,7 @@ npm install -g spec-superflow
 |---------|---------|
 | `ssf list` | List all changes and status |
 | `ssf validate <dir>` | Validate artifact completeness |
-| `ssf doctor` | Health check (versions, hooks, skills, docs) |
+| `ssf doctor` | Source-checkout maintenance check (versions, hooks, skills, docs) |
 | `ssf version <semver>` | Sync version across all manifests |
 | `ssf state <sub> <dir>` | Manage `.spec-superflow.yaml` state file |
 | `ssf check-update` | Check for a spec-superflow update |
