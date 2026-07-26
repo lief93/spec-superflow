@@ -20,6 +20,20 @@ Subagent (general-purpose):
 
     [PLAN_OR_REQUIREMENTS]
 
+    ## Project Development Baseline
+
+    Read the baseline and selected classic implementation listed here:
+    [PROJECT_BASELINE]
+
+    ## Project Memories
+
+    [PROJECT_MEMORIES]
+
+    ## Capability Baseline
+
+    Read the current capability specs listed here:
+    [CAPABILITY_SPECS]
+
     ## Git Range to Review
 
     **Base:** [BASE_SHA]
@@ -50,15 +64,26 @@ Subagent (general-purpose):
 
     **Architecture:**
     - Sound design decisions?
+    - Is each changed responsibility consistent with documented architecture and ownership boundaries?
+    - Did the implementation reuse documented project abstractions where they fit the requested behavior?
+    - Does the implementation conflict with confirmed runtime, data, state, or interface facts?
     - Reasonable scalability and performance?
     - Security concerns?
     - Integrates cleanly with surrounding code?
+    - Follows the selected classic implementation and applicable project baseline rules?
+    - Any deviation is explicitly approved by design and the execution contract?
 
     **Testing:**
     - Tests verify real behavior, not mocks?
     - Edge cases covered?
     - Integration tests where they matter?
     - All tests passing?
+    - For frontend work, does every user-visible AC map to an exact platform UI test file and case, and do that case's actions/assertions prove the AC's WHEN/THEN?
+    - Across Unit, Component, Integration, and UI rows, does every observable WHEN/THEN/AND outcome have an explicit assertion rather than only a passing row count?
+    - Does each user-triggered UI WHEN act through the rendered control rather than call a ViewModel, callback, repository, or reducer directly?
+    - Do UI tests reacquire nodes after recomposition, rerender, refresh, or navigation instead of retaining stale node handles?
+    - Reject Markdown, builds, launch-only checks, unrelated test cases, and aggregate suite counts as substitutes for AC test evidence.
+    - Is any claimed `Unavailable` UI Test backed by repository evidence rather than convenience?
 
     **Production readiness:**
     - Migration strategy if schema changed?
@@ -128,6 +153,9 @@ Subagent (general-purpose):
 **Placeholders:**
 - `[DESCRIPTION]` — brief summary of what was built
 - `[PLAN_OR_REQUIREMENTS]` — what it should do (execution-contract.md file path, spec file path, or requirements)
+- `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation and approved deviations, or `Not configured`
+- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/MEMORY.md` and only linked topic files relevant to the diff, or `Not configured`
+- `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[BASE_SHA]` — starting commit
 - `[HEAD_SHA]` — ending commit
 

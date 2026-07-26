@@ -17,6 +17,8 @@ Use for ANY technical issue: test failures, bugs, unexpected behavior, performan
 
 Don't skip because issue "seems simple" or you're "in a hurry" — systematic debugging is faster than thrashing.
 
+Before investigating, read matching project-root `specs/<capability>/spec.md` for intended behavior. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only topic links relevant to the failing module, symptom, runtime, or environment. Use recalled learnings to avoid repeating prior investigations, but prefer current evidence when they conflict.
+
 ## The Four Phases
 
 Complete each phase before proceeding.
@@ -45,7 +47,8 @@ Scientific method: form a single hypothesis ("I think X is the root cause becaus
 1. **Create failing test case** — simplest reproduction, automated if possible. Follow TDD rules from build-executor
 2. **Implement single fix** — address root cause, one change at a time, no "while I'm here" improvements
 3. **Verify fix** — test passes? no regressions? issue resolved?
-4. **If fix doesn't work**: count attempts. < 3 → return to Phase 1. **≥ 3 → STOP and question architecture (DP-5)**
+4. **Remember selectively** — after the root cause and resolution are verified, invoke `memory-manager` only if the conclusion is shared, project-specific, non-obvious, stable, expensive to rediscover, and not evident in the final code or tests.
+5. **If fix doesn't work**: count attempts. < 3 → return to Phase 1. **≥ 3 → STOP and question architecture (DP-5)**
 
 ### DP-5: Debug Escalation (3+ Failures)
 

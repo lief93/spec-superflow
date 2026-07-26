@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Spec-first workflow plugin marketplace for Cursor",
-    "version": "0.8.9"
+    "version": "0.13.0"
   },
   "plugins": [
     {
       "name": "spec-superflow",
       "source": ".",
-      "description": "Spec-first workflow: integrates OpenSpec planning engine + Superpowers execution discipline with 9 collaborative skills."
+      "description": "Spec-first workflow: integrates project baselines, Claude-style shared auto memory, OpenSpec planning, and Superpowers execution discipline with 11 collaborative skills."
     }
   ]
 }

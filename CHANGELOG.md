@@ -4,6 +4,74 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [0.13.0] - 2026-07-24
+
+### Added
+
+- **Selectable VS Code workflow agent** - Added an opt-in Spec Superflow custom agent distributed by the root Agent Plugin manifest.
+- **Central plugin deployment guidance** - Documented one-time installation across business repositories, repository-owned customization boundaries, and an empty MCP configuration template.
+- **Multi-project VS Code guide** - Added a Chinese setup and operations guide for sharing one Agent Plugin and global CLI across business repositories.
+
+### Changed
+
+- **Global CLI execution** - Workflow Skills use the globally installed, matching-version `ssf` CLI for state, validation, and synchronization commands.
+- **Global helper commands** - Exposed update checks, workflow inference, transition guards, task briefs, and review packages through `ssf`, removing shell-command dependence on plugin-relative script paths.
+
+## [0.12.2] - 2026-07-24
+
+### Fixed
+
+- **Underscore-safe artifact validation** - `cmd-validate` now preserves underscores in test paths, test cases, Requirement names, and AC names instead of rewriting identifiers during Markdown normalization.
+- **Existing-test regression coverage** - Added validation coverage for `Run existing` entries whose real test file and method names contain underscores.
+
+## [0.12.1] - 2026-07-23
+
+### Changed
+
+- **English-only workflow artifacts** - Converted proposal, spec, design, tasks, execution contract, and PR summary templates to English while preserving their existing SDD and test-traceability structure.
+- **English project initialization guidance** - Converted the `project-init` skill, Copilot instructions, project development baseline, and workflow decision labels to English.
+- **Backward-compatible baseline validation** - New English project baselines are validated by default, existing Chinese baselines remain supported, and a regression test prevents CJK text from returning to published skills or templates.
+
+## [0.12.0] - 2026-07-23
+
+### Changed
+
+- **AC-linked test planning** — Every acceptance scenario now maps to exact platform test files, test cases, and asserted outcomes across Unit, Component, Integration, and UI layers.
+- **Deterministic test contracts and evidence** — Test obligations flow unchanged from `tasks.md` into the execution contract and PR evidence, with validation and closure gates rejecting missing, vague, duplicated, or aggregate-only results.
+- **Reliable frontend verification** — User actions must run through rendered controls, system events remain explicitly simulated, UI nodes are reacquired after render-tree changes, and exact UI/device cases are rerun before release.
+
+## [0.11.0] - 2026-07-23
+
+### Changed
+
+- **Claude-style shared Auto Memory** — Replaced the Serena-inspired memory graph with a concise `MEMORY.md` index and typed `feedback`, `project`, and `reference` topics that are recalled only when relevant.
+- **Selective memory admission** — Memory is now optional and limited to verified, shared, project-specific, non-obvious learnings; project rules, current behavior, decisions, and task history remain in their existing authoritative artifacts.
+
+### Removed
+
+- **Serena memory files and references** — Removed `memory_maintenance.md`, `core.md`, and `mem:` traversal from the active workflow. Migration preserves useful content before removing only the legacy Serena Memory files.
+
+## [0.9.2] - 2026-07-21
+
+### Added
+
+- **Progressive project memory** — Added `memory-manager`, `.spec-superflow/memories/`, and `ssf memories list|check` for durable, progressively loaded project knowledge without Serena, MCP, or a language server.
+- **Memory maintenance at closure** — Verified implementation findings can add, update, or skip long-term memory after spec synchronization, while task history and transient logs remain outside memory.
+- **Frontend verification contract** — Frontend work now records UI Test obligations and requires final Device Test evidence on a baseline browser, simulator, or device.
+
+### Changed
+
+- **End-to-end planning traceability** — Requirements and Scenarios now map through Design Decisions, AC-owned file changes, TDD test plans, execution batches, and final review evidence.
+- **Structured TDD planning** — Every AC can select Unit, Component, Integration, and UI test layers with explicit `Add`, `Update`, `Run existing`, `Unavailable`, or `Not applicable` actions.
+- **Execution task extraction** — `task-brief` extracts the current AC-based task format with Batch context while preserving legacy numbered Task support.
+- **Planning repair and validation** — Planning artifacts can be repaired before execution, and validators enforce stronger contract, traceability, frontend evidence, and state consistency.
+- **Canonical spec synchronization** — Capability specs can synchronize against explicit canonical targets.
+
+### Fixed
+
+- **Workflow state hardening** — Improved CLI state transitions, audit data handling, and validation edge cases.
+- **Codex hook discovery** — Prevented unintended hook auto-discovery in Codex installations.
+
 ## [0.8.9] - 2026-07-04
 
 ### Added

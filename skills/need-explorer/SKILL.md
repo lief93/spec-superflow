@@ -13,9 +13,9 @@ Agree on: problem, scope, non-goals, success criteria, whether to split before s
 
 ## Process
 
-### 1. Inspect Context First
+### 1. Inspect Existing Knowledge First
 
-Before asking questions, understand what exists and what constraints are in place.
+Before asking questions, understand what exists and what constraints are in place. If `docs/project/project-guidelines.md` exists, read its technology and architecture rules, inspect the classic implementation index, and follow only recipes relevant to the likely change. Infer the affected capabilities and read each matching project-root `specs/<capability>/spec.md` as current behavior. If `.spec-superflow/memories/MEMORY.md` exists, read its concise entrypoint and only topic links relevant to those capabilities, affected modules, runtime conditions, or prior symptoms. Use the baseline to identify likely ownership, reuse points, and conflicts, not to invent business requirements. If the capability is unclear, inspect names first and read only likely matches before narrowing with the user.
 
 ### 2. One Question at a Time
 

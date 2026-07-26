@@ -31,6 +31,14 @@
 用 workflow-start 开始
 ```
 
+首次接入已有项目时，可先在支持 Agent Skills 的 Copilot/Agent Chat 中运行：
+
+```text
+/spec-superflow:project-init
+```
+
+它会生成 `.github/copilot-instructions.md` 和 `docs/project/project-guidelines.md`，为后续 Spec、Design、实现与 Review 提供同一份项目开发基线。
+
 Agent 会自动检查当前工件目录，**内容级判断**（不看文件时间戳，而是比较 proposal 范围 vs 契约意图锁）你处于哪个阶段，然后路由到正确的下一个 skill。
 
 - 启动新的变更 → `用 workflow-start 开始`
@@ -86,6 +94,18 @@ copilot plugin marketplace add MageByte-Zero/spec-superflow
 copilot plugin install spec-superflow@spec-superflow
 ```
 
+### VS Code GitHub Copilot（Agent Plugin）
+
+在 VS Code 命令面板运行 **Chat: Install Plugin From Source**，输入本仓库的
+Git 地址。安装后从 Agent 选择器中选择 **Spec Superflow**；切换回其他 Agent
+即停止应用该工作流 Agent 的专属指令，不需要卸载其他 Agent。Agent 使用全局
+安装的同版本 `ssf` CLI 执行状态、校验和同步命令。
+
+Plugin 在用户环境只安装一次，可供多个业务仓库使用。业务仓库继续维护自己的
+Copilot Instructions 和项目专属 Skills，不需要复制中央 `agents/`、`skills/`、
+`scripts/` 或 `templates/`。完整说明见
+[VS Code Agent Plugin 多项目复用指南](docs/vscode-agent-plugin-zh.md)。
+
 ### Gemini CLI
 
 ```bash
@@ -117,14 +137,21 @@ npx spec-superflow list          # 或通过 npx 使用
 | `ssf doctor` | 健康检查（版本、hooks、skills、文档一致性） |
 | `ssf version <semver>` | 一键同步版本号到所有 manifest |
 | `ssf state <sub> <dir>` | 管理 `.spec-superflow.yaml` 状态文件 |
+| `ssf check-update` | 检查 spec-superflow 更新 |
+| `ssf infer-workflow <dir>` | 推断 hotfix、tweak 或 full 工作流 |
+| `ssf guard check ...` | 校验工作流状态转换 |
+| `ssf task-brief ...` | 提取单个 Task 或 AC 的执行摘要 |
+| `ssf review-package ...` | 生成限定范围的 Review 包 |
 | `ssf inject <dir>` | 生成多平台 phase-guard 产物 |
 | `ssf audit <dir>` | 生成决策点审计报告 |
+| `ssf memories init` / `list` / `check` | 创建 Claude 式共享 Memory 索引、列出主题或检查类型、容量和链接 |
+| `ssf project check` | 校验项目开发基线的结构、路径和符号引用 |
 | `ssf install-cursor` | 部署到 Cursor `.cursor/` 目录 |
 | `ssf install-workbuddy` | 部署到 WorkBuddy marketplace 并启用技能 |
 
 ### 版本
 
-- 当前版本：`v0.8.9`
+- 当前版本：`v0.13.0`
 - 自包含插件，不需要运行时安装 OpenSpec 或 Superpowers
 - 上游来源：[Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) 和 [obra/superpowers](https://github.com/obra/superpowers)
 - 版本历史见 [CHANGELOG.md](CHANGELOG.md)
@@ -164,15 +191,17 @@ npx spec-superflow list          # 或通过 npx 使用
 
 | # | Skill | 阶段 | 职责 |
 |---|---|---|---|
-| 1 | `workflow-start` | 入口 | 内容级状态检测、8 状态路由、阻止非法跳转 |
-| 2 | `need-explorer` | 探索 | 一次一问 + 方案对比 + 推荐 |
-| 3 | `spec-writer` | 规格 | 产出 proposal/specs/design/tasks，Schema 引擎实时验证 |
-| 4 | `contract-builder` | 桥接 | 解析引擎自动提取 4 工件 → 压缩为 execution-contract.md |
-| 5 | `build-executor` | 执行 | TDD 铁律 + SDD 子代理驱动 + Review Gate |
-| 6 | `bug-investigator` | 调试 | 4 阶段根因分析，3+ 修复失败 → 质疑架构 |
-| 7 | `code-reviewer` | 审查 | 结构化审查，三级问题分级 |
-| 8 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
-| 9 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
+| 1 | `project-init` | 项目初始化 | 生成 Copilot 指令和项目开发基线，可通过 `/` 命令触发 |
+| 2 | `memory-manager` | 共享 Auto Memory | 参考 Claude，按需记录和读取团队反馈、非显性项目上下文与外部引用 |
+| 3 | `workflow-start` | 入口 | 内容级状态检测、8 状态路由、阻止非法跳转 |
+| 4 | `need-explorer` | 探索 | 一次一问 + 方案对比 + 推荐 |
+| 5 | `spec-writer` | 规格 | 产出 proposal/specs/design/tasks，Schema 引擎实时验证 |
+| 6 | `contract-builder` | 桥接 | 解析引擎自动提取 4 工件 → 压缩为 execution-contract.md |
+| 7 | `build-executor` | 执行 | TDD 铁律 + SDD 子代理驱动 + Review Gate |
+| 8 | `bug-investigator` | 调试 | 4 阶段根因分析，3+ 修复失败 → 质疑架构 |
+| 9 | `code-reviewer` | 审查 | 结构化审查，三级问题分级 |
+| 10 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
+| 11 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
 
 ---
 

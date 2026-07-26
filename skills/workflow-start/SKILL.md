@@ -5,7 +5,7 @@ description: Primary entry point for the spec-superflow state-machine workflow. 
 
 # Workflow Start
 
-Primary entry point for `spec-superflow`. Jobs: inspect change context, check for updates, confirm DP-0, determine state, route to correct skill, block invalid transitions.
+Primary entry point for `spec-superflow`. Jobs: load the project development baseline, relevant project memories, and change artifacts; check for updates; confirm DP-0; determine state; route to the correct skill; and block invalid transitions.
 
 ## Use This Skill When
 
@@ -19,8 +19,10 @@ Do NOT invoke for: general coding tasks outside spec-superflow changes, casual q
 
 ## Initialization
 
-1. **Update check**: Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-update.mjs"`. Exit 0 → continue. Exit 1 → non-blocking upgrade reminder. Exit 2 → skip.
-2. **Inspect change folder**: Check for `proposal.md`, `specs/`, `design.md`, `tasks.md`, `execution-contract.md`. Answer: Is the change fuzzy? Artifacts missing/unstable? Contract exist? User approved contract? Execution in progress or blocked? In verification/wrap-up?
+1. **Update check**: Run `ssf check-update`. Exit 0 → continue. Exit 1 → non-blocking upgrade reminder. Exit 2 → skip.
+2. **Load project baseline**: If `docs/project/project-guidelines.md` exists, read its technology and architecture tables, inspect the classic implementation index, and read only recipes relevant to the request. If the user explicitly asks to initialize or refresh the project baseline, route to `project-init`. A missing baseline does not block an ordinary change; mention `/project-init` once.
+3. **Recall shared auto memory**: If `.spec-superflow/memories/MEMORY.md` exists, read only its first 200 lines or 25,000 bytes. Use the one-line hooks to select up to five `feedback`, `project`, or `reference` topics clearly relevant to the request, and verify stale claims before relying on them. If the user asks to remember, forget, inspect, or consolidate a project learning, route to `memory-manager`. Missing Memory is normal and does not need initialization at task start.
+4. **Inspect change folder**: Check for `proposal.md`, `specs/`, `design.md`, `tasks.md`, `execution-contract.md`. Answer: Is the change fuzzy? Artifacts missing/unstable? Contract exist? User approved contract? Execution in progress or blocked? In verification/wrap-up?
 
 ## DP-0: User Confirmation Gate
 
@@ -39,23 +41,26 @@ Config-aware routing: check `artifacts.order` and `artifacts.skip` from project 
 
 ## Mode Detection
 
-If workflow is `auto`/`null`/unset: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/infer-workflow.mjs" <change-dir>`. Inference: **hotfix** (≤2 tasks, ≤2 files, no schema/API/new modules), **tweak** (≤4 tasks, config/doc only), **full** (anything larger). Persist with `ssf state set <dir> workflow <mode>`.
+If workflow is `auto`/`null`/unset: run `ssf infer-workflow <change-dir>`. Inference: **hotfix** (≤2 tasks, ≤2 files, no schema/API/new modules), **tweak** (≤4 tasks, config/doc only), **full** (anything larger). Persist with `ssf state set <dir> workflow <mode>`.
 
 Validate mode against artifact content. If hotfix/tweak criteria not met → upgrade to `full` and output reason. Don't overwrite explicit mode unless user asks.
 
 ## Routing Rules
 
+### Route to project-init
+The user explicitly asks to initialize or refresh project coding rules, architecture guidance, canonical implementations, or Copilot project context.
+
 ### Route to need-explorer
 Change is fuzzy, scope unclear, comparing options, no stable change name.
 
 ### Route to spec-writer
-Guard: `node "${CLAUDE_PLUGIN_ROOT}/scripts/guard/guard.mjs" check <dir> exploring specifying --json` → fail = BLOCK. User knows what they want, artifacts missing/incomplete.
+Guard: `ssf guard check <dir> exploring specifying --json` → fail = BLOCK. User knows what they want, artifacts missing/incomplete.
 
 ### Route to contract-builder
-Guard: `... check <dir> specifying bridging --json` → fail = BLOCK. Artifacts exist, implementation requested, contract missing/stale. Include `DP-3: 契约批准`.
+Guard: `ssf guard check <dir> specifying bridging --json` → fail = BLOCK. Artifacts exist, implementation requested, contract missing/stale. Include `DP-3: Contract Approval`.
 
 ### Route to build-executor
-Guard: `... check <dir> approved-for-build executing --json` → fail = BLOCK. Contract exists and approved, contract matches artifacts. Include `DP-4: 执行模式选择`.
+Guard: `ssf guard check <dir> approved-for-build executing --json` → fail = BLOCK. Contract exists and approved, contract matches artifacts. Include `DP-4: Execution Mode Selection`.
 
 ### Route to bug-investigator
 Execution hit blockage: test failure, unexpected behavior, build error, task cannot proceed. After debugging, route back to build-executor.
@@ -64,7 +69,7 @@ Execution hit blockage: test failure, unexpected behavior, build error, task can
 Batch completed, batch ready for spec-compliance + code-quality verification.
 
 ### Route to release-archivist
-Guard: `... check <dir> executing closing --json` → fail = BLOCK. Implementation complete, verification complete/nearly complete. Include `DP-7: 归档确认`.
+Guard: `ssf guard check <dir> executing closing --json` → fail = BLOCK. Implementation complete, verification complete/nearly complete. Include `DP-7: Archive Confirmation`.
 
 ### Route to spec-merger
 Delta specs exist that need merging, change closing with ADDED/MODIFIED/REMOVED/RENAMED specs.
@@ -73,8 +78,8 @@ Delta specs exist that need merging, change closing with ADDED/MODIFIED/REMOVED/
 User explicitly requests, bug-investigator escalates after 3+ failures AND user chooses, scope change makes change no longer worthwhile AND user confirms. Block from `closing` or `abandoned`.
 
 ### Fast-Path Routing
-- **Hotfix**: Route to contract-builder (minimal), skip need-explorer + spec-writer, guard check `exploring bridging --workflow hotfix`, after DP-3 → build-executor (inline), after → release-archivist (lightweight)
-- **Tweak**: Route to build-executor (direct edit), skip need-explorer + spec-writer + contract-builder, guard check `exploring approved-for-build --workflow tweak`, after → release-archivist (lightweight)
+- **Hotfix**: Route to contract-builder (minimal), skip need-explorer + spec-writer, run `ssf guard check <dir> exploring bridging --workflow hotfix`, after DP-3 → build-executor (inline), after → release-archivist (lightweight)
+- **Tweak**: Route to build-executor (direct edit), skip need-explorer + spec-writer + contract-builder, run `ssf guard check <dir> exploring approved-for-build --workflow tweak`, after → release-archivist (lightweight)
 
 Post-transition: 💡 `ssf inject <change-dir>` to update phase-guard artifacts.
 

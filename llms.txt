@@ -3,7 +3,7 @@
 ## Overview
 spec-superflow is a self-contained workflow integration plugin for Claude Code, Cursor, OpenAI Codex CLI/App, GitHub Copilot CLI, Gemini CLI, OpenCode, WorkBuddy, and Trae. It merges spec-driven planning artifacts (proposal, specs, design, tasks) with disciplined execution guardrails (TDD, review gates, controlled handoff) into one unified workflow.
 
-Current version: v0.8.9.
+Current version: v0.13.0.
 
 ## Key Documents
 - README.md: Chinese homepage with full usage guide and FAQ
@@ -16,6 +16,8 @@ Current version: v0.8.9.
 - CONTRIBUTING.md: Contribution guidelines
 
 ## Core Skills (in skills/)
+- project-init: Generates project coding instructions and an actionable development baseline
+- memory-manager: Selectively records and recalls Claude-style shared auto memory without MCP
 - workflow-start: Entry point, content-level state detection, 8-state routing, blocks illegal transitions
 - need-explorer: Clarifies intent, scope, constraints, and success criteria
 - spec-writer: Generates proposal, specs, design, and tasks with Schema validation
@@ -26,12 +28,17 @@ Current version: v0.8.9.
 - release-archivist: Verification-before-completion, archiving, risk summary
 - spec-merger: Merges delta specs into main specs with conflict detection
 
-## Templates (in templates/)
+## Templates And Skill Resources
+- skills/project-init/references/: Copilot instruction and project guideline templates
+- skills/memory-manager/references/MEMORY.md: Concise shared-memory index template
+- skills/memory-manager/references/TOPIC.md: Typed feedback/project/reference topic template
+- .spec-superflow/memories/: Project-shared `MEMORY.md` plus on-demand topic files
 - proposal.md: Change proposal template
 - spec.md: Capability specification template
 - design.md: Technical design template
 - tasks.md: Implementation tasks template
 - execution-contract.md: Bridge artifact template
+- pr-summary.md: Delivery, verification, exceptions, and known risks
 
 ## Examples (in docs/examples/)
 - add-dark-mode: New UI feature example (dark mode)

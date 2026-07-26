@@ -31,11 +31,32 @@ Claiming work is complete without verification is dishonesty, not efficiency. Be
 ### Step 1: Test Suite
 Run full test suite. Record total/passed/failed/skipped. Zero failures = PASS.
 
+### Step 1A: Frontend Verification
+
+Read `## Frontend Verification` from `execution-contract.md`.
+
+When `Frontend Impact: Yes`:
+
+1. Run every exact UI Test File and Test Case in `## AC Test Matrix` fresh. A broader smoke/regression suite may be additional evidence, never a replacement.
+2. Run Device Test after all Batches are complete: execute the same AC-linked UI cases on at least one project baseline simulator/device per affected native platform, then cover only the remaining non-automatable user paths manually. For Web, use the default real browser and desktop viewport; add a mobile viewport only when responsive behavior is affected.
+3. Record one row per matrix obligation in `pr-summary.md > AC Test Evidence`, plus the aggregate UI and Device results in `Frontend Verification Evidence`.
+4. Each matrix row with `Add`, `Update`, or `Run existing` must be `Pass`. Any missing or failing required UI case is FAIL.
+5. `Unavailable` is CONDITIONAL, not PASS. Record searched locations/configuration and the missing capability; proceed only after developer acceptance. Do not introduce a framework during release verification.
+6. Device Test must be `Pass`. Missing evidence, build/install/launch failure, or an unverified affected path is FAIL.
+
+Screenshot testing is outside this version and is not required by this gate.
+
+For an accepted `Unavailable` UI Test, record the decision before closure:
+```bash
+ssf state set <change-dir> dp_6_result "confirmed conditional: <developer acceptance and capability-gap summary>; Device Test passed"
+ssf state set <change-dir> dp_6_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
+```
+
 ### Step 2: Completeness
 Compare contract batches against actual diff. Every SHALL/MUST must have implementation evidence. Missing = Critical severity.
 
 ### Step 3: Coherence
-Compare design decisions against code. Check naming consistency. Inconsistencies = IMPORTANT.
+Compare design decisions against code. Read the configured project development baseline and selected classic implementation, then read relevant project memories for non-duplicated facts. Evaluate architecture, ownership, source-of-truth, reuse, boundary, and convention consistency. Check naming consistency. Unapproved baseline deviations or inconsistencies = IMPORTANT.
 
 ### Step 4: Unintended Scope
 Check for files modified outside scope fence, new dependencies not in design. Unplanned = WARN.
@@ -60,14 +81,21 @@ Check for files modified outside scope fence, new dependencies not in design. Un
 - Scope added without artifact updates?
 - Unresolved blockers or known risks?
 - Delta specs exist that need merging?
+- Frontend contract obligations have matching `pr-summary.md` evidence?
 - Run `ssf audit <change-dir>` — include `decision-point-audit.md` in archive
+
+### Auto Memory Pass
+
+After verification establishes the final result, invoke `memory-manager` once as a catch-up pass over team-wide feedback, code-invisible project context, external references, and verified runtime or debugging conclusions that remain expensive to rediscover. Exclude personal feedback and ordinary fix recipes. Write only items that pass every admission condition. `NONE` is the normal result and must not block closure.
 
 ### DP-6 (Verification Outcome)
 ```bash
-ssf state set <change-dir> dp_6_result "<pass|conditional|fail>: <summary>"
+ssf state set <change-dir> dp_6_result "<pass|confirmed conditional|fail>: <summary>"
 ssf state set <change-dir> dp_6_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
 If FAIL, do NOT proceed to DP-7. Route back or ask about abandonment.
+
+After all mandatory checks pass, set `ssf state set <change-dir> test_result pass`. Do not set it from a successful build, code-level tests alone, or planned-but-unrun frontend checks.
 
 ### DP-7 (Archive Confirmation)
 ```bash
@@ -82,11 +110,11 @@ If implementation diverged from the contract, return to `bridging` before closur
 
 ## Post-Verification
 
-Run `node scripts/spec-superflow.mjs state transition <change-dir> closing`. If delta specs exist, route to `spec-merger`.
+Run `ssf state transition <change-dir> closing`. If delta specs exist, route to `spec-merger`.
 
 ## Lightweight Closure (hotfix/tweak)
 
-Verify files exist and are non-empty, run `node --check` on code files, skip 5-step verification. Still record DP-6 and DP-7.
+Verify files exist and are non-empty, run `node --check` on code files, skip the general 5-step verification. Frontend hotfix/tweak changes still require the contract's UI Test and Device Test obligations. Still record DP-6 and DP-7.
 
 ## Exception Handling
 

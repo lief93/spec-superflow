@@ -10,7 +10,7 @@ After a change completes, delta specs (ADDED/MODIFIED/REMOVED/RENAMED) must be m
 ## Pre-Flight Checks
 
 ### Conflict Detection
-Run `node scripts/spec-superflow.mjs sync <change-dir>`. If conflicts are detected (same requirement modified by multiple changes), present the conflict list to the user for resolution order.
+Run `ssf sync <change-dir>`. If conflicts are detected (same requirement modified by multiple changes), present the conflict list to the user for resolution order.
 
 ### Abandoned Change Guard
 Check if the change is `abandoned`. If so → STOP: "Abandoned changes cannot be synced. Delta specs are preserved for reference but must not be merged."
@@ -40,7 +40,7 @@ Before executing, detect:
 Apply changes. Do NOT delete delta specs — they remain for traceability. After merge, validate: no duplicate requirement names, no orphaned references, REMOVED section clearly separated.
 
 ### Step 5: Report
-Output sync report table: Capability, ADDED/MODIFIED/REMOVED/RENAMED counts, Status (✓/⚠). Summary with totals and unresolved conflicts.
+Output sync report table: Capability, ADDED/MODIFIED/REMOVED/RENAMED counts and Status (✓/⚠). Summary with totals and unresolved conflicts. Auto Memory is handled during work and by the release catch-up pass, not by Spec synchronization.
 
 ## Guardrails
 
@@ -48,6 +48,7 @@ Output sync report table: Capability, ADDED/MODIFIED/REMOVED/RENAMED counts, Sta
 - Do not auto-resolve conflicts across changes
 - Do not merge specs for unverified changes
 - Validate main spec consistency after each capability merge
+- Do not copy progress logs, failed attempts, or task summaries into Auto Memory
 
 ## Post-Sync
 

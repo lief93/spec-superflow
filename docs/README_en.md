@@ -31,6 +31,12 @@ Once installed, just tell your agent:
 use workflow-start to begin
 ```
 
+For the first use in an existing repository, initialize its development baseline:
+
+```text
+/spec-superflow:project-init
+```
+
 The agent inspects your current artifacts, performs **content-level detection** (comparing proposal scope vs. contract intent lock, not just file timestamps), determines your workflow stage, and routes to the correct next skill.
 
 - New change → `use workflow-start to begin`
@@ -82,6 +88,21 @@ copilot plugin marketplace add MageByte-Zero/spec-superflow
 copilot plugin install spec-superflow@spec-superflow
 ```
 
+### VS Code GitHub Copilot (Agent Plugin)
+
+Run **Chat: Install Plugin From Source** from the VS Code Command Palette and
+enter this repository's Git URL. Select **Spec Superflow** from the agent picker
+when the workflow is needed; switching to another agent stops applying its
+agent-specific instructions. Install the matching global `ssf` CLI for state,
+validation, and synchronization commands used by the Agent.
+
+The plugin is installed once per user profile and works across repositories.
+Business repositories keep their own Copilot instructions and repository
+skills; they do not need copies of the central `agents/`, `skills/`, `scripts/`,
+or `templates/` directories. See
+[vscode-agent-plugin.md](vscode-agent-plugin.md) for the complete ownership and
+runtime model.
+
 ### Gemini CLI
 
 ```bash
@@ -112,14 +133,21 @@ npm install -g spec-superflow
 | `ssf doctor` | Health check (versions, hooks, skills, docs) |
 | `ssf version <semver>` | Sync version across all manifests |
 | `ssf state <sub> <dir>` | Manage `.spec-superflow.yaml` state file |
+| `ssf check-update` | Check for a spec-superflow update |
+| `ssf infer-workflow <dir>` | Infer hotfix, tweak, or full workflow mode |
+| `ssf guard check ...` | Validate a workflow state transition |
+| `ssf task-brief ...` | Extract one Task or AC execution brief |
+| `ssf review-package ...` | Generate a bounded review package |
 | `ssf inject <dir>` | Generate multi-platform phase-guard artifacts |
 | `ssf audit <dir>` | Generate decision-point audit report |
+| `ssf memories init` / `list` / `check` | Create a Claude-style shared-memory index, list topics, or validate types, limits, and links |
+| `ssf project check` | Validate project baseline structure, paths, and symbol references |
 | `ssf install-cursor` | Deploy to `.cursor/` directory |
 | `ssf install-workbuddy` | Deploy to WorkBuddy marketplace and enable skills |
 
 ### Version
 
-- Current: `v0.8.9`
+- Current: `v0.13.0`
 - Self-contained — no OpenSpec or Superpowers runtime required
 - Upstream: [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec), [obra/superpowers](https://github.com/obra/superpowers)
 - Changelog: [CHANGELOG.md](../CHANGELOG.md)
@@ -159,15 +187,17 @@ AI coding sessions fail in one of two ways:
 
 | # | Skill | Stage | Purpose |
 |---|-------|-------|---------|
-| 1 | `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
-| 2 | `need-explorer` | Exploring | One question at a time, approach comparison, recommendation |
-| 3 | `spec-writer` | Specifying | Generate proposal/specs/design/tasks with Schema engine validation |
-| 4 | `contract-builder` | Bridging | Parse 4 artifacts → compress into execution-contract.md |
-| 5 | `build-executor` | Executing | TDD Iron Law + SDD subagent-driven + Review Gates |
-| 6 | `bug-investigator` | Debugging | 4-phase root cause analysis; 3+ failures → escalate |
-| 7 | `code-reviewer` | Review | Structured review with 3-level severity classification |
-| 8 | `release-archivist` | Closing | Verification-before-completion + archive + risk summary |
-| 9 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
+| 1 | `project-init` | Project setup | Generate Copilot instructions and an actionable project development baseline |
+| 2 | `memory-manager` | Shared auto memory | Claude-style capture and recall of team feedback, code-invisible project context, and external references |
+| 3 | `workflow-start` | Entry | Content-level state detection, 8-state routing, blocks illegal transitions |
+| 4 | `need-explorer` | Exploring | One question at a time, approach comparison, recommendation |
+| 5 | `spec-writer` | Specifying | Generate proposal/specs/design/tasks with Schema engine validation |
+| 6 | `contract-builder` | Bridging | Parse 4 artifacts → compress into execution-contract.md |
+| 7 | `build-executor` | Executing | TDD Iron Law + SDD subagent-driven + Review Gates |
+| 8 | `bug-investigator` | Debugging | 4-phase root cause analysis; 3+ failures → escalate |
+| 9 | `code-reviewer` | Review | Structured review with 3-level severity classification |
+| 10 | `release-archivist` | Closing | Verification-before-completion + archive + risk summary |
+| 11 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
 
 ---
 

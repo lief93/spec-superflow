@@ -25,6 +25,15 @@ Subagent (general-purpose):
     Global constraints from the spec/design that bind this task:
     [GLOBAL_CONSTRAINTS]
 
+    Project development baseline and selected classic implementation:
+    [PROJECT_BASELINE]
+
+    Relevant project memories:
+    [PROJECT_MEMORIES]
+
+    Read these current capability specs:
+    [CAPABILITY_SPECS]
+
     ## What the Implementer Claims They Built
 
     Read the implementer's report: [REPORT_FILE]
@@ -101,14 +110,29 @@ Subagent (general-purpose):
     **Tests:**
     - Do the new and changed tests verify real behavior, not mocks?
     - Are the task's edge cases covered?
+    - For every TDD Test Plan row, open the exact changed/existing Test File and locate the named Test Case; a report claim alone is insufficient.
+    - Map the Test Case setup, action, and assertions to the AC's WHEN/THEN. Rendering a screen, launching an app, checking that no exception occurred, or reading Markdown does not prove a behavioral AC unless that is the stated outcome.
+    - Across all planned rows, map every observable WHEN/THEN/AND outcome to an explicit assertion. Verify internal state/calls/persistence/order/concurrency at Unit/Component/Integration level and visible state/user interaction at UI level where applicable; row counts alone are not coverage.
+    - A user-triggered UI WHEN must act through the rendered control. Direct ViewModel, callback, repository, or reducer calls are acceptable only for setup or genuine system/lifecycle events, not as substitutes for user interaction.
+    - After an action that may recompose, rerender, refresh, or navigate, verify the test reacquires nodes with stable semantic selectors instead of reusing a stale node handle.
+    - For `Run existing`, does the named historical test case actually assert the affected AC rather than merely belonging to the same page or module?
+    - For `Unavailable`, is the missing framework supported by concrete repository evidence and no test infrastructure was added without approval?
 
     **Structure:**
     - Does each file have one clear responsibility with a well-defined interface?
+    - Is each changed responsibility consistent with the documented architecture and ownership boundaries?
+    - Does the task reuse documented project abstractions where they fit the requested behavior?
+    - Does the implementation conflict with any confirmed runtime, data, state, or interface fact?
     - Are units decomposed so they can be understood and tested independently?
     - Is the implementation following the file structure from the plan?
     - Did this change create new files that are already large, or
       significantly grow existing files? (Don't flag pre-existing file
       sizes — focus on what this change contributed.)
+
+    **Project baseline:**
+    - Does the implementation follow the selected classic implementation?
+    - Are ownership, dependency, state, model, source-of-truth, and reuse rules preserved?
+    - Is every deviation explicitly approved in design and the execution contract?
 
     Your report should point at evidence: file:line references for every
     finding and for any check you would otherwise answer with a bare
@@ -163,16 +187,20 @@ Subagent (general-purpose):
     **Task quality:** [Approved | Needs fixes]
 
     **Reasoning:** [1-2 sentence technical assessment]
+
 ```
 
 **Placeholders:**
 - `[MODEL]` — REQUIRED: reviewer model per build-executor Model Selection
-- `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path; same file the implementer worked from)
+- `[BRIEF_FILE]` — REQUIRED: the task brief file (`ssf task-brief PLAN N` prints the path; same file the implementer worked from)
 - `[GLOBAL_CONSTRAINTS]` — the binding requirements copied verbatim from the plan's Global Constraints section or the spec: exact values, formats, and stated relationships between components (not process rules — those are already in this template)
+- `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation and approved deviations, or `Not configured`
+- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/MEMORY.md` and only linked topic files relevant to the diff, or `Not configured`
+- `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed report to
 - `[BASE_SHA]` — commit before this task
 - `[HEAD_SHA]` — current commit
-- `[DIFF_FILE]` — REQUIRED: the path the controller wrote the review package to (`scripts/review-package BASE HEAD` prints the unique path it wrote; the package never enters the controller's context)
+- `[DIFF_FILE]` — REQUIRED: the path the controller wrote the review package to (`ssf review-package BASE HEAD` prints the unique path it wrote; the package never enters the controller's context)
 
 **Reviewer returns:** Spec Compliance verdict (✅/❌/⚠️), Strengths, Issues (Critical/Important/Minor), Task quality verdict
 
