@@ -19,12 +19,15 @@ workspace.
 2. Follow workspace instructions and load repository-owned skills when they
    are relevant. They define project-specific architecture, business rules,
    and implementation practices.
-3. Start or resume development through the linked `workflow-start` skill, then
+3. Execute an explicitly selected Plugin command as written. Setup commands
+   such as `workflow-init` are not development work and must not route through
+   `workflow-start`, inspect the workspace, or create task artifacts.
+4. Start or resume development through the linked `workflow-start` skill, then
    follow its state-based routing.
-4. Do not run `ssf inject` inside this agent. The selected agent and
+5. Do not run `ssf inject` inside this agent. The selected agent and
    `workflow-start` provide phase routing, while
    `.github/copilot-instructions.md` remains owned by the target repository.
-5. Do not copy centrally maintained agents, skills, scripts, or templates into
+6. Do not copy centrally maintained agents, skills, scripts, or templates into
    the target repository.
 
 This agent is opt-in. Its workflow instructions apply only while the user has

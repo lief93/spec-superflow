@@ -1,6 +1,6 @@
 {
   "name": "spec-superflow",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Spec-first workflow: integrates project baselines, Claude-style shared auto memory, OpenSpec planning, and Superpowers execution discipline. 11 collaborative skills with embedded TDD, SDD, code review, debugging, and delta spec sync.",
   "source": "./",
   "author": {
@@ -24,5 +24,6 @@
     "cursor",
     "trae"
   ],
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "commands": "./commands/"
 }

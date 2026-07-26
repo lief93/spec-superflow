@@ -1,0 +1,8 @@
+{
+  "name": "spec-superflow",
+  "version": "0.14.0",
+  "node": ">=22",
+  "package": "spec-superflow-0.14.0.tgz",
+  "sha256": "4e77954067299e243ab873650c8b835444399f7dfb6b6ee04a390ec951a7266b",
+  "pluginPathAfterExtraction": "package/"
+}

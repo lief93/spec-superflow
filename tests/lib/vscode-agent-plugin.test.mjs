@@ -16,8 +16,43 @@ describe('VS Code Agent Plugin', () => {
 
     assert.equal(manifest.skills, 'skills/');
     assert.equal(manifest.agents, 'agents/');
+    assert.equal(manifest.commands, 'commands/');
     assert.equal(manifest.mcpServers, '.mcp.json');
     assert.deepEqual(mcp, { mcpServers: {} });
+  });
+
+  it('provides a version-pinned workflow-init command', () => {
+    const pkg = JSON.parse(read('package.json'));
+    const command = read('commands/workflow-init.md');
+
+    assert.match(command, /name: workflow-init/);
+    assert.match(command, /node --version/);
+    assert.match(command, /Node\.js 22 or newer/);
+    assert.match(command, /ssf --version/);
+    assert.match(command, /instead of the Agent's `workflow-start` route/);
+    assert.match(command, /Do not inspect the open\s+workspace/);
+    assert.match(
+      command,
+      new RegExp(`npm install -g spec-superflow@${pkg.version.replaceAll('.', '\\.')}`),
+    );
+    assert.match(command, /package=<path>/);
+    assert.match(
+      command,
+      new RegExp(`spec-superflow-${pkg.version.replaceAll('.', '\\.')}\\.tgz`),
+    );
+    assert.match(command, /npm install -g "<path>"/);
+    assert.match(command, /rerun `\/workflow-init package=<absolute-tgz-path>`/);
+    assert.match(command, new RegExp(`spec-superflow-cli-version: ${pkg.version.replaceAll('.', '\\.')}`));
+    assert.doesNotMatch(command, /\bsudo\b.*npm install/);
+    assert.match(command, /create task artifacts, or start the\s+development workflow/);
+  });
+
+  it('keeps plugin setup commands outside the development state machine', () => {
+    const agent = read('agents/spec-superflow.agent.md');
+
+    assert.match(agent, /Execute an explicitly selected Plugin command as written/);
+    assert.match(agent, /workflow-init[\s\S]*must not route through/);
+    assert.match(agent, /inspect the workspace, or create task artifacts/);
   });
 
   it('keeps a runnable plugin-relative MCP fixture', () => {

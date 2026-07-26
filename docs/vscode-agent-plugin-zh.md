@@ -37,11 +37,11 @@ Plugin 和全局 CLI 由工作流维护者统一发布。项目规则、任务�
 CLI：
 
 ```bash
-npm install -g spec-superflow@0.13.0
+npm install -g spec-superflow@0.14.0
 ssf --version
 ```
 
-`ssf --version` 应输出 `0.13.0`。版本一致由发布和安装流程人工保证。
+`ssf --version` 应输出 `0.14.0`。版本一致由发布和安装流程人工保证。
 `ssf doctor` 用于维护者检查 spec-superflow 源仓库结构，不用于业务仓库的安装验证。
 
 ### 2. 安装 VS Code Agent Plugin
@@ -53,6 +53,19 @@ ssf --version
 5. 在 Chat 的 Agent 选择器中确认可以选择 **Spec Superflow**。
 
 Plugin 安装在当前 VS Code 用户配置中，不属于当前业务仓库。
+
+如果尚未安装全局 CLI，也可以先完成 Plugin 安装，再选择 **Spec Superflow**
+Agent 并运行 `/workflow-init`。该命令检查 Node.js 和现有 CLI，只在 CLI 缺失或
+版本不一致时通过机器已经配置的 npm registry 安装匹配版本，最后执行
+`ssf --version` 验证。终端仍会按照 VS Code 权限策略显示执行确认。
+
+内网 registry 没有对应包时，使用离线目录中的同版本 tgz：
+
+```text
+/workflow-init package=/absolute/path/spec-superflow-0.14.0.tgz
+```
+
+命令不会修改 registry，只接受显式提供且版本匹配的本地包。
 
 直接通过 Git URL 执行 **Install Plugin From Source** 时，VS Code 使用仓库默认
 分支。需要固定版本时，应在内部 marketplace 的 `source` 中使用 `ref` 或完整
