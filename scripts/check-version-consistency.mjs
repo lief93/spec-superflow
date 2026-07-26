@@ -26,6 +26,7 @@ const errors = [];
 // ── JSON manifests ──
 const JSON_CHECKS = [
   { file: 'plugin.json', path: ['version'] },
+  { file: '.plugin/plugin.json', path: ['version'] },
   { file: '.claude-plugin/plugin.json', path: ['version'] },
   { file: '.claude-plugin/marketplace.json', path: ['plugins', '0', 'version'] },
   { file: '.cursor-plugin/plugin.json', path: ['version'] },

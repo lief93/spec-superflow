@@ -54,6 +54,18 @@ ssf --version
 
 Plugin 安装在当前 VS Code 用户配置中，不属于当前业务仓库。
 
+直接通过 Git URL 执行 **Install Plugin From Source** 时，VS Code 使用仓库默认
+分支。需要固定版本时，应在内部 marketplace 的 `source` 中使用 `ref` 或完整
+`sha`。开发和分支测试时，可以先检出目标分支，再通过用户设置直接注册本地目录：
+
+```jsonc
+"chat.pluginLocations": {
+  "/absolute/path/to/spec-superflow": true
+}
+```
+
+这两种方式都只注册一份中央 Plugin，不向业务仓库复制文件。
+
 ## 在多个项目中使用
 
 在任意业务仓库中：
@@ -125,9 +137,31 @@ Plugin 根目录的 `.mcp.json` 是中央 MCP 配置入口。当前默认配置�
 }
 ```
 
-只有在 MCP 服务命令、权限、负责人和内网安装方式明确后再统一配置。Plugin
-启用时，其 MCP 可能对同一 VS Code 用户环境中的多个仓库可见，因此不要写入
-项目密钥或机器专属凭据。
+Plugin 使用 `.plugin/plugin.json` 作为 OpenPlugin manifest。如果 MCP Server
+代码随 Plugin 一起发布，路径必须通过 `${PLUGIN_ROOT}` 引用，不能依赖业务
+仓库或当前工作目录：
+
+```json
+{
+  "mcpServers": {
+    "company-service": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/servers/company-service.mjs"],
+      "cwd": "${PLUGIN_ROOT}"
+    }
+  }
+}
+```
+
+Server 代码及依赖全部包含在 Plugin 中时，不需要单独安装 MCP 包；但配置中的
+运行时必须已经存在。spec-superflow 的全局 CLI 本身要求 Node，因此 Node
+Server 可以复用这一基础环境。Python、Java、原生程序、本地模型或外部 npm
+包形式的 MCP，仍需通过公司的安装方式准备对应运行时和依赖。
+
+如果公司已经把本地 MCP 作为稳定命令安装到 `PATH`，`.mcp.json` 直接配置该
+命令即可，不必把 Server 再复制进 Plugin。只有在命令、权限、负责人和内网
+安装方式明确后再统一配置。Plugin 启用时，其 MCP 对同一 VS Code 用户环境中
+的多个仓库可见，因此不要写入项目密钥或机器专属凭据。
 
 ## 更新
 
@@ -151,6 +185,8 @@ Plugin 根目录的 `.mcp.json` 是中央 MCP 配置入口。当前默认配置�
 4. 生成的任务文档和代码只出现在当前业务仓库。
 5. 两个仓库分别读取自己的 Copilot Instructions 和项目 Skills。
 6. 切换到其他 Agent 后，不再应用 Spec Superflow 工作流。
+7. Plugin 内测试 MCP 能从 `${PLUGIN_ROOT}` 启动、在 Configure Tools 中出现并
+   被 Chat 调用；业务仓库中没有 MCP 文件或中央 Plugin 文件副本。
 
 ## 常见问题
 
@@ -169,7 +205,8 @@ CLI。
 ### Agent 选择器中没有 Spec Superflow
 
 检查 `@agentPlugins @installed`、Plugin 是否启用，以及安装的 Git 源是否包含
-根目录 `plugin.json` 和 `agents/spec-superflow.agent.md`。
+`.plugin/plugin.json`（或根目录 `plugin.json`）和
+`agents/spec-superflow.agent.md`。
 
 ### Chat 使用了旧 Skill
 

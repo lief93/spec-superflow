@@ -12,6 +12,7 @@ function checkVersionConsistency(root) {
   const files = [
     { name: 'package.json', path: ['version'] },
     { name: 'plugin.json', path: ['version'] },
+    { name: '.plugin/plugin.json', path: ['version'] },
     { name: '.claude-plugin/plugin.json', path: ['version'] },
     { name: '.claude-plugin/marketplace.json', path: ['plugins', '0', 'version'] },
     { name: '.cursor-plugin/plugin.json', path: ['version'] },

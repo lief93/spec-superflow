@@ -6,6 +6,7 @@ import { join } from 'node:path';
 const MANIFESTS = [
   { file: 'package.json', path: ['version'] },
   { file: 'plugin.json', path: ['version'] },
+  { file: '.plugin/plugin.json', path: ['version'] },
   { file: '.claude-plugin/plugin.json', path: ['version'] },
   { file: '.claude-plugin/marketplace.json', path: ['plugins', '0', 'version'] },
   { file: '.cursor-plugin/plugin.json', path: ['version'] },
