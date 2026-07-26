@@ -243,7 +243,7 @@ copilot plugin uninstall spec-superflow
 
 VS Code Agent Plugin 将可选择的 Agent、中央 Skills、scripts、templates 和
 MCP 配置作为一个安装单元提供。Agent 从中央 Plugin 解析运行资源，不要求业务
-仓库保存副本。Agent 使用全局安装的同版本 `ssf` CLI 执行状态、校验和同步命令。
+仓库保存副本。内置 MCP bridge 直接执行 Plugin 仓库中的工作流脚本。
 
 ### 安装
 
@@ -252,22 +252,16 @@ Git 地址。安装完成后：
 
 1. 在 Extensions 中搜索 `@agentPlugins @installed` 确认 Plugin 已启用。
 2. 在 Agent 选择器中选择 **Spec Superflow**。
-3. 用普通对话启动一个测试需求，确认 Agent 从 Plugin 读取 Skill、脚本和模板，
+3. 执行 `/workflow-init`，确认内置 MCP runtime 返回 `READY`。
+4. 用普通对话启动一个测试需求，确认 Agent 从 Plugin 读取 Skill、脚本和模板，
    并把任务产物写入当前业务仓库。
 
 Plugin 在用户环境安装一次即可供多个仓库使用。业务仓库只保留项目
 Instructions、项目专属 Skills、任务产物、Memory 和代码。切换到其他 Agent
-即可停止使用 Spec Superflow Agent 的专属指令，不需要卸载公司其他 Agent。
+即可停止使用 Spec Superflow Agent 的专属指令，不需要卸载其他 Agent。
 
-安装与 Plugin 版本一致的 CLI：
-
-```bash
-npm install -g spec-superflow
-ssf --version
-```
-
-MCP 尚未确定时，仓库中的 `.mcp.json` 保持空的 `mcpServers` 配置；不要填写
-不可执行的示例服务。详细设计见
+Plugin 的 `.mcp.json` 启动仓库内的 `servers/spec-superflow-mcp.mjs`，因此不需要
+单独安装 CLI 或 MCP 包。详细结构和复现步骤见
 [`docs/vscode-agent-plugin-zh.md`](docs/vscode-agent-plugin-zh.md)。
 
 ### 更新和停用

@@ -12,8 +12,6 @@
   "scripts": {
     "build": "tsc",
     "test": "node --test --experimental-strip-types tests/e2e.test.ts tests/lib/*.test.*",
-    "pack:offline": "node scripts/build-offline-bundle.mjs",
-    "verify:offline": "node scripts/verify-offline-bundle.mjs",
     "validate": "node scripts/validate-artifacts",
     "version": "node scripts/spec-superflow.mjs version $npm_new_version && node scripts/check-version-consistency.mjs && git add -A",
     "check-versions": "node scripts/check-version-consistency.mjs",

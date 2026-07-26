@@ -1,237 +1,195 @@
-# VS Code Agent Plugin 多项目复用指南
+# VS Code Spec Superflow Plugin 配置指南
 
-本方案将 spec-superflow 作为 VS Code 用户级 Agent Plugin 安装一次，在多个业务
-仓库中按需选择使用。业务仓库不需要复制中央 Agent、Skills、scripts 或
-templates。
+本方案把完整的 Spec Superflow 仓库作为一个 VS Code Agent Plugin。安装 Plugin
+时，VS Code 会克隆整个仓库，因此 Agent、Skills、Commands、Templates、脚本和
+内置 MCP bridge 会一起安装，不需要再安装或复制另一份 Spec Superflow。
 
-## 最终结构
-
-```text
-VS Code 用户环境
-  Spec Superflow Agent Plugin
-    agents/       可选择的 Spec Superflow Agent
-    skills/       统一维护的工作流 Skills
-    templates/    统一维护的文档模板
-    .mcp.json     可选的中央 MCP 配置
-
-全局命令
-  ssf             状态、校验、Guard、Task Brief、Review Package 等确定性能力
-
-业务仓库 A / B / C
-  .github/copilot-instructions.md   项目架构和编码规则
-  .github/instructions/             项目专属 Instructions
-  .github/skills/                   项目或业务专属 Skills
-  changes/                          当前需求的规划和证据
-  .spec-superflow/                  项目共享 Memory
-  application code                 业务代码和测试
-```
-
-Plugin 和全局 CLI 由工作流维护者统一发布。项目规则、任务产物和代码仍由各业务
-仓库维护。
-
-## 安装
-
-### 1. 安装全局 CLI
-
-从公司内部 npm registry、离线安装包或批准的 Git 源安装与 Plugin 相同版本的
-CLI：
-
-```bash
-npm install -g spec-superflow@0.14.0
-ssf --version
-```
-
-`ssf --version` 应输出 `0.14.0`。版本一致由发布和安装流程人工保证。
-`ssf doctor` 用于维护者检查 spec-superflow 源仓库结构，不用于业务仓库的安装验证。
-
-### 2. 安装 VS Code Agent Plugin
-
-1. 打开 VS Code 命令面板。
-2. 运行 **Chat: Install Plugin From Source**。
-3. 输入 spec-superflow 内部 Git 仓库地址。
-4. 在 Extensions 中搜索 `@agentPlugins @installed`，确认 Plugin 已启用。
-5. 在 Chat 的 Agent 选择器中确认可以选择 **Spec Superflow**。
-
-Plugin 安装在当前 VS Code 用户配置中，不属于当前业务仓库。
-
-如果尚未安装全局 CLI，也可以先完成 Plugin 安装，再选择 **Spec Superflow**
-Agent 并运行 `/workflow-init`。该命令检查 Node.js 和现有 CLI，只在 CLI 缺失或
-版本不一致时通过机器已经配置的 npm registry 安装匹配版本，最后执行
-`ssf --version` 验证。终端仍会按照 VS Code 权限策略显示执行确认。
-
-内网 registry 没有对应包时，使用离线目录中的同版本 tgz：
+## 目标结构
 
 ```text
-/workflow-init package=/absolute/path/spec-superflow-0.14.0.tgz
+spec-superflow-plugin/
+  .plugin/plugin.json              # OpenPlugin manifest
+  plugin.json                      # 可选：跨工具兼容的 manifest 副本
+  agents/
+    spec-superflow.agent.md        # 可选择的 Agent
+  skills/
+    <skill-name>/
+      SKILL.md                     # 工作流 Skill
+  commands/
+    workflow-init.md               # /workflow-init 自检命令
+  servers/
+    spec-superflow-mcp.mjs         # 内置 MCP bridge
+  scripts/                         # 确定性工作流实现
+  templates/                       # Spec、Design、Tasks 等模板
+  .mcp.json                        # MCP Server 启动配置
+  package.json                     # 版本和 Node 要求
+  .github/
+    plugin/marketplace.json        # 可选：发布为 marketplace 时使用
+    copilot-instructions.md        # 可选：仅约束本仓库自身的维护
 ```
 
-命令不会修改 registry，只接受显式提供且版本匹配的本地包。
+`scripts/`、`templates/` 和 Server 虽然不是 manifest 中独立注册的组件，但会随
+整个仓库一起安装，并由 Skill 或 MCP Server 使用。
 
-直接通过 Git URL 执行 **Install Plugin From Source** 时，VS Code 使用仓库默认
-分支。需要固定版本时，应在内部 marketplace 的 `source` 中使用 `ref` 或完整
-`sha`。开发和分支测试时，可以先检出目标分支，再通过用户设置直接注册本地目录：
+## Plugin 格式要求
 
-```jsonc
-"chat.pluginLocations": {
-  "/absolute/path/to/spec-superflow": true
-}
-```
+VS Code 按以下顺序识别 manifest：
 
-这两种方式都只注册一份中央 Plugin，不向业务仓库复制文件。
+1. `.plugin/plugin.json`
+2. 根目录 `plugin.json`
+3. `.github/plugin/plugin.json`
+4. `.claude-plugin/plugin.json`
 
-## 在多个项目中使用
+本仓库使用 `.plugin/plugin.json`，因此属于 OpenPlugin 格式，可以在 MCP 配置中
+使用 `${PLUGIN_ROOT}` 引用安装后的 Plugin 根目录。
 
-在任意业务仓库中：
-
-1. 打开仓库。
-2. 在 Chat Agent 选择器中选择 **Spec Superflow**。
-3. 用普通需求描述开始或恢复工作流。
-
-例如：
-
-```text
-使用 SDD 工作流实现订单列表的空状态。先检查需求和项目上下文，
-生成规划文档，得到我的确认后再开发。
-```
-
-Agent 从中央 Plugin 加载工作流 Skills，通过全局 `ssf` 执行确定性命令，并将
-`changes/`、Memory、测试和代码写入当前打开的业务仓库。
-
-切换到另一个仓库后，选择同一个 **Spec Superflow** Agent 即可复用，无需再次
-复制或安装工作流文件。切换到其他 Agent 后，Spec Superflow 的专属工作流不再
-生效，也不需要卸载其他 Agent。
-
-## 业务仓库保留什么
-
-业务仓库只保留项目自身内容：
-
-| 内容 | 位置 | 作用 |
-|---|---|---|
-| 项目规则 | `.github/copilot-instructions.md` | 架构边界、编码规范、经典实现 |
-| 目录级规则 | `.github/instructions/` | 特定模块或文件范围的规则 |
-| 项目 Skills | `.github/skills/` | 业务或内部框架专属能力 |
-| 任务产物 | `changes/<change-name>/` | Spec、Design、Tasks、Contract、Evidence |
-| 共享 Memory | `.spec-superflow/` | 经验证且值得复用的项目事实 |
-| 实现产物 | 项目源码和测试目录 | 业务代码、Unit Test、UI Test、设备测试 |
-
-不要将中央 `agents/`、`skills/`、`scripts/` 或 `templates/` 复制进业务仓库。
-仓库专属 Skill 应避免与中央工作流 Skill 使用相同名称。
-
-## CLI 与 Plugin 的职责
-
-Plugin 负责：
-
-- 提供可选择的 Agent。
-- 决定当前工作流阶段和应使用的 Skill。
-- 维护通用工作流说明和模板。
-
-全局 `ssf` 负责：
-
-- `state`、`validate`、`sync` 和 `audit`。
-- `check-update`、`infer-workflow` 和 `guard`。
-- `task-brief` 和 `review-package`。
-- 项目基线与 Memory 的结构校验。
-
-业务仓库不需要本地 `scripts/`。Skill 中的工作流命令统一通过 `ssf` 执行。
-
-## 项目 Instructions 与 Phase Guard
-
-`.github/copilot-instructions.md` 归业务仓库所有。Spec Superflow Agent 不执行
-`ssf inject`，避免覆盖项目已有的架构和编码规则。当前阶段由所选 Agent 和
-`workflow-start` 每次根据任务文件重新判断。
-
-## MCP
-
-Plugin 根目录的 `.mcp.json` 是中央 MCP 配置入口。当前默认配置为空：
+最小 manifest：
 
 ```json
 {
-  "mcpServers": {}
+  "name": "spec-superflow",
+  "description": "Spec-driven development workflow.",
+  "version": "0.14.0",
+  "author": {
+    "name": "Your Team"
+  },
+  "skills": "skills/",
+  "agents": "agents/",
+  "commands": "commands/",
+  "mcpServers": ".mcp.json"
 }
 ```
 
-因此当前正式 Plugin 的 MCP 状态是 **Not Configured**，本版本没有内置可调用的
-MCP Server。仓库中的 MCP fixture 只验证 stdio 协议和 `${PLUGIN_ROOT}` 路径，
-不能作为 VS Code 发现 Server 或 Chat 真实调用工具的证据。
+需要遵守：
 
-Plugin 使用 `.plugin/plugin.json` 作为 OpenPlugin manifest。如果 MCP Server
-代码随 Plugin 一起发布，路径必须通过 `${PLUGIN_ROOT}` 引用，不能依赖业务
-仓库或当前工作目录：
+| 项目 | 要求 |
+|---|---|
+| `name` | 只能使用小写字母、数字和连字符，最长 64 字符 |
+| `version` | 使用语义化版本，例如 `0.14.0` |
+| `author` | 使用对象格式，至少包含 `name` |
+| 组件路径 | 相对于 Plugin 根目录；目录必须真实存在 |
+| Agent | 放在 `agents/`，文件名以 `.agent.md` 结尾 |
+| Skill | `skills/<name>/SKILL.md`；目录名与 frontmatter 中的 `name` 一致 |
+| Skill 名称 | 使用 kebab-case，不添加命名空间前缀 |
+| Command | 放在 `commands/`，Markdown frontmatter 中声明 `name` 和 `description` |
+| MCP | 顶层字段必须是 `mcpServers`；Plugin 内文件通过 `${PLUGIN_ROOT}` 引用 |
+
+如果同时保留多个 manifest，`name`、`version` 和组件路径必须同步。
+
+## 内置运行方式
+
+`.mcp.json`：
 
 ```json
 {
   "mcpServers": {
-    "company-service": {
+    "spec-superflow": {
       "command": "node",
-      "args": ["${PLUGIN_ROOT}/servers/company-service.mjs"],
+      "args": [
+        "${PLUGIN_ROOT}/servers/spec-superflow-mcp.mjs"
+      ],
       "cwd": "${PLUGIN_ROOT}"
     }
   }
 }
 ```
 
-Server 代码及依赖全部包含在 Plugin 中时，不需要单独安装 MCP 包；但配置中的
-运行时必须已经存在。spec-superflow 的全局 CLI 本身要求 Node，因此 Node
-Server 可以复用这一基础环境。Python、Java、原生程序、本地模型或外部 npm
-包形式的 MCP，仍需通过公司的安装方式准备对应运行时和依赖。
+MCP bridge 提供：
 
-如果公司已经把本地 MCP 作为稳定命令安装到 `PATH`，`.mcp.json` 直接配置该
-命令即可，不必把 Server 再复制进 Plugin。只有在命令、权限、负责人和内网
-安装方式明确后再统一配置。Plugin 启用时，其 MCP 对同一 VS Code 用户环境中
-的多个仓库可见，因此不要写入项目密钥或机器专属凭据。
+- `spec_superflow_health`：验证 Plugin 版本和内置运行时。
+- `spec_superflow_run`：在当前打开的项目中执行 Plugin 自带的确定性工作流命令。
+
+Agent 将 Skill 中的逻辑命令 `ssf <args>` 转换为
+`spec_superflow_run(workspace, args)`。脚本来自 Plugin 仓库，生成的 Spec、
+Design、Tasks、Memory、测试和代码仍写入当前打开的项目。
+
+`/workflow-init` 只调用 `spec_superflow_health` 检查 Plugin 是否完整，不下载、
+安装或更新其他包。
+
+运行要求只有：
+
+- VS Code 已启用 Agent Plugin 功能。
+- GitHub Copilot Chat 可以使用 Agent、Command 和 MCP 工具。
+- `node` 可用并满足 `package.json` 中的版本要求。
+
+## 从现有 Spec 仓库制作 Plugin
+
+如果已有一个单独仓库用于维护 Spec Superflow：
+
+1. 将 Spec Superflow 的完整仓库内容放到该仓库根目录。
+2. 保留 `agents/`、`skills/`、`commands/`、`servers/`、`scripts/` 和
+   `templates/`，不要只复制 `.github/`。
+3. 按上面的结构添加或检查 `.plugin/plugin.json` 和 `.mcp.json`。
+4. 确保 `dist/` 等运行时文件已经提交；使用者不应在安装后执行构建。
+5. 将仓库提交到可被使用者 Git 客户端访问的 Git 地址。
+
+`.github/` 不是直接安装 Plugin 的必需目录：
+
+- `.github/plugin/marketplace.json` 只在需要 marketplace 安装和版本发现时使用。
+- `.github/copilot-instructions.md` 只约束维护这个 Plugin 仓库时的开发行为。
+- 它不会替代 `.plugin/plugin.json`，也不会自动把目录中的文件注册成 Plugin
+  Agent 或 Skill。
+
+## 安装和使用
+
+1. 在 VS Code 命令面板运行 **Chat: Install Plugin From Source**。
+2. 输入 Plugin 仓库的 Git 地址。
+3. 在 Extensions 中搜索 `@agentPlugins @installed`，确认
+   **Spec Superflow** 已启用。
+4. 在 Chat Agent 选择器中选择 **Spec Superflow**。
+5. 执行 `/workflow-init`，预期返回 `READY`。
+6. 打开任意项目，描述需求并启动工作流。
+
+也可以先克隆仓库，再通过用户设置注册本地目录：
+
+```jsonc
+"chat.pluginLocations": {
+  "/absolute/path/to/spec-superflow-plugin": true
+}
+```
+
+Plugin 安装一次即可在多个项目中复用。项目仓库只保留自己的：
+
+```text
+.github/copilot-instructions.md
+.github/instructions/
+.github/skills/
+changes/
+.spec-superflow/
+应用源码和测试
+```
+
+不要把 Plugin 的 `agents/`、`skills/`、`scripts/` 或 `templates/` 再复制到每个
+项目。项目级 Agent 或 Skill 与 Plugin 中同名时，项目级配置会优先，可能导致
+Plugin 组件被忽略。
 
 ## 更新
 
-发布新版本时：
+1. 更新 Plugin 源仓库中的 Spec Superflow 文件。
+2. 同步修改所有 manifest 和 marketplace 中的 `version`。
+3. 提交并推送仓库。
+4. 在 VS Code 中运行 **Extensions: Check for Extension Updates**，或重新执行
+   **Chat: Install Plugin From Source**。
+5. 再次执行 `/workflow-init`，确认返回的新版本与仓库一致。
 
-1. 工作流维护者发布同版本 Plugin 和 CLI。
-2. 使用者更新全局 CLI。
-3. 在 VS Code Agent Plugins 视图更新 Plugin；内部 Git 源不支持自动更新时，
-   重新运行 **Chat: Install Plugin From Source**。
-4. 执行 `ssf --version`，确认与 Plugin 发布版本一致。
+不需要单独维护 CLI 版本。
 
-不要只更新 Plugin 或只更新 CLI。
+## 验证清单
 
-## 验证多项目复用
+| 检查 | 预期结果 |
+|---|---|
+| Plugin 安装 | Agent Plugins 中显示并启用 Spec Superflow |
+| Agent | Agent 选择器中可以选择 Spec Superflow |
+| Command | `/workflow-init` 可发现并返回 `READY` |
+| Skills | Agent 可以进入 `workflow-start` 并路由到对应 Skill |
+| MCP | `MCP: List Servers` 显示 `spec-superflow` |
+| MCP 工具 | `spec_superflow_health` 和 `spec_superflow_run` 可调用 |
+| 项目隔离 | 产物只写入当前打开的项目，不写入 Plugin 安装目录 |
+| 多项目复用 | 两个项目使用同一个 Plugin，且没有工作流目录副本 |
+| 更新 | 更新仓库版本后，VS Code 加载的新版本与 `/workflow-init` 一致 |
 
-至少使用两个无关业务仓库验证：
+单元测试只能证明 manifest、Server 协议和脚本调用成立。最终验收仍应在真实
+VS Code Chat 中完成 Command 发现、MCP 启动和一次工作流调用。
 
-1. 两个仓库都能选择同一个 **Spec Superflow** Agent。
-2. 两个仓库都没有中央 `scripts/`、`skills/` 或 `templates/` 副本。
-3. Chat 能自动进入 `workflow-start` 并执行 `ssf guard`、`ssf validate` 等命令。
-4. 生成的任务文档和代码只出现在当前业务仓库。
-5. 两个仓库分别读取自己的 Copilot Instructions 和项目 Skills。
-6. 切换到其他 Agent 后，不再应用 Spec Superflow 工作流。
-7. 默认 MCP 显示为 **Not Configured**。只有配置公司批准的真实 Server，并在
-   VS Code 中完成工具发现和调用后，才能记录为 Pass；fixture 测试不能替代该
-   运行时证据。
-
-## 常见问题
-
-### Chat 提示找不到 `ssf`
-
-确认 CLI 安装在 VS Code Terminal 使用的同一环境：
-
-```bash
-command -v ssf
-ssf --version
-```
-
-Remote SSH、WSL 和 Dev Container 的命令运行在远端环境，需要在对应环境安装
-CLI。
-
-### Agent 选择器中没有 Spec Superflow
-
-检查 `@agentPlugins @installed`、Plugin 是否启用，以及安装的 Git 源是否包含
-`.plugin/plugin.json`（或根目录 `plugin.json`）和
-`agents/spec-superflow.agent.md`。
-
-### Chat 使用了旧 Skill
-
-删除业务仓库中以前复制的 spec-superflow Skills，并检查用户级 Skills 中是否
-还有同名旧版本。中央工作流只保留一份。
-
-### 产物写入错误仓库
-
-确认 VS Code 当前打开的 workspace 和 Chat Terminal 工作目录。任务产物必须
-写入当前业务仓库，不能写入 Plugin 安装目录。
+格式依据：[VS Code Agent plugins](https://code.visualstudio.com/docs/agent-customization/agent-plugins)
+和 [GitHub Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference)。

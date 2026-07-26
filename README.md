@@ -98,13 +98,13 @@ copilot plugin install spec-superflow@spec-superflow
 
 在 VS Code 命令面板运行 **Chat: Install Plugin From Source**，输入本仓库的
 Git 地址。安装后从 Agent 选择器中选择 **Spec Superflow**；切换回其他 Agent
-即停止应用该工作流 Agent 的专属指令，不需要卸载其他 Agent。Agent 使用全局
-安装的同版本 `ssf` CLI 执行状态、校验和同步命令。
+即停止应用该工作流 Agent 的专属指令，不需要卸载其他 Agent。Plugin 自带
+Agent、Skills、Commands、脚本、模板和 MCP bridge，不需要另外安装 `ssf`。
 
-Plugin 在用户环境只安装一次，可供多个业务仓库使用。业务仓库继续维护自己的
+Plugin 在用户环境只安装一次，可供多个项目使用。项目继续维护自己的
 Copilot Instructions 和项目专属 Skills，不需要复制中央 `agents/`、`skills/`、
 `scripts/` 或 `templates/`。完整说明见
-[VS Code Agent Plugin 多项目复用指南](docs/vscode-agent-plugin-zh.md)。
+[VS Code Spec Superflow Plugin 配置指南](docs/vscode-agent-plugin-zh.md)。
 
 ### Gemini CLI
 

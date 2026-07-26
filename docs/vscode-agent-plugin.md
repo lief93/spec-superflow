@@ -1,141 +1,78 @@
-# VS Code Agent Plugin
+# VS Code Spec Superflow Agent Plugin
 
-The VS Code Agent Plugin is the centrally installed delivery unit for
-spec-superflow. It contributes the selectable **Spec Superflow** agent and the
-maintained workflow skills. The globally installed `ssf` CLI is the
-deterministic workflow runtime and is maintained at the same version as the
-Plugin.
+The complete Spec Superflow repository is the Plugin. Installing it from a Git
+source clones the agents, skills, commands, templates, scripts, and bundled MCP
+bridge as one unit. No separate Spec Superflow package or global CLI is needed.
 
-## Runtime Model
+## Repository layout
 
 ```text
-VS Code user profile
-  spec-superflow Agent Plugin
-    agents/                 selectable workflow agent
-    skills/                 centrally maintained workflow skills
-    scripts/                centrally maintained deterministic helpers
-    templates/              centrally maintained artifact templates
-    .mcp.json               optional centrally maintained MCP servers
-
-Global command
-  ssf                       workflow runtime and user-facing CLI entrypoint
-
-Business repository
-  .github/copilot-instructions.md
-  .github/instructions/     repository-owned rules
-  .github/skills/           repository-owned skills
-  changes/                  generated change artifacts
-  .spec-superflow/          shared memory
-  application code
+spec-superflow-plugin/
+  .plugin/plugin.json
+  plugin.json
+  agents/
+  skills/
+  commands/
+  servers/spec-superflow-mcp.mjs
+  scripts/
+  templates/
+  .mcp.json
+  package.json
+  .github/plugin/marketplace.json   # optional
 ```
 
-The plugin and repository customizations are additive. Repository instructions
-and repository-owned skills remain local to the open workspace. Avoid using the
-same skill name for a central skill and a repository skill. The Spec Superflow
-agent links its maintained Skills directly, while deterministic helper commands
-run through the global `ssf` CLI. It does not run `ssf inject`; the selected
-agent handles workflow routing without replacing the repository-owned Copilot
-instructions file.
+VS Code checks `.plugin/plugin.json`, root `plugin.json`,
+`.github/plugin/plugin.json`, and `.claude-plugin/plugin.json`, in that order.
+This repository uses the OpenPlugin manifest so MCP configuration can reference
+bundled files through `${PLUGIN_ROOT}`.
 
-## Install From an Internal Git Repository
+The manifest must use a kebab-case `name`, a semantic `version`, an `author`
+object, and valid relative component paths. Each skill must be stored at
+`skills/<name>/SKILL.md`; its directory and frontmatter names must match and use
+kebab-case without a namespace prefix. Agents use `*.agent.md`. Commands are
+Markdown prompt files in `commands/`.
 
-1. Install the matching `ssf` CLI globally and verify it with `ssf --version`.
-2. In VS Code, run **Chat: Install Plugin From Source**.
-3. Enter the internal Git URL for this repository.
-4. Verify the plugin under `@agentPlugins @installed`.
-5. Select **Spec Superflow** from the agent picker when the workflow is needed.
-6. Switch back to another agent to stop applying the Spec Superflow agent
-   instructions. No other agent needs to be removed.
+## Bundled runtime
 
-The plugin is installed once in the user's VS Code profile and is available in
-multiple repositories.
+`.mcp.json` starts `servers/spec-superflow-mcp.mjs` from `${PLUGIN_ROOT}`. The
+bundled MCP bridge provides:
 
-If the global CLI is not installed yet, install the Plugin first, select the
-**Spec Superflow** agent, and run `/workflow-init`. The command checks Node.js
-and the current CLI, installs the version pinned to the Plugin through the
-machine's configured npm registry when needed, and verifies `ssf --version`.
-Terminal execution remains subject to the client's approval policy.
-For an offline install, pass the matching release package explicitly:
-`/workflow-init package=/absolute/path/spec-superflow-0.14.0.tgz`.
+- `spec_superflow_health`, which verifies the installed Plugin runtime.
+- `spec_superflow_run`, which executes the Plugin's deterministic workflow
+  scripts with the open repository as their working directory.
 
-Direct source installation from a Git URL uses the repository's default
-branch. Use a marketplace source object with `ref` or `sha` when the installed
-version must be pinned. For local development, clone or check out the desired
-branch and register it without copying it into a business repository:
+The selected Agent maps logical `ssf <args>` instructions from the Skills to the
+MCP tool. Workflow artifacts are written to the open repository, while runtime
+code remains in the Plugin.
+
+`/workflow-init` only calls the health tool. It does not install, download, or
+update another package.
+
+## Build a Plugin repository
+
+1. Copy the complete Spec Superflow repository, not only `.github/`.
+2. Keep `agents/`, `skills/`, `commands/`, `servers/`, `scripts/`, `templates/`,
+   and committed runtime output such as `dist/`.
+3. Add or verify `.plugin/plugin.json` and `.mcp.json`.
+4. Commit the repository to an accessible Git source.
+5. Run **Chat: Install Plugin From Source** and enter that Git URL.
+
+The `.github/` directory is optional. Its marketplace manifest is needed only
+for marketplace distribution. Its Copilot Instructions govern maintenance of
+the Plugin repository itself; they do not replace the Plugin manifest.
+
+For local development, register the checkout directly:
 
 ```jsonc
 "chat.pluginLocations": {
-  "/absolute/path/to/spec-superflow": true
+  "/absolute/path/to/spec-superflow-plugin": true
 }
 ```
 
-`ssf doctor` checks a spec-superflow source checkout and is intended for
-workflow maintainers. It is not an installation check for business
-repositories.
+After installation, select **Spec Superflow**, run `/workflow-init`, and verify
+that `MCP: List Servers` shows `spec-superflow`. Project-specific Instructions,
+Skills, task artifacts, memory, source code, and tests remain in each target
+repository.
 
-## MCP Packaging
-
-`.mcp.json` intentionally contains an empty `mcpServers` object until the team
-defines a real server, executable, ownership model, and security policy.
-The production status is therefore **Not Configured**: this Plugin version does
-not ship a callable MCP server.
-
-The Plugin uses the OpenPlugin manifest at `.plugin/plugin.json`. A server
-whose code is shipped inside the Plugin must use `${PLUGIN_ROOT}` because MCP
-processes run outside the business repository:
-
-```json
-{
-  "mcpServers": {
-    "company-service": {
-      "command": "node",
-      "args": ["${PLUGIN_ROOT}/servers/company-service.mjs"],
-      "cwd": "${PLUGIN_ROOT}"
-    }
-  }
-}
-```
-
-No separate MCP package installation is needed when the server implementation
-and its dependencies are included in the Plugin. The configured runtime still
-has to exist on the machine. For this project, `node` is already required by
-the global `ssf` CLI. A Python, Java, native, model-backed, or externally
-packaged MCP server still requires that runtime and its approved dependencies
-to be installed.
-
-For a company-managed server already available on `PATH`, configure its stable
-company command instead of `${PLUGIN_ROOT}`. Do not commit tokens or
-machine-specific credentials. Plugin MCP servers start whenever the Plugin is
-enabled, not only when the Spec Superflow agent is selected.
-
-## Ownership
-
-| Content | Location | Owner |
-|---|---|---|
-| Workflow agent and state-machine skills | Agent Plugin | Workflow maintainers |
-| Shared business skills | Agent Plugin | Domain maintainers |
-| MCP definitions | Agent Plugin | Platform maintainers |
-| Architecture and coding rules | Business repository | Repository maintainers |
-| Repository-specific skills | Business repository | Repository maintainers |
-| Change artifacts, evidence, and memory | Business repository | Change owner and reviewers |
-
-## Verification
-
-Test the installed plugin in at least two unrelated repositories:
-
-1. The same **Spec Superflow** agent appears in both agent pickers.
-2. Selecting another agent does not apply the Spec Superflow agent
-   instructions.
-3. Repository-specific instructions and skills differ correctly by workspace.
-4. The agent loads Skills from the installed Plugin and executes helper
-   commands through global `ssf` while the repository contains no central
-   runtime files.
-5. Generated artifacts remain in the target repository.
-6. Existing `.github/copilot-instructions.md` content remains unchanged.
-7. Chat customization diagnostics show only the intended central
-   spec-superflow plugin as the workflow source; if an old project copy remains,
-   the selected agent still opens skills through its explicit central registry.
-8. MCP is reported as **Not Configured** unless a separately approved server is
-   added and called in the real VS Code host. The repository fixture verifies
-   stdio protocol behavior and `${PLUGIN_ROOT}` path resolution only; it is not
-   evidence of production Plugin discovery or a Chat tool call.
+See the [VS Code Agent plugins documentation](https://code.visualstudio.com/docs/agent-customization/agent-plugins)
+and [GitHub Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference).
