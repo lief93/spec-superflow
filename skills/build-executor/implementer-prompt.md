@@ -19,6 +19,27 @@ Subagent (general-purpose):
 
     [Scene-setting: where this fits, dependencies, architectural context]
 
+    ## Project Development Baseline
+
+    Read [PROJECT_BASELINE] before changing code. Follow the selected classic
+    implementation and applicable architecture, state, data, and reuse rules
+    recorded in the contract. If the task requires a deviation that the design
+    did not approve, stop and report the conflict.
+
+    ## Project Memories
+
+    Read [PROJECT_MEMORIES] before changing code. These are the relevant files
+    selected from the concise `MEMORY.md` entrypoint and its topic links. If the
+    value is `Not configured`, follow the approved design and established
+    codebase patterns. Memory is recalled context, not a rule source; report
+    stale Memory when current evidence contradicts it.
+
+    ## Capability Baseline
+
+    Read [CAPABILITY_SPECS] before changing code. The listed `spec.md` files
+    define current behavior. If no capability spec is configured, continue
+    from the approved contract and codebase.
+
     ## Before You Begin
 
     If you have questions about:
@@ -101,6 +122,12 @@ Subagent (general-purpose):
     - Did I follow TDD if required?
     - Are tests comprehensive?
     - Is the test output pristine (no stray warnings or noise)?
+    - Did I execute every row using its exact Platform, Test File, and Test Case?
+    - Does each test case assert the AC's WHEN/THEN outcome rather than merely render, launch, compile, or read a document?
+    - Across the planned rows, does every observable WHEN/THEN/AND outcome have an explicit assertion, including internal state/calls/persistence and visible behavior?
+    - For a user-triggered UI WHEN, did the UI test act through the rendered control rather than call the ViewModel, callback, repository, or reducer directly?
+    - After an action that may recompose, rerender, refresh, or navigate, did I reacquire UI nodes with stable semantic selectors instead of reusing stale node handles?
+    - If it says `Unavailable`, did I avoid silently adding test infrastructure and preserve the documented reason?
 
     If you find issues during self-review, fix them now before reporting.
 
@@ -116,8 +143,9 @@ Subagent (general-purpose):
     - What you implemented (or what you attempted, if blocked)
     - What you tested and test results
     - **TDD Evidence** (if TDD was required for this task):
-      - RED: command run, relevant failing output before implementation, and why the failure was expected
+      - RED: command run, relevant failing output before new or changed production behavior, and why the failure was expected; for test-only coverage of existing behavior, record the baseline PASS instead and never manufacture a failure
       - GREEN: command run and relevant passing output after implementation
+    - **TDD Test Evidence**: for each Unit, Component, Integration, or UI row, record Requirement, AC, Platform, Test File, Test Case, action, and RED/GREEN results for new or changed behavior; test-only coverage and `Run existing` record the baseline/regression result, and `Unavailable` records inspected locations and the missing capability
     - Files changed
     - Self-review findings (if any)
     - Any issues or concerns
@@ -141,7 +169,10 @@ Subagent (general-purpose):
 **Placeholders:**
 - `[task name]` — short name for the task
 - `[MODEL]` — REQUIRED: implementer model per build-executor Model Selection
-- `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N` prints the path)
+- `[BRIEF_FILE]` — REQUIRED: the task brief file (`ssf task-brief PLAN N` prints the path)
+- `[PROJECT_BASELINE]` — `docs/project/project-guidelines.md` plus the selected classic implementation, or `Not configured`
+- `[PROJECT_MEMORIES]` — `.spec-superflow/memories/MEMORY.md` and only the relevant linked topic files, or `Not configured`
+- `[CAPABILITY_SPECS]` — relevant project-root `specs/<capability>/spec.md` paths, or `Not configured`
 - `[directory]` — working directory for the implementation
 - `[REPORT_FILE]` — REQUIRED: the file path where the implementer writes its full report
 

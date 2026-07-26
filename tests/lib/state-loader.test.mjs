@@ -152,7 +152,7 @@ describe('state-loader: writeState()', () => {
   it('writes all DP fields (0-7)', () => {
     const state = {
       state: 'closing',
-      // DP-0 uses different fields (decisions + confirmed, not result)
+      dp_0_result: 'confirmed: scope locked',
       dp_0_decisions: 'scope: csv export only, tech: nestjs',
       dp_0_confirmed: 'true',
       dp_0_timestamp: '2026-07-01T08:00:00Z',
@@ -168,6 +168,7 @@ describe('state-loader: writeState()', () => {
     stateLoader.writeState(tempDir, state);
 
     const content = readFileSync(join(tempDir, '.spec-superflow.yaml'), 'utf-8');
+    assert.ok(content.includes('dp_0_result: confirmed: scope locked'));
     assert.ok(content.includes('dp_0_decisions: scope: csv export only, tech: nestjs'));
     assert.ok(content.includes('dp_0_confirmed: true'));
     assert.ok(content.includes('dp_1_result: confirmed: csv export'));
@@ -219,10 +220,12 @@ describe('state-loader: updateField()', () => {
 
     stateLoader.updateField(tempDir, 'state', 'specifying');
     stateLoader.updateField(tempDir, 'batches_completed', 3);
+    stateLoader.updateField(tempDir, 'dp_0_result', 'confirmed: initial scope');
 
     const state = stateLoader.readState(tempDir);
     assert.equal(state.state, 'specifying');
     assert.equal(state.batches_completed, 3);
+    assert.equal(state.dp_0_result, 'confirmed: initial scope');
     // workflow should still be 'full'
     assert.equal(state.workflow, 'full');
   });

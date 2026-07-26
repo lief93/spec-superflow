@@ -1,37 +1,53 @@
-# 技术设计
+# Technical Design
 
-## 上下文
+## Context
 
-- 当前状态：
-- 约束条件：
-- 利益相关者：
+- Current state:
+- Constraints:
+- Stakeholders:
 
-## 目标
+## Goals
 
-- 本设计必须达成什么
+- What this design must achieve
 
-## 非目标
+## Non-Goals
 
-- 本设计刻意不解决什么
+- What this design intentionally does not address
 
-## 决策
+## Project Baseline Alignment
 
-### 决策 1
+Use the exact Scenario titles from the Spec. If the project baseline is not initialized, enter `Not configured` as the source; do not invent rules.
 
-- **选择**：
-- **理由**：
-- **考虑的替代方案**：
+| Scenario | Baseline Source | Classic Implementation | Applied Constraints | Deviation |
+|---|---|---|---|---|
+| Scenario title | `docs/project/project-guidelines.md` | Classic implementation title | Architecture, state, data, and reuse rules that apply to this Scenario | `None` or an approved deviation with rationale |
 
-## 风险与权衡
+## Requirement And Scenario Coverage
 
-- 风险 → 缓解措施
+Use the exact Requirement and Scenario titles from the Spec. Map every Scenario to a design decision; enter `No design change` when it has no design impact.
 
-## 迁移计划
+| Requirement | Scenario | Design Decision | Affected Area | Why Here |
+|---|---|---|---|---|
+| Requirement title | Scenario title | Decision title or `No design change` | Module, component, or responsibility boundary | Why this area owns the change |
 
-- 上线步骤：
-- 回滚步骤：
+## Decisions
 
-## 待明确问题
+### Decision: Decision title
 
-- 问题：
-- 决策负责人：
+- **Choice**:
+- **Rationale**:
+- **Alternatives considered**:
+
+## Risks And Trade-Offs
+
+- Risk -> Mitigation
+
+## Migration Plan
+
+- Rollout steps:
+- Rollback steps:
+
+## Open Questions
+
+- Question:
+- Decision owner:

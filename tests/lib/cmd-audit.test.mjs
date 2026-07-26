@@ -58,7 +58,8 @@ describe('cmd-audit: generateReport()', () => {
     const state = {
       change_name: 'test',
       state: 'specifying',
-      dp_0_result: 'confirmed',
+      dp_0_decisions: 'scope confirmed',
+      dp_0_confirmed: 'true',
       dp_1_result: 'confirmed: ok',
       // dp_2 through dp_7 are all null (not recorded)
     };
@@ -67,6 +68,22 @@ describe('cmd-audit: generateReport()', () => {
 
     assert.ok(report.includes('2/8 已记录'), `Expected 2/8 recorded but got: ${report}`);
     assert.ok(report.includes('6/8 未记录'), `Expected 6/8 missing but got: ${report}`);
+    assert.ok(report.includes('confirmed: scope confirmed'));
+  });
+
+  it('uses dp_0_decisions when dp_0_result is absent', () => {
+    const state = {
+      change_name: 'test',
+      state: 'specifying',
+      dp_0_decisions: 'scope: one capability only',
+      dp_0_confirmed: 'true',
+      dp_0_timestamp: '2026-07-01T08:00:00Z',
+    };
+
+    const report = generateReport(tempDir, state);
+
+    assert.ok(report.includes('confirmed: scope: one capability only'));
+    assert.ok(report.includes('1/8 已记录'));
   });
 
   it('marks unrecorded DPs with interpretation hint', () => {

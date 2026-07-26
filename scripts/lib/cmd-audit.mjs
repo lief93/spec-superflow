@@ -21,6 +21,24 @@ function formatResult(result) {
   return String(result);
 }
 
+function hasRecordedValue(value) {
+  return value !== null && value !== undefined && value !== '';
+}
+
+function getDpResult(state, index) {
+  if (index !== 0) return state[`dp_${index}_result`];
+
+  if (hasRecordedValue(state.dp_0_result)) return state.dp_0_result;
+  if (hasRecordedValue(state.dp_0_decisions)) {
+    if (String(state.dp_0_confirmed).toLowerCase() === 'true') {
+      return `confirmed: ${state.dp_0_decisions}`;
+    }
+    return state.dp_0_decisions;
+  }
+  if (hasRecordedValue(state.dp_0_confirmed)) return `confirmed: ${state.dp_0_confirmed}`;
+  return null;
+}
+
 function formatTimestamp(ts) {
   if (ts === null || ts === undefined || ts === '') return '—';
   return String(ts);
@@ -29,7 +47,7 @@ function formatTimestamp(ts) {
 function generateReport(changeDir, state) {
   const rows = [];
   for (let i = 0; i <= 7; i++) {
-    const result = formatResult(state[`dp_${i}_result`]);
+    const result = formatResult(getDpResult(state, i));
     const timestamp = formatTimestamp(state[`dp_${i}_timestamp`]);
     rows.push({ dp: i, name: DP_NAMES[i], result, timestamp });
   }
