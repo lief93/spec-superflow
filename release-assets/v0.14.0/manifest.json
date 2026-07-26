@@ -3,6 +3,6 @@
   "version": "0.14.0",
   "node": ">=22",
   "package": "spec-superflow-0.14.0.tgz",
-  "sha256": "4e77954067299e243ab873650c8b835444399f7dfb6b6ee04a390ec951a7266b",
+  "sha256": "39a69a654c05045882bb4779ad62a4f3ea91fa3e1cac42fa49ab5c0f99bff574",
   "pluginPathAfterExtraction": "package/"
 }

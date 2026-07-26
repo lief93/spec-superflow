@@ -9,14 +9,22 @@ The format loosely follows Keep a Changelog.
 ### Added
 
 - **OpenPlugin manifest** - Added `.plugin/plugin.json` so Plugin-bundled MCP servers can resolve files through `${PLUGIN_ROOT}` outside business repositories.
-- **Plugin MCP regression fixture** - Added a dependency-free stdio MCP fixture that verifies initialization, tool discovery, tool calls, and Plugin-relative working directories.
+- **Plugin MCP regression fixture** - Added a dependency-free stdio protocol fixture for initialization, tool-list/call messages, and Plugin-relative path resolution; it is not production VS Code runtime evidence.
 - **Workflow initialization command** - Added `/workflow-init` to install and verify the global CLI version required by the selected Spec Superflow Plugin.
-- **Offline installation bundle** - Added a reproducible package, checksum manifest, and verifier for Plugin-only installation and CLI upgrades without public npm access.
+- **Offline installation bundle** - Added a reproducible package, checksum manifest, and verifier for direct local tgz CLI installation and upgrades without public npm access.
 - **Deployment and demo evidence** - Added an intranet AI execution checklist, workflow briefing, demo runbook, and locally reproduced installation and requirement evidence.
 
 ### Changed
 
 - **VS Code deployment guidance** - Documented default-branch source installation, pinned marketplace sources, local branch registration, and the runtime boundary for bundled and externally installed MCP servers.
+- **Evidence classification** - Local evidence now reports only executed package and CLI primitives; VS Code `/workflow-init` remains pending and the empty production MCP remains not configured.
+
+### Fixed
+
+- **Fail-closed bundle integrity** - Verify manifest identity, checksum sidecars, actual package digest, archive readability, internal package identity, and forbidden entries before extraction.
+- **Maintenance command status** - `ssf doctor` now returns non-zero when source-checkout checks fail, and is no longer used as installed CLI evidence.
+- **Workflow-init version drift** - Version synchronization and consistency checks now include the offline tgz filename.
+- **Package hygiene** - Exclude change history, tests, validation evidence, release bundles, `.DS_Store`, AppleDouble, and editor temporary `.DS_Store` files from npm packages.
 
 ## [0.13.0] - 2026-07-24
 

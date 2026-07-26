@@ -1,4 +1,4 @@
-// ssf doctor — health check for spec-superflow installation and project
+// ssf doctor — maintenance check for a spec-superflow source checkout
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig } from './config-loader.mjs';
@@ -211,6 +211,7 @@ export async function run(args) {
   console.log('');
   if (hasFailure) {
     console.log('⚠️  Some checks need attention.');
+    process.exitCode = 1;
   } else {
     console.log('✅ All checks passed.');
   }

@@ -37,7 +37,7 @@ Usage: ssf <command> [options]
 Commands:
   list                  List all changes and their status
   validate <dir>        Validate artifacts in a change directory
-  doctor                Health check (versions, hooks, skills, docs)
+  doctor                Source-checkout maintenance check
   version <semver>      Sync version to all manifest files
   sync <change-dir>     Merge delta specs into main specs
   config [options]      Display or modify configuration

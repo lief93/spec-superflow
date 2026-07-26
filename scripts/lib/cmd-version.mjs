@@ -28,6 +28,7 @@ const TEXT_FILES = [
   { file: '.claude/always/phase-guard.md', pattern: /(# spec-superflow v)0\.\d+\.\d+( \|)/g,      replacement: '$10.%MINOR%.%PATCH%$2' },
   { file: 'GEMINI.md',              pattern: /(# spec-superflow v)0\.\d+\.\d+( \|)/g,              replacement: '$10.%MINOR%.%PATCH%$2' },
   { file: 'commands/workflow-init.md', pattern: /((?:spec-superflow-cli-version: |spec-superflow@|version `))\d+\.\d+\.\d+/g, replacement: '$1%VERSION%' },
+  { file: 'commands/workflow-init.md', pattern: /(spec-superflow-)\d+\.\d+\.\d+(\.tgz)/g, replacement: '$1%VERSION%$2' },
 ];
 
 function getNestedValue(obj, pathParts) {

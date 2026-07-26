@@ -77,6 +77,8 @@ repositories.
 
 `.mcp.json` intentionally contains an empty `mcpServers` object until the team
 defines a real server, executable, ownership model, and security policy.
+The production status is therefore **Not Configured**: this Plugin version does
+not ship a callable MCP server.
 
 The Plugin uses the OpenPlugin manifest at `.plugin/plugin.json`. A server
 whose code is shipped inside the Plugin must use `${PLUGIN_ROOT}` because MCP
@@ -133,6 +135,7 @@ Test the installed plugin in at least two unrelated repositories:
 7. Chat customization diagnostics show only the intended central
    spec-superflow plugin as the workflow source; if an old project copy remains,
    the selected agent still opens skills through its explicit central registry.
-8. A Plugin-bundled test MCP starts from `${PLUGIN_ROOT}`, exposes its tool in
-   Configure Tools, and can be called from Chat while the business repository
-   contains no MCP files or copied Plugin resources.
+8. MCP is reported as **Not Configured** unless a separately approved server is
+   added and called in the real VS Code host. The repository fixture verifies
+   stdio protocol behavior and `${PLUGIN_ROOT}` path resolution only; it is not
+   evidence of production Plugin discovery or a Chat tool call.

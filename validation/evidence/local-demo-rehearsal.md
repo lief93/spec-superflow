@@ -6,7 +6,9 @@
 
 | Step | Actual result | Elapsed | Evidence |
 |---|---|---:|---|
-| Verify Plugin-only bundle, local CLI install, upgrade, READY, and idempotency | PASS | 4.44 s | `validation/evidence/offline-install-upgrade.md` |
+| Verify bundle integrity, direct local CLI install, upgrade, and repeated install | PASS | 4.44 s | `validation/evidence/offline-install-upgrade.md` |
+| Discover and execute `/workflow-init`, render READY, and invoke it twice | Pending VS Code runtime | Not executed | Internal `installation.md` |
+| Discover and call a production Plugin MCP | Not Configured | No production server | Internal `plugin-runtime.md` |
 | Validate ordinary requirement artifacts | PASS | 0.05 s | All five planning/contract artifacts valid |
 | Check workflow state consistency | PASS | 0.03 s | State `closing`; stored and current hash match |
 | Run full affected unit suite | PASS | 4.08 s | `app/build/test-results/testDebugUnitTest/` |
@@ -17,4 +19,7 @@ Android project and emulator are warm. The first Gradle build is intentionally
 excluded from the live demo and retained as evidence because it took more than
 one minute on this machine.
 
-Overall: **PASS**
+Executed local checks: **PASS**
+
+VS Code Plugin Chat runtime remains **PENDING**. Production Plugin MCP remains
+**NOT CONFIGURED**.
