@@ -67,6 +67,9 @@ const TEXT_CHECKS = [
   { file: 'llms.txt',               extract: /Current version: v(\d+\.\d+\.\d+)\./ },
   { file: '.claude/always/phase-guard.md', extract: /# spec-superflow v(\d+\.\d+\.\d+) \|/ },
   { file: 'GEMINI.md',              extract: /# spec-superflow v(\d+\.\d+\.\d+) \|/ },
+  { file: 'commands/workflow-init.md', extract: /spec-superflow-cli-version: (\d+\.\d+\.\d+)/ },
+  { file: 'commands/workflow-init.md', extract: /spec-superflow@(\d+\.\d+\.\d+)/ },
+  { file: 'commands/workflow-init.md', extract: /version `(\d+\.\d+\.\d+)`/ },
 ];
 
 for (const check of TEXT_CHECKS) {

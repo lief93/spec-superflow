@@ -4,12 +4,15 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
-## [Unreleased]
+## [0.14.0] - Unreleased
 
 ### Added
 
 - **OpenPlugin manifest** - Added `.plugin/plugin.json` so Plugin-bundled MCP servers can resolve files through `${PLUGIN_ROOT}` outside business repositories.
 - **Plugin MCP regression fixture** - Added a dependency-free stdio MCP fixture that verifies initialization, tool discovery, tool calls, and Plugin-relative working directories.
+- **Workflow initialization command** - Added `/workflow-init` to install and verify the global CLI version required by the selected Spec Superflow Plugin.
+- **Offline installation bundle** - Added a reproducible package, checksum manifest, and verifier for Plugin-only installation and CLI upgrades without public npm access.
+- **Deployment and demo evidence** - Added an intranet AI execution checklist, workflow briefing, demo runbook, and locally reproduced installation and requirement evidence.
 
 ### Changed
 

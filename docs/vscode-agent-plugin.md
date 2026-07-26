@@ -50,6 +50,14 @@ instructions file.
 The plugin is installed once in the user's VS Code profile and is available in
 multiple repositories.
 
+If the global CLI is not installed yet, install the Plugin first, select the
+**Spec Superflow** agent, and run `/workflow-init`. The command checks Node.js
+and the current CLI, installs the version pinned to the Plugin through the
+machine's configured npm registry when needed, and verifies `ssf --version`.
+Terminal execution remains subject to the client's approval policy.
+For an offline install, pass the matching release package explicitly:
+`/workflow-init package=/absolute/path/spec-superflow-0.14.0.tgz`.
+
 Direct source installation from a Git URL uses the repository's default
 branch. Use a marketplace source object with `ref` or `sha` when the installed
 version must be pinned. For local development, clone or check out the desired
