@@ -11,12 +11,32 @@ function read(path) {
 
 describe('VS Code Agent Plugin', () => {
   it('registers skills, agents, and the MCP configuration', () => {
-    const manifest = JSON.parse(read('plugin.json'));
+    const manifest = JSON.parse(read('.plugin/plugin.json'));
+    const mcp = JSON.parse(read('.mcp.json'));
 
     assert.equal(manifest.skills, 'skills/');
     assert.equal(manifest.agents, 'agents/');
     assert.equal(manifest.mcpServers, '.mcp.json');
-    assert.deepEqual(JSON.parse(read('.mcp.json')), { mcpServers: {} });
+    assert.deepEqual(mcp, { mcpServers: {} });
+  });
+
+  it('keeps a runnable plugin-relative MCP fixture', () => {
+    const fixtureRoot = join(ROOT, 'tests', 'fixtures', 'vscode-plugin-mcp');
+    const manifest = JSON.parse(
+      readFileSync(join(fixtureRoot, '.plugin', 'plugin.json'), 'utf8'),
+    );
+    const mcp = JSON.parse(readFileSync(join(fixtureRoot, '.mcp.json'), 'utf8'));
+
+    assert.equal(manifest.mcpServers, '.mcp.json');
+    assert.deepEqual(mcp.mcpServers['spec-superflow-local'], {
+      command: 'node',
+      args: ['${PLUGIN_ROOT}/servers/spec-superflow-mcp.mjs'],
+      cwd: '${PLUGIN_ROOT}',
+    });
+    assert.equal(
+      existsSync(join(fixtureRoot, 'servers', 'spec-superflow-mcp.mjs')),
+      true,
+    );
   });
 
   it('provides an opt-in Spec Superflow agent', () => {

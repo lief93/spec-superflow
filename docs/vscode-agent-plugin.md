@@ -50,34 +50,53 @@ instructions file.
 The plugin is installed once in the user's VS Code profile and is available in
 multiple repositories.
 
+Direct source installation from a Git URL uses the repository's default
+branch. Use a marketplace source object with `ref` or `sha` when the installed
+version must be pinned. For local development, clone or check out the desired
+branch and register it without copying it into a business repository:
+
+```jsonc
+"chat.pluginLocations": {
+  "/absolute/path/to/spec-superflow": true
+}
+```
+
 `ssf doctor` checks a spec-superflow source checkout and is intended for
 workflow maintainers. It is not an installation check for business
 repositories.
 
-## MCP Template
+## MCP Packaging
 
 `.mcp.json` intentionally contains an empty `mcpServers` object until the team
 defines a real server, executable, ownership model, and security policy.
 
-Add a server only after its command and configuration are known:
+The Plugin uses the OpenPlugin manifest at `.plugin/plugin.json`. A server
+whose code is shipped inside the Plugin must use `${PLUGIN_ROOT}` because MCP
+processes run outside the business repository:
 
 ```json
 {
   "mcpServers": {
     "company-service": {
-      "command": "company-mcp-server",
-      "args": ["--stdio"],
-      "env": {
-        "COMPANY_ENV": "${input:company-environment}"
-      }
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/servers/company-service.mjs"],
+      "cwd": "${PLUGIN_ROOT}"
     }
   }
 }
 ```
 
-Prefer a command installed and versioned by the company. Do not commit tokens
-or machine-specific credentials. Plugin MCP servers start whenever the plugin
-is enabled, not only when the Spec Superflow agent is selected.
+No separate MCP package installation is needed when the server implementation
+and its dependencies are included in the Plugin. The configured runtime still
+has to exist on the machine. For this project, `node` is already required by
+the global `ssf` CLI. A Python, Java, native, model-backed, or externally
+packaged MCP server still requires that runtime and its approved dependencies
+to be installed.
+
+For a company-managed server already available on `PATH`, configure its stable
+company command instead of `${PLUGIN_ROOT}`. Do not commit tokens or
+machine-specific credentials. Plugin MCP servers start whenever the Plugin is
+enabled, not only when the Spec Superflow agent is selected.
 
 ## Ownership
 
@@ -106,3 +125,6 @@ Test the installed plugin in at least two unrelated repositories:
 7. Chat customization diagnostics show only the intended central
    spec-superflow plugin as the workflow source; if an old project copy remains,
    the selected agent still opens skills through its explicit central registry.
+8. A Plugin-bundled test MCP starts from `${PLUGIN_ROOT}`, exposes its tool in
+   Configure Tools, and can be called from Chat while the business repository
+   contains no MCP files or copied Plugin resources.

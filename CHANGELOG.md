@@ -4,6 +4,17 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
+## [Unreleased]
+
+### Added
+
+- **OpenPlugin manifest** - Added `.plugin/plugin.json` so Plugin-bundled MCP servers can resolve files through `${PLUGIN_ROOT}` outside business repositories.
+- **Plugin MCP regression fixture** - Added a dependency-free stdio MCP fixture that verifies initialization, tool discovery, tool calls, and Plugin-relative working directories.
+
+### Changed
+
+- **VS Code deployment guidance** - Documented default-branch source installation, pinned marketplace sources, local branch registration, and the runtime boundary for bundled and externally installed MCP servers.
+
 ## [0.13.0] - 2026-07-24
 
 ### Added
