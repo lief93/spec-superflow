@@ -8,13 +8,13 @@ The format loosely follows Keep a Changelog.
 
 ### Added
 
-- **Self-contained VS Code runtime** - Added a production MCP bridge that runs the deterministic workflow scripts bundled in the Plugin.
-- **Workflow initialization command** - Added `/workflow-init` to verify the bundled Plugin runtime without installing another package.
+- **VS Code CLI bootstrap** - Added a bundled MCP server that checks, installs, and upgrades the matching global CLI from the Plugin source.
+- **Workflow initialization command** - Added `/workflow-init` with confirmation, exact version verification, idempotency, and upgrade rollback.
 - **Plugin repository guide** - Documented the required manifest, directory layout, component naming, installation, update, and runtime verification steps.
 
 ### Changed
 
-- **VS Code command execution** - The selected Agent maps logical `ssf` commands to the bundled `spec_superflow_run` MCP tool instead of relying on a PATH-installed CLI.
+- **VS Code command execution** - Workflow Skills execute the matching global `ssf` CLI directly after entry-point bootstrap.
 - **Single-source distribution** - Installing the Git repository now supplies Agent, Skills, Commands, templates, scripts, and runtime together.
 
 ### Fixed

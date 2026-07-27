@@ -69,6 +69,7 @@ const TEXT_CHECKS = [
   { file: 'GEMINI.md',              extract: /# spec-superflow v(\d+\.\d+\.\d+) \|/ },
   { file: 'commands/workflow-init.md', extract: /spec-superflow-plugin-version: (\d+\.\d+\.\d+)/ },
   { file: 'commands/workflow-init.md', extract: /version `(\d+\.\d+\.\d+)`/ },
+  { file: 'agents/spec-superflow.agent.md', extract: /spec-superflow-plugin-version: (\d+\.\d+\.\d+)/ },
 ];
 
 for (const check of TEXT_CHECKS) {

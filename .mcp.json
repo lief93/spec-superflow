@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "spec-superflow": {
-      "command": "node",
+      "command": "${PLUGIN_ROOT}/servers/spec-superflow-mcp-launcher.cmd",
       "args": [
         "${PLUGIN_ROOT}/servers/spec-superflow-mcp.mjs"
       ],

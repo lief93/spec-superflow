@@ -5,7 +5,7 @@ description: Primary entry point for the spec-superflow state-machine workflow. 
 
 # Workflow Start
 
-Primary entry point for `spec-superflow`. Jobs: load the project development baseline, relevant project memories, and change artifacts; check for updates; confirm DP-0; determine state; route to the correct skill; and block invalid transitions.
+Primary entry point for `spec-superflow`. Jobs: load the project development baseline, relevant project memories, and change artifacts; confirm DP-0; determine state; route to the correct skill; and block invalid transitions.
 
 ## Use This Skill When
 
@@ -19,10 +19,9 @@ Do NOT invoke for: general coding tasks outside spec-superflow changes, casual q
 
 ## Initialization
 
-1. **Update check**: Run `ssf check-update`. Exit 0 → continue. Exit 1 → non-blocking upgrade reminder. Exit 2 → skip.
-2. **Load project baseline**: If `docs/project/project-guidelines.md` exists, read its technology and architecture tables, inspect the classic implementation index, and read only recipes relevant to the request. If the user explicitly asks to initialize or refresh the project baseline, route to `project-init`. A missing baseline does not block an ordinary change; mention `/project-init` once.
-3. **Recall shared auto memory**: If `.spec-superflow/memories/MEMORY.md` exists, read only its first 200 lines or 25,000 bytes. Use the one-line hooks to select up to five `feedback`, `project`, or `reference` topics clearly relevant to the request, and verify stale claims before relying on them. If the user asks to remember, forget, inspect, or consolidate a project learning, route to `memory-manager`. Missing Memory is normal and does not need initialization at task start.
-4. **Inspect change folder**: Check for `proposal.md`, `specs/`, `design.md`, `tasks.md`, `execution-contract.md`. Answer: Is the change fuzzy? Artifacts missing/unstable? Contract exist? User approved contract? Execution in progress or blocked? In verification/wrap-up?
+1. **Load project baseline**: If `docs/project/project-guidelines.md` exists, read its technology and architecture tables, inspect the classic implementation index, and read only recipes relevant to the request. If the user explicitly asks to initialize or refresh the project baseline, route to `project-init`. A missing baseline does not block an ordinary change; mention `/project-init` once.
+2. **Recall shared auto memory**: If `.spec-superflow/memories/MEMORY.md` exists, read only its first 200 lines or 25,000 bytes. Use the one-line hooks to select up to five `feedback`, `project`, or `reference` topics clearly relevant to the request, and verify stale claims before relying on them. If the user asks to remember, forget, inspect, or consolidate a project learning, route to `memory-manager`. Missing Memory is normal and does not need initialization at task start.
+3. **Inspect change folder**: Check for `proposal.md`, `specs/`, `design.md`, `tasks.md`, `execution-contract.md`. Answer: Is the change fuzzy? Artifacts missing/unstable? Contract exist? User approved contract? Execution in progress or blocked? In verification/wrap-up?
 
 ## DP-0: User Confirmation Gate
 
