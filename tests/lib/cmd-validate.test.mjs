@@ -219,6 +219,29 @@ Rate limiting runs before handlers.
     assert.ok(result.stdout.includes('Test File must be a platform test source file'));
   });
 
+  for (const extension of ['cjs', 'mjs']) {
+    it(`accepts a Node.js ${extension} test source file`, () => {
+      const changeDir = join(tempDir, `tasks-${extension}-test`);
+      mkdirSync(changeDir, { recursive: true });
+      writeValidPlanningArtifacts(changeDir);
+      writeValidExecutionContract(changeDir);
+      for (const fileName of ['tasks.md', 'execution-contract.md']) {
+        const path = join(changeDir, fileName);
+        writeFileSync(
+          path,
+          readFileSync(path, 'utf-8').replace(
+            '`test/rate-limit.test.ts`',
+            `\`tests/rate-limit.test.${extension}\``,
+          ),
+        );
+      }
+
+      const result = runValidate(changeDir);
+
+      assert.equal(result.exitCode, 0, result.stdout);
+    });
+  }
+
   it('requires a UI test row for a user-visible AC', () => {
     const changeDir = join(tempDir, 'tasks-visible-ac-without-ui');
     mkdirSync(changeDir, { recursive: true });

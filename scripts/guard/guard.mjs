@@ -11,7 +11,7 @@ import { check as checkDpGate } from './checks/dp-gate-passed.mjs';
 // Transition matrix: <from>:<to> → required check dimensions
 const TRANSITION_CHECKS = {
   // Forward transitions
-  'exploring:specifying':           ['artifacts-exist'],
+  'exploring:specifying':           [],
   'specifying:bridging':            ['artifacts-exist', 'schema-valid'],
   'bridging:approved-for-build':    ['artifacts-exist', 'schema-valid', 'contract-fresh', 'dp-gate-passed'],
   'approved-for-build:executing':   ['artifacts-exist', 'contract-fresh', 'dp-gate-passed'],

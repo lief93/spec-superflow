@@ -2,7 +2,7 @@
 // Tests for scripts/lib/cmd-state.mjs
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
@@ -153,6 +153,158 @@ describe('cmd-state: transition', () => {
       const transition = ssf(`state transition ${relChangeDir} specifying`, { cwd: projectDir });
       assert.equal(transition.exitCode, 0, transition.stderr);
       assert.ok(transition.stdout.includes('exploring -> specifying'));
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it('progresses a new full-workflow Change through every mainline state', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ssf-state-lifecycle-'));
+    const changeDir = join(projectDir, 'changes', 'full-lifecycle');
+
+    function expectState(expected) {
+      const result = ssf(`state get ${changeDir} state`);
+      assert.equal(result.exitCode, 0, result.stderr);
+      assert.equal(result.stdout, expected);
+    }
+
+    try {
+      assert.equal(ssf(`state init ${changeDir}`).exitCode, 0);
+      expectState('exploring');
+
+      assert.equal(ssf(`state transition ${changeDir} specifying`).exitCode, 0);
+      expectState('specifying');
+
+      mkdirSync(join(changeDir, 'specs', 'lifecycle'), { recursive: true });
+      writeFileSync(join(changeDir, 'proposal.md'), `## Why
+The workflow must persist every mainline state so later guards inspect the real lifecycle instead of inferred intent.
+## What Changes
+- Exercise the full state-machine lifecycle.
+`);
+      writeFileSync(join(changeDir, 'specs', 'lifecycle', 'spec.md'), `## ADDED Requirements
+### Requirement: Persist workflow state
+The system SHALL persist each approved mainline transition.
+#### Scenario: Complete the workflow
+- **WHEN** every phase gate passes
+- **THEN** the Change reaches closing
+`);
+      writeFileSync(join(changeDir, 'design.md'), `# Design
+## Context
+The CLI owns persisted workflow state.
+## Goals
+Persist each legal mainline transition.
+## Requirement And Scenario Coverage
+| Requirement | Scenario | Design Decision | Affected Area | Why Here |
+|---|---|---|---|---|
+| Persist workflow state | Complete the workflow | Use state transition commands | State CLI | The CLI owns persisted state |
+## Decisions
+### Decision: Use state transition commands
+- Choice: Run the guarded CLI transition for every phase.
+- Rationale: The state file remains the auditable source of lifecycle state.
+- Alternatives: Infer state only from artifacts.
+## Risks And Trade-Offs
+- Every phase must run its transition command.
+`);
+      writeFileSync(join(changeDir, 'tasks.md'), `# Tasks
+## Interfaces
+- Batch 1 verifies the state-machine lifecycle.
+## Batch 1: Complete the workflow
+Depends on: None
+### AC: Complete the workflow
+- **Requirement**: Persist workflow state
+- **User-visible**: No
+#### File Changes
+##### Modify \`skills/workflow-start/SKILL.md\`
+- **Responsibility**: Persist every successful mainline route.
+- **Change**: Pair every guard with its state transition.
+- **Used by**: Workflow routing.
+#### TDD Test Plan
+| Layer | Platform | Action | Test File | Test Case | Proves |
+|---|---|---|---|---|---|
+| Integration | Node | Add | \`tests/lib/cmd-state.test.mjs\` | \`progresses a new full-workflow Change through every mainline state\` | Every mainline state is persisted in order. |
+#### TDD Steps
+- [ ] RED: Prove a missing transition leaves stale state.
+- [ ] GREEN: Persist every successful transition.
+- [ ] REFACTOR: Run state and guard regression tests.
+`);
+
+      assert.equal(ssf(`state transition ${changeDir} bridging`).exitCode, 0);
+      expectState('bridging');
+
+      writeFileSync(join(changeDir, 'execution-contract.md'), `# Execution Contract
+## Intent Lock
+Persist every mainline workflow transition.
+## Approved Behavior
+The Change reaches each state only after its guard passes.
+## Requirement Traceability
+| Requirement | Approved Behavior | Test Obligation | Batch |
+|---|---|---|---|
+| Persist workflow state | Persist every successful mainline transition | Execute the lifecycle integration test | Batch 1 |
+## AC Test Matrix
+| Requirement | AC | Layer | Platform | Action | Test File | Test Case | Proves |
+|---|---|---|---|---|---|---|---|
+| Persist workflow state | Complete the workflow | Integration | Node | Add | \`tests/lib/cmd-state.test.mjs\` | \`progresses a new full-workflow Change through every mainline state\` | Every mainline state is persisted in order. |
+## Design Constraints
+Use the guarded state CLI.
+## Task Batches
+### Batch 1
+- Complete the lifecycle integration.
+## Test Obligations
+- Run the lifecycle integration test.
+## Frontend Verification
+- **Frontend Impact**: No
+- **Reason**: State-machine behavior has no user interface.
+## Execution Mode
+- Mode: Inline
+## Verification Dimensions
+| Dimension | Status | Findings |
+|---|---|---|
+| Completeness | Pending | - |
+## Review Gates
+- Review before closure.
+## Escalation Rules
+- Stop on any failed transition.
+`);
+      assert.equal(ssf(`state init ${changeDir}`).exitCode, 0);
+      assert.equal(ssf(`state set ${changeDir} dp_3_result "approved: lifecycle contract"`).exitCode, 0);
+      assert.equal(ssf(`state transition ${changeDir} approved-for-build`).exitCode, 0);
+      expectState('approved-for-build');
+
+      assert.equal(ssf(`state set ${changeDir} dp_4_result "inline execution"`).exitCode, 0);
+      assert.equal(ssf(`state transition ${changeDir} executing`).exitCode, 0);
+      expectState('executing');
+
+      const tasksPath = join(changeDir, 'tasks.md');
+      writeFileSync(
+        tasksPath,
+        readFileSync(tasksPath, 'utf-8').replaceAll('- [ ]', '- [x]'),
+      );
+      writeFileSync(join(changeDir, 'pr-summary.md'), `## AC Test Evidence
+| Requirement | AC | Layer | Platform | Test File | Test Case | Result | Command | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| Persist workflow state | Complete the workflow | Integration | Node | \`tests/lib/cmd-state.test.mjs\` | \`progresses a new full-workflow Change through every mainline state\` | Pass | \`node --test tests/lib/cmd-state.test.mjs\` | Mainline states persisted in order. |
+`);
+      assert.equal(ssf(`state set ${changeDir} batches_completed 1`).exitCode, 0);
+      assert.equal(ssf(`state set ${changeDir} test_result pass`).exitCode, 0);
+      assert.equal(ssf(`state rebuild ${changeDir}`).exitCode, 0);
+
+      const closingOwners = [
+        ['release-archivist', readFileSync(join(process.cwd(), 'skills/release-archivist/SKILL.md'), 'utf-8')],
+        ['workflow-start', readFileSync(join(process.cwd(), 'skills/workflow-start/SKILL.md'), 'utf-8')],
+      ].filter(([, content]) =>
+        content.includes('ssf state transition <change-dir> closing')
+        || content.includes('ssf state transition <dir> closing'));
+
+      for (const [owner] of closingOwners) {
+        const transition = ssf(`state transition ${changeDir} closing`);
+        assert.equal(
+          transition.exitCode,
+          0,
+          `${owner} attempted a duplicate closing transition: ${transition.stderr}`,
+        );
+      }
+      assert.equal(closingOwners.length, 1, 'exactly one Skill must own executing -> closing');
+      expectState('closing');
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }

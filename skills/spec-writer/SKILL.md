@@ -17,10 +17,16 @@ Run `ssf config --get artifacts.order` and `ssf config --get artifacts.skip`. Ge
 
 ## Artifact Roles
 
-- `proposal.md`: why and scope
-- `specs/`: required behavior (testable)
-- `design.md`: architecture decisions and trade-offs (not line-by-line)
-- `tasks.md`: dependency-aware implementation steps
+- `<change-dir>/proposal.md`: why and scope
+- `<change-dir>/specs/<capability>/spec.md`: required behavior (testable)
+- `<change-dir>/design.md`: architecture decisions and trade-offs (not line-by-line)
+- `<change-dir>/tasks.md`: dependency-aware implementation steps
+
+All generated planning artifacts must stay under the active `<change-dir>`
+initialized by `workflow-start`. Never create planning artifacts at the
+repository root. Project-root `specs/` is only the long-lived current-behavior
+baseline read by this Skill; change-specific delta specs always use
+`<change-dir>/specs/<capability>/spec.md`.
 
 ## Working Rules
 
@@ -35,7 +41,22 @@ Must state: problem, what changes, capabilities affected, impact areas.
 Every requirement must be testable. Use SHALL or MUST. Every requirement must have at least one `#### Scenario:` with WHEN/THEN. Group under ADDED/MODIFIED/REMOVED Requirements headers.
 
 ### design.md
-Must have: Context (current state, constraints, stakeholders), Goals, Project Baseline Alignment, Requirement And Scenario Coverage, Decisions (Choice + Rationale + Alternatives considered), Risks And Trade-Offs. Project Baseline Alignment maps each Scenario to an applicable classic implementation and architecture rules, and records any deliberate deviation. The coverage table uses the exact Requirement and Scenario titles from the spec and maps each Scenario to a Design Decision, affected area, and reason that area owns the change. Use `No design change` when a Scenario needs no technical decision. Use relevant project memories to justify non-duplicated runtime or domain facts without copying whole memories into the design.
+Must have: Context (current state, constraints, stakeholders), Goals, Project Baseline Alignment, Requirement And Scenario Coverage, Decisions (Choice + Rationale + Alternatives considered), Risks And Trade-Offs. Project Baseline Alignment maps each Scenario to an applicable classic implementation and architecture rules, and records any deliberate deviation. The coverage table uses the exact Requirement and Scenario titles from the spec and maps each Scenario to a Design Decision, affected area, and reason that area owns the change. Requirement and Scenario cells contain only the exact titles from the spec, without `Requirement:` or `Scenario:` prefixes. Use `No design change` when a Scenario needs no technical decision. Every non-`No design change` value in the coverage table must exactly match a `### Decision: <title>` heading in `## Decisions`; a descriptive sentence or numbered list item is not a decision heading. Use relevant project memories to justify non-duplicated runtime or domain facts without copying whole memories into the design.
+
+Use this exact coverage structure:
+
+```markdown
+## Requirement And Scenario Coverage
+| Requirement | Scenario | Design Decision | Affected Area | Why Here |
+|---|---|---|---|---|
+| <exact Requirement title> | <exact Scenario title> | <exact Decision title> | path or symbol | ownership reason |
+
+## Decisions
+### Decision: <exact Decision title>
+- **Choice**: Selected implementation approach.
+- **Rationale**: Why this approach satisfies the Scenario.
+- **Alternatives considered**: Rejected alternatives and why.
+```
 
 ### tasks.md
 Must include:
@@ -43,10 +64,12 @@ Must include:
 - **Single ownership**: every spec Scenario belongs to exactly one Batch AC section
 - **File Changes per AC**: each Create/Modify/Delete file sits under the AC it serves, with a concrete explanation of what changes, what is added, and what is reused; when one file serves multiple ACs, repeat the file under each AC with only that AC's change
 - **Baseline-derived files**: derive ownership, implementation order, and reuse candidates from the selected classic implementation; explain deviations in `design.md` rather than silently choosing another pattern
+- **Interface impact closure**: when changing an interface, protocol, abstract type, public constructor, or shared contract, search for every production implementation, adapter, fake, mock, test double, and affected module. Include each file that must change, or record why a discovered implementation remains compatible. Add a compile or test obligation for every affected module; do not stop at the first implementation found
 - **AC as the join key**: derive file changes from `design.md`, but do not repeat Design Decision metadata in `tasks.md`; the exact Requirement/Scenario titles connect Spec, Design, and Tasks
 - **User-visible**: mark every AC `Yes` or `No`; `Yes` requires an AC-specific UI row
 - **TDD Test Plan**: use `Layer | Platform | Action | Test File | Test Case | Proves`; actions are `Add`, `Update`, `Run existing`, or `Unavailable`
 - **Complete scenario proof**: cover every observable WHEN/THEN/AND outcome in the Scenario across the planned rows. Use Unit/Component/Integration rows for internal state, calls, persistence, ordering, and concurrency; use UI rows for rendered state and user interaction. `Proves` must name the exact outcome, not merely say the test covers the AC
+- **Edge-case precision**: every required edge case named by the spec or design must appear in an exact test row. The row must identify the fixture or precondition and the observable assertion in `Test Case` or `Proves`. An indirect assertion such as one item disappearing does not prove an empty-result state
 - **Honest baseline**: `Action` describes the test-source change, not whether production behavior already exists. For test-only characterization or regression coverage, use `Add`/`Update`, record a baseline PASS, and never add a sentinel or deliberate failure to manufacture RED
 - **Real targets**: name one project-relative platform test source and exact case; docs, production code, commands, globs, directories, and suite labels are invalid
 - **Stable anchors**: use file paths and method/type names when known; do not use line numbers and do not split each method into a separate task
@@ -56,12 +79,41 @@ Must include:
 - **Zero placeholders**: no TBD, TODO, "figure out", "add appropriate"
 - **Dependency ordering**: depends only on prior tasks, explicit "Depends on: Batch N"
 
+Use these exact Markdown headings inside every `### AC:` section:
+
+```markdown
+## Batch 1: <goal>
+
+### AC: <exact Scenario title>
+- **Requirement**: <exact Requirement title>
+- **User-visible**: No
+
+#### File Changes
+##### Modify `path/to/file`
+- **Change**: Concrete resulting behavior.
+
+#### TDD Test Plan
+| Layer | Platform | Action | Test File | Test Case | Proves |
+|---|---|---|---|---|---|
+| Unit | Actual platform | Add | path/to/test | exact test name | exact outcome |
+
+#### TDD Steps
+- [ ] RED: Run the exact planned test and observe the behavior-specific failure.
+- [ ] GREEN: Implement the minimum change and rerun the test.
+- [ ] REFACTOR: Run the AC tests and relevant regression tests.
+```
+
+For file entries, use exactly `##### Create \`path/to/file\``,
+`##### Modify \`path/to/file\``, or `##### Delete \`path/to/file\``. Do not
+replace these headings with bold list labels such as `- **File Changes**:`.
+
 For Web, Android, HarmonyOS, iOS, desktop, or another user-interface client:
 
 - Unit, Component, Integration, and UI tests are all part of the AC's TDD strategy; do not treat UI Test as post-TDD evidence.
 - Put each behavior at the lowest stable test layer that proves it. Do not duplicate the same assertion across layers without a distinct regression risk.
 - User-visible rendering, interaction, navigation, input, state, or error behavior → include an `Add` or `Update` UI row and use it as the outer RED/GREEN loop.
 - A UI row must perform the Scenario's user action through a rendered control and assert the visible result. Direct ViewModel, callback, repository, or reducer calls may arrange preconditions or simulate a genuine system, lifecycle, or external event, but cannot replace a user WHEN. When no user affordance exists, add a UI row only if the Scenario has a distinct visible outcome to prove; otherwise keep the internal behavior at Unit, Component, or Integration level.
+- When visible output is derived from ViewModel, reducer, store, or repository state, identify an existing injectable rendering seam or plan the smallest content-level seam that accepts that state. Test state-to-UI derivation separately from lazy, scrolling, or repeated content behavior. Do not claim state mapping is covered by asserting only a child component parameter or only the subset of items currently composed on screen.
 - When that user-visible behavior already works and the requested change only adds or strengthens coverage, the outer loop is baseline PASS → preserve behavior; do not fabricate RED.
 - No new UI Test needed → mark the related historical UI file and case `Run existing`.
 - No direct match → use an exact file and case from the nearest module UI suite; a suite label is invalid.
@@ -71,12 +123,16 @@ For Web, Android, HarmonyOS, iOS, desktop, or another user-interface client:
 
 ## Artifact Generation
 
-Generate one at a time. Confirm each before next. This prevents scope drift — if proposal has errors, downstream artifacts are wrong.
+Generate one at a time. Stop after each artifact and wait for explicit user confirmation before generating the next. This prevents scope drift — if proposal has errors, downstream artifacts are wrong.
 
 1. `proposal.md` → present summary → wait for confirm
 2. `specs/` → present requirement list → wait for confirm
 3. `design.md` → present key decisions → wait for confirm
 4. `tasks.md` → present batch breakdown → wait for confirm
+
+Never generate `execution-contract.md`; only `contract-builder` owns that
+artifact, and it may run only after validated planning artifacts receive DP-2
+approval. Do not merge DP-2 and DP-3 into one response.
 
 ## Validation Checklist
 

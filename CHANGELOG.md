@@ -16,6 +16,7 @@ The format loosely follows Keep a Changelog.
 
 - **VS Code command execution** - Workflow Skills execute the matching global `ssf` CLI directly after entry-point bootstrap.
 - **Single-source distribution** - Installing the Git repository now supplies Agent, Skills, Commands, templates, scripts, and runtime together.
+- **Project instructions ownership** - `project-init` writes `.github/instructions/spec-superflow.instructions.md` and leaves existing root Copilot instructions unchanged.
 
 ### Fixed
 

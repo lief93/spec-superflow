@@ -69,7 +69,7 @@ For changes with multiple execution batches. Dispatch an implementer subagent pe
 2. **Handle response**: DONE → generate review package + dispatch reviewer. DONE_WITH_CONCERNS → assess. NEEDS_CONTEXT → provide context. BLOCKED → re-dispatch with better model or escalate.
 3. **Review**: Use `skills/build-executor/task-reviewer-prompt.md`. Pass the project baseline path and selected recipe, relevant memory paths or `Not configured`, and relevant capability `spec.md` paths. Reviewer returns spec compliance + baseline compliance + code quality verdicts.
 4. **Fix**: If Critical or Important issues, dispatch fix subagent, re-review.
-5. **Mark complete**: Append to `.superpowers/sdd/progress.md`: `AC N: complete (commits <base7>..<head7>, review clean)`
+5. **Mark complete**: Mark every completed `tasks.md` TDD checkbox as `[x]` before recording the batch complete. Append to `.superpowers/sdd/progress.md`: `AC N: complete (commits <base7>..<head7>, review clean)`.
 6. **Remember selectively**: If this AC produced verified team-wide feedback, code-invisible project context, an external reference, or an expensive-to-rediscover runtime or debugging conclusion, invoke `memory-manager` immediately. Personal feedback and ordinary fix recipes do not qualify. Most ACs should produce no Memory.
 
 Use every exact file/case row in the AC's `TDD Test Plan` to drive execution. Never substitute documentation checks, builds, another test, or an aggregate suite result for the named case. `Add` and `Update` use RED → GREEN → REFACTOR when production behavior is new or changing. When the AC only adds or strengthens coverage for behavior that already works, record a baseline PASS and preserve that behavior; never inject a sentinel or deliberate failure to manufacture RED. `Run existing` establishes the baseline before work and verifies regression afterward. For frontend UI rows:
@@ -88,7 +88,7 @@ For `Add`/`Update` that cover new or changed behavior, confirm the named UI case
 Use least powerful model per role: mechanical (cheap), integration/judgment (standard), architecture/design (most capable), review (match diff), final review (most capable). Always specify model explicitly.
 
 ### Progress Ledger
-Track in `.superpowers/sdd/progress.md`. Check for existing ledger — completed tasks are done. After each batch: `ssf state set <change-dir> batches_completed <N>`.
+Track in `.superpowers/sdd/progress.md`. Check for existing ledger — completed tasks are done. Run `ssf state set <change-dir> batches_completed <N>` only after those checkboxes are updated. The state count is the number of completed `## Batch N:` sections, not the number of tasks or checkboxes.
 
 ## Inline Execution Mode
 

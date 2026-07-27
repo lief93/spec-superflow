@@ -14,10 +14,10 @@ Generate a developer-reviewable project baseline from repository evidence. This 
 
 Write at the project root:
 
-- `.github/copilot-instructions.md`
+- `.github/instructions/spec-superflow.instructions.md`
 - `docs/project/project-guidelines.md`
 
-Use [Copilot instructions](./references/copilot-instructions.md) and [project guidelines](./references/project-guidelines.md) as the required structures. Preserve unrelated existing Copilot instructions. When rerunning, update the generated baseline without discarding developer-maintained facts.
+Use [Copilot instructions](./references/copilot-instructions.md) and [project guidelines](./references/project-guidelines.md) as the required structures. Leave an existing `.github/copilot-instructions.md` byte-for-byte unchanged. When rerunning, update the dedicated Spec Superflow instructions and generated baseline without duplicating content or discarding developer-maintained facts.
 
 ## Boundary
 
@@ -51,7 +51,14 @@ Exclude generated output, build caches, binaries, vendored dependencies, and tas
 
 ### Copilot instructions
 
-Keep this concise and operational. Tell the agent to read `docs/project/project-guidelines.md`, locate the relevant classic implementation, preserve ownership and source-of-truth rules, reuse existing mechanisms, and verify the affected path. Also tell it to read `.spec-superflow/memories/MEMORY.md` and relevant topic links when present, and to record only verified, non-personal, future-useful shared learnings through `memory-manager`.
+Generate `.github/instructions/spec-superflow.instructions.md` with
+`applyTo: "**"` frontmatter. Keep it concise and operational. Tell the agent to
+read `docs/project/project-guidelines.md`, locate the relevant classic
+implementation, preserve ownership and source-of-truth rules, reuse existing
+mechanisms, and verify the affected path. Also tell it to read
+`.spec-superflow/memories/MEMORY.md` and relevant topic links when present, and
+to record only verified, non-personal, future-useful shared learnings through
+`memory-manager`.
 
 ### Project guideline
 
@@ -93,7 +100,9 @@ For application repositories, the implementation steps must answer where relevan
 
 ## Existing Files
 
-- Existing `.github/copilot-instructions.md`: preserve unrelated content and add or update the project-baseline instruction without duplicating it.
+- Existing `.github/copilot-instructions.md`: leave it byte-for-byte unchanged.
+- Existing `.github/instructions/spec-superflow.instructions.md`: update only
+  the dedicated Spec Superflow baseline without duplicating it.
 - Existing `docs/project/project-guidelines.md`: treat confirmed developer facts as authoritative; refresh generated evidence around them and report conflicts instead of silently replacing them.
 
 ## Validation

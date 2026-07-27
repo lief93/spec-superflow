@@ -221,17 +221,50 @@ describe('VS Code Agent Plugin', () => {
     assert.match(agent, /name: Spec Superflow/);
     assert.match(agent, /user-invocable: true/);
     assert.match(agent, /disable-model-invocation: true/);
+    assert.match(agent, /spec_superflow_cli_status/);
+    assert.match(agent, /spec_superflow_install_cli/);
+    assert.match(agent, /spec_superflow_optional_mcp_status/);
+    assert.match(agent, /spec_superflow_install_optional_mcp/);
     assert.doesNotMatch(normalWorkflow, /spec_superflow_cli_status|spec_superflow_install_cli/);
     assert.doesNotMatch(
       normalWorkflow,
       /spec_superflow_optional_mcp_status|spec_superflow_install_optional_mcp/,
     );
+    assert.doesNotMatch(normalWorkflow, /Development Entry Protocol/);
     assert.match(normalWorkflow, /start or resume development through the linked `workflow-start` skill/i);
-    assert.match(agent, /`workflow-start` is a linked Agent Skill, not\s+an `ssf` CLI subcommand/i);
-    assert.match(agent, /never\s+run \`ssf workflow-start\`/i);
+    assert.match(
+      agent,
+      /`workflow-start` is a linked Agent Skill, not\s+an `ssf` CLI subcommand/i,
+    );
+    assert.match(agent, /never\s+run `ssf workflow-start`/i);
+    assert.match(
+      agent,
+      /load the linked `spec-writer` Skill before generating or repairing/is,
+    );
+    assert.match(
+      agent,
+      /Do not inspect\s+a user-level\s+or globally installed `spec-superflow` package/is,
+    );
+    assert.match(
+      agent,
+      /Do not inspect implementation source, edit code, or edit tests directly\.\s+First enter `workflow-start`/i,
+    );
+    assert.match(
+      agent,
+      /planning artifacts\s+and\s+an\s+approved\s+execution contract exist/i,
+    );
+    assert.match(
+      agent,
+      /planning artifacts must\s+pass `ssf validate\s+<change-dir>` before any implementation edit/i,
+    );
+    assert.match(
+      agent,
+      /final response.*`ssf validate <change-dir>`.*`ssf state check <change-dir>`/is,
+    );
     assert.match(agent, /execute the global `ssf` CLI directly/i);
     assert.doesNotMatch(agent, /spec_superflow_run|logical\s+command|Do not invoke a PATH-installed/);
     assert.match(agent, /Do not run `ssf inject` inside this agent/);
+    assert.match(agent, /copilot-instructions\.md` remains unchanged/);
     assert.match(agent, /Do not copy centrally maintained agents, skills, scripts, or templates/);
     assert.doesNotMatch(agent, /hooks:\s+PreToolUse:/);
     assert.doesNotMatch(agent, /\$\{PLUGIN_ROOT\}/);
@@ -278,6 +311,134 @@ describe('VS Code Agent Plugin', () => {
     assert.match(workflow, /`ssf guard check <dir>/);
   });
 
+  it('initializes a new change before routing and keeps planning artifacts inside it', () => {
+    const workflow = read('skills/workflow-start/SKILL.md');
+    const writer = read('skills/spec-writer/SKILL.md');
+
+    assert.match(workflow, /`ssf state init changes\/<change-name>`/);
+    assert.match(
+      workflow,
+      /initialize the exact\s+`changes\/<change-name>` directory before recording DP-0/i,
+    );
+    assert.match(
+      workflow,
+      /Do not create `proposal\.md`, `design\.md`, `tasks\.md`, or delta specs at the repository root/i,
+    );
+    assert.match(writer, /`<change-dir>\/proposal\.md`/);
+    assert.match(writer, /`<change-dir>\/specs\/<capability>\/spec\.md`/);
+    assert.match(writer, /`<change-dir>\/design\.md`/);
+    assert.match(writer, /`<change-dir>\/tasks\.md`/);
+    assert.match(
+      writer,
+      /All generated planning artifacts must stay under the active `<change-dir>`/i,
+    );
+    assert.match(
+      writer,
+      /Never create planning artifacts at the\s+repository root/i,
+    );
+    assert.match(
+      workflow,
+      /Route to spec-writer[\s\S]*guard check <dir> exploring specifying[\s\S]*state transition <dir> specifying/i,
+    );
+    assert.match(
+      workflow,
+      /Route to contract-builder[\s\S]*guard check <dir> specifying bridging[\s\S]*state transition <dir> bridging/i,
+    );
+    assert.match(
+      workflow,
+      /Route to build-executor[\s\S]*guard check <dir> bridging approved-for-build[\s\S]*state transition <dir> approved-for-build[\s\S]*guard check <dir> approved-for-build executing[\s\S]*state transition <dir> executing/i,
+    );
+    const releaseRoute = /### Route to release-archivist([\s\S]*?)(?=\n### )/
+      .exec(workflow)?.[1] || '';
+    assert.match(releaseRoute, /release-archivist[\s\S]*own the `executing` → `closing`\s+transition/i);
+    assert.match(releaseRoute, /state get <dir> state[\s\S]*require\s+`closing`/i);
+    assert.doesNotMatch(releaseRoute, /guard check <dir> executing closing|state transition <dir> closing/i);
+  });
+
+  it('makes validator-sensitive planning structure explicit and preserves approval gates', () => {
+    const agent = read('agents/spec-superflow.agent.md');
+    const workflow = read('skills/workflow-start/SKILL.md');
+    const writer = read('skills/spec-writer/SKILL.md');
+
+    assert.match(
+      writer,
+      /every non-`No design change` value in the coverage table must exactly match a `### Decision: <title>` heading/i,
+    );
+    assert.match(
+      writer,
+      /Requirement and Scenario cells contain only the exact titles.*without `Requirement:` or `Scenario:` prefixes/i,
+    );
+    assert.match(
+      writer,
+      /^\| Requirement \| Scenario \| Design Decision \| Affected Area \| Why Here \|$/m,
+    );
+    assert.match(writer, /^\| <exact Requirement title> \| <exact Scenario title> \| <exact Decision title> \|/m);
+    assert.match(writer, /^## Batch 1: <goal>$/m);
+    assert.match(writer, /^- \*\*Requirement\*\*: <exact Requirement title>$/m);
+    assert.match(writer, /^- \*\*User-visible\*\*: (?:Yes|No)$/m);
+    assert.match(writer, /^#### File Changes$/m);
+    assert.match(writer, /^##### (?:Create|Modify|Delete) `path\/to\/file`$/m);
+    assert.match(writer, /^#### TDD Test Plan$/m);
+    assert.match(writer, /^#### TDD Steps$/m);
+    assert.match(writer, /do not\s+replace these headings with bold list labels/i);
+    assert.match(
+      writer,
+      /Stop after each artifact and wait for explicit user confirmation before generating the next/i,
+    );
+    assert.match(
+      agent,
+      /create at most one planning artifact family in a single\s+response/i,
+    );
+    assert.match(
+      agent,
+      /return to the user immediately after presenting that artifact/i,
+    );
+    assert.match(
+      writer,
+      /Never generate `execution-contract\.md`; only `contract-builder` owns that\s+artifact/i,
+    );
+    assert.match(
+      agent,
+      /Never collapse DP-2 planning approval and DP-3 execution-contract approval\s+into one gate/i,
+    );
+    assert.match(
+      workflow,
+      /When the user explicitly requests the full workflow, persist `workflow` as\s+`full` and do not infer `hotfix` or `tweak`/i,
+    );
+  });
+
+  it('requires dependency-closed planning and precise behavioral test seams', () => {
+    const writer = read('skills/spec-writer/SKILL.md');
+    const contract = read('skills/contract-builder/SKILL.md');
+
+    for (const content of [writer, contract]) {
+      assert.match(
+        content,
+        /interface[\s\S]*production implementation[\s\S]*(?:fake|mock)[\s\S]*test double/i,
+      );
+      assert.match(content, /affected module[\s\S]*(?:compile|test) obligation/i);
+      assert.match(
+        content,
+        /required edge case[\s\S]*(?:fixture|precondition)[\s\S]*observable assertion/i,
+      );
+      assert.match(
+        content,
+        /injectable rendering seam[\s\S]*state-to-UI derivation[\s\S]*(?:lazy|scrolling|repeated content)/i,
+      );
+    }
+    assert.match(
+      writer,
+      /do not stop at the first implementation found/i,
+    );
+    assert.match(
+      writer,
+      /one item disappearing does not prove an empty-result state/i,
+    );
+    assert.match(
+      writer,
+      /Do not claim state mapping is covered by asserting only a child component parameter/i,
+    );
+  });
 
   it('keeps bootstrap checks out of internal workflow skills', () => {
     const skillNames = readdirSync(join(ROOT, 'skills'), { withFileTypes: true })
@@ -305,4 +466,37 @@ describe('VS Code Agent Plugin', () => {
     }
   });
 
+  it('requires fresh artifact and state verification before completion', () => {
+    const executor = read('skills/build-executor/SKILL.md');
+    const release = read('skills/release-archivist/SKILL.md');
+
+    assert.match(
+      executor,
+      /mark every completed `tasks\.md` TDD checkbox as `\[x\]` before recording the batch complete/i,
+    );
+    assert.match(
+      executor,
+      /`ssf state set <change-dir> batches_completed <N>` only after those checkboxes are updated/i,
+    );
+    assert.match(release, /^## AC Test Evidence$/m);
+    assert.match(
+      release,
+      /^\| Requirement \| AC \| Layer \| Platform \| Test File \| Test Case \| Result \| Command \| Evidence \|$/m,
+    );
+    assert.match(
+      release,
+      /copy the first six cells exactly from each `execution-contract\.md > AC Test Matrix` row/i,
+    );
+    assert.match(
+      release,
+      /update every completed `tasks\.md` checkbox to `\[x\]` before attempting `closing`/i,
+    );
+    assert.match(
+      release,
+      /run `ssf guard check <change-dir> executing closing --json` before `ssf state transition <change-dir> closing`/i,
+    );
+    assert.match(release, /after every final artifact edit, run `ssf validate <change-dir>`/i);
+    assert.match(release, /run `ssf state check <change-dir>`/i);
+    assert.match(release, /do not claim completion/i);
+  });
 });

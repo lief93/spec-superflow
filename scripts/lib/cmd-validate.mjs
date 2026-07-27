@@ -97,8 +97,9 @@ function isMeaningfulCell(value) {
 }
 
 const TEST_SOURCE_EXTENSIONS = new Set([
-  '.c', '.cc', '.cpp', '.cs', '.dart', '.ets', '.feature', '.go', '.java', '.js', '.jsx',
+  '.c', '.cc', '.cjs', '.cpp', '.cs', '.dart', '.ets', '.feature', '.go', '.java', '.js', '.jsx',
   '.kt', '.kts', '.m', '.mm', '.php', '.py', '.rb', '.rs', '.swift', '.ts', '.tsx',
+  '.mjs',
 ]);
 
 function findProjectRoot(startDir) {

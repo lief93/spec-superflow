@@ -31,6 +31,8 @@ Before finalizing:
 4. Flag unmapped Requirements or Scenarios in Escalation Rules
 5. Note cross-batch dependencies
 6. Copy every TDD Test Plan row unchanged into `## AC Test Matrix`; do not collapse files/cases into a suite label
+7. For every changed interface, protocol, abstract type, public constructor, or shared contract, verify that tasks enumerate all discovered production implementations, adapters, fakes, mocks, test doubles, and affected module compile/test obligations
+8. Verify every required edge case has an exact fixture or precondition and observable assertion in the AC Test Matrix; an indirect assertion is not equivalent to the required state
 
 ## Frontend Verification
 
@@ -38,6 +40,7 @@ Classify the repository as frontend when it contains a Web, Android, HarmonyOS, 
 
 - `Frontend Impact: Yes`: include `UI Test` and `Device Test` rows.
 - Set the aggregate UI obligation to `Required by AC Test Matrix`; the matrix retains each row's `Add`/`Update`/`Run existing`/`Unavailable` action. Shared navigation, shared UI, or global state changes may add broader tests, but cannot replace AC-specific rows.
+- For visible output derived from application state, require a stable injectable rendering seam in the design/tasks and preserve separate obligations for state-to-UI derivation and lazy, scrolling, or repeated content behavior. A child-parameter assertion alone is not sufficient evidence.
 - If no UI framework exists, use `Unavailable`, record the inspected test locations/configuration, and do not silently introduce a framework.
 - Device Test is always `Required`. Default to one project baseline simulator/device per affected native platform, or the default browser and desktop viewport for Web. Add environments only when an AC depends on system version, screen size, Market, permission, or device capability.
 - Read commands and runtime prerequisites from relevant shared-memory topics, build files, package scripts, and existing tests. Do not invent commands.
