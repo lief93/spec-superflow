@@ -39,6 +39,14 @@ The bundled Plugin runtime must report version \`${version}\`.
 `;
 }
 
+function agent(version) {
+  return `---
+name: Spec Superflow
+---
+<!-- spec-superflow-plugin-version: ${version} -->
+`;
+}
+
 function createVersionFixture(root, version) {
   json(join(root, 'package.json'), { version });
   json(join(root, 'plugin.json'), { version });
@@ -61,6 +69,7 @@ function createVersionFixture(root, version) {
   write(join(root, '.claude/always/phase-guard.md'), `# spec-superflow v${version} | guard\n`);
   write(join(root, 'GEMINI.md'), `# spec-superflow v${version} | guard\n`);
   write(join(root, 'commands/workflow-init.md'), workflowInit(version));
+  write(join(root, 'agents/spec-superflow.agent.md'), agent(version));
 }
 
 afterEach(() => {
@@ -95,6 +104,9 @@ describe('maintenance CLI behavior', () => {
     assert.doesNotMatch(command, /0\.14\.0/);
     assert.match(command, /spec-superflow-plugin-version: 0\.15\.0/);
     assert.match(command, /version `0\.15\.0`/);
+    const agentSource = readFileSync(join(root, 'agents/spec-superflow.agent.md'), 'utf8');
+    assert.doesNotMatch(agentSource, /0\.14\.0/);
+    assert.match(agentSource, /spec-superflow-plugin-version: 0\.15\.0/);
   });
 
   it('consistency check rejects a stale workflow-init Plugin version', () => {
@@ -114,4 +126,23 @@ describe('maintenance CLI behavior', () => {
     assert.match(result.stdout, /commands\/workflow-init\.md/);
     assert.match(result.stdout, /found:\s+0\.14\.0/);
   });
+
+  it('consistency check rejects a stale Agent Plugin version', () => {
+    const root = tempRoot('ssf-agent-version-consistency-');
+    createVersionFixture(root, '0.15.0');
+    write(join(root, 'agents/spec-superflow.agent.md'), agent('0.14.0'));
+    const copiedScript = join(root, 'scripts/check-version-consistency.mjs');
+    mkdirSync(dirname(copiedScript), { recursive: true });
+    copyFileSync(CONSISTENCY_SCRIPT, copiedScript);
+
+    const result = spawnSync(process.execPath, [copiedScript], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stdout, /agents\/spec-superflow\.agent\.md/);
+    assert.match(result.stdout, /found:\s+0\.14\.0/);
+  });
+
 });

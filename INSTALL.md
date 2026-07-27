@@ -242,8 +242,9 @@ copilot plugin uninstall spec-superflow
 ## VS Code GitHub Copilot
 
 VS Code Agent Plugin 将可选择的 Agent、中央 Skills、scripts、templates 和
-MCP 配置作为一个安装单元提供。Agent 从中央 Plugin 解析运行资源，不要求业务
-仓库保存副本。内置 MCP bridge 直接执行 Plugin 仓库中的工作流脚本。
+bootstrap MCP 作为一个安装单元提供。项目仓库不需要保存这些公共资源的副本。
+bootstrap MCP 只在 `/workflow-init` 中检查并安装匹配版本的全局 CLI；工作流
+命令直接执行 `ssf`。
 
 ### 安装
 
@@ -251,8 +252,10 @@ MCP 配置作为一个安装单元提供。Agent 从中央 Plugin 解析运行�
 Git 地址。安装完成后：
 
 1. 在 Extensions 中搜索 `@agentPlugins @installed` 确认 Plugin 已启用。
-2. 在 Agent 选择器中选择 **Spec Superflow**。
-3. 执行 `/workflow-init`，确认内置 MCP runtime 返回 `READY`。
+2. 保持 VS Code 内置 **Agent**，输入 `/workflow-init`，点击候选项或按
+   **Tab** 将其提交为 Plugin Slash Command；在需要时确认安装或升级 CLI，
+   并等待 `READY`。
+3. 在 Agent 选择器中选择 **Spec Superflow**。
 4. 用普通对话启动一个测试需求，确认 Agent 从 Plugin 读取 Skill、脚本和模板，
    并把任务产物写入当前业务仓库。
 
@@ -260,8 +263,8 @@ Plugin 在用户环境安装一次即可供多个仓库使用。业务仓库只�
 Instructions、项目专属 Skills、任务产物、Memory 和代码。切换到其他 Agent
 即可停止使用 Spec Superflow Agent 的专属指令，不需要卸载其他 Agent。
 
-Plugin 的 `.mcp.json` 启动仓库内的 `servers/spec-superflow-mcp.mjs`，因此不需要
-单独安装 CLI 或 MCP 包。详细结构和复现步骤见
+Plugin 的 `.mcp.json` 启动仓库内的 `servers/spec-superflow-mcp.mjs`。CLI 从
+Plugin 自身安装，不需要另外下载 Spec 仓库或安装包。详细结构和复现步骤见
 [`docs/vscode-agent-plugin-zh.md`](docs/vscode-agent-plugin-zh.md)。
 
 ### 更新和停用

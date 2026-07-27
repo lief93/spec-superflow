@@ -1,0 +1,29 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "spec-superflow-optional-mcp-url",
+      "description": "Service URL for the optional Spec Superflow MCP",
+      "password": false
+    },
+    {
+      "type": "promptString",
+      "id": "spec-superflow-optional-mcp-token",
+      "description": "Token for the optional Spec Superflow MCP",
+      "password": false
+    }
+  ],
+  "servers": {
+    "spec-superflow-optional-example": {
+      "type": "stdio",
+      "command": "<absolute-path-to-plugin>/servers/spec-superflow-mcp-launcher.cmd",
+      "args": [
+        "<absolute-path-to-plugin>/servers/token-example-mcp.mjs"
+      ],
+      "env": {
+        "SPEC_SUPERFLOW_EXAMPLE_URL": "${input:spec-superflow-optional-mcp-url}",
+        "SPEC_SUPERFLOW_EXAMPLE_TOKEN": "${input:spec-superflow-optional-mcp-token}"
+      }
+    }
+  }
+}
