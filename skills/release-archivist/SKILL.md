@@ -31,6 +31,23 @@ Claiming work is complete without verification is dishonesty, not efficiency. Be
 ### Step 1: Test Suite
 Run full test suite. Record total/passed/failed/skipped. Zero failures = PASS.
 
+For every row in `execution-contract.md > AC Test Matrix`, create one matching
+row in `pr-summary.md` using this exact structure:
+
+```md
+## AC Test Evidence
+
+| Requirement | AC | Layer | Platform | Test File | Test Case | Result | Command | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| <exact Requirement> | <exact AC> | <exact Layer> | <exact Platform> | <exact Test File> | <exact Test Case> | Pass | <fresh command> | <concrete result> |
+```
+
+Copy the first six cells exactly from each `execution-contract.md > AC Test Matrix` row.
+Do not paraphrase, combine rows, or replace the table with prose. `Result` is
+`Pass` for a successfully executed obligation and `Unavailable` only for a
+planned `Unavailable` obligation. `Command` and `Evidence` must both be concrete
+and non-empty.
+
 ### Step 1A: Frontend Verification
 
 Read `## Frontend Verification` from `execution-contract.md`.
@@ -78,6 +95,9 @@ Check for files modified outside scope fence, new dependencies not in design. Un
 
 - Tests passing? (cite command and output)
 - All batches complete? (cite batch status)
+- Update every completed `tasks.md` checkbox to `[x]` before attempting `closing`.
+- Set `batches_completed` to the number of completed `## Batch N:` sections,
+  never the number of task checkboxes.
 - Scope added without artifact updates?
 - Unresolved blockers or known risks?
 - Delta specs exist that need merging?
@@ -110,7 +130,17 @@ If implementation diverged from the contract, return to `bridging` before closur
 
 ## Post-Verification
 
-Run `ssf state transition <change-dir> closing`. If delta specs exist, route to `spec-merger`.
+Run `ssf guard check <change-dir> executing closing --json` before `ssf state transition <change-dir> closing`.
+If the guard fails, fix the exact reported evidence or task-completion gap
+before retrying. Do not repeatedly attempt the transition while the guard
+reports failures. If delta specs exist, route to `spec-merger`.
+
+After every final artifact edit, run `ssf validate <change-dir>`. If artifacts
+changed after the latest state transition, rebuild or transition state through
+the supported CLI flow, then run `ssf state check <change-dir>`. Both commands
+must exit zero after all evidence and summary edits. Do not claim completion
+when validation fails or state is inconsistent; report the exact blocking
+output and route back to the owning Skill.
 
 ## Lightweight Closure (hotfix/tweak)
 

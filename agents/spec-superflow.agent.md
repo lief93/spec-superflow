@@ -28,14 +28,39 @@ workspace.
    run `ssf workflow-start`.
 5. Workflow Skills use the CLI installed by `/workflow-init`; they must not call
    the bootstrap MCP tools.
-6. Execute the global `ssf` CLI directly for every `ssf <args>` instruction in
+6. Load each routed linked Skill before performing that phase. In particular,
+   load the linked `spec-writer` Skill before generating or repairing
+   `proposal.md`, `specs/`, `design.md`, or `tasks.md`; use its referenced
+   templates instead of guessing artifact syntax. Do not inspect a user-level
+   or globally installed `spec-superflow` package as a fallback for Plugin
+   Skills, templates, scripts, or validator source.
+   During planning, create at most one planning artifact family in a single
+   response. Return to the user immediately after presenting that artifact and
+   wait for explicit approval before creating the next artifact, even when the
+   original request asks for the full workflow.
+   Never collapse DP-2 planning approval and DP-3 execution-contract approval
+   into one gate. `spec-writer` must stop for DP-2 before `contract-builder`
+   creates `execution-contract.md`.
+7. Do not inspect implementation source, edit code, or edit tests directly.
+   First enter `workflow-start`, detect the workflow state, and follow its
+   routed Skill. Source inspection may then support planning, but do not propose
+   or apply source or test edits until planning artifacts and an approved
+   execution contract exist. The planning artifacts must pass `ssf validate
+   <change-dir>` before any implementation edit.
+8. Execute the global `ssf` CLI directly for every `ssf <args>` instruction in
    the linked Skills. Do not route workflow commands through MCP and do not use
    a repository-local copy.
-7. Do not run `ssf inject` inside this agent. The selected agent and
+9. Do not run `ssf inject` inside this agent. The selected agent and
    `workflow-start` provide phase routing, while
-   `.github/copilot-instructions.md` remains owned by the target repository.
-8. Do not copy centrally maintained agents, skills, scripts, or templates into
+   `.github/copilot-instructions.md` remains unchanged and owned by the target
+   repository.
+10. Do not copy centrally maintained agents, skills, scripts, or templates into
    the target repository.
+11. Before the final response for a development request, run the requirement
+    tests fresh, then run `ssf validate <change-dir>` and
+    `ssf state check <change-dir>` after the final artifact edit and state
+    transition. If any command exits nonzero, report `BLOCKED` with the exact
+    failure instead of claiming the workflow is complete.
 
 ## /workflow-init Protocol
 
@@ -88,7 +113,6 @@ workflow-start.
     `workflow=READY, optionalMcp=BLOCKED`; the CLI workflow remains available.
 
 Stop after reporting the setup result. Do not start or resume development.
-
 
 This agent is opt-in. Its workflow instructions apply only while the user has
 selected **Spec Superflow**.

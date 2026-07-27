@@ -163,8 +163,15 @@ Plugin 仓库。
 ## 多项目复用
 
 Plugin 安装一次即可在多个项目中选择使用。各项目只维护自己的源码、测试、
-项目 Skills、任务产物、Memory 和项目指导。不要把中央 Plugin 的 `agents/`、
-`skills/`、`scripts/` 或 `templates/` 再复制到每个项目。
+项目 Skills、任务产物、Memory 和项目指导。`project-init` 生成：
+
+```text
+.github/instructions/spec-superflow.instructions.md
+docs/project/project-guidelines.md
+```
+
+如果项目已有 `.github/copilot-instructions.md`，其内容保持不变。不要把中央
+Plugin 的 `agents/`、`skills/`、`scripts/` 或 `templates/` 再复制到每个项目。
 
 ## 更新
 
@@ -186,6 +193,7 @@ Plugin 安装一次即可在多个项目中选择使用。各项目只维护自�
 | 启动可选 MCP | VS Code 询问可见的 URL 和 Token，并启动内置 Server |
 | 验证可选 MCP | 再次执行 `/workflow-init` 返回 `workflow=READY, optionalMcp=READY` |
 | 直接提需求 | 使用 `/workflow-init` 已准备好的 CLI |
+| project-init | 生成独立 instructions，根 instructions 不变 |
 | 多项目 | 复用同一 Plugin，各项目没有公共工作流副本 |
 
 协议和单元测试不能替代真实 VS Code Chat 中的 Plugin 安装、Command 发现、

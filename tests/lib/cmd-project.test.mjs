@@ -10,13 +10,22 @@ const roots = [];
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'ssf-project-'));
   roots.push(root);
-  mkdirSync(join(root, '.github'), { recursive: true });
+  mkdirSync(join(root, '.github', 'instructions'), { recursive: true });
   mkdirSync(join(root, 'docs/project'), { recursive: true });
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src/App.kt'), 'class App { fun load() = Unit }\n');
   writeFileSync(
-    join(root, '.github/copilot-instructions.md'),
-    '# Project\n\nRead `docs/project/project-guidelines.md`.\n',
+    join(root, '.github/instructions/spec-superflow.instructions.md'),
+    `---
+name: Spec Superflow Project Baseline
+description: Apply the repository's generated development baseline.
+applyTo: "**"
+---
+
+# Project
+
+Read \`docs/project/project-guidelines.md\`.
+`,
   );
   writeFileSync(
     join(root, 'docs/project/project-guidelines.md'),
@@ -106,9 +115,43 @@ describe('ssf project check', () => {
 
   it('reports unresolved placeholders', () => {
     const root = fixture();
-    const instructions = join(root, '.github/copilot-instructions.md');
-    writeFileSync(instructions, 'Read `docs/project/project-guidelines.md`. <scope>\n');
+    const instructions = join(root, '.github/instructions/spec-superflow.instructions.md');
+    writeFileSync(instructions, `---
+applyTo: "**"
+---
+
+Read \`docs/project/project-guidelines.md\`. <scope>
+`);
     const result = check(root);
     assert.ok(result.issues.some(issue => issue.includes('Unresolved placeholder: <scope>')));
+  });
+
+  it('rejects project instructions without frontmatter', () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, '.github/instructions/spec-superflow.instructions.md'),
+      '# Project\n\nRead `docs/project/project-guidelines.md`.\n',
+    );
+
+    const result = check(root);
+
+    assert.ok(result.issues.some(issue => issue.includes('frontmatter')));
+  });
+
+  it('rejects project instructions with a non-global applyTo value', () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, '.github/instructions/spec-superflow.instructions.md'),
+      `---
+applyTo: "src/**"
+---
+
+Read \`docs/project/project-guidelines.md\`.
+`,
+    );
+
+    const result = check(root);
+
+    assert.ok(result.issues.some(issue => issue.includes('applyTo: "**"')));
   });
 });

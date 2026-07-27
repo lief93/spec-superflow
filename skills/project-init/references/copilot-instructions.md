@@ -1,3 +1,9 @@
+---
+name: Spec Superflow Project Baseline
+description: Apply the repository's generated development baseline.
+applyTo: "**"
+---
+
 # Project Development Instructions
 
 Before planning, implementing, or reviewing code, read the parts of `docs/project/project-guidelines.md` relevant to the change. First locate the matching classic implementation and its end-to-end path.

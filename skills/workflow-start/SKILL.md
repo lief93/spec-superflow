@@ -29,16 +29,27 @@ Run DP-0 when: change folder doesn't exist, planning artifacts missing/empty, or
 
 Ask: change name + one-sentence intent, known constraints, related optimizations (include or stay focused?), communication preference (ask per decision or draft for review).
 
-After confirmation:
+After confirmation, normalize the change name to a safe lowercase kebab-case
+directory name. If the change does not exist, run
+`ssf state init changes/<change-name>` to initialize the exact
+`changes/<change-name>` directory before recording DP-0. Treat that directory
+as `<change-dir>` for every later command and artifact:
+
 ```bash
+ssf state init changes/<change-name>
 ssf state set <change-dir> dp_0_decisions "<summary>"
 ssf state set <change-dir> dp_0_confirmed true
 ssf state set <change-dir> dp_0_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
 
+Do not create `proposal.md`, `design.md`, `tasks.md`, or delta specs at the repository root. They belong under `<change-dir>`.
+
 Config-aware routing: check `artifacts.order` and `artifacts.skip` from project config.
 
 ## Mode Detection
+
+When the user explicitly requests the full workflow, persist `workflow` as
+`full` and do not infer `hotfix` or `tweak`.
 
 If workflow is `auto`/`null`/unset: run `ssf infer-workflow <change-dir>`. Inference: **hotfix** (≤2 tasks, ≤2 files, no schema/API/new modules), **tweak** (≤4 tasks, config/doc only), **full** (anything larger). Persist with `ssf state set <dir> workflow <mode>`.
 
@@ -53,13 +64,27 @@ The user explicitly asks to initialize or refresh project coding rules, architec
 Change is fuzzy, scope unclear, comparing options, no stable change name.
 
 ### Route to spec-writer
-Guard: `ssf guard check <dir> exploring specifying --json` → fail = BLOCK. User knows what they want, artifacts missing/incomplete.
+User knows what they want and planning artifacts are missing or incomplete.
+Run `ssf guard check <dir> exploring specifying --json`; fail = BLOCK.
+After it passes, run `ssf state transition <dir> specifying`, verify the
+persisted state is `specifying`, then route to `spec-writer`.
 
 ### Route to contract-builder
-Guard: `ssf guard check <dir> specifying bridging --json` → fail = BLOCK. Artifacts exist, implementation requested, contract missing/stale. Include `DP-3: Contract Approval`.
+Planning artifacts exist, implementation is requested, and the contract is
+missing or stale. Run `ssf guard check <dir> specifying bridging --json`; fail =
+BLOCK. After it passes, run `ssf state transition <dir> bridging`, verify the
+persisted state is `bridging`, then route to `contract-builder`. Include `DP-3:
+Contract Approval`.
 
 ### Route to build-executor
-Guard: `ssf guard check <dir> approved-for-build executing --json` → fail = BLOCK. Contract exists and approved, contract matches artifacts. Include `DP-4: Execution Mode Selection`.
+The contract exists, is approved, and matches the planning artifacts. When the
+current state is `bridging`, run
+`ssf guard check <dir> bridging approved-for-build --json`; fail = BLOCK. After
+it passes, run `ssf state transition <dir> approved-for-build` and verify the
+persisted state. Record `DP-4: Execution Mode Selection`, then run
+`ssf guard check <dir> approved-for-build executing --json`; fail = BLOCK.
+After it passes, run `ssf state transition <dir> executing`, verify the
+persisted state is `executing`, then route to `build-executor`.
 
 ### Route to bug-investigator
 Execution hit blockage: test failure, unexpected behavior, build error, task cannot proceed. After debugging, route back to build-executor.
@@ -68,7 +93,12 @@ Execution hit blockage: test failure, unexpected behavior, build error, task can
 Batch completed, batch ready for spec-compliance + code-quality verification.
 
 ### Route to release-archivist
-Guard: `ssf guard check <dir> executing closing --json` → fail = BLOCK. Implementation complete, verification complete/nearly complete. Include `DP-7: Archive Confirmation`.
+Route to `release-archivist` while the state remains `executing` so it can
+produce the final test and PR evidence and own the `executing` → `closing`
+transition. After it returns, run `ssf state get <dir> state` and require
+`closing`. If the persisted state is not `closing`, report BLOCKED with the
+release result; do not repeat the transition from `workflow-start`. Include
+`DP-7: Archive Confirmation`.
 
 ### Route to spec-merger
 Delta specs exist that need merging, change closing with ADDED/MODIFIED/REMOVED/RENAMED specs.
@@ -77,8 +107,8 @@ Delta specs exist that need merging, change closing with ADDED/MODIFIED/REMOVED/
 User explicitly requests, bug-investigator escalates after 3+ failures AND user chooses, scope change makes change no longer worthwhile AND user confirms. Block from `closing` or `abandoned`.
 
 ### Fast-Path Routing
-- **Hotfix**: Route to contract-builder (minimal), skip need-explorer + spec-writer, run `ssf guard check <dir> exploring bridging --workflow hotfix`, after DP-3 → build-executor (inline), after → release-archivist (lightweight)
-- **Tweak**: Route to build-executor (direct edit), skip need-explorer + spec-writer + contract-builder, run `ssf guard check <dir> exploring approved-for-build --workflow tweak`, after → release-archivist (lightweight)
+- **Hotfix**: Skip need-explorer + spec-writer. Run `ssf guard check <dir> exploring bridging --workflow hotfix`; after it passes run `ssf state transition <dir> bridging`, then route to contract-builder (minimal). After DP-3, follow the normal approved-for-build and executing transitions, then release-archivist (lightweight).
+- **Tweak**: Skip need-explorer + spec-writer + contract-builder. Run `ssf guard check <dir> exploring approved-for-build --workflow tweak`; after it passes run `ssf state transition <dir> approved-for-build`, then record DP-4 and follow the normal executing transition before direct edit. Finish through release-archivist (lightweight).
 
 Post-transition: 💡 `ssf inject <change-dir>` to update phase-guard artifacts.
 

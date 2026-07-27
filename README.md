@@ -37,7 +37,7 @@
 /spec-superflow:project-init
 ```
 
-它会生成 `.github/copilot-instructions.md` 和 `docs/project/project-guidelines.md`，为后续 Spec、Design、实现与 Review 提供同一份项目开发基线。
+它会生成 `.github/instructions/spec-superflow.instructions.md` 和 `docs/project/project-guidelines.md`，并保留已有 `.github/copilot-instructions.md`，为后续 Spec、Design、实现与 Review 提供同一份项目开发基线。
 
 Agent 会自动检查当前工件目录，**内容级判断**（不看文件时间戳，而是比较 proposal 范围 vs 契约意图锁）你处于哪个阶段，然后路由到正确的下一个 skill。
 

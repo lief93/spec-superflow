@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 
 const GUIDELINE = 'docs/project/project-guidelines.md';
-const INSTRUCTIONS = '.github/copilot-instructions.md';
+const INSTRUCTIONS = '.github/instructions/spec-superflow.instructions.md';
 const REQUIRED_HEADING_GROUPS = [
   ['# Project Development Baseline', '# 项目开发基线'],
   ['## Technology And Framework Constraints', '## 技术与框架约束'],
@@ -36,6 +36,18 @@ function parseReference(token) {
   return { token, file: file.replace(/^\.\//, ''), symbol: symbol?.replace(/\(.*\)$/, '') };
 }
 
+function parseFrontmatter(markdown) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
+  if (!match) return null;
+  return new Map(
+    match[1]
+      .split(/\r?\n/)
+      .map(line => /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line.trim()))
+      .filter(Boolean)
+      .map(([, key, value]) => [key, value]),
+  );
+}
+
 function check(projectRoot) {
   const root = resolve(projectRoot);
   const guidelinePath = join(root, GUIDELINE);
@@ -51,6 +63,12 @@ function check(projectRoot) {
 
   const instructions = readFileSync(instructionPath, 'utf-8');
   const guideline = readFileSync(guidelinePath, 'utf-8');
+  const frontmatter = parseFrontmatter(instructions);
+  if (!frontmatter) {
+    issues.push(`${INSTRUCTIONS} requires YAML frontmatter`);
+  } else if (frontmatter.get('applyTo') !== '"**"') {
+    issues.push(`${INSTRUCTIONS} frontmatter requires applyTo: "**"`);
+  }
   if (!instructions.includes(GUIDELINE)) {
     issues.push(`${INSTRUCTIONS} must direct the agent to ${GUIDELINE}`);
   }
@@ -118,4 +136,4 @@ export async function run(args) {
   console.log(`Project baseline check passed: ${result.checkedPaths} paths and ${result.checkedSymbols} symbols verified.`);
 }
 
-export { check, extractInlineCode, parseReference };
+export { check, extractInlineCode, parseFrontmatter, parseReference };

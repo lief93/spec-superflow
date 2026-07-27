@@ -41,11 +41,10 @@ describe('guard: transition matrix', () => {
     }
   }
 
-  it('exploring→specifying requires artifacts-exist', () => {
+  it('exploring→specifying starts artifact generation without requiring artifacts', () => {
     const result = runGuard('exploring', 'specifying');
     assert.equal(result.exitCode, 0, `Expected exit 0 but got ${result.exitCode}: ${JSON.stringify(result.output)}`);
-    const checks = result.output.checks;
-    assert.ok(checks.some(c => c.dimension === 'artifacts-exist'));
+    assert.deepEqual(result.output.checks, []);
   });
 
   it('specifying→bridging requires artifacts-exist + schema-valid', () => {
@@ -162,7 +161,7 @@ describe('guard: workflow mode skipping', () => {
   });
 });
 
-describe('guard: artifacts-exist check', () => {
+describe('guard: artifact timing', () => {
   before(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'ssf-guard-artifacts-'));
   });
@@ -187,12 +186,96 @@ describe('guard: artifacts-exist check', () => {
     }
   }
 
-  it('fails when no artifacts exist', () => {
+  it('allows entering specifying before the first planning artifact exists', () => {
     const result = runGuard('exploring', 'specifying');
-    // artifacts-exist should fail — no proposal, specs, etc.
-    const artifactsCheck = result.output.checks.find(c => c.dimension === 'artifacts-exist');
-    assert.ok(artifactsCheck);
-    assert.equal(artifactsCheck.pass, false);
-    assert.ok(artifactsCheck.failures.length > 0);
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.output.pass, true);
+    assert.deepEqual(result.output.checks, []);
+  });
+});
+
+describe('guard: completed batch count', () => {
+  let changeDir;
+
+  before(() => {
+    changeDir = mkdtempSync(join(tmpdir(), 'ssf-guard-batches-'));
+  });
+
+  after(() => {
+    if (changeDir) rmSync(changeDir, { recursive: true, force: true });
+  });
+
+  function writeFixture(batchNumbers, batchesCompleted) {
+    const batches = batchNumbers.map(number => `## Batch ${number}: Batch ${number}
+- [x] Complete batch ${number}
+`).join('\n');
+    writeFileSync(join(changeDir, 'tasks.md'), `# Tasks\n\n${batches}`);
+    writeFileSync(
+      join(changeDir, '.spec-superflow.yaml'),
+      `state: executing
+workflow: full
+batches_completed: ${batchesCompleted}
+test_result: pass
+`,
+    );
+  }
+
+  function runClosingGuard() {
+    try {
+      const output = execSync(
+        `node ${GUARD_PATH} check ${changeDir} executing closing --json`,
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+      );
+      return { exitCode: 0, output: JSON.parse(output.trim()) };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        output: JSON.parse(error.stdout.toString().trim()),
+      };
+    }
+  }
+
+  it('rejects an under-reported completed batch count', () => {
+    writeFixture([1, 2], 0);
+    const result = runClosingGuard();
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(
+      result.output.checks.some(check =>
+        check.dimension === 'tasks-complete'
+        && check.failures.some(failure => failure.includes('batches_completed is 0') && failure.includes('2'))),
+    );
+  });
+
+  it('rejects an over-reported completed batch count', () => {
+    writeFixture([1, 2], 3);
+    const result = runClosingGuard();
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(
+      result.output.checks.some(check =>
+        check.dimension === 'tasks-complete'
+        && check.failures.some(failure => failure.includes('batches_completed is 3') && failure.includes('2'))),
+    );
+  });
+
+  it('rejects a gap in Batch numbering', () => {
+    writeFixture([1, 3], 2);
+    const result = runClosingGuard();
+
+    assert.equal(result.exitCode, 1);
+    assert.ok(
+      result.output.checks.some(check =>
+        check.dimension === 'tasks-complete'
+        && check.failures.some(failure => failure.includes('Batch numbering'))),
+    );
+  });
+
+  it('accepts sequential Batch headings with the matching completed count', () => {
+    writeFixture([1, 2], 2);
+    const result = runClosingGuard();
+
+    assert.equal(result.exitCode, 0, JSON.stringify(result.output));
+    assert.equal(result.output.pass, true);
   });
 });

@@ -69,13 +69,15 @@ describe('VS Code Plugin documentation boundary', () => {
     assert.doesNotMatch(chinese, /公司|内网/);
   });
 
-  it('documents direct CLI workflow execution and central resource ownership', () => {
+  it('documents direct CLI workflow execution and independent project instructions', () => {
     const english = read('docs/vscode-agent-plugin.md');
     const chinese = read('docs/vscode-agent-plugin-zh.md');
 
     assert.match(english, /Skills execute `ssf state`/);
     assert.match(chinese, /Skills 直接执行 `ssf state`/);
-    assert.ok(english.includes('Do not copy the central `agents/`'));
-    assert.ok(chinese.includes('不要把中央 Plugin 的 `agents/`'));
+    assert.match(english, /\.github\/instructions\/spec-superflow\.instructions\.md/);
+    assert.match(chinese, /\.github\/instructions\/spec-superflow\.instructions\.md/);
+    assert.match(english, /leaves an existing `.github\/copilot-instructions\.md` unchanged/);
+    assert.match(chinese, /已有 `.github\/copilot-instructions\.md`，其内容保持不变/);
   });
 });

@@ -145,9 +145,16 @@ For local Plugin development:
 
 The Plugin is installed once and can be selected in multiple repositories.
 Each target repository keeps only its own source, tests, project Skills, task
-artifacts, memory, and project guidance. Do not copy the central `agents/`,
-`skills/`, `scripts/`, or `templates/` directories into each target
-repository.
+artifacts, memory, and project guidance. `project-init` writes:
+
+```text
+.github/instructions/spec-superflow.instructions.md
+docs/project/project-guidelines.md
+```
+
+It leaves an existing `.github/copilot-instructions.md` unchanged. Do not copy
+the central `agents/`, `skills/`, `scripts/`, or `templates/` directories into
+each target repository.
 
 ## Update and verify
 
@@ -169,6 +176,7 @@ Verify in a real VS Code Chat runtime:
 | Optional MCP started | VS Code prompts for visible URL and Token values; bundled Server starts |
 | Optional MCP verified | A later `/workflow-init` reports `workflow=READY, optionalMcp=READY` |
 | Requirement entry | Uses the CLI prepared by `/workflow-init` |
+| Project init | Dedicated instructions are generated; root instructions are unchanged |
 
 Protocol tests prove server behavior but do not replace this installed Plugin
 and Chat verification.
