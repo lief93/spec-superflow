@@ -4,6 +4,9 @@
 Commands、Templates、CLI 源码和一个轻量的 bootstrap MCP。项目仓库不需要复制
 这些公共资源，也不需要再下载另一份 Spec Superflow。
 
+需要自行组合或维护 Plugin 时，参见
+[VS Code Agent Plugin 结构与迁移指南](vscode-plugin-assembly-zh.md)。
+
 ## Plugin 结构
 
 ```text
