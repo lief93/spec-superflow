@@ -1,11 +1,18 @@
 ---
 name: workflow-start
-description: Primary entry point for the spec-superflow state-machine workflow. Invoke when the user is inside an active spec-superflow change directory (look for .spec-superflow.yaml, changes/<name>/, proposal.md, specs/, design.md, tasks.md, or execution-contract.md) and asks to start, continue, resume, implement, plan, or figure out the next workflow step. Also invoke when the user explicitly asks to start a new spec-superflow change or route through the spec-superflow workflow. Do not invoke for unrelated coding tasks that happen to use words like start, continue, implement, or plan.
+description: Primary entry point for the spec-superflow state-machine workflow. Invoke when the user is inside an active spec-superflow change directory (look for .spec-superflow.yaml, changes/<name>/, proposal.md, specs/, design.md, tasks.md, or execution-contract.md) and asks to start, continue, resume, implement, plan, or figure out the next workflow step. Also invoke when the user explicitly asks to start a new spec-superflow change or route through the spec-superflow workflow. Do not invoke for /workflow-init or Plugin, CLI, or MCP runtime setup. Do not invoke for unrelated coding tasks that happen to use words like start, continue, implement, or plan.
+disable-model-invocation: true
 ---
 
 # Workflow Start
 
 Primary entry point for `spec-superflow`. Jobs: load the project development baseline, relevant project memories, and change artifacts; confirm DP-0; determine state; route to the correct skill; and block invalid transitions.
+
+## Hard Exclusion
+
+Do not invoke for `/workflow-init` or Plugin, CLI, or MCP runtime setup. Return
+control to the selected command. Do not inspect the workspace, read another
+Skill, or create or resume a Change.
 
 ## Use This Skill When
 

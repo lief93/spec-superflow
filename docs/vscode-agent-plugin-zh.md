@@ -138,7 +138,9 @@ Plugin 仓库。
 3. 在 Agent Plugins 视图确认 **Spec Superflow** 已启用。
 4. 保持 VS Code 内置 **Agent**，输入 `/workflow-init` 并选择 Plugin 提供的候选项。
    用鼠标点击或按 **Tab**，让 VS Code 将它提交为结构化 Slash Command；不要把
-   候选文字当普通消息直接发送。
+   候选文字当普通消息直接发送。该命令会自动使用隐藏的
+   **Spec Superflow Setup** Agent；它只能调用 bootstrap MCP 和原生提问工具，
+   不会载入 **Spec Superflow** Agent 的需求开发状态机。
 5. 缺少 CLI 或版本不一致时确认安装。
 6. 选择是否配置可选 MCP；跳过时返回
    `workflow=READY, optionalMcp=SKIPPED`。
@@ -149,9 +151,10 @@ Plugin 仓库。
 9. 初始化返回 `workflow=READY` 后选择 **Spec Superflow** 并描述需求；普通工作流只
    使用已经安装的 CLI，不负责安装或升级。
 
-`/workflow-init` 只准备运行环境，不读取当前项目、不生成 change，也不启动需求。
-应先在内置 **Agent** 执行该命令，再选择 **Spec Superflow**，避免开发 Agent
-的状态机指令进入初始化请求。
+`/workflow-init` 只初始化、验证或更新运行环境，不读取当前项目、不询问需求信息、
+不生成 Change，也不启动或恢复需求。
+保持内置 **Agent** 执行该命令；命令会在本次请求中自动切换到隐藏的初始化
+Agent。只有返回 `workflow=READY` 后才选择 **Spec Superflow**。
 开始需求前先执行 `/workflow-init`。Plugin 更新后也先重新执行一次，使 CLI
 版本与 Plugin 保持一致。
 
