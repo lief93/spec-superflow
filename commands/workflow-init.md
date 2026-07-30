@@ -44,10 +44,9 @@ verified, the next and only tool call is
    #tool:vscode/askQuestions to ask whether the user wants to install or update
    the global `ssf` command from this Plugin's bundled source. Call
    #tool:spec-superflow/spec_superflow_install_cli only after an explicit `Yes`.
-6. If the user declines, or the tool call is cancelled, unavailable, or
-   unsuccessful,
+6. If the user declines, or the tool call is cancelled or unsuccessful,
    immediately report `CANCELLED` or `BLOCKED` and stop. Do not use terminal,
-   file, alternate installation, or development tools.
+   file, or development tools.
 7. After a successful install, call
    #tool:spec-superflow/spec_superflow_cli_status again. The workflow runtime
    is ready only when it reports `ready: true` and version `0.14.0`.
@@ -90,6 +89,6 @@ verified, the next and only tool call is
     `workflow=READY, optionalMcp=BLOCKED` with the recovery guidance. The CLI
     workflow remains available.
 
-Do not provide a URL, registry, package name, archive, or alternate path to the
-CLI or optional MCP install tools. Do not modify the open workspace. Do not
-start or resume a development request after this command.
+Do not provide a URL, registry, package name, or archive to the CLI or optional
+MCP install tools. Do not modify the open workspace. Do not start or resume a
+development request after this command.
