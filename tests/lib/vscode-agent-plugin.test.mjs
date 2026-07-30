@@ -168,6 +168,7 @@ describe('VS Code Agent Plugin', () => {
     assert.match(command, /request confirmation/i);
     assert.match(command, /status tool executes `ssf --version`/i);
     assert.match(command, /do not route to project-init\s+or workflow-start/i);
+    assert.doesNotMatch(command, /alternate (?:installation|path)/i);
     assert.match(
       command,
       new RegExp(`spec-superflow-plugin-version: ${pkg.version.replaceAll('.', '\\.')}`),
