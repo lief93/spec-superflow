@@ -68,6 +68,7 @@ describe('planning artifact slimming', () => {
     }
     assert.match(builder, /do not copy/i);
     assert.match(builder, /tasks\.md.*source of truth/i);
+    assert.match(builder, /design\.md.*unless.*configured.*skip/i);
   });
 
   it('uses tasks test plans as the evidence source after implementation', () => {

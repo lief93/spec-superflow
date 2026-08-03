@@ -132,6 +132,14 @@ describe('tests-passing frontend evidence gate', () => {
     assert.deepEqual(checkTestsPassing(changeDir), { pass: true, failures: [] });
   });
 
+  it('falls back to the legacy contract matrix when legacy tasks have no AC test plans', () => {
+    writeFrontendContract();
+    writeFileSync(join(changeDir, 'tasks.md'), '# Tasks\n## Task 1: Show transfer result\n- [x] Implement and verify the legacy task.\n');
+    writeFrontendSummary();
+
+    assert.deepEqual(checkTestsPassing(changeDir), { pass: true, failures: [] });
+  });
+
   it('rejects aggregate UI evidence when the AC-specific test row is missing', () => {
     writeFrontendContract();
     writeFrontendSummary();

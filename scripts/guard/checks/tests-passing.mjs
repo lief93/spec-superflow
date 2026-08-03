@@ -66,17 +66,19 @@ function plannedTestRows(changeDir, contractContent) {
   if (existsSync(tasksPath)) {
     const content = readFileSync(tasksPath, 'utf-8');
     const headings = [...content.matchAll(/^###\s+AC:\s*(.+?)\s*$/gim)];
-    const rows = [];
-    headings.forEach((heading, index) => {
-      const bodyStart = heading.index + heading[0].length;
-      const body = content.slice(bodyStart, headings[index + 1]?.index ?? content.length);
-      const requirement = labeledValue(body, 'Requirement');
-      const plan = extractHeadingSection(body, 'TDD Test Plan', 4);
-      for (const row of tableRowList(plan)) {
-        rows.push({ requirement, ac: heading[1].trim(), ...row });
-      }
-    });
-    return { configured: true, source: 'tasks.md TDD Test Plans', rows };
+    if (headings.length > 0) {
+      const rows = [];
+      headings.forEach((heading, index) => {
+        const bodyStart = heading.index + heading[0].length;
+        const body = content.slice(bodyStart, headings[index + 1]?.index ?? content.length);
+        const requirement = labeledValue(body, 'Requirement');
+        const plan = extractHeadingSection(body, 'TDD Test Plan', 4);
+        for (const row of tableRowList(plan)) {
+          rows.push({ requirement, ac: heading[1].trim(), ...row });
+        }
+      });
+      return { configured: true, source: 'tasks.md TDD Test Plans', rows };
+    }
   }
 
   const matrixSection = extractSection(contractContent, 'AC Test Matrix');
