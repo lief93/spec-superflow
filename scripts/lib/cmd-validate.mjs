@@ -441,7 +441,7 @@ function extractTaskAcs(content) {
   }));
 }
 
-function validateFileChanges(scopeName, content, headingLevel = 5) {
+function validateFileChanges(scopeName, content, headingLevel = 5, requireWhy = false) {
   const issues = [];
   const hashes = '#'.repeat(headingLevel);
   const fileRegex = new RegExp('^' + hashes + '\\s+(Create|Modify|Delete)\\s+`([^`]+)`\\s*$', 'gim');
@@ -457,6 +457,9 @@ function validateFileChanges(scopeName, content, headingLevel = 5) {
     if (!/\*\*(?:Change|Add|Responsibility)\*\*:\s*\S+/i.test(body)) {
       issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} file ${file.path} needs a concrete Change, Add, or Responsibility explanation` });
     }
+    if (requireWhy && !/\*\*Why this file\*\*:\s*\S+/i.test(body)) {
+      issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} file ${file.path} needs a concrete Why this file explanation` });
+    }
   });
   return issues;
 }
@@ -465,7 +468,7 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
   const issues = [];
   const testRows = [];
   if (content.trim().length < 50) {
-    issues.push({ level: 'ERROR', path: 'tasks.md', message: 'tasks.md is too short (< 50 chars) — provide covered scenarios, concrete file changes, and ordered TDD steps' });
+    issues.push({ level: 'ERROR', path: 'tasks.md', message: 'tasks.md is too short (< 50 chars) — provide covered scenarios, concrete file changes, test plans, and Batch verification' });
   }
 
   const batches = extractTaskBatches(content);
@@ -475,6 +478,7 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
 
   for (const batch of batches) {
     const acs = extractTaskAcs(batch.content);
+    const batchVerification = extractNestedSection(batch.content, 'Batch Verification', 3);
     if (acs.length === 0) {
       issues.push({ level: 'ERROR', path: 'tasks.md', message: `${batch.name} must contain at least one ### AC: <Scenario title> section` });
       continue;
@@ -510,7 +514,7 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
       if (!fileChanges) {
         issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} is missing #### File Changes` });
       } else {
-        issues.push(...validateFileChanges(scopeName, fileChanges));
+        issues.push(...validateFileChanges(scopeName, fileChanges, 5, Boolean(batchVerification)));
       }
 
       const testPlan = extractNestedSection(ac.content, 'TDD Test Plan', 4);
@@ -548,11 +552,22 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
         }
       }
 
-      const tddSteps = extractNestedSection(ac.content, 'TDD Steps', 4);
-      if (!tddSteps) {
-        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} is missing #### TDD Steps` });
-      } else if (!/-\s*\[[ xX]\]\s+\S+/.test(tddSteps)) {
-        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} TDD Steps must contain executable checklist items` });
+      if (!batchVerification) {
+        const tddSteps = extractNestedSection(ac.content, 'TDD Steps', 4);
+        if (!tddSteps) {
+          issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} requires either #### TDD Steps or a shared ### Batch Verification block` });
+        } else if (!/-\s*\[[ xX]\]\s+\S+/.test(tddSteps)) {
+          issues.push({ level: 'ERROR', path: 'tasks.md', message: `${scopeName} TDD Steps must contain executable checklist items` });
+        }
+      }
+    }
+
+    if (batchVerification) {
+      if (!/-\s*\[[ xX]\]\s+\S+/.test(batchVerification)) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${batch.name} Batch Verification must contain executable checklist items` });
+      }
+      if (!/`[^`\n]+`/.test(batchVerification)) {
+        issues.push({ level: 'ERROR', path: 'tasks.md', message: `${batch.name} Batch Verification must name at least one exact command` });
       }
     }
   }
@@ -563,7 +578,7 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
     }
   }
 
-  return { ...makeReport(issues), testRows };
+  return { ...makeReport(issues), testRows, batchNames: batches.map(batch => batch.name) };
 }
 
 function extractBatchNames(contractContent) {
@@ -616,7 +631,7 @@ function validateFrontendVerification(sectionContent, taskTestRows) {
   if (!uiRow) issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Verification requires a UI Test row' });
   if (!deviceRow) issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Verification requires a Device Test row' });
   if (!taskTestRows.some(row => normalizeRequirementName(row.layer) === 'ui')) {
-    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Impact: Yes requires at least one UI row in the AC Test Matrix' });
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Frontend Impact: Yes requires at least one UI row in tasks.md TDD Test Plans' });
   }
 
   for (const [name, row] of [['UI Test', uiRow], ['Device Test', deviceRow]]) {
@@ -628,8 +643,8 @@ function validateFrontendVerification(sectionContent, taskTestRows) {
     }
   }
 
-  if (uiRow && normalizeRequirementName(uiRow.obligation) !== 'required by ac test matrix') {
-    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'UI Test obligation must be Required by AC Test Matrix' });
+  if (uiRow && !['required by tasks.md', 'required by ac test matrix'].includes(normalizeRequirementName(uiRow.obligation))) {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'UI Test obligation must be Required by tasks.md' });
   }
   if (deviceRow && normalizeRequirementName(deviceRow.obligation) !== 'required') {
     issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Device Test obligation must be Required for frontend work' });
@@ -663,7 +678,95 @@ function validateSpecsLayout(changeDir, specsDir, specFiles) {
   return makeReport(issues);
 }
 
-function validateExecutionContract(contractContent, requirementNames, taskTestRows) {
+function validateCompactExecutionContract(contractContent, taskTestRows, taskBatchNames) {
+  const issues = [];
+  for (const section of ['Approved Artifacts', 'Execution Mode', 'Batch Gates', 'Verification', 'Frontend Verification', 'Stop Conditions']) {
+    if (!hasSection(contractContent, section)) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `Missing required section: ## ${section}` });
+    }
+  }
+
+  const approved = extractSection(contractContent, 'Approved Artifacts');
+  if (approved) {
+    const lock = normalizeRequirementName(extractLabeledValue(approved, 'Planning Lock'));
+    if (!lock.includes('.spec-superflow.yaml') || !lock.includes('artifacts_hash')) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Approved Artifacts must lock .spec-superflow.yaml > artifacts_hash' });
+    }
+    const table = parseMarkdownTable(approved, ['artifact', 'source of truth'], 'Approved Artifacts');
+    if (table.error) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: table.error });
+    } else {
+      const sources = new Map(table.rows.map(row => [normalizeRequirementName(row.artifact), normalizeRequirementName(row['source of truth'])]));
+      for (const [artifact, expected] of [['proposal', 'proposal.md'], ['specs', 'specs/'], ['tasks', 'tasks.md']]) {
+        if (!sources.get(artifact)?.includes(expected)) {
+          issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `Approved Artifacts must reference ${expected}` });
+        }
+      }
+    }
+  }
+
+  const mode = extractSection(contractContent, 'Execution Mode');
+  if (mode) {
+    if (!isMeaningfulCell(extractLabeledValue(mode, 'Mode'))) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Execution Mode requires a concrete Mode' });
+    }
+    if (!isMeaningfulCell(extractLabeledValue(mode, 'Selection rationale'))) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Execution Mode requires a concrete Selection rationale' });
+    }
+  }
+
+  const gates = extractSection(contractContent, 'Batch Gates');
+  if (gates) {
+    const table = parseMarkdownTable(gates, ['batch', 'entry gate', 'exit gate', 'review gate'], 'Batch Gates');
+    if (table.error) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: table.error });
+    } else {
+      const rows = new Map(table.rows.map(row => [normalizeRequirementName(row.batch), row]));
+      for (const batch of taskBatchNames) {
+        const row = rows.get(normalizeRequirementName(batch));
+        if (!row) {
+          issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `Batch Gates is missing tasks.md batch: ${batch}` });
+          continue;
+        }
+        for (const field of ['entry gate', 'exit gate', 'review gate']) {
+          if (!isMeaningfulCell(row[field])) {
+            issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `Batch Gates row for ${batch} requires ${field}` });
+          }
+        }
+      }
+      for (const row of table.rows) {
+        if (!taskBatchNames.some(batch => normalizeRequirementName(batch) === normalizeRequirementName(row.batch))) {
+          issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `Batch Gates references no tasks.md batch: ${row.batch}` });
+        }
+      }
+    }
+  }
+
+  const verification = extractSection(contractContent, 'Verification');
+  if (verification) {
+    const table = parseMarkdownTable(verification, ['check', 'command or procedure', 'evidence required'], 'Verification');
+    if (table.error) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: table.error });
+    } else if (table.rows.length === 0) {
+      issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Verification requires at least one shared check' });
+    }
+  }
+
+  const frontend = extractSection(contractContent, 'Frontend Verification');
+  if (frontend) issues.push(...validateFrontendVerification(frontend, taskTestRows));
+
+  const stops = extractSection(contractContent, 'Stop Conditions');
+  if (stops && !/^[-*]\s+\S+/m.test(stops)) {
+    issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Stop Conditions requires at least one concrete condition' });
+  }
+
+  return makeReport(issues);
+}
+
+function validateExecutionContract(contractContent, requirementNames, taskTestRows, taskBatchNames) {
+  if (hasSection(contractContent, 'Approved Artifacts')) {
+    return validateCompactExecutionContract(contractContent, taskTestRows, taskBatchNames);
+  }
   const requiredSections = [
     'Intent Lock',
     'Approved Behavior',
@@ -874,10 +977,12 @@ export async function run(args) {
 
   const projectRoot = findProjectRoot(changeDir);
   let taskTestRows = [];
+  let taskBatchNames = [];
   const tasksPath = join(changeDir, 'tasks.md');
   if (existsSync(tasksPath)) {
     const report = validateTasksStructure(readFileSync(tasksPath, 'utf-8'), scenarioPairs, designCoverageRows, designExists, projectRoot);
     taskTestRows = report.testRows;
+    taskBatchNames = report.batchNames;
     printReport('tasks.md', report);
     if (!report.valid) hasErrors = true;
   }
@@ -885,7 +990,7 @@ export async function run(args) {
   const contractPath = join(changeDir, 'execution-contract.md');
   if (existsSync(contractPath)) {
     const content = readFileSync(contractPath, 'utf-8');
-    const report = validateExecutionContract(content, requirementNames, taskTestRows);
+    const report = validateExecutionContract(content, requirementNames, taskTestRows, taskBatchNames);
     printReport('execution-contract.md', report);
     if (!report.valid) hasErrors = true;
   }
