@@ -7,13 +7,13 @@ description: Convert approved planning artifacts into an execution contract. Inv
 
 Convert approved planning artifacts into a compact execution lock: `execution-contract.md`. Use `templates/execution-contract.md` as the exact structure. The contract records what is approved, how execution is gated, and when to stop; it does not restate planning content.
 
-Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `tasks.md`, and `docs/artifact-contract.md`. Read `docs/project/project-guidelines.md` when configured. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only relevant topics.
+Read before generating: `proposal.md`, change-local `specs/`, `tasks.md`, and `docs/artifact-contract.md`. Read `design.md` unless `artifacts.skip` contains `design` as a configured skip. Read `docs/project/project-guidelines.md` when configured. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only relevant topics.
 
 ## Source Of Truth
 
 - `proposal.md`: intent and scope
 - `specs/`: approved behavior and Scenarios
-- `design.md`: decisions, baseline alignment, constraints, and deviations
+- `design.md`: decisions, baseline alignment, constraints, and deviations; record `configured skip` instead when the project configuration skips Design
 - `tasks.md`: Batch/AC ownership, file changes, TDD Test Plans, and Batch Verification
 
 Reference these artifacts from `## Approved Artifacts`. Do not copy their behavior summaries, Requirement mappings, decisions, file lists, Task Batches, or AC test matrix into the contract. `tasks.md > TDD Test Plan` remains the source of truth for exact test obligations and later `pr-summary.md` evidence.
@@ -22,8 +22,8 @@ Reference these artifacts from `## Approved Artifacts`. Do not copy their behavi
 
 Before generating the contract, verify without copying the result:
 
-1. Every SHALL/MUST and Scenario in `specs/` appears in the design coverage table and exactly one task Batch AC.
-2. Every task file change follows the selected baseline/reuse pattern or has an approved design deviation.
+1. Every SHALL/MUST and Scenario in `specs/` appears in exactly one task Batch AC and, unless Design is configured to skip, in the design coverage table.
+2. Unless Design is configured to skip, every task file change follows the selected baseline/reuse pattern or has an approved design deviation.
 3. Every required edge case has an exact fixture or precondition and observable assertion in `tasks.md`.
 4. Every TDD row has a controllable precondition and observable result. Reject no-op fakes, no-op callbacks, inert refreshes, inaccessible UI state, and generic suite labels.
 5. Interface changes enumerate all discovered production implementations, adapters, fakes, mocks, test doubles, and affected module compile/test obligations.

@@ -230,8 +230,8 @@ describe('cmd-validate', () => {
     assert.ok(result.stdout.includes('All artifacts validated'));
   });
 
-  it('rejects design coverage that omits the baseline and constraint columns', () => {
-    const changeDir = join(tempDir, 'design-missing-new-columns');
+  it('accepts a legacy five-column design coverage table', () => {
+    const changeDir = join(tempDir, 'legacy-design-columns');
     mkdirSync(changeDir, { recursive: true });
     writeValidPlanningArtifacts(changeDir);
     writeValidExecutionContract(changeDir);
@@ -239,15 +239,21 @@ describe('cmd-validate', () => {
     writeFileSync(
       designPath,
       readFileSync(designPath, 'utf-8')
-        .replace(' | Baseline / Reuse | Constraint / Deviation', '')
-        .replace(' |---|---', '')
-        .replace(' | Existing route registration | No new handler contract', ''),
+        .replace(
+          '| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |',
+          '| Requirement | Scenario | Design Decision | Affected Area | Why Here |',
+        )
+        .replace('|---|---|---|---|---|---|---|', '|---|---|---|---|---|')
+        .replace(
+          '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Existing route registration | No new handler contract | Middleware runs before expensive handlers |',
+          '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Middleware runs before expensive handlers |',
+        ),
     );
 
     const result = runValidate(changeDir);
 
-    assert.equal(result.exitCode, 1);
-    assert.match(result.stdout, /must include columns:.*baseline \/ reuse.*constraint \/ deviation/i);
+    assert.equal(result.exitCode, 0, result.stdout || result.stderr);
+    assert.match(result.stdout, /All artifacts validated/);
   });
 
   it('rejects non-meaningful baseline or constraint coverage', () => {
@@ -271,6 +277,26 @@ describe('cmd-validate', () => {
     assert.match(result.stdout, /requires constraint \/ deviation/i);
   });
 
+  it('accepts None when there is no design constraint or deviation', () => {
+    const changeDir = join(tempDir, 'design-no-constraint');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    const designPath = join(changeDir, 'design.md');
+    writeFileSync(
+      designPath,
+      readFileSync(designPath, 'utf-8').replace(
+        '| Existing route registration | No new handler contract |',
+        '| Existing route registration | None |',
+      ),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 0, result.stdout || result.stderr);
+    assert.match(result.stdout, /All artifacts validated/);
+  });
+
   it('rejects a compact contract that does not lock design.md', () => {
     const changeDir = join(tempDir, 'compact-contract-missing-design');
     mkdirSync(changeDir, { recursive: true });
@@ -286,6 +312,35 @@ describe('cmd-validate', () => {
 
     assert.equal(result.exitCode, 1);
     assert.match(result.stdout, /Approved Artifacts must reference design\.md/);
+  });
+
+  it('accepts a configured design skip in a compact contract', () => {
+    const changeDir = join(tempDir, 'compact-contract-design-skip');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    rmSync(join(changeDir, 'design.md'));
+    writeFileSync(join(changeDir, 'spec-superflow.config.json'), JSON.stringify({ artifacts: { skip: ['design'] } }));
+    const tasksPath = join(changeDir, 'tasks.md');
+    writeFileSync(
+      tasksPath,
+      readFileSync(tasksPath, 'utf-8')
+        .replace('- **Responsibility**: Enforce the shared request limit before handlers run.', '- **Why this file**: A dedicated middleware owns admission before handlers.\n- **Responsibility**: Enforce the shared request limit before handlers run.')
+        .replace(
+          /#### TDD Steps[\s\S]*$/,
+          '### Batch Verification\n- [ ] **RED / Baseline**: Run `node --test test/rate-limit.test.ts`; expect behavior-specific failure.\n- [ ] **GREEN**: Run `node --test test/rate-limit.test.ts`; expect PASS.\n- [ ] **Regression**: Run `npm test`; expect zero failures.\n',
+        ),
+    );
+    writeCompactExecutionContract(changeDir);
+    const contractPath = join(changeDir, 'execution-contract.md');
+    writeFileSync(
+      contractPath,
+      readFileSync(contractPath, 'utf-8').replace('| Design | `design.md` |', '| Design | configured skip |'),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 0, result.stdout || result.stderr);
+    assert.match(result.stdout, /All artifacts validated/);
   });
 
   it('fails when a spec scenario is missing from design coverage', () => {

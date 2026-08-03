@@ -1,6 +1,7 @@
 // ssf validate <dir> — validate artifacts in a change directory
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, basename, dirname, extname, relative, resolve, sep } from 'node:path';
+import { loadConfig } from './config-loader.mjs';
 
 async function getValidator() {
   const mod = await import('../../dist/index.js');
@@ -94,6 +95,10 @@ function normalizeDecisionName(value) {
 function isMeaningfulCell(value) {
   const normalized = normalizeCell(value).toLowerCase();
   return normalized !== '' && !['-', '—', 'n/a', 'na', 'none', 'tbd', 'todo', 'pending'].includes(normalized);
+}
+
+function isMeaningfulConstraintCell(value) {
+  return normalizeRequirementName(value) === 'none' || isMeaningfulCell(value);
 }
 
 const TEST_SOURCE_EXTENSIONS = new Set([
@@ -256,10 +261,12 @@ function parseMarkdownTable(sectionContent, requiredHeaders, tableName = 'Markdo
       const cells = splitMarkdownTableRow(lines[j]);
       if (!cells) break;
       const row = {};
-      for (const required of requiredHeaders) row[required] = cells[indexes[required]] || '';
+      headers.forEach((header, index) => {
+        row[header] = cells[index] || '';
+      });
       rows.push(row);
     }
-    return { rows };
+    return { rows, headers };
   }
 
   return { error: `${tableName} section must contain a markdown table` };
@@ -363,11 +370,18 @@ function validateDesignStructure(content, scenarioPairs) {
 
   const table = parseMarkdownTable(
     coverageSection,
-    ['requirement', 'scenario', 'design decision', 'affected area', 'baseline / reuse', 'constraint / deviation', 'why here'],
+    ['requirement', 'scenario', 'design decision', 'affected area', 'why here'],
     'Design coverage',
   );
   if (table.error) {
     issues.push({ level: 'ERROR', path: 'design.md', message: table.error });
+    return { ...makeReport(issues), coverageRows: new Map() };
+  }
+
+  const hasBaseline = table.headers.includes('baseline / reuse');
+  const hasConstraint = table.headers.includes('constraint / deviation');
+  if (hasBaseline !== hasConstraint) {
+    issues.push({ level: 'ERROR', path: 'design.md', message: 'Design coverage must include both Baseline / Reuse and Constraint / Deviation, or use the legacy five-column table' });
     return { ...makeReport(issues), coverageRows: new Map() };
   }
 
@@ -384,8 +398,13 @@ function validateDesignStructure(content, scenarioPairs) {
       continue;
     }
     coverageRows.set(key, row);
-    for (const field of ['design decision', 'affected area', 'baseline / reuse', 'constraint / deviation', 'why here']) {
-      if (!isMeaningfulCell(row[field])) {
+    const requiredFields = ['design decision', 'affected area', 'why here'];
+    if (hasBaseline) requiredFields.splice(2, 0, 'baseline / reuse', 'constraint / deviation');
+    for (const field of requiredFields) {
+      const meaningful = field === 'constraint / deviation'
+        ? isMeaningfulConstraintCell(row[field])
+        : isMeaningfulCell(row[field]);
+      if (!meaningful) {
         issues.push({ level: 'ERROR', path: 'design.md', message: `Design coverage for "${row.requirement} / ${row.scenario}" requires ${field}` });
       }
     }
@@ -682,7 +701,7 @@ function validateSpecsLayout(changeDir, specsDir, specFiles) {
   return makeReport(issues);
 }
 
-function validateCompactExecutionContract(contractContent, taskTestRows, taskBatchNames) {
+function validateCompactExecutionContract(contractContent, taskTestRows, taskBatchNames, designSkipped) {
   const issues = [];
   for (const section of ['Approved Artifacts', 'Execution Mode', 'Batch Gates', 'Verification', 'Frontend Verification', 'Stop Conditions']) {
     if (!hasSection(contractContent, section)) {
@@ -701,10 +720,18 @@ function validateCompactExecutionContract(contractContent, taskTestRows, taskBat
       issues.push({ level: 'ERROR', path: 'execution-contract.md', message: table.error });
     } else {
       const sources = new Map(table.rows.map(row => [normalizeRequirementName(row.artifact), normalizeRequirementName(row['source of truth'])]));
-      for (const [artifact, expected] of [['proposal', 'proposal.md'], ['specs', 'specs/'], ['design', 'design.md'], ['tasks', 'tasks.md']]) {
+      for (const [artifact, expected] of [['proposal', 'proposal.md'], ['specs', 'specs/'], ['tasks', 'tasks.md']]) {
         if (!sources.get(artifact)?.includes(expected)) {
           issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `Approved Artifacts must reference ${expected}` });
         }
+      }
+      const designSource = sources.get('design') || '';
+      if (designSkipped) {
+        if (!designSource.includes('configured skip')) {
+          issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Approved Artifacts must record the configured design skip' });
+        }
+      } else if (!designSource.includes('design.md')) {
+        issues.push({ level: 'ERROR', path: 'execution-contract.md', message: 'Approved Artifacts must reference design.md' });
       }
     }
   }
@@ -767,9 +794,9 @@ function validateCompactExecutionContract(contractContent, taskTestRows, taskBat
   return makeReport(issues);
 }
 
-function validateExecutionContract(contractContent, requirementNames, taskTestRows, taskBatchNames) {
+function validateExecutionContract(contractContent, requirementNames, taskTestRows, taskBatchNames, designSkipped = false) {
   if (hasSection(contractContent, 'Approved Artifacts')) {
-    return validateCompactExecutionContract(contractContent, taskTestRows, taskBatchNames);
+    return validateCompactExecutionContract(contractContent, taskTestRows, taskBatchNames, designSkipped);
   }
   const requiredSections = [
     'Intent Lock',
@@ -932,6 +959,8 @@ export async function run(args) {
 
   const changeName = basename(changeDir);
   const validator = await getValidator();
+  const config = loadConfig(changeDir);
+  const designSkipped = config.artifacts?.skip?.includes('design') || false;
 
   console.log(`🔍 Validating: ${changeDir}`);
   console.log(`   Change: ${changeName}`);
@@ -994,7 +1023,7 @@ export async function run(args) {
   const contractPath = join(changeDir, 'execution-contract.md');
   if (existsSync(contractPath)) {
     const content = readFileSync(contractPath, 'utf-8');
-    const report = validateExecutionContract(content, requirementNames, taskTestRows, taskBatchNames);
+    const report = validateExecutionContract(content, requirementNames, taskTestRows, taskBatchNames, designSkipped);
     printReport('execution-contract.md', report);
     if (!report.valid) hasErrors = true;
   }
