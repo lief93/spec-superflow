@@ -51,7 +51,15 @@ Classify a change as frontend when it affects a Web, Android, HarmonyOS, iOS, de
 - `Frontend Impact: Yes`: include UI Test and Device Test rows.
 - Set UI Test to `Required by tasks.md`; exact actions, files, and cases remain in each AC's TDD Test Plan.
 - For visible output derived from application state, require an injectable rendering seam and separate proof of state-to-UI derivation from lazy, scrolling, or repeated-content behavior. A child-parameter assertion alone is insufficient.
-- Device Test is `Required`. Default to one project-baseline simulator/device per affected native platform, or the default real browser for Web. Add environments only when behavior depends on system version, screen size, Market, permission, or device capability.
+- Device Test is `Required` at feature level: run at least one reachable branch
+  per affected feature on one project-baseline simulator/device per affected
+  native platform, or the default real browser for Web. Externally controlled
+  branches driven by service data, network state, account state, or another
+  unavailable condition may use their exact automated UI or unit test evidence
+  instead of device replay. Do not add a Repository, fake, debug entry, or
+  production seam solely to force such a branch on-device. Add environments only
+  when behavior depends on system version, screen size, Market, permission, or
+  device capability.
 - If no UI framework exists, preserve `Unavailable` in the task row, record the inspected locations/configuration, and do not add a framework without developer approval.
 - Read commands and runtime prerequisites from code, relevant Memory, build files, package scripts, and existing tests. Do not invent commands.
 - `Frontend Impact: No`: record the concrete reason and omit the table.

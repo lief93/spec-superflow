@@ -100,6 +100,12 @@ authority, review only `design.md` and `tasks.md`, and use this fixed order:
 4. **Visible and accessibility results**: Every user-visible AC needs its own UI
    row. When visible output and accessibility semantics are parallel outcomes,
    require the test to assert both, including updated and stale-value absence.
+   Plan Device Test at feature level: require one reachable branch of each
+   affected feature on the baseline device. Externally controlled branches
+   driven by service data, network state, account state, or another unavailable
+   condition may use exact automated UI or unit test evidence instead of device
+   replay; do not require a Repository, fake, debug entry, or other production
+   seam solely to force those branches on-device.
 5. **Static selector versus runtime proof**: `Proves` may claim only observable
    results asserted by its command and mechanism. Android
    `getQuantityString(0/1/2)` does not prove static `quantity="zero"`,

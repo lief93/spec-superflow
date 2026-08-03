@@ -126,11 +126,24 @@ Read `## Frontend Verification` from `execution-contract.md`.
 When `Frontend Impact: Yes`:
 
 1. Run every exact UI Test File and Test Case in `tasks.md > TDD Test Plan` fresh. A broader smoke/regression suite may be additional evidence, never a replacement.
-2. Run Device Test after all Batches are complete: execute the same AC-linked UI cases on at least one project baseline simulator/device per affected native platform, then cover only the remaining non-automatable user paths manually. For Web, use the default real browser and desktop viewport; add a mobile viewport only when responsive behavior is affected.
+2. Run Device Test after all Batches are complete: exercise at least one
+   reachable branch of each affected feature on one project baseline
+   simulator/device per affected native platform. For Web, use the default real
+   browser and desktop viewport; add a mobile viewport only when responsive
+   behavior is affected. Externally controlled branches driven by service data,
+   network state, account state, or another unavailable condition may rely on
+   their exact automated UI or unit test evidence instead of device replay.
+   Name the branch actually run and disclose which remaining branches were
+   covered only by automated evidence; never claim those branches were run on a
+   device.
 3. Record one row per task test obligation in `pr-summary.md > AC Test Evidence`, plus the aggregate UI and Device results in `Frontend Verification Evidence`.
 4. Each task row with `Add`, `Update`, or `Run existing` must be `Pass`. Any missing or failing required UI case is FAIL.
 5. `Unavailable` is CONDITIONAL, not PASS. Record searched locations/configuration and the missing capability; proceed only after developer acceptance. Do not introduce a framework during release verification.
-6. Device Test must be `Pass`. Missing evidence, build/install/launch failure, or an unverified affected path is FAIL.
+6. Device Test must be `Pass` for the required reachable feature branch. A
+   failure in that executed branch, or missing evidence that any affected
+   feature was reached, is FAIL. Lack of device evidence for an externally
+   controlled remaining branch is not a failure when its exact task-owned
+   automated evidence passed and the boundary is disclosed.
 
 Screenshot testing is outside this version and is not required by this gate.
 

@@ -46,7 +46,7 @@ Keep the table below when `Frontend Impact: Yes`; delete it when `No`.
 | Check | Obligation | Scope | Target Environment | Command Or Procedure | Evidence Required |
 |---|---|---|---|---|---|
 | UI Test | `Required by tasks.md` | Every UI row in `tasks.md` | UI test runtime | Run the exact planned files and cases; when unavailable, record the search scope and capability gap | Per-AC result and report path |
-| Device Test | `Required` | Every User-visible AC in `tasks.md` | Project-standard emulator, device, or browser environment | Run affected UI paths in the target environment; list manual steps only for paths that cannot be automated | Result, environment details, and necessary logs |
+| Device Test | `Required` | One reachable branch per affected feature; externally controlled remaining branches stay in AC-owned automated tests | Project-standard emulator, device, or browser environment | Run and name the reachable feature branch; disclose external-condition branches covered only by automated evidence | Result, environment details, executed branch, and necessary logs |
 
 ## Stop Conditions
 

@@ -29,7 +29,7 @@ Keep the table below when `Frontend Impact: Yes`; delete it when `No`.
 | Check | Planned Obligation | Result | Environment | Command Or Procedure | Evidence |
 |---|---|---|---|---|---|
 | UI Test | `Required by tasks.md` | `Pass` / `Unavailable` | Test runtime | Actual command; when unavailable, record the search process | Pass/fail count, report path, or capability gap |
-| Device Test | `Required` | `Pass` / `Fail` | Device, emulator, or browser and version | Actual build, install/start, and verification steps | Result and key logs |
+| Device Test | `Required` | `Pass` / `Fail` | Device, emulator, or browser and version | Run and name one reachable branch per affected feature; disclose externally controlled branches covered only by automated evidence | Result, executed branch, and key logs |
 
 ## Exceptions And Known Risks
 
