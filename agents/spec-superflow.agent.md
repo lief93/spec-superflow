@@ -82,60 +82,38 @@ exactly three semantic checkpoints:
 
 At each checkpoint:
 
-1. Run `ssf review candidate <change-dir> <stage> --json`. For `final`, choose
-   one stable Git base and pass the same `--base <review-base>` to candidate,
-   record, and check.
-2. Freeze the candidate. Do not edit its artifacts, implementation, tests, or
-   evidence while Reviewer runs.
-3. Invoke exactly `Spec Superflow Reviewer` in a fresh independent context for
+1. Freeze the current stage inputs. Do not edit artifacts, implementation,
+   tests, or evidence while Reviewer runs.
+2. Invoke exactly `Spec Superflow Reviewer` in a fresh independent context for
    the first review of this stage, and retain that one stage-scoped context.
-   For the Planning handoff at `proposal-specs` and `design-tasks`, supply a
-   short reference index containing only: the exact candidate JSON unchanged;
-   project-relative paths to `user-intent.md`, current stage artifacts, and
-   applicable project standards; a necessary repository and test evidence
-   index with each project-relative path plus symbol; and exact mechanical check
-   results as command, exit code, and concise result. Reviewer opens those paths
-   itself.
-   For the Final handoff, pass the exact final candidate JSON unchanged; it
-   contains `review_base`, `worktree_identity`, `changed_files`, review targets,
-   and the finding allowlist. `changed_files` describes only implementation
-   differences outside the current Change directory. Change artifacts are
-   covered separately by the candidate `inputs` and upstream candidate
-   identities. Also pass only project-relative paths to the
-   original requirement, applicable project standards, current Change Specs,
-   Design, Tasks, execution contract, mechanical evidence, risks, and PR
-   summary. Include these suggested read-only Git commands:
-   `git status --short`, `git diff <review-base> -- .`,
-   `git log --oneline <review-base>..HEAD`, and, when necessary,
-   `git show <review-base>:<path>`. Reviewer uses ordinary project-read and
-   terminal tools to acquire the actual fixed-base diff, inspect every
-   `changed_files` entry, and read every untracked file itself. Never inline or
-   add the tracked diff, untracked source text, a whole artifact, source or test
-   file, or evidence log to the handoff. Reviewer must not edit files, stage,
-   commit, push, change workflow state, contact the user, or invoke another
-   Agent.
-4. The first action after every Reviewer return is to write its raw JSON
+   Give Reviewer only the exact Change directory and stage. Do not prepare a
+   handoff bundle, candidate JSON, path index, evidence index, mechanical
+   summary, diff, artifact body, or result schema. Reviewer discovers the
+   current candidate and repository evidence itself.
+3. The first action after every Reviewer return is to write its raw JSON
    unchanged to `<change-dir>/reviews/<stage>-pending-report.json`. The
    immediately next action is `ssf review record <change-dir> <stage> --json`.
-   Immediately after record, run
-   `ssf review check <change-dir> <stage> --json`. For `final`, append the same
-   explicit base to both commands. Candidate identity binds exact Git status,
+   Immediately after record, run `ssf review check <change-dir> <stage> --json`.
+   For `final`, candidate, record, and check default to the immutable
+   `execution_base_commit` captured when this Change first entered `executing`;
+   explicit `--base` is only a diagnostic or compatibility override. Candidate identity binds exact Git status,
    including staged versus unstaged state, the complete tracked diff, and every
    untracked byte. Therefore record and check fail on status, staged, or
    worktree drift. Only after write, record, and check may Primary interpret or
    act on the verdict.
-5. Before all three finish, do not interpret the verdict, edit any artifact, or
+4. Before all three finish, do not interpret the verdict, edit any artifact, or
    invoke Reviewer again. Missing any one of write, record, or check, or doing
    another action first, is `BLOCKED`.
-6. A valid `Request Changes` is recorded as current evidence and makes check
+5. A valid `Request Changes` is recorded as current evidence and makes check
    exit nonzero with JSON `code: "request-changes"`. Only that exact check
    result is a verified blocking verdict. Preserve its current evidence. Any
    other nonzero, malformed, stale, or unavailable result is `BLOCKED`.
-7. On the first verified `Request Changes`, keep the workflow in its current state.
+6. On the first verified `Request Changes`, keep the workflow in its current state.
    Primary repairs only the affected stage exactly once, reruns the applicable
-   checks, freezes a new candidate, and invokes the same fixed Reviewer again
-   in the same Reviewer context. The Reviewer must reread the new candidate and
-   repeat the complete stage scan; never reuse an earlier approval.
+   checks, freezes the repaired inputs, and invokes the same fixed Reviewer
+   again in the same Reviewer context with only the same Change directory and
+   stage. The Reviewer must recompute and reread the new candidate and repeat
+   the complete stage scan; never reuse an earlier approval.
 
 A second verified `Request Changes`, including a new Finding, or a missing,
 malformed, stale, unavailable, or otherwise nonzero second review result is

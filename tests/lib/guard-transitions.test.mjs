@@ -295,6 +295,7 @@ describe('Independent review transition gates', () => {
     try {
       const proposal = writeApprovedReview(fixture, 'proposal-specs');
       let state = baseReviewState('executing', {
+        execution_base_commit: fixture.base,
         dp_1_result: 'confirmed: product direction',
         dp_1_candidate_identity: proposal.identity,
       });

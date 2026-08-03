@@ -107,11 +107,12 @@ Primary repairs only the located targets once; the repaired candidate and every 
 result are refrozen before the single same-context re-review. A second `Request Changes`
 is `BLOCKED`. After current `Approved`, only workflow-state progression is allowed.
 
-Final input is limited to a body-free metadata candidate, paths to
-original/current intent, the concise execution contract, project standards,
-exact key-test evidence, known risks, and unexecuted runtime checks. It never
-contains the tracked diff, untracked source text, or whole artifact/source/test/
-evidence bodies. Reviewer takes the resolved review base from the candidate,
+Final invocation contains only the Change directory and `final` stage. Reviewer
+runs the read-only `ssf review candidate` command to discover the current
+artifacts, evidence paths, changed files, and resolved `HEAD` base itself; no
+Primary-authored candidate, path index, evidence summary, result schema, tracked
+diff, untracked source text, or whole artifact/source/test/evidence body is
+passed. Reviewer takes the resolved review base from the candidate,
 runs read-only `git status`, fixed-base `git diff`, `git log`, and necessary
 `git show`, then reads every changed-file entry and every untracked file itself.
 Candidate computation writes no Review Markdown, bundle, or extra report JSON.
@@ -129,8 +130,8 @@ these runtime properties together:
 4. Reviewer uses ordinary project-read and terminal tools to run the required
    read-only Git commands and read an untracked canary; candidate identity,
    porcelain status, cached diff, file bytes, and staged state remain unchanged.
-   It does not run tests or workflow commands, mutate Git, or invoke another
-   Agent.
+   It does not run tests or any workflow command except read-only
+   `ssf review candidate`, mutate Git, or invoke another Agent.
 5. Reviewer output returns to Primary before Primary repairs the located target
    or asks the user; no direct Reviewer-to-user path qualifies.
 

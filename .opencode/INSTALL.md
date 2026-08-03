@@ -43,14 +43,14 @@ directly. During a normal requirement, it directly invokes the global `ssf`;
 normal requirements never call bootstrap MCP tools.
 
 For a full workflow, one hidden read-only Reviewer runs only at the two
-Planning semantic gates and final Code Review. The primary Agent supplies the
-body-free CLI-owned candidate JSON plus paths to original intent, current stage
-artifacts, project standards, and necessary repository/test/runtime evidence.
-The Reviewer uses ordinary project-read and terminal tools to resolve those
-inputs. For final review it independently runs read-only Git status/diff/log/
+Planning semantic gates and final Code Review. The primary Agent supplies only
+the Change directory and stage; the Plugin strips any additional handoff text.
+The Reviewer runs the read-only `ssf review candidate` command and uses ordinary
+project-read and terminal tools to discover current artifacts and repository
+evidence. For final review it independently runs read-only Git status/diff/log/
 show commands and reads every changed and untracked file; it does not receive
-copied source or diff bodies, run tests/workflow commands, mutate files or Git,
-or call another Agent. Mechanical schema/state/test checks stay with the
+copied source or diff bodies, run tests or other workflow commands, mutate files
+or Git, or call another Agent. Mechanical schema/state/test checks stay with the
 primary Agent. A delivery package check stays there too only when the current Specs
 explicitly require a delivery package or
 `tasks.md > TDD Test Plan` explicitly requires a delivery package.

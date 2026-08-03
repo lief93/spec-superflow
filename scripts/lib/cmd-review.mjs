@@ -23,6 +23,7 @@ import {
   pendingReviewReportRelativePath,
   readRegularFileNoFollow,
   requireReviewStagePrerequisites,
+  resolveFinalReviewBase,
 } from './review-evidence.mjs';
 
 const REVIEW_COMMANDS = ['candidate', 'record', 'check'];
@@ -46,20 +47,20 @@ export function run(args) {
     printUsage();
     process.exit(2);
   }
-  if (stage === 'final' && !values.base) {
-    console.error(`Final review ${subcommand} requires --base <git-ref>.`);
-    process.exit(2);
-  }
   if (stage !== 'final' && values.base) {
     console.error('--base is supported only for final review.');
     process.exit(2);
   }
 
+  const base = stage === 'final'
+    ? resolveFinalReviewBase(changeDir, values.base)
+    : undefined;
+
   const common = {
     changeDir,
     stage,
     repoRoot: process.cwd(),
-    base: values.base,
+    base,
   };
   if (subcommand === 'candidate') {
     const prerequisiteIdentities = requireReviewStagePrerequisites(common);

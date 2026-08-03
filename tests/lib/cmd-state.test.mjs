@@ -332,7 +332,7 @@ Use the guarded state CLI.
 - Review before closure.
 ## Escalation Rules
 - Stop on any failed transition.
-`);
+      `);
       assert.equal(ssf(`state init ${changeDir}`).exitCode, 0);
       assert.equal(ssf(`state set ${changeDir} dp_3_result "approved: lifecycle contract"`).exitCode, 0);
       assert.equal(ssf(`state transition ${changeDir} approved-for-build`).exitCode, 0);
@@ -341,6 +341,9 @@ Use the guarded state CLI.
       assert.equal(ssf(`state set ${changeDir} dp_4_result "inline execution"`).exitCode, 0);
       assert.equal(ssf(`state transition ${changeDir} executing`).exitCode, 0);
       expectState('executing');
+      const executionBase = ssf(`state get ${changeDir} execution_base_commit`);
+      assert.equal(executionBase.exitCode, 0, executionBase.stderr);
+      assert.equal(executionBase.stdout, reviewBase);
 
       const tasksPath = join(changeDir, 'tasks.md');
       writeFileSync(
@@ -376,6 +379,128 @@ Use the guarded state CLI.
       }
       assert.equal(closingOwners.length, 1, 'exactly one Skill must own executing -> closing');
       expectState('closing');
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it('records independent execution bases for Changes that start at different commits', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ssf-state-independent-bases-'));
+    const changeA = join(projectDir, 'changes', 'change-a');
+    const changeB = join(projectDir, 'changes', 'change-b');
+    const runGit = command => execSync(`git -C ${projectDir} ${command}`, { encoding: 'utf8' }).trim();
+    const enterExecuting = changeDir => {
+      for (const args of [
+        `state init ${changeDir}`,
+        `state set ${changeDir} workflow tweak`,
+        `state transition ${changeDir} approved-for-build`,
+        `state set ${changeDir} dp_4_result "inline execution"`,
+        `state transition ${changeDir} executing`,
+      ]) {
+        const result = ssf(args, { cwd: projectDir });
+        assert.equal(result.exitCode, 0, result.stderr);
+      }
+      return ssf(`state get ${changeDir} execution_base_commit`, { cwd: projectDir }).stdout;
+    };
+
+    try {
+      runGit('init -q -b main');
+      runGit('config user.email tests@example.com');
+      runGit('config user.name "Spec Superflow Tests"');
+      writeFileSync(join(projectDir, 'README.md'), '# First base\n');
+      runGit('add README.md');
+      runGit('commit -qm first-base');
+      const first = runGit('rev-parse HEAD');
+      assert.equal(enterExecuting(changeA), first);
+
+      writeFileSync(join(projectDir, 'README.md'), '# Second base\n');
+      runGit('add README.md');
+      runGit('commit -qm second-base');
+      const second = runGit('rev-parse HEAD');
+      assert.notEqual(second, first);
+      assert.equal(enterExecuting(changeB), second);
+      assert.equal(ssf(`state get ${changeA} execution_base_commit`).stdout, first);
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves the execution base across debugging and a later HEAD commit', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ssf-state-debugging-base-'));
+    const changeDir = join(projectDir, 'changes', 'debug-round-trip');
+    const runGit = command => execSync(`git -C ${projectDir} ${command}`, { encoding: 'utf8' }).trim();
+
+    try {
+      runGit('init -q -b main');
+      runGit('config user.email tests@example.com');
+      runGit('config user.name "Spec Superflow Tests"');
+      writeFileSync(join(projectDir, 'README.md'), '# Execution base\n');
+      runGit('add README.md');
+      runGit('commit -qm execution-base');
+      const executionBase = runGit('rev-parse HEAD');
+      for (const args of [
+        `state init ${changeDir}`,
+        `state set ${changeDir} workflow tweak`,
+        `state transition ${changeDir} approved-for-build`,
+        `state set ${changeDir} dp_4_result "inline execution"`,
+        `state transition ${changeDir} executing`,
+        `state transition ${changeDir} debugging`,
+      ]) {
+        const result = ssf(args, { cwd: projectDir });
+        assert.equal(result.exitCode, 0, result.stderr);
+      }
+      const attemptedOverride = ssf(
+        `state set ${changeDir} execution_base_commit ${'0'.repeat(40)}`,
+        { cwd: projectDir },
+      );
+      assert.notEqual(attemptedOverride.exitCode, 0);
+
+      writeFileSync(join(projectDir, 'README.md'), '# Debugging commit\n');
+      runGit('add README.md');
+      runGit('commit -qm debugging-commit');
+      assert.notEqual(runGit('rev-parse HEAD'), executionBase);
+      const resumed = ssf(`state transition ${changeDir} executing`, { cwd: projectDir });
+      assert.equal(resumed.exitCode, 0, resumed.stderr);
+      assert.equal(ssf(`state get ${changeDir} execution_base_commit`).stdout, executionBase);
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it('records HEAD without rejecting a mixed worktree', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ssf-state-mixed-worktree-'));
+    const changeDir = join(projectDir, 'changes', 'mixed-worktree');
+    const runGit = command => execSync(`git -C ${projectDir} ${command}`, { encoding: 'utf8' }).trim();
+
+    try {
+      runGit('init -q -b main');
+      runGit('config user.email tests@example.com');
+      runGit('config user.name "Spec Superflow Tests"');
+      mkdirSync(join(projectDir, 'src'), { recursive: true });
+      writeFileSync(join(projectDir, 'src', 'tracked.mjs'), 'export const value = 1;\n');
+      runGit('add src/tracked.mjs');
+      runGit('commit -qm baseline');
+      const head = runGit('rev-parse HEAD');
+      writeFileSync(join(projectDir, 'src', 'tracked.mjs'), 'export const value = 2;\n');
+      writeFileSync(join(projectDir, 'src', 'staged.mjs'), 'export const staged = true;\n');
+      writeFileSync(join(projectDir, 'src', 'untracked.mjs'), 'export const untracked = true;\n');
+      runGit('add src/staged.mjs');
+
+      for (const args of [
+        `state init ${changeDir}`,
+        `state set ${changeDir} workflow tweak`,
+        `state transition ${changeDir} approved-for-build`,
+        `state set ${changeDir} dp_4_result "inline execution"`,
+        `state transition ${changeDir} executing`,
+      ]) {
+        const result = ssf(args, { cwd: projectDir });
+        assert.equal(result.exitCode, 0, result.stderr);
+      }
+      assert.equal(ssf(`state get ${changeDir} execution_base_commit`).stdout, head);
+      const status = runGit('status --short');
+      assert.match(status, /^ M src\/tracked\.mjs$/m);
+      assert.match(status, /^A  src\/staged\.mjs$/m);
+      assert.match(status, /^\?\? src\/untracked\.mjs$/m);
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }

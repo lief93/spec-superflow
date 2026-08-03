@@ -354,7 +354,7 @@ describe('recursive stage prerequisites and final base', () => {
     }
   });
 
-  it('requires current Design approval plus DP-2 and the same explicit final base', () => {
+  it('keeps the first executing commit as the default final base after HEAD advances', () => {
     const fixture = createFixture();
     try {
       const proposal = approvePlanningStage(fixture, 'proposal-specs');
@@ -374,27 +374,48 @@ describe('recursive stage prerequisites and final base', () => {
         assert.equal(result.status, 0, result.stderr);
       }
 
-      for (const subcommand of ['candidate', 'record', 'check']) {
-        const withoutBase = run(fixture.repo, [
-          'review', subcommand, fixture.changeDir, 'final', '--json',
-        ]);
-        assert.notEqual(withoutBase.status, 0, `${subcommand} without base`);
+      for (const args of [
+        ['state', 'set', fixture.changeDir, 'workflow', 'tweak'],
+        ['state', 'transition', fixture.changeDir, 'approved-for-build'],
+        ['state', 'set', fixture.changeDir, 'dp_4_result', 'inline execution'],
+        ['state', 'transition', fixture.changeDir, 'executing'],
+      ]) {
+        const transition = run(fixture.repo, args);
+        assert.equal(transition.status, 0, transition.stderr);
       }
-      const finalCandidate = candidate(fixture, 'final', fixture.base);
-      let result = record(fixture, 'final', finalCandidate);
+      assert.equal(
+        run(fixture.repo, ['state', 'get', fixture.changeDir, 'execution_base_commit']).stdout.trim(),
+        fixture.head,
+      );
+      write(fixture.repo, 'src/after-execution.mjs', 'export const afterExecution = true;\n');
+      git(fixture.repo, ['add', 'src/after-execution.mjs']);
+      git(fixture.repo, ['commit', '-qm', 'implementation after execution start']);
+      assert.notEqual(git(fixture.repo, ['rev-parse', 'HEAD']), fixture.head);
+
+      let result = run(fixture.repo, [
+        'review', 'candidate', fixture.changeDir, 'final', '--json',
+      ]);
       assert.equal(result.status, 0, result.stderr);
+      const finalCandidate = JSON.parse(result.stdout);
+      assert.equal(finalCandidate.review_base, fixture.head);
+
+      writePending(fixture, 'final', reviewReport(finalCandidate));
       result = run(fixture.repo, [
-        'review', 'check', fixture.changeDir, 'final', '--base', fixture.base, '--json',
+        'review', 'record', fixture.changeDir, 'final', '--json',
       ]);
       assert.equal(result.status, 0, result.stderr);
       result = run(fixture.repo, [
-        'review', 'check', fixture.changeDir, 'final', '--base', fixture.head, '--json',
+        'review', 'check', fixture.changeDir, 'final', '--json',
+      ]);
+      assert.equal(result.status, 0, result.stderr);
+      result = run(fixture.repo, [
+        'review', 'check', fixture.changeDir, 'final', '--base', fixture.base, '--json',
       ]);
       assert.equal(result.status, 1);
 
       writeFileSync(join(fixture.repo, 'src/feature.mjs'), 'export const ready = false;\n');
       result = run(fixture.repo, [
-        'review', 'check', fixture.changeDir, 'final', '--base', fixture.base, '--json',
+        'review', 'check', fixture.changeDir, 'final', '--json',
       ]);
       assert.equal(result.status, 1);
       assert.equal(JSON.parse(result.stdout).code, 'stale');

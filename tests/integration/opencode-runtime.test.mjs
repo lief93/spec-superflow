@@ -135,7 +135,7 @@ it('resolves hidden Agent tools through pinned OpenCode for repository and packe
       assert.match(reviewer.prompt, /every invocation[\s\S]*reread[\s\S]*exact current candidate[\s\S]*complete[\s\S]*Review Focus/i);
       assert.match(
         reviewer.prompt,
-        /project-relative paths to `user-intent\.md`[\s\S]*current artifacts[\s\S]*project standards/i,
+        /ssf review candidate <change-dir> <stage>[\s\S]*`inputs`[\s\S]*current[\s\S]*artifacts[\s\S]*project standards/i,
       );
       assert.match(
         reviewer.prompt,
@@ -195,19 +195,11 @@ it('resolves hidden Agent tools through pinned OpenCode for repository and packe
       );
       assert.match(
         primary.prompt,
-        /short reference index containing only[\s\S]*exact candidate JSON[\s\S]*project-relative paths[\s\S]*path plus symbol[\s\S]*command, exit code, and concise result/i,
+        /prompt contains only[\s\S]*Review change[\s\S]*<change-dir>[\s\S]*at stage[\s\S]*<stage>/i,
       );
       assert.match(
         primary.prompt,
-        /Final handoff[\s\S]*review_base[\s\S]*worktree_identity[\s\S]*changed_files[\s\S]*suggested read-only Git commands/i,
-      );
-      assert.match(
-        primary.prompt,
-        /changed_files[\s\S]*outside\s+the current Change directory[\s\S]*Change artifacts[\s\S]*inputs[\s\S]*upstream candidate\s+identit/i,
-      );
-      assert.match(
-        primary.prompt,
-        /Never inline or[\s\S]*tracked diff[\s\S]*untracked source text[\s\S]*whole artifact[\s\S]*evidence log/i,
+        /Do not prepare a handoff bundle[\s\S]*candidate JSON[\s\S]*path index[\s\S]*evidence index[\s\S]*result schema/i,
       );
       assertTextInOrder(primary.prompt, [
         'The first action after every Reviewer return',
@@ -228,7 +220,7 @@ it('resolves hidden Agent tools through pinned OpenCode for repository and packe
       );
       assert.match(
         primary.prompt,
-        /resume the same Reviewer task[\s\S]*same `task_id`[\s\S]*reread and completely review the new candidate/i,
+        /resume the same Reviewer task[\s\S]*same `task_id`[\s\S]*recompute, reread, and completely review the[\s\S]*new candidate/i,
       );
       assert.match(
         primary.prompt,

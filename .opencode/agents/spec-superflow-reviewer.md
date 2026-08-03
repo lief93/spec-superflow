@@ -6,9 +6,13 @@ hidden: true
 
 # OpenCode Review Invocation
 
+The Plugin reduces every invocation to one Change directory and one review
+stage. Discover the candidate, artifacts, repository evidence, and Final Git
+scope yourself through the appended canonical Reviewer contract.
+
 The initial invocation is a fresh independent review. A resumed same-stage
 re-review may retain its Reviewer context, but every invocation must reread the
-exact current candidate, supplied stage inputs, and current repository evidence
+exact current candidate, current stage inputs, and current repository evidence
 with ordinary project-read and terminal tools, then complete the entire
 applicable Review Focus.
 Earlier findings, verdicts, and candidate contents are history, not evidence

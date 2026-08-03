@@ -24,6 +24,18 @@ function addUnique(list, value) {
   if (!list.includes(value)) list.push(value);
 }
 
+function normalizeReviewerTask(args) {
+  if (args?.subagent_type !== 'spec-superflow-reviewer') return;
+  const prompt = typeof args.prompt === 'string' ? args.prompt : '';
+  const change = /\bchange\s+`?(changes\/[a-z0-9][a-z0-9-]*)`?/i.exec(prompt)?.[1];
+  const stage = /\bstage\s+`?(proposal-specs|design-tasks|final)`?/i.exec(prompt)?.[1];
+  if (!change || !stage) {
+    throw new Error('Reviewer task requires exactly one change directory and review stage');
+  }
+  args.description = `Review ${stage}`;
+  args.prompt = `Review change \`${change}\` at stage \`${stage}\`.`;
+}
+
 export const SpecSuperflowPlugin = async () => {
   return {
     config: async config => {
@@ -86,6 +98,10 @@ export const SpecSuperflowPlugin = async () => {
           SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
         },
       };
+    },
+
+    'tool.execute.before': async (input, output) => {
+      if (input.tool === 'task') normalizeReviewerTask(output.args);
     },
 
   };

@@ -14,6 +14,8 @@ const VALID_STATES = [
   'executing', 'debugging', 'closing', 'abandoned',
 ];
 
+const GIT_COMMIT = /^[a-f0-9]{40}$/;
+
 const SETTABLE_FIELDS = [
   'workflow', 'execution_mode', 'test_result', 'batches_completed',
   'dp_0_decisions', 'dp_0_confirmed', 'dp_0_timestamp', 'dp_0_result',
@@ -137,6 +139,10 @@ export async function run(args) {
         }
       }
 
+      if (toState === 'executing' && !state.execution_base_commit) {
+        state.execution_base_commit = resolveHeadCommit(changePath);
+      }
+
       state.state = toState;
       state.last_transition_from = fromState;
       state.last_transition_to = toState;
@@ -201,4 +207,17 @@ export async function run(args) {
       console.error(`Unknown subcommand: ${sub}. Valid: init, check, transition, get, rebuild, set`);
       process.exit(2);
   }
+}
+
+function resolveHeadCommit(changePath) {
+  const result = spawnSync(
+    'git',
+    ['-C', changePath, 'rev-parse', '--verify', 'HEAD^{commit}'],
+    { encoding: 'utf8' },
+  );
+  const commit = result.stdout?.trim();
+  if (result.status !== 0 || !GIT_COMMIT.test(commit ?? '')) {
+    throw new Error('Entering executing requires the Change to be inside a Git repository with a valid HEAD commit');
+  }
+  return commit;
 }

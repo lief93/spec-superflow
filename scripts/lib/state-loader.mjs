@@ -10,6 +10,7 @@ const BUILTIN_DEFAULTS = {
   artifacts_hash: null,
   contract_hash: null,
   execution_mode: null,
+  execution_base_commit: null,
   batches_completed: 0,
   test_result: null,
   change_name: null,
@@ -60,7 +61,7 @@ export function writeState(changeDir, state) {
   const filePath = path.join(changeDir, STATE_FILE);
   const lines = [];
   lines.push('# .spec-superflow.yaml — lightweight state machine');
-  lines.push('# Derived data. Always rebuildable from artifacts. Lost/corrupt → fall back to content-level detection.');
+  lines.push('# Workflow state. Hashes are rebuildable; execution_base_commit is immutable execution provenance.');
   lines.push('');
   lines.push('# === Core state ===');
   lines.push(`state: ${state.state || 'exploring'}`);
@@ -72,6 +73,7 @@ export function writeState(changeDir, state) {
   lines.push('');
   lines.push('# === Execution progress ===');
   lines.push(`execution_mode: ${state.execution_mode ?? 'null'}`);
+  lines.push(`execution_base_commit: ${state.execution_base_commit ?? 'null'}`);
   lines.push(`batches_completed: ${state.batches_completed ?? 0}`);
   lines.push(`test_result: ${state.test_result ?? 'null'}`);
   lines.push('');

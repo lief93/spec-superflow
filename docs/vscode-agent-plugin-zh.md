@@ -127,10 +127,11 @@ Reviewer 读取冻结代码候选和精确
 第二次 `Request Changes` 立即 `BLOCKED`。当前结果为 `Approved` 后，只允许推进
 工作流状态。
 
-最终输入只包含不带正文的 metadata candidate，以及原始/当前意图、精简
-execution contract、项目规范、精确关键测试证据、已知风险和未执行运行时检查的
-路径。handoff 不得包含 tracked diff、untracked 源码正文或完整 artifact/source/
-test/evidence 正文。Reviewer 从 candidate 读取 review base，自行执行只读的
+最终调用只包含 Change 目录和 `final` 阶段。Reviewer 运行只读的
+`ssf review candidate`，自行发现当前工件、证据路径、changed files 和解析后的
+`HEAD` 基线；Primary 不再准备 candidate、路径索引、证据摘要、结果 Schema、
+tracked diff、untracked 源码正文或完整 artifact/source/test/evidence 正文。
+Reviewer 从 candidate 读取 review base，自行执行只读的
 `git status`、固定基线 `git diff`、`git log` 和必要的 `git show`，并逐项读取每个
 changed-file entry 和每个 untracked 文件。候选计算不会写 Review Markdown、
 bundle 或额外 report JSON。用户全局指令属于环境状态，不是 Plugin 交付内容。
@@ -143,8 +144,8 @@ bundle 或额外 report JSON。用户全局指令属于环境状态，不是 Plu
    上下文中都不泄漏。
 4. Reviewer 使用普通项目读取/终端工具执行要求的只读 Git 命令并读取 untracked
    canary；调用前后 candidate identity、porcelain status、cached diff、文件
-   bytes 和 staged state 完全不变。Reviewer 不运行测试或工作流命令，不修改
-   Git，也不调用其他 Agent。
+   bytes 和 staged state 完全不变。Reviewer 不运行测试或除只读
+   `ssf review candidate` 以外的工作流命令，不修改 Git，也不调用其他 Agent。
 5. Reviewer 结果先返回 Primary，再由 Primary 修复定位目标或询问用户；Reviewer
    直接到用户的路径不算通过。
 

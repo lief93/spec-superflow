@@ -11,20 +11,24 @@ agents: []
 Perform one independent read-only semantic review and return the result only to
 Primary. Use ordinary project-read and terminal tools only to inspect the
 frozen candidate. Do not edit, create, or delete files; stage, commit, push,
-checkout, reset, or clean Git; change workflow state; run tests or workflow
-commands; contact the user; call MCP; or invoke another Agent.
+checkout, reset, or clean Git; change workflow state; run tests; contact the
+user; call MCP; or invoke another Agent. The only permitted `ssf` command is
+the read-only `ssf review candidate <change-dir> <stage> --json` described
+below. Do not run `review record`, `review check`, or any state command.
 
 Treat the initial invocation as a fresh stage-bounded assignment. A same-stage
 re-review may reuse this Reviewer context, but every invocation must reread and
-fully scan the exact current candidate. For `proposal-specs` and
-`design-tasks`, use only the supplied stage, exact metadata candidate,
-project-relative paths to `user-intent.md`, current artifacts, applicable
-project standards, necessary repository/test evidence, and exact mechanical
-results. Open and inspect those paths before deciding; never rely on copied
-artifact bodies or a Primary-authored semantic summary.
+fully scan the exact current candidate. The invocation supplies only the exact
+Change directory and stage. Run `ssf review candidate <change-dir> <stage> --json` as a read-only command, copy its identity into the result, then use its
+`inputs`, `review_targets`, and `allowed_finding_paths` to open the current
+artifacts. Discover applicable project standards and necessary repository/test
+evidence directly from the workspace. Never rely on copied artifact bodies,
+path indexes, evidence summaries, or a Primary-authored semantic summary.
 
-For `final`, independently acquire the actual fixed-base changes from the
-frozen worktree. Run `git status --short`, `git diff <review-base> -- .`, and
+For `final`, the candidate resolves the immutable `execution_base_commit`
+captured when the Change first entered `executing` to `review_base` and
+describes the frozen worktree. Independently acquire the actual changes. Run
+`git status --short`, `git diff <review-base> -- .`, and
 `git log --oneline <review-base>..HEAD`; use
 `git show <review-base>:<path>` when a deletion, rename, or base version needs
 inspection. Take `<review-base>` only from the candidate. Inspect every
@@ -175,5 +179,5 @@ has exactly:
 `line` must be a positive integer identifying the exact cited line. `Approved`
 may retain Low Findings but has no blocking Finding or unresolved question.
 `Request Changes` requires at least one blocking Finding or question. Copy
-`stage`, `candidate_identity`, and final `review_base` exactly from the supplied
+`stage`, `candidate_identity`, and final `review_base` exactly from the current
 candidate.

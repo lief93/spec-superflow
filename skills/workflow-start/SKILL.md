@@ -79,8 +79,9 @@ third review or state progression. Each stage records only
 The first action after every Reviewer return is to write its raw JSON unchanged
 to `reviews/<stage>-pending-report.json`. The immediately next action is
 `ssf review record <change-dir> <stage> --json`. Immediately after record, run
-`ssf review check <change-dir> <stage> --json`; final uses the same explicit base
-for both commands. Only after write, record, and check may Primary interpret the
+`ssf review check <change-dir> <stage> --json`; final candidate, record, and
+check default to the immutable `execution_base_commit` captured when the Change
+first entered `executing`. Only after write, record, and check may Primary interpret the
 verdict, edit, or invoke Reviewer again. Before all three finish, do not
 interpret, edit, or invoke Reviewer. Missing any one of write, record, or check
 is `BLOCKED`. Only a check nonzero result with JSON
