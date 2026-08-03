@@ -92,6 +92,59 @@ Depends on: None
 - [x] GREEN: Add containment, real-file, fixed-name, and stage checks.
 - [x] REFACTOR: Run Review CLI and filesystem-boundary regressions.
 
+### AC: Change enters execution
+
+- **Requirement**: Final candidate covers the complete worktree
+- **User-visible**: No
+
+#### File Changes
+
+##### Modify `scripts/lib/state-loader.mjs`
+
+- **Change**: Persist an immutable Change-owned `execution_base_commit`.
+
+##### Modify `scripts/lib/cmd-state.mjs`
+
+- **Change**: Resolve and record actual `HEAD` only when the Change first enters
+  `executing`; preserve it on later entries and do not add a worktree gate.
+
+##### Modify `scripts/lib/cmd-review.mjs`
+
+- **Change**: Default Final candidate, record, and check to the Change-owned
+  execution base while retaining explicit `--base` as a diagnostic override.
+
+##### Modify `scripts/lib/review-evidence.mjs`
+
+- **Change**: Resolve the same persisted default for direct Final freshness
+  checks, including the closing guard path.
+
+##### Modify `tests/lib/cmd-state.test.mjs`
+
+- **Change**: Prove per-Change capture, debugging preservation, immutability,
+  and mixed-worktree compatibility through the public CLI.
+
+##### Modify `tests/lib/cmd-review.test.mjs`
+
+- **Change**: Prove Final candidate, record, and check retain the first
+  executing commit after `HEAD` advances.
+
+#### TDD Test Plan
+
+| Layer | Platform | Action | Test File | Test Case | Proves |
+|---|---|---|---|---|---|
+| Integration | Git and Node.js 22 | Add | tests/lib/cmd-state.test.mjs | records independent execution bases for Changes that start at different commits | Each Change owns its execution base independently. |
+| Integration | Git and Node.js 22 | Add | tests/lib/cmd-state.test.mjs | preserves the execution base across debugging and a later HEAD commit | The base is immutable across a debugging round trip and cannot be set manually. |
+| Integration | Git and Node.js 22 | Add | tests/lib/cmd-state.test.mjs | records HEAD without rejecting a mixed worktree | Mixed staged, unstaged, and untracked state remains permitted. |
+| Integration | Git and Node.js 22 | Update | tests/lib/cmd-review.test.mjs | keeps the first executing commit as the default final base after HEAD advances | Final candidate, record, and check use the Change-owned base rather than Review-time HEAD. |
+
+#### TDD Steps
+
+- [x] RED: Observe the first executing transition leave the execution base null.
+- [x] GREEN: Capture actual HEAD once and expose it through the state CLI.
+- [x] RED: Advance HEAD and observe Final candidate resolve the newer commit.
+- [x] GREEN: Default Final candidate, record, and check to the persisted base.
+- [x] REFACTOR: Prove independent Changes, debugging preservation, and mixed-worktree compatibility.
+
 ### AC: Final work changes after approval
 
 - **Requirement**: Final candidate covers the complete worktree
@@ -125,7 +178,7 @@ Depends on: None
 - [x] GREEN: Include the missing layer and explicit base in canonical identity.
 - [x] REFACTOR: Run candidate, evidence, CLI, and guard regressions.
 
-### AC: Reviewer inspects a frozen final candidate
+### AC: Reviewer discovers and inspects a frozen final candidate
 
 - **Requirement**: Final candidate covers the complete worktree
 - **User-visible**: No
@@ -149,7 +202,8 @@ Depends on: None
 
 - **Change**: Require Reviewer-owned read-only status/diff/log/show and complete
   changed/untracked inspection through ordinary host tools while prohibiting
-  mutation, tests, workflow commands, MCP, and nested Agents.
+  mutation, tests, every workflow command except read-only `review candidate`,
+  MCP, and nested Agents.
 
 ##### Modify `tests/lib/review-candidate.test.mjs`
 

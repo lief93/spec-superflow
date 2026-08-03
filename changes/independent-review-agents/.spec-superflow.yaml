@@ -1,22 +1,23 @@
 # .spec-superflow.yaml — lightweight state machine
-# Derived data. Always rebuildable from artifacts. Lost/corrupt → fall back to content-level detection.
+# Workflow state. Hashes are rebuildable; execution_base_commit is immutable execution provenance.
 
 # === Core state ===
 state: specifying
 workflow: full
 
 # === Hashes (fast staleness detection) ===
-artifacts_hash: sha256:892742b0fca5ade56a30e42c23c9e98d5db157e6e61f4335fc29b9a0458829e3
-contract_hash: sha256:b6d1f984721f3759cfd67b953c7edfb97d453090d4adb12f4fa3a2a3b94e89a3
+artifacts_hash: sha256:2001de82a886e086e34939ae09707f85d1eda3d680fbb615055d0a7d1cc2aceb
+contract_hash: sha256:e2b2e00e410002bb7292bfc9d2409c35896da454b3c7d197f48c8511d6aa8569
 
 # === Execution progress ===
 execution_mode: null
+execution_base_commit: null
 batches_completed: 0
 test_result: null
 
 # === Metadata ===
 change_name: independent-review-agents
-last_transition: 2026-08-02T08:00:49.411Z
+last_transition: 2026-08-03T10:00:04.091Z
 last_transition_from: null
 last_transition_to: null
 

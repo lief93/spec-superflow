@@ -10,10 +10,10 @@ parallel manager/developer protocol or depend on host-specific continuity.
 
 Mechanical tests, validation, package checks, workflow commands, and runtime
 probes remain Primary responsibilities. Reviewer uses ordinary host
-project-read and terminal tools only to inspect the frozen repository and run
-read-only SCM commands. Primary supplies metadata and path references rather
-than copied bodies. A review result is useful only while its candidate identity
-remains current.
+project-read and terminal tools to run the read-only `review candidate` command,
+inspect the frozen repository, and run read-only SCM commands. Primary supplies
+only the Change directory and stage. A review result is useful only while its
+candidate identity remains current.
 
 ## Goals
 
@@ -33,8 +33,9 @@ remains current.
 
 - No additional Agent role, workflow state, lock, receipt, review history, or
   host continuity model.
-- No Reviewer edits, mutating Git commands, test/workflow execution, state
-  changes, user contact, nested Agent calls, custom command allowlist, or
+- No Reviewer edits, mutating Git commands, tests, workflow execution other
+  than read-only `review candidate`, state changes, user contact, nested Agent
+  calls, custom command allowlist, or
   dedicated read-only SCM tool.
 - No public-network or company-internal runtime work.
 
@@ -53,16 +54,17 @@ remains current.
 
 | Requirement | Scenario | Design Decision | Affected Area | Why Here |
 |---|---|---|---|---|
-| Full workflow uses one Primary and one fixed independent Reviewer | Primary requests an independent semantic review | Fixed two-Agent host topology | `agents/`, `.opencode/agents/`, `.opencode/plugins/spec-superflow.js` | Independent context plus explicit no-mutation behavior creates the review boundary while preserving ordinary SCM inspection |
+| Full workflow uses one Primary and one fixed independent Reviewer | Primary requests an independent semantic review | Fixed two-Agent host topology | `agents/`, `.opencode/agents/`, `.opencode/plugins/spec-superflow.js` | Independent context plus Plugin-normalized Change-and-stage invocation creates the review boundary while preserving Reviewer-owned inspection |
 | Full workflow uses one Primary and one fixed independent Reviewer | Non-full workflow continues | Three seams on the existing workflow | `skills/workflow-start/SKILL.md`, shared phase Skills | Routing can restrict checkpoints to exact full while retaining fast paths |
 | Planning has two independent semantic checkpoints | Proposal and Specs become ready for DP-1 | Planning approval binds current candidate identity | Primary prompts, `scripts/guard/checks/review-approved.mjs` | DP-1 must prove it confirms the reviewed Proposal/Specs candidate |
 | Planning has two independent semantic checkpoints | Design and Tasks become ready for DP-2 | Planning approval binds current candidate identity | Primary prompts, Planning Skills, transition guard | Contract creation must wait for current Design/Tasks review and DP-2 |
-| Final review blocks closing without replacing mechanical gates | Final candidate is approved | Final freeze uses an explicit worktree-aware base | Review candidate collector, release Skill, closing guard | Closing must refer to the exact full candidate and happen once |
+| Final review blocks closing without replacing mechanical gates | Final candidate is approved | Final freeze uses the Change-owned execution base | State CLI, review candidate collector, release Skill, closing guard | Closing must cover all work since this Change first entered execution and happen once |
 | Final review blocks closing without replacing mechanical gates | Final candidate requests changes | Current-only review evidence | Review CLI and Primary repair loop | A changed candidate invalidates approval without changing workflow state |
 | Review CLI records only current stage evidence | Primary records a valid Reviewer result | Fixed safe report transport | `scripts/lib/cmd-review.mjs`, `scripts/lib/review-evidence.mjs` | Fixed inbox and atomic current replacement avoid caller-selected paths |
 | Review CLI records only current stage evidence | Review transport or result is unsafe | Fixed safe report transport | Review CLI validation and tests | Unsafe path/file/schema inputs must fail before any current result changes |
-| Final candidate covers the complete worktree | Final work changes after approval | Final freeze uses an explicit worktree-aware base | `scripts/lib/worktree-review-candidate.mjs`, `scripts/lib/review-candidate.mjs` | Committed and uncommitted inputs must all participate in staleness without copying source text into the handoff |
-| Final candidate covers the complete worktree | Reviewer inspects a frozen final candidate | Final freeze uses an explicit worktree-aware base | `scripts/lib/worktree-review-candidate.mjs`, `scripts/lib/review-candidate.mjs`, Reviewer prompts | Public handoff stays body-free while Reviewer independently acquires the complete SCM/file view and identity detects later drift |
+| Final candidate covers the complete worktree | Change enters execution | Final freeze uses the Change-owned execution base | `scripts/lib/cmd-state.mjs`, `scripts/lib/state-loader.mjs`, Review CLI | Each Change captures its own first executing commit without requiring a clean or separate worktree |
+| Final candidate covers the complete worktree | Final work changes after approval | Final freeze uses the Change-owned execution base | `scripts/lib/cmd-state.mjs`, `scripts/lib/worktree-review-candidate.mjs`, `scripts/lib/review-candidate.mjs` | Committed and uncommitted inputs since first execution must participate in staleness without Primary-prepared review content |
+| Final candidate covers the complete worktree | Reviewer discovers and inspects a frozen final candidate | Fixed two-Agent host topology | `scripts/lib/worktree-review-candidate.mjs`, `scripts/lib/review-candidate.mjs`, Reviewer prompts | Reviewer independently acquires the complete SCM/file view and identity detects later drift |
 | Existing state and decision-point flow remains authoritative | Planning advances through the existing state machine | Three seams on the existing workflow | state loader, DP guard, workflow Skills | Review is an added gate, not another transition model |
 | VS Code and OpenCode register the same review topology | Plugin host resolves review capabilities | Fixed two-Agent host topology | VS Code/OpenCode prompts, manifests, runtime tests | Both supported hosts need the same visible/hidden role and behavioral read-only boundary |
 
@@ -74,12 +76,11 @@ remains current.
   hidden `Spec Superflow Reviewer`. Primary may invoke only that Reviewer for
   semantic review. Reviewer uses ordinary project-read and terminal tools but
   is instructed not to edit, stage, commit, push, checkout, reset, clean, run
-  tests or workflow commands, change state, or invoke another Agent. Each
-  handoff contains only the exact metadata candidate JSON, project-relative
-  artifact paths, bounded repository/test path-and-symbol evidence, and concise
-  mechanical results; Reviewer resolves those references instead of receiving
-  inlined artifacts or source bodies. Every return is durably processed as raw
-  write, record, then check before Primary acts.
+  tests or workflow commands other than read-only `review candidate`, change
+  state, or invoke another Agent. OpenCode reduces each Reviewer task to the
+  exact Change directory and stage. Reviewer discovers current artifacts,
+  repository evidence, and Git scope itself. Every return is durably processed
+  as raw write, record, then check before Primary acts.
 - **Rationale**: This supplies a genuinely independent context while leaving all
   mutable work and user coordination with one Agent.
 - **Alternatives considered**: A Manager/Dev/Reviewer trio was rejected because
@@ -124,24 +125,33 @@ remains current.
 - **Alternatives considered**: Arbitrary report paths, result history, or a
   service were rejected as unnecessary and unsafe.
 
-### Decision: Final freeze uses an explicit worktree-aware base
+### Decision: Final freeze uses the Change-owned execution base
 
-- **Choice**: Final candidate requires `--base <review-base>`. Its public JSON
+- **Choice**: On the first transition into `executing`, the state CLI records
+  the resolved `HEAD` as immutable `execution_base_commit`. Later entries into
+  `executing`, including from `debugging`, preserve it, and each Change owns its
+  own value. Final candidate, record, and check default to that commit; an
+  explicit `--base <review-base>` remains a diagnostic or compatibility
+  override. Public JSON
   exposes the resolved base, worktree identity, changed-file status/path/from,
   mode, byte length, content hash, review targets, and finding allowlist, but no
   tracked diff or untracked source text. Reviewer independently runs `git
   status`, fixed-base `git diff`, `git log`, and necessary `git show`, then
   reads every untracked file. Internally, candidate identity frames the
   resolved base, porcelain-v2 status, complete base-to-worktree diff, every
-  untracked byte, and final evidence inputs. The same base is required for
-  record and check.
+  untracked byte, and final evidence inputs. A mixed worktree remains permitted
+  because its exact state is identity-bound rather than hidden by a new
+  worktree requirement.
 - **Rationale**: Final review must cover the exact deliverable, including work
   that is not committed yet, without placing repository bodies in the public
-  handoff. Status framing also detects an unchanged byte sequence moving
+  candidate. Status framing also detects an unchanged byte sequence moving
   between unstaged and staged state.
-- **Alternatives considered**: HEAD-only review was rejected because it misses
-  staged, unstaged, and untracked work. Implicit base selection was rejected as
-  ambiguous.
+- **Alternatives considered**: Bare `git diff` was rejected because it misses
+  untracked work and has ambiguous staging semantics. Requiring a
+  Primary-selected base in the ordinary flow was rejected because the
+  Change-owned state already provides the default. Requiring a clean or
+  separate worktree was rejected because it is not necessary for exact
+  identity binding.
 
 ### Decision: Current-only review evidence
 
@@ -167,7 +177,9 @@ ssf review record    <change-dir> <proposal-specs|design-tasks|final> [--base <g
 ssf review check     <change-dir> <proposal-specs|design-tasks|final> [--base <git-base>] --json
 ```
 
-- `final` requires the same explicit base for all three commands.
+- `final` candidate, record, and check default to the immutable
+  `execution_base_commit` captured on first entry to `executing`. `--base`
+  remains an optional diagnostic or compatibility override.
 - Planning candidates include current planning artifacts and upstream review/DP
   bindings where applicable.
 - Final candidate includes only metadata and paths publicly; its identity binds
@@ -198,7 +210,7 @@ No state name or transition command is added.
 
 | Risk | Mitigation |
 |---|---|
-| Reviewer is independent but does not execute tests or workflow commands | Primary supplies exact mechanical evidence; Reviewer uses ordinary read-only SCM inspection and assesses whether that evidence proves the acceptance item |
+| Reviewer is independent but does not execute tests or state-changing workflow commands | Reviewer runs only read-only `review candidate`, discovers real artifacts and repository evidence itself, and uses ordinary read-only SCM inspection |
 | Behavioral no-mutation instructions can drift or be violated | Host registration and packed-resolution tests assert the prompt contract; OpenCode public-tool runtime proves the declared Reviewer can perform required reads while candidate identity, porcelain status, and cached diff remain unchanged; real VS Code Chat stays `PENDING` |
 | Candidate changes during review | Primary freezes inputs; `review check` recomputes identity and fails stale |
 | Fixed Reviewer is unavailable | Fail closed and keep workflow state unchanged |

@@ -80,9 +80,8 @@ describe('fixed independent review workflow contract', () => {
     assert.match(reviewer, /ordinary project-read and terminal tools/i);
   });
 
-  it('uses candidate -> stage-scoped Reviewer -> fixed inbox -> record -> check', () => {
+  it('uses stage-scoped Reviewer -> fixed inbox -> record -> check', () => {
     for (const host of [primary, openCodePrimary]) {
-      assert.match(host, /ssf review candidate <change-dir> <stage> --json/i);
       assert.match(host, /one independent Reviewer context|one fresh `task`/i);
       assert.match(host, /reviews\/<stage>-pending-report\.json/);
       assert.match(host, /ssf review record <change-dir> <stage> --json/i);
@@ -93,47 +92,68 @@ describe('fixed independent review workflow contract', () => {
       assert.match(host, /second[\s\S]*Request Changes[\s\S]*BLOCKED/i);
       assert.match(host, /never[\s\S]*third review/i);
     }
+    assert.match(reviewer, /ssf review candidate <change-dir> <stage>[\s\S]*--json/i);
   });
 
-  it('uses body-free references while Reviewer independently acquires the fixed-base diff', () => {
+  it('invokes Reviewer with only change and stage while Reviewer discovers the candidate', () => {
     for (const [label, host] of [
       ['VS Code Primary', primary],
       ['OpenCode Primary', openCodePrimary],
     ]) {
       assert.match(
         host,
-        /Planning handoff[\s\S]*proposal-specs[\s\S]*design-tasks[\s\S]*short reference index/i,
-        `${label} must scope bounded references to Planning`,
+        /Reviewer[^]*only[^]*change(?: directory)?[^]*stage/i,
+        `${label} must keep Reviewer invocation minimal`,
       );
+      assert.doesNotMatch(
+        host,
+        /short reference index|repository and test evidence index|exact mechanical check results/i,
+        `${label} must not prepare a handoff bundle`,
+      );
+    }
+    assert.match(
+      reviewer,
+      /read-only `ssf review candidate <change-dir> <stage> --json`/i,
+      'Reviewer must discover its exact candidate through the read-only CLI command',
+    );
+    assert.match(
+      reviewer,
+      /Run `ssf review candidate <change-dir> <stage> --json` as a read-only command/i,
+      'Reviewer command must remain on one line for direct execution',
+    );
+    assert.match(
+      reviewer,
+      /candidate[^]*inputs[^]*open[^]*current\s+artifacts/i,
+      'Reviewer must resolve current artifact paths from the candidate',
+    );
+    assert.match(
+      reviewer,
+      /For `final`[^]*candidate[^]*review_base[^]*git status[^]*git diff/i,
+      'Reviewer must acquire the final diff from the candidate-resolved base',
+    );
+    for (const [label, host] of [
+      ['VS Code Primary', primary],
+      ['OpenCode Primary', openCodePrimary],
+      ['workflow-start', workflowStart],
+      ['Reviewer', reviewer],
+    ]) {
       assert.match(
         host,
-        /exact candidate JSON unchanged[\s\S]*project-relative paths? to `user-intent\.md`[\s\S]*current stage artifacts/i,
-        `${label} must pass artifact paths rather than copies`,
+        /execution_base_commit[^]*(?:first entered|first entry)[^]*executing/i,
+        `${label} must use the Change-owned immutable execution base`,
       );
+    }
+  });
+
+  it('keeps Primary body-free while Reviewer independently discovers inputs and diff', () => {
+    for (const [label, host] of [
+      ['VS Code Primary', primary],
+      ['OpenCode Primary', openCodePrimary],
+    ]) {
       assert.match(
         host,
-        /necessary repository and test evidence\s+index[\s\S]*project-relative path[\s\S]*symbol/i,
-        `${label} must pass a bounded path and symbol evidence index`,
-      );
-      assert.match(
-        host,
-        /exact mechanical check\s+results[\s\S]*command[\s\S]*exit[\s\S]*result/i,
-        `${label} must pass exact concise mechanical results`,
-      );
-      assert.match(
-        host,
-        /Final handoff[\s\S]*exact final candidate JSON unchanged[\s\S]*review_base[\s\S]*worktree_identity[\s\S]*changed_files[\s\S]*review targets/i,
-        `${label} must pass only the final metadata candidate`,
-      );
-      assert.match(
-        host,
-        /suggested read-only Git commands[\s\S]*git status[\s\S]*git diff <review-base>[\s\S]*git log[\s\S]*git show/i,
-        `${label} must suggest standard Reviewer-owned SCM reads`,
-      );
-      assert.match(
-        host,
-        /never (?:inline|add)[\s\S]*tracked diff[\s\S]*untracked source text[\s\S]*whole artifact[\s\S]*evidence log/i,
-        `${label} must prohibit all Primary body copies`,
+        /Do not prepare a[\s\S]*handoff bundle[\s\S]*candidate JSON[\s\S]*path index[\s\S]*evidence index[\s\S]*diff[\s\S]*artifact body[\s\S]*result schema/i,
+        `${label} must prohibit Primary-authored review bodies`,
       );
       assert.match(
         host,
@@ -143,28 +163,18 @@ describe('fixed independent review workflow contract', () => {
     }
     assert.match(
       reviewer,
-      /For `proposal-specs` and[\s\S]*`design-tasks`[\s\S]*project-relative paths[\s\S]*Open and inspect those paths/i,
-      'Reviewer must resolve bounded Planning references itself',
+      /candidate[\s\S]*`inputs`[\s\S]*open the current[\s\S]*artifacts[\s\S]*Discover applicable project standards[\s\S]*repository\/test\s+evidence\s+directly/i,
+      'Reviewer must discover Planning artifacts and repository evidence itself',
     );
     assert.match(
       reviewer,
-      /For `final`[\s\S]*run `git status[\s\S]*git diff <review-base>[\s\S]*git log[\s\S]*git show[\s\S]*every\s+`changed_files` entry[\s\S]*untracked[\s\S]*read/i,
+      /For `final`[\s\S]*run\s+`git status[\s\S]*git diff <review-base>[\s\S]*git log[\s\S]*git show[\s\S]*every\s+`changed_files` entry[\s\S]*untracked[\s\S]*read/i,
       'Reviewer must acquire and inspect tracked and untracked final content itself',
     );
-    assert.doesNotMatch(`${primary}\n${openCodePrimary}`, /candidate JSON[^]*raw tracked diff/i);
+    assert.doesNotMatch(`${primary}\n${openCodePrimary}`, /short reference index|repository and test evidence index/i);
   });
 
   it('defines final changed_files as implementation diff outside the current Change', () => {
-    for (const [label, host] of [
-      ['VS Code Primary', primary],
-      ['OpenCode Primary', openCodePrimary],
-    ]) {
-      assert.match(
-        host,
-        /changed_files[^]*outside\s+the current Change directory[^]*Change artifacts[^]*inputs[^]*upstream candidate\s+identit/i,
-        `${label} must explain the final candidate scope to Reviewer`,
-      );
-    }
     assert.match(
       reviewer,
       /changed_files[^]*outside\s+the current Change directory[^]*Change artifacts[^]*inputs[^]*upstream candidate\s+identit/i,
@@ -241,7 +251,10 @@ describe('fixed independent review workflow contract', () => {
 
   it('keeps final semantic review after mechanics and before the single closing transition', () => {
     assert.match(primary, /`final`:[\s\S]*implementation, tests, applicable runtime evidence[\s\S]*PR summary[\s\S]*complete and frozen/i);
-    assert.match(primary, /one stable Git base[\s\S]*same `--base <review-base>`/i);
+    assert.match(
+      primary,
+      /For `final`[\s\S]*execution_base_commit[\s\S]*first entered `executing`[\s\S]*explicit `--base`[\s\S]*override/i,
+    );
     assert.match(primary, /After current final[\s\S]*Approved[\s\S]*no substantive write/i);
     assert.match(primary, /release-archivist[\s\S]*state get <change-dir> state[\s\S]*exactly `closing`/i);
   });
@@ -295,7 +308,7 @@ describe('fixed independent review workflow contract', () => {
   it('makes Reviewer semantic and evidence-first without replacing mechanical gates', () => {
     assert.match(
       reviewer,
-      /project-relative paths[\s\S]*Open and inspect those paths before deciding/i,
+      /candidate[\s\S]*`inputs`[\s\S]*open the current[\s\S]*artifacts/i,
     );
     assert.match(reviewer, /Structural validation is not\s+semantic approval/i);
     assert.match(reviewer, /Aggregate test counts are not proof/i);

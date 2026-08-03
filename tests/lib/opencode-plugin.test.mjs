@@ -88,7 +88,7 @@ describe('OpenCode Plugin independent review topology', () => {
     assert.match(primary, /Start one fresh `task` targeting exactly[\s\S]*spec-superflow-reviewer/i);
     assert.match(
       primary,
-      /capture[\s\S]*returned `task_id`[\s\S]*Primary[\s\S]*current runtime context/i,
+      /capture[\s\S]*returned\s+`task_id`[\s\S]*Primary[\s\S]*current runtime context/i,
     );
     assert.match(
       primary,
@@ -116,11 +116,11 @@ describe('OpenCode Plugin independent review topology', () => {
     ], 'OpenCode raw review return sequence');
     assert.match(
       primary,
-      /short reference index containing only[\s\S]*exact candidate JSON[\s\S]*project-relative paths[\s\S]*path plus symbol[\s\S]*command, exit code, and concise result/i,
+      /prompt contains only[\s\S]*Review change[\s\S]*<change-dir>[\s\S]*at stage[\s\S]*<stage>/i,
     );
     assert.match(
       primary,
-      /Never inline or[\s\S]*tracked diff[\s\S]*untracked source text[\s\S]*whole artifact[\s\S]*evidence log/i,
+      /Do not prepare a handoff bundle[\s\S]*candidate JSON[\s\S]*path index[\s\S]*evidence index[\s\S]*result schema/i,
     );
     assert.match(
       primary,
@@ -164,6 +164,35 @@ describe('OpenCode Plugin independent review topology', () => {
     }
   });
 
+  it('reduces every Reviewer task prompt to only change and stage', async () => {
+    const { hooks } = await configured();
+    const output = {
+      args: {
+        description: 'Review proposal and specs with copied evidence',
+        prompt: [
+          'Perform stage `proposal-specs` on change `changes/add-affirmations-top-bar`.',
+          'Use this invented schema: {"severity":"medium","path":"proposal.md"}',
+          'Copied evidence and summaries must not reach Reviewer.',
+        ].join('\n'),
+        subagent_type: 'spec-superflow-reviewer',
+        task_id: '',
+      },
+    };
+
+    await hooks['tool.execute.before']({
+      tool: 'task',
+      sessionID: 'session-primary',
+      callID: 'call-review',
+    }, output);
+
+    assert.equal(output.args.description, 'Review proposal-specs');
+    assert.equal(
+      output.args.prompt,
+      'Review change `changes/add-affirmations-top-bar` at stage `proposal-specs`.',
+    );
+    assert.doesNotMatch(output.args.prompt, /schema|evidence|summary|severity|path/i);
+  });
+
   it('registers bundled Skills and a local bootstrap MCP idempotently', async () => {
     const existing = {
       skills: { paths: ['/existing/skills'] },
@@ -184,7 +213,7 @@ describe('OpenCode Plugin independent review topology', () => {
     const reviewer = config.agent['spec-superflow-reviewer'].prompt;
     assert.match(
       reviewer,
-      /project-relative paths to `user-intent\.md`[\s\S]*current artifacts[\s\S]*project standards/i,
+      /ssf review candidate <change-dir> <stage>[\s\S]*`inputs`[\s\S]*current[\s\S]*artifacts[\s\S]*project standards/i,
     );
     assert.match(reviewer, /candidate_identity/);
     assert.match(reviewer, /allowed_finding_paths/);
@@ -192,9 +221,10 @@ describe('OpenCode Plugin independent review topology', () => {
     assert.match(reviewer, /severity[\s\S]*file[\s\S]*line[\s\S]*impact[\s\S]*suggested_repair/i);
   });
 
-  it('keeps the central Plugin export free of planning-write policy hooks', () => {
+  it('uses the central Plugin hook only to normalize Reviewer task input', () => {
     const source = readFileSync(PLUGIN, 'utf8');
-    assert.doesNotMatch(source, /tool\.execute|permission\.ask|state next|state confirm|pending review/i);
+    assert.match(source, /tool\.execute\.before[\s\S]*normalizeReviewerTask/);
+    assert.doesNotMatch(source, /permission\.ask|state next|state confirm|pending review/i);
     assert.match(source, /config\.agent\['spec-superflow-reviewer'\]/);
     assert.match(source, /config\.command\['workflow-init'\]/);
   });

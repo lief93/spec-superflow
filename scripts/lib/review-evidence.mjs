@@ -155,15 +155,9 @@ export function checkCurrentReview({
       return failure('invalid', error.message);
     }
 
-    let requestedBase = base;
-    if (stage === 'final' && !requestedBase) {
-      try {
-        const raw = JSON.parse(bytes.toString('utf8'));
-        requestedBase = raw.review_base;
-      } catch {
-        return failure('invalid', 'Current final review is not valid JSON');
-      }
-    }
+    const requestedBase = stage === 'final'
+      ? resolveFinalReviewBase(changeDir, base)
+      : base;
     const candidate = computeCandidate({
       changeDir,
       stage,
@@ -198,6 +192,15 @@ export function checkCurrentReview({
   } catch (error) {
     return failure('prerequisite', error.message);
   }
+}
+
+export function resolveFinalReviewBase(changeDir, requestedBase) {
+  if (requestedBase) return requestedBase;
+  const recordedBase = readState(changeDir).execution_base_commit;
+  if (!GIT_COMMIT.test(recordedBase ?? '')) {
+    throw new Error('Final review requires an execution_base_commit recorded when the Change first entered executing');
+  }
+  return recordedBase;
 }
 
 export function requireReviewStagePrerequisites({ changeDir, stage, repoRoot }) {

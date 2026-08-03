@@ -68,7 +68,7 @@ describe('VS Code Agent Plugin', () => {
 
   it('adds only three exact-full independent semantic checkpoints to the Primary', () => {
     assert.match(primary, /one independent Reviewer context at each of[\s\S]*exactly three[\s\S]*proposal-specs[\s\S]*design-tasks[\s\S]*final/i);
-    assert.match(primary, /candidate[\s\S]*freeze[\s\S]*pending-report\.json[\s\S]*record[\s\S]*check/i);
+    assert.match(primary, /Freeze the current stage inputs[\s\S]*only the exact Change directory and stage[\s\S]*pending-report\.json[\s\S]*record[\s\S]*check/i);
     assert.match(primary, /first verified `Request Changes`[\s\S]*repairs only the affected\s+stage exactly once[\s\S]*same Reviewer context/i);
     assert.match(primary, /second verified `Request Changes`[\s\S]*`BLOCKED`[\s\S]*no\s+third review/i);
     assert.match(primary, /DP-2 and the existing user-owned DP-3[\s\S]*remain separate/i);

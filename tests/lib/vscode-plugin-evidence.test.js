@@ -125,7 +125,7 @@ describe('VS Code Plugin documentation boundary', () => {
         /exact(?:ly)? `Spec Superflow Reviewer`[\s\S]*no separate Dev Agent/i,
         /cross-stage[\s\S]*canar(?:y|ies)[\s\S]*(?:do not leak|absent)/i,
         /ordinary project-read and terminal tools[\s\S]*read-only Git[\s\S]*untracked canary[\s\S]*candidate identity[\s\S]*remain unchanged/i,
-        /does not run tests or workflow commands[\s\S]*mutate Git[\s\S]*invoke another\s+Agent/i,
+        /does not run tests or any workflow command except read-only[\s\S]*ssf review candidate[\s\S]*mutate Git[\s\S]*invoke another\s+Agent/i,
         /Reviewer[\s\S]*Primary[\s\S]*(?:repairs|asks the user)/i,
       ]],
       [chinese, [
@@ -133,7 +133,7 @@ describe('VS Code Plugin documentation boundary', () => {
         /精确(?:调用)? `Spec Superflow Reviewer`[\s\S]*没有注册或调用独立 Dev Agent/,
         /跨阶段 canary[\s\S]*(?:不泄漏|不存在)/,
         /普通项目读取\/终端工具[\s\S]*只读 Git 命令[\s\S]*untracked[\s\S]*candidate identity[\s\S]*完全不变/,
-        /不运行测试或工作流命令[\s\S]*不修改[\s\S]*Git[\s\S]*不调用其他 Agent/,
+        /不运行测试或除只读[\s\S]*ssf review candidate[\s\S]*以外的工作流命令[\s\S]*不修改[\s\S]*Git[\s\S]*不调用其他 Agent/,
         /Reviewer[\s\S]*Primary[\s\S]*(?:修复|询问用户)/,
       ]],
     ]) {

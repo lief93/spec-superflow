@@ -37,46 +37,27 @@ There is no Dev Agent or second workflow state machine.
 
 The stages are `proposal-specs`, `design-tasks`, and `final`. For each stage:
 
-1. Run `ssf review candidate <change-dir> <stage> --json`; final additionally
-   requires one explicit `--base <review-base>`.
-2. Freeze all candidate inputs. Start one fresh `task` targeting exactly
-   `spec-superflow-reviewer` without `task_id`. Capture the returned `task_id`
-   only in Primary's current runtime context for this stage.
-3. For the Planning handoff at `proposal-specs` and `design-tasks`, supply a
-   short reference index containing only: the exact candidate JSON unchanged;
-   project-relative paths to `user-intent.md`, current stage artifacts, and
-   applicable project standards; a necessary repository and test evidence
-   index with each project-relative path plus symbol; and exact mechanical check
-   results as command, exit code, and concise result. Reviewer opens those paths
-   itself.
-   For the Final handoff, pass the exact final candidate JSON unchanged; it
-   contains `review_base`, `worktree_identity`, `changed_files`, review targets,
-   and the finding allowlist. `changed_files` describes only implementation
-   differences outside the current Change directory. Change artifacts are
-   covered separately by the candidate `inputs` and upstream candidate
-   identities. Also pass only project-relative paths to the
-   original requirement, applicable project standards, current Change Specs,
-   Design, Tasks, execution contract, mechanical evidence, risks, and PR
-   summary. Include these suggested read-only Git commands:
-   `git status --short`, `git diff <review-base> -- .`,
-   `git log --oneline <review-base>..HEAD`, and, when necessary,
-   `git show <review-base>:<path>`. Reviewer uses ordinary project-read and
-   terminal tools to acquire the actual fixed-base diff, inspect every
-   `changed_files` entry, and read every untracked file itself. Never inline or
-   add the tracked diff, untracked source text, a whole artifact, source or test
-   file, or evidence log to the handoff. Reviewer must not edit files, stage,
-   commit, push, change workflow state, contact the user, or invoke another
-   Agent.
-4. Require the exact JSON schema defined by the Reviewer prompt. The first
+1. Freeze all current stage inputs. Start one fresh `task` targeting exactly
+   `spec-superflow-reviewer` without `task_id`. Its prompt contains only:
+   `Review change \`<change-dir>\` at stage \`<stage>\`.` The Plugin normalizes
+   every Reviewer task to that exact form before execution. Capture the returned
+   `task_id` only in Primary's current runtime context for this stage.
+2. Do not prepare a handoff bundle, candidate JSON, path index, evidence index,
+   mechanical summary, diff, artifact body, source body, or result schema.
+   Reviewer discovers the current candidate, artifacts, repository evidence,
+   and Final Git scope itself.
+3. The first
    action after every Reviewer return is to write its raw JSON unchanged to
    `<change-dir>/reviews/<stage>-pending-report.json`. The immediately next
    action is `ssf review record <change-dir> <stage> --json`. Immediately after
-   record, run `ssf review check <change-dir> <stage> --json`. Final
-   record/check use the same explicit base. Candidate identity binds exact Git
+   record, run `ssf review check <change-dir> <stage> --json`. Final candidate,
+   record, and check default to the immutable `execution_base_commit` captured
+   when this Change first entered `executing`; explicit `--base` is only a
+   diagnostic or compatibility override. Candidate identity binds exact Git
    status, including staged versus unstaged state, the complete tracked diff,
    and every untracked byte, so record and check fail on status, staged, or
    worktree drift.
-5. Before all three finish, do not interpret the verdict, edit an artifact, or
+4. Before all three finish, do not interpret the verdict, edit an artifact, or
    invoke task or Reviewer again. Missing any one of write, record, or check, or
    doing another action first, is `BLOCKED`. Only after write, record, and check
    may Primary act on the verdict.
@@ -90,9 +71,10 @@ never asks the user directly.
 
 If the first result is valid, current `Request Changes`, keep state unchanged
 and repair only the located stage exactly once. Rerun the relevant checks,
-compute and freeze a new candidate, then resume the same Reviewer task by
-calling native `task` with the same `task_id`. Supply all current inputs again;
-the resumed Reviewer must reread and completely review the new candidate.
+freeze the repaired inputs, then resume the same Reviewer task by calling
+native `task` with the same `task_id` and the same minimal Change-and-stage
+prompt. The resumed Reviewer must recompute, reread, and completely review the
+new candidate.
 
 If the second verified result is `Request Changes`, including a new Finding, or is
 missing, malformed, stale, unavailable, or followed by a nonzero record/check,
@@ -132,7 +114,8 @@ semantic review per AC or Batch. When implementation is complete,
 evidence and the PR summary while state remains `executing`. A delivery package
 is required only when the current Specs explicitly require a delivery package or
 `tasks.md > TDD Test Plan` explicitly requires a delivery package.
-Freeze one explicit Git base and run the `final` checkpoint.
+Freeze the final inputs and run the `final` checkpoint; the Reviewer and CLI
+resolve the Change-owned `execution_base_commit` without a Primary-selected base.
 
 Final `Request Changes` follows the same one-repair, same-task re-review limit.
 After current final `Approved`, make no substantive write. Let

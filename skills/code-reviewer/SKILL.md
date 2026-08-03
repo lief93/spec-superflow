@@ -12,10 +12,11 @@ For exact `full`, semantic Code Review runs once through the fixed
 evidence, PR summary, exact test/risk context, and the base-to-candidate
 worktree identity are frozen, using one independent Reviewer context for the
 final stage and at most one same-context re-review.
-Primary computes them with `ssf review candidate <change-dir> final --base
-<review-base> --json`, then invokes that same fixed Reviewer identity in a
-fresh isolated context for the initial review. Reviewer does not run tests or
-repeat mechanical gates.
+Primary invokes that same fixed Reviewer identity with only the Change directory
+and `final` stage in a fresh isolated context. Reviewer computes the candidate
+with the read-only `ssf review candidate <change-dir> final --json`, discovers
+the resolved `HEAD` base and repository evidence itself, and does not run tests
+or repeat mechanical gates.
 
 Do not dispatch the historical general-purpose reviewer after each task,
 feature, AC, or Batch on this route. On `Request Changes`, Primary directly repairs only

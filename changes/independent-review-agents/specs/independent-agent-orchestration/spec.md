@@ -13,9 +13,9 @@ state, or host continuity protocol.
 
 - **WHEN** a full-workflow review checkpoint is reached
 - **THEN** Primary SHALL invoke the fixed Reviewer in a fresh stage-scoped independent context
-- **AND** Reviewer SHALL receive a short reference index containing the exact metadata-only candidate, current artifact paths, bounded repository/test path-and-symbol evidence, and concise mechanical results rather than inlined artifacts, source bodies, or a Primary-authored semantic summary
-- **AND** Reviewer SHALL use ordinary project-read and terminal tools to resolve those paths and MAY run only read-only SCM inspection required by the review
-- **AND** Reviewer SHALL return to Primary without modifying files or Git state, running tests or workflow commands, changing state, contacting the user, calling MCP, or invoking another Agent
+- **AND** Reviewer SHALL receive only the exact Change directory and review stage; the host SHALL remove any Primary-authored schema, summary, candidate, path index, evidence index, or copied body before execution
+- **AND** Reviewer SHALL run the read-only `review candidate` command and use ordinary project-read and terminal tools to discover the current artifacts, repository evidence, and final SCM view itself
+- **AND** Reviewer SHALL return to Primary without modifying files or Git state, running tests or any other workflow command, changing state, contacting the user, calling MCP, or invoking another Agent
 - **AND** after every Reviewer return Primary SHALL write the raw JSON unchanged, run `review record`, and then run `review check` before interpreting the verdict or editing
 - **AND** after one repair Primary SHALL resume the same stage-scoped Reviewer context, while a second `Request Changes` SHALL fail closed without a third review
 
