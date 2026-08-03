@@ -7,7 +7,9 @@ description: Convert approved planning artifacts into an execution contract. Inv
 
 Convert approved planning artifacts into a compact execution lock: `execution-contract.md`. Use `templates/execution-contract.md` as the exact structure. The contract records what is approved, how execution is gated, and when to stop; it does not restate planning content.
 
-Read before generating: `proposal.md`, change-local `specs/`, `tasks.md`, and `docs/artifact-contract.md`. Read `design.md` unless `artifacts.skip` contains `design` as a configured skip. Read `docs/project/project-guidelines.md` when configured. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only relevant topics.
+For exact `full`, read only `.spec-superflow.yaml`, the Batch headings, dependencies, Batch Verification blocks, and aggregate frontend obligations in `tasks.md`, plus project command configuration or build scripts needed for shared verification. The approved Proposal, Specs, Design, and Tasks remain referenced source artifacts; do not re-read them for semantic judgment.
+
+For non-full paths, read before generating: `proposal.md`, change-local `specs/`, `tasks.md`, and `docs/artifact-contract.md`. Read `design.md` unless `artifacts.skip` contains `design` as a configured skip. Read `docs/project/project-guidelines.md` when configured. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only relevant topics.
 
 ## Source Of Truth
 
@@ -18,9 +20,25 @@ Read before generating: `proposal.md`, change-local `specs/`, `tasks.md`, and `d
 
 Reference these artifacts from `## Approved Artifacts`. Do not copy their behavior summaries, Requirement mappings, decisions, file lists, Task Batches, or AC test matrix into the contract. `tasks.md > TDD Test Plan` remains the source of truth for exact test obligations and later `pr-summary.md` evidence.
 
+## Planning Review Handoff
+
+First determine the persisted route:
+
+```bash
+ssf state get <change-dir> workflow
+```
+
+For exact `full`, run the existing `specifying -> bridging` guard before writing the contract:
+
+```bash
+ssf guard check <change-dir> specifying bridging --json
+```
+
+This guard already owns artifact/schema validity, the current approved `design-tasks` review, and DP-2 identity binding. If it fails, stop and route to the owning artifact or gate. If it passes, do not repeat the Planning Cross-Check or re-review Requirement mapping, architecture, edge cases, test quality, interface closure, or dependency discovery while compiling the contract.
+
 ## Planning Cross-Check
 
-Before generating the contract, verify without copying the result:
+For non-full paths that do not carry the independent Planning Review handoff, verify without copying the result:
 
 1. Every SHALL/MUST and Scenario in `specs/` appears in exactly one task Batch AC and, unless Design is configured to skip, in the design coverage table.
 2. Unless Design is configured to skip, every task file change follows the selected baseline/reuse pattern or has an approved design deviation.
@@ -50,7 +68,8 @@ Classify a change as frontend when it affects a Web, Android, HarmonyOS, iOS, de
 
 - `Frontend Impact: Yes`: include UI Test and Device Test rows.
 - Set UI Test to `Required by tasks.md`; exact actions, files, and cases remain in each AC's TDD Test Plan.
-- For visible output derived from application state, require an injectable rendering seam and separate proof of state-to-UI derivation from lazy, scrolling, or repeated-content behavior. A child-parameter assertion alone is insufficient.
+- For exact `full`, aggregate the frontend obligations already approved in `tasks.md`; do not reopen their design or test quality.
+- For non-full paths, visible output derived from application state requires an injectable rendering seam and separate proof of state-to-UI derivation from lazy, scrolling, or repeated-content behavior. A child-parameter assertion alone is insufficient.
 - Device Test is `Required` at feature level: run at least one reachable branch
   per affected feature on one project-baseline simulator/device per affected
   native platform, or the default real browser for Web. Externally controlled
@@ -106,5 +125,5 @@ If validation fails, regenerate the contract from the approved artifact set. Do 
 
 - **Parse failures**: Report the exact file and section; route back to `spec-writer`.
 - **Missing files**: List every missing artifact; route back to `spec-writer`.
-- **User interruption**: Re-read all artifacts and check freshness on resume.
+- **User interruption**: For exact `full`, rerun the guard and re-read only the contract inputs listed above. For non-full, re-read all artifacts and check freshness.
 - **Validation failure**: Return to the artifact that owns the missing information; do not duplicate it into the contract.
