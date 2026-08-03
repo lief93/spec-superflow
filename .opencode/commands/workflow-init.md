@@ -1,7 +1,7 @@
 ---
 description: Initialize or update the Spec Superflow workflow runtime.
 agent: spec-superflow-setup
-subtask: true
+subtask: false
 ---
 
 # Initialize or Update Spec Superflow
