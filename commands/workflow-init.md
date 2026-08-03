@@ -9,7 +9,7 @@ tools:
   - 'vscode/askQuestions'
 ---
 
-<!-- spec-superflow-plugin-version: 0.14.0 -->
+<!-- spec-superflow-plugin-version: 0.15.0 -->
 
 # Initialize or Update Spec Superflow
 
@@ -39,7 +39,7 @@ verified, the next and only tool call is
    with Node.js as the missing prerequisite.
 3. If npm is unavailable, report `BLOCKED` with npm as the missing prerequisite.
 4. The status tool executes `ssf --version`. If it reports `ready: true` and
-   both Plugin and CLI versions are exactly `0.14.0`, continue.
+   both Plugin and CLI versions are exactly `0.15.0`, continue.
 5. If the CLI is missing or has another version, use
    #tool:vscode/askQuestions to ask whether the user wants to install or update
    the global `ssf` command from this Plugin's bundled source. Call
@@ -49,7 +49,7 @@ verified, the next and only tool call is
    file, or development tools.
 7. After a successful install, call
    #tool:spec-superflow/spec_superflow_cli_status again. The workflow runtime
-   is ready only when it reports `ready: true` and version `0.14.0`.
+   is ready only when it reports `ready: true` and version `0.15.0`.
 8. On installation, permission, PATH, rollback, or version errors, report
    `BLOCKED` with the tool's recovery guidance. Never claim `READY` from npm's
    exit code alone.

@@ -1,6 +1,6 @@
 {
   "name": "spec-superflow",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Spec-first workflow: integrates project baselines, Claude-style shared auto memory, OpenSpec planning, and Superpowers execution discipline. 12 collaborative skills with embedded TDD, SDD, code review, debugging, and delta spec sync.",
   "source": "./",
   "author": {

@@ -146,7 +146,7 @@ independent Reviewer.
 
 ## /workflow-init Protocol
 
-<!-- spec-superflow-plugin-version: 0.14.0 -->
+<!-- spec-superflow-plugin-version: 0.15.0 -->
 
 When the user selects `/workflow-init`, do not inspect the workspace, load a
 Skill, or create task artifacts. Do not send a setup preamble. The first tool
@@ -159,7 +159,7 @@ workflow-start.
 1. If Node.js or npm is unavailable, report `BLOCKED` with the missing
    prerequisite.
 2. The status tool executes `ssf --version`. If it reports `ready: true` and
-   both Plugin and CLI versions are exactly 0.14.0, continue.
+   both Plugin and CLI versions are exactly 0.15.0, continue.
 3. If the CLI is missing or has another version, ask whether the user wants to
    install or update the Plugin's bundled CLI globally. Call
    `spec_superflow_install_cli` only after an explicit confirmation.
@@ -167,7 +167,7 @@ workflow-start.
    report `CANCELLED` or `BLOCKED` and stop. Do not try another tool.
 5. After a successful install, call `spec_superflow_cli_status` again.
 6. Report `READY` only when the second status call reports `ready: true` and
-   version 0.14.0. Otherwise, report `BLOCKED` with the recovery guidance
+   version 0.15.0. Otherwise, report `BLOCKED` with the recovery guidance
    returned by the tool.
 7. Call `spec_superflow_optional_mcp_status`. Business MCP is optional and
    must never block the Spec workflow.

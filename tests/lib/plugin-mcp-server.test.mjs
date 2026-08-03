@@ -82,7 +82,7 @@ if (args[0] === 'install') {
     process.exit(13);
   }
   mkdirSync(dirname(bin), { recursive: true });
-  const version = process.env.FAKE_INSTALL_VERSION || '0.14.0';
+  const version = process.env.FAKE_INSTALL_VERSION || '0.15.0';
   writeFileSync(bin, '#!${process.execPath}\\nconsole.log(' + JSON.stringify(version) + ')\\n');
   chmodSync(bin, 0o755);
   process.exit(0);
@@ -579,7 +579,7 @@ process.exit(child.status ?? 1);
     const bin = join(sandbox, 'bin');
     const prefix = join(sandbox, 'prefix');
     fakeNpm(join(bin, 'npm'));
-    fakeSsf(join(bin, 'ssf'), '0.14.0');
+    fakeSsf(join(bin, 'ssf'), '0.15.0');
     const before = treeSnapshot(sandbox);
     const client = startClient({
       pluginRoot,
@@ -597,8 +597,8 @@ process.exit(child.status ?? 1);
       });
       const status = parseTool(call);
       assert.equal(status.status, 'ready');
-      assert.equal(status.pluginVersion, '0.14.0');
-      assert.equal(status.cli.version, '0.14.0');
+      assert.equal(status.pluginVersion, '0.15.0');
+      assert.equal(status.cli.version, '0.15.0');
       assert.equal(status.installRequired, false);
       assert.equal(status.requiredAction, 'verify-with-ssf-version');
       assert.deepEqual(treeSnapshot(sandbox), before);
@@ -622,7 +622,7 @@ process.exit(child.status ?? 1);
         PATH: `${join(prefix, 'bin')}:${bin}:/usr/bin:/bin`,
         FAKE_NPM_PREFIX: prefix,
         FAKE_NPM_LOG: log,
-        FAKE_INSTALL_VERSION: '0.14.0',
+        FAKE_INSTALL_VERSION: '0.15.0',
         SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
       },
     });
@@ -634,7 +634,7 @@ process.exit(child.status ?? 1);
       }));
       assert.equal(first.status, 'ready');
       assert.equal(first.installed, true);
-      assert.equal(first.cli.version, '0.14.0');
+      assert.equal(first.cli.version, '0.15.0');
 
       const callsAfterFirst = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
       const install = callsAfterFirst.find(args => args[0] === 'install');
@@ -655,14 +655,14 @@ process.exit(child.status ?? 1);
     }
   });
 
-  it('upgrades an older CLI through OpenCode and does not reinstall the exact version', async () => {
+  it('upgrades the previous 0.14.0 CLI through OpenCode and does not reinstall 0.15.0', async () => {
     const sandbox = makeRoot('ssf-opencode-bootstrap-upgrade-');
     const pluginRoot = copyPluginRoot(sandbox, 'OpenCode Plugin With Spaces');
     const prefix = join(sandbox, 'global prefix');
     const bin = join(prefix, 'bin');
     const tools = join(sandbox, 'tools');
     const log = join(sandbox, 'npm.log');
-    fakeSsf(join(bin, 'ssf'), '0.13.0');
+    fakeSsf(join(bin, 'ssf'), '0.14.0');
     fakeNpm(join(tools, 'npm'));
     const client = startClient({
       pluginRoot,
@@ -670,7 +670,7 @@ process.exit(child.status ?? 1);
         PATH: `${bin}:${tools}:/usr/bin:/bin`,
         FAKE_NPM_PREFIX: prefix,
         FAKE_NPM_LOG: log,
-        FAKE_INSTALL_VERSION: '0.14.0',
+        FAKE_INSTALL_VERSION: '0.15.0',
         SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
       },
     });
@@ -681,7 +681,7 @@ process.exit(child.status ?? 1);
         arguments: {},
       }));
       assert.equal(before.status, 'mismatch');
-      assert.equal(before.cli.version, '0.13.0');
+      assert.equal(before.cli.version, '0.14.0');
       assert.equal(before.requiredAction, 'request-install-confirmation');
 
       const upgraded = parseTool(await client.request(2, 'tools/call', {
@@ -689,7 +689,7 @@ process.exit(child.status ?? 1);
         arguments: {},
       }));
       assert.equal(upgraded.status, 'ready');
-      assert.equal(upgraded.cli.version, '0.14.0');
+      assert.equal(upgraded.cli.version, '0.15.0');
       assert.equal(upgraded.installed, true);
       assert.equal(upgraded.upgraded, true);
 
@@ -776,7 +776,7 @@ process.exit(child.status ?? 1);
 
     const escapedRoot = copyPluginRoot(sandbox, 'escaped plugin');
     const outsideCli = join(sandbox, 'outside-cli.mjs');
-    writeExecutable(outsideCli, `#!${process.execPath}\nconsole.log('0.14.0')\n`);
+    writeExecutable(outsideCli, `#!${process.execPath}\nconsole.log('0.15.0')\n`);
     rmSync(join(escapedRoot, 'scripts/spec-superflow.mjs'));
     symlinkSync(outsideCli, join(escapedRoot, 'scripts/spec-superflow.mjs'));
     const escapedClient = startClient({ pluginRoot: escapedRoot });
@@ -952,7 +952,7 @@ process.exit(child.status ?? 1);
       env: {
         PATH: `${npmBin}:/usr/bin:/bin`,
         FAKE_NPM_PREFIX: prefix,
-        FAKE_INSTALL_VERSION: '0.14.0',
+        FAKE_INSTALL_VERSION: '0.15.0',
         SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
       },
     });
@@ -1023,7 +1023,7 @@ process.exit(child.status ?? 1);
       env: {
         PATH: `${tools}:/usr/bin:/bin`,
         FAKE_NPM_PREFIX: prefix,
-        FAKE_INSTALL_VERSION: '0.14.0',
+        FAKE_INSTALL_VERSION: '0.15.0',
       },
     });
     try {
