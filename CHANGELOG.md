@@ -4,7 +4,7 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
-## [0.14.0] - Unreleased
+## [0.15.0] - Unreleased
 
 ### Added
 

@@ -41,7 +41,7 @@ VS Code 按以下顺序识别 manifest：
 {
   "name": "spec-superflow",
   "description": "Spec-driven development workflow.",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "author": {
     "name": "Your Team"
   },
