@@ -45,8 +45,7 @@ Keep only the test layers needed to prove this AC; do not add every layer mechan
 
 ### Batch Verification
 
-List commands once per Batch. Every `Add` or `Update` row above must have a real behavior-specific RED before implementation unless it characterizes existing behavior, in which case record a baseline PASS. `Run existing` rows establish a regression baseline.
+List commands once per Batch. Keep one exact Test Case per AC for evidence, but group cases that share a runner, test target, and lifecycle into the fewest repository-executable invocations. One grouped command may cover multiple exact Test Cases when its report identifies every case and result. Every `Add` or `Update` row above must have a real behavior-specific RED before implementation unless it characterizes existing behavior, in which case record a baseline PASS. `Run existing` rows establish a regression baseline.
 
-- [ ] **RED / Baseline**: Run `exact focused command`; record the expected behavior-specific failure or baseline PASS.
-- [ ] **GREEN**: Run `exact focused command`; all planned AC test cases pass.
-- [ ] **Regression**: Run `exact affected regression command`; no related regressions.
+- [ ] **RED / Baseline**: Run `grouped pre-change command per distinct runner`; record each planned case's expected behavior-specific failure or baseline PASS from the report.
+- [ ] **GREEN / Regression**: Run `grouped post-change command per distinct runner`; all planned AC test cases and affected regression checks pass. Combine build or regression tasks in the same runner invocation when supported; do not repeat a command already executed for this result.

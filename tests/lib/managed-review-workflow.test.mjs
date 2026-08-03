@@ -451,7 +451,14 @@ describe('fixed independent review workflow contract', () => {
       specWriter,
       /coverage-only, characterization, or unchanged regression uses BASELINE PASS and RERUN[\s\S]*without manufactured failures/i,
     );
-    assert.match(specWriter, /real platform selectors[\s\S]*class#method[\s\S]*--tests/i);
+    assert.match(
+      specWriter,
+      /Evidence granularity[\s\S]*one exact Test Case per AC[\s\S]*Execution granularity[\s\S]*shared runner[\s\S]*one invocation/i,
+    );
+    assert.match(
+      specWriter,
+      /Prefer class, file, suite, or combined task selectors[\s\S]*over repeated Gradle `class#method`/i,
+    );
     assert.doesNotMatch(
       specWriter,
       /Each AC's TDD Steps must[\s\S]*RED[\s\S]*GREEN/i,
@@ -460,7 +467,7 @@ describe('fixed independent review workflow contract', () => {
       .exec(tasksTemplate)?.[1] || '';
     assert.match(
       batchVerificationTemplate,
-      /RED \/ Baseline[\s\S]*behavior-specific failure or baseline PASS[\s\S]*GREEN[\s\S]*Regression/i,
+      /RED \/ Baseline[\s\S]*grouped pre-change command[\s\S]*GREEN \/ Regression[\s\S]*grouped post-change command/i,
     );
     assert.doesNotMatch(specWriter, /^#### TDD Steps$/m);
     const validationChecklist = /## Validation Checklist([\s\S]*?)(?=\n## Validation Repair Loop)/
@@ -541,6 +548,18 @@ describe('fixed independent review workflow contract', () => {
     assert.match(
       designTasksFocus,
       /coverage-only, characterization, or unchanged regression needs BASELINE PASS\s+and RERUN[\s\S]*never manufacture RED/i,
+    );
+    assert.match(
+      designTasksFocus,
+      /evidence granularity[\s\S]*one Test Case belongs to one AC[\s\S]*execution granularity[\s\S]*one grouped command[\s\S]*multiple exact cases/i,
+    );
+    assert.match(
+      designTasksFocus,
+      /one grouped pre-change command[\s\S]*RED and baseline[\s\S]*one grouped post-change command[\s\S]*GREEN and affected regression/i,
+    );
+    assert.doesNotMatch(
+      designTasksFocus,
+      /require[^.]{0,120}(?:class#method|method-level command)/i,
     );
     assert.match(
       designTasksFocus,

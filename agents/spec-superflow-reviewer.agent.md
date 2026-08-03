@@ -96,7 +96,15 @@ authority, review only `design.md` and `tasks.md`, and use this fixed order:
    synonymous `Add`. Behavior-changing work needs RED and GREEN with a complete
    repository-executable command verified against real project tooling.
    Coverage-only, characterization, or unchanged regression needs BASELINE PASS
-   and RERUN with the exact Test Case; never manufacture RED.
+   and RERUN with the exact Test Case; never manufacture RED. Evidence granularity
+   stays one Test Case belongs to one AC; execution granularity may
+   use one grouped command for multiple exact cases that share a runner, target,
+   and lifecycle when the report identifies every case and result. For behavior-changing work,
+   require one grouped pre-change command per shared runner for RED and baseline,
+   then one grouped post-change command for GREEN and affected regression. Class, file,
+   suite, and combined task selectors are valid; method-level commands and a
+   runner restart per AC are optional. Reject an aggregate count that does not
+   expose per-case results.
 3. **User-triggered rendered control**: Only a user-triggered Scenario must
    exercise the real rendered control. Initial load, lifecycle, and external or
    system events may use an existing injectable seam, but must still prove the
