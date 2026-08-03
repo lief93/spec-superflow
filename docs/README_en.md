@@ -96,13 +96,13 @@ enter this repository's Git URL. Keep the built-in **Agent** selected, type
 as a structured Slash Command. The bootstrap installs the matching global `ssf` CLI from the
 Plugin itself. After it reports `READY`, select **Spec Superflow** from the
 agent picker and start the requirement. Switching to another agent stops
-applying its agent-specific instructions. The Plugin bundles its Agent, Skills,
-Commands, scripts, templates, CLI source, and bootstrap MCP. Normal workflow
+applying its agent-specific instructions. The Plugin bundles its Agent, Skills
+with their artifact templates, Commands, scripts, CLI source, and bootstrap MCP. Normal workflow
 requests use the installed CLI directly. The plugin is installed once per user
 profile and works across repositories.
 Target repositories keep their own Copilot instructions and repository
 skills; they do not need copies of the central `agents/`, `skills/`, `scripts/`,
-or `templates/` directories. See
+or `skills/*/references/` directories. See
 [vscode-agent-plugin.md](vscode-agent-plugin.md) for the complete ownership and
 runtime model.
 

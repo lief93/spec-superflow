@@ -7,6 +7,10 @@ description: Close out a spec-superflow change with verification, summary, and a
 
 Finish a spec-superflow change cleanly with verification evidence.
 
+Before creating or updating `pr-summary.md`, read `references/pr-summary.md`
+and use it as the exact structure. If the reference is missing or unreadable,
+stop instead of reconstructing the summary from memory.
+
 ## Full Workflow Two-Step Route
 
 For exact persisted `workflow: full`, use two separate steps.
@@ -101,16 +105,9 @@ Claiming work is complete without verification is dishonesty, not efficiency. Be
 ### Step 1: Test Suite
 Run full test suite. Record total/passed/failed/skipped. Zero failures = PASS.
 
-For every row in `tasks.md > TDD Test Plan`, create one matching
-row in `pr-summary.md` using this exact structure:
-
-```md
-## AC Test Evidence
-
-| Requirement | AC | Layer | Platform | Test File | Test Case | Result | Command | Evidence |
-|---|---|---|---|---|---|---|---|---|
-| <exact Requirement> | <exact AC> | <exact Layer> | <exact Platform> | <exact Test File> | <exact Test Case> | Pass | <fresh command> | <concrete result> |
-```
+For every row in `tasks.md > TDD Test Plan`, create one matching row in
+`pr-summary.md > AC Test Evidence` using the exact table from
+`references/pr-summary.md`.
 
 Copy Requirement and AC from the owning task section, then copy Layer, Platform,
 Test File, and Test Case exactly from each `tasks.md > TDD Test Plan` row.

@@ -171,6 +171,7 @@ Delta specs exist that need merging, change closing with ADDED/MODIFIED/REMOVED/
 
 ### Route to abandoned
 User explicitly requests, bug-investigator escalates after 3+ failures AND user chooses, scope change makes change no longer worthwhile AND user confirms. Block from `closing` or `abandoned`.
+When this route creates or updates `abandonment-summary.md`, read `references/abandonment-summary.md` first and use its exact structure.
 
 ### Fast-Path Routing
 - **Hotfix**: Skip need-explorer + spec-writer. Run `ssf guard check <dir> exploring bridging --workflow hotfix`; after it passes run `ssf state transition <dir> bridging`, then route to contract-builder (minimal). After DP-3, follow the normal approved-for-build and executing transitions, then release-archivist (lightweight).

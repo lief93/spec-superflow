@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // scripts/install-cursor.mjs — deploy spec-superflow for Cursor Agent
 //
-// Copies the full plugin tree (skills + scripts + docs + templates + dist + hooks)
+// Copies the full plugin tree (skills with references + scripts + docs + dist + hooks)
 // to .cursor/spec-superflow/ so that skill instructions referencing
 // ${CLAUDE_PLUGIN_ROOT}/scripts/... and ${CLAUDE_PLUGIN_ROOT}/docs/... resolve
 // correctly. Also copies skills to .cursor/skills/ (where Cursor reads them).
@@ -22,7 +22,7 @@ const GITHUB_REPO = 'MageByte-Zero/spec-superflow';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
 // Directories needed at runtime by skills (referenced via ${CLAUDE_PLUGIN_ROOT})
-const RUNTIME_DIRS = ['scripts', 'docs', 'templates', 'dist', 'hooks'];
+const RUNTIME_DIRS = ['scripts', 'docs', 'dist', 'hooks'];
 
 function ensureDir(dir) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });

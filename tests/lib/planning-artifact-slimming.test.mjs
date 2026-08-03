@@ -9,7 +9,7 @@ const read = path => readFileSync(join(root, path), 'utf-8');
 
 describe('planning artifact slimming', () => {
   it('keeps one design mapping table with baseline and reuse context', () => {
-    const template = read('templates/design.md');
+    const template = read('skills/spec-writer/references/design.md');
     const writer = read('skills/spec-writer/SKILL.md');
 
     assert.doesNotMatch(template, /^## Project Baseline Alignment$/m);
@@ -22,7 +22,7 @@ describe('planning artifact slimming', () => {
   });
 
   it('moves repeated AC execution steps into one batch verification block', () => {
-    const template = read('templates/tasks.md');
+    const template = read('skills/spec-writer/references/tasks.md');
     const writer = read('skills/spec-writer/SKILL.md');
 
     assert.doesNotMatch(template, /^#### TDD Steps$/m);
@@ -33,16 +33,15 @@ describe('planning artifact slimming', () => {
   });
 
   it('preserves the review chain from each AC to file rationale and exact tests', () => {
-    const template = read('templates/tasks.md');
+    const template = read('skills/spec-writer/references/tasks.md');
     const writer = read('skills/spec-writer/SKILL.md');
-    const exactExample = /Use these exact Markdown headings[\s\S]*?```markdown([\s\S]*?)```/i.exec(writer)?.[1] || '';
 
     assert.match(template, /^### AC: \[Exact Scenario title from the Spec\]$/m);
     assert.match(template, /\*\*Why this file\*\*/);
     assert.match(template, /^#### TDD Test Plan$/m);
     assert.match(writer, /every AC.*at least one.*test row/i);
     assert.match(writer, /exact Requirement\/Scenario titles connect Spec, Design, and Tasks/i);
-    assert.match(exactExample, /\*\*Why this file\*\*:/i);
+    assert.match(writer, /exact Batch, AC, File Changes, TDD Test Plan, and Batch Verification structure from `references\/tasks\.md`/i);
   });
 
   it('uses state hashes instead of deleted contract scope prose for resume freshness', () => {
@@ -57,7 +56,7 @@ describe('planning artifact slimming', () => {
   });
 
   it('uses execution-contract as a compact lock instead of copying planning content', () => {
-    const template = read('templates/execution-contract.md');
+    const template = read('skills/contract-builder/references/execution-contract.md');
     const builder = read('skills/contract-builder/SKILL.md');
 
     for (const heading of ['Approved Artifacts', 'Execution Mode', 'Batch Gates', 'Verification', 'Frontend Verification', 'Stop Conditions']) {
@@ -82,7 +81,7 @@ describe('planning artifact slimming', () => {
     assert.match(handoff, /ssf guard check <change-dir> specifying bridging --json/i);
     assert.match(handoff, /approved `design-tasks` review[\s\S]*DP-2 identity/i);
     assert.match(handoff, /do not repeat[\s\S]*Planning Cross-Check/i);
-    assert.match(builder, /For exact `full`, read only[\s\S]*Batch headings[\s\S]*Batch Verification/i);
+    assert.match(builder, /After the template, exact `full` reads only[\s\S]*Batch headings[\s\S]*Batch Verification/i);
     assert.match(crossCheck, /For non-full paths/i);
     assert.match(crossCheck, /Every SHALL\/MUST and Scenario[\s\S]*exactly one task Batch AC/i);
     assert.doesNotMatch(builder, /Runtime ABI/i);
@@ -90,7 +89,7 @@ describe('planning artifact slimming', () => {
 
   it('uses tasks test plans as the evidence source after implementation', () => {
     for (const path of [
-      'templates/pr-summary.md',
+      'skills/release-archivist/references/pr-summary.md',
       'skills/code-reviewer/SKILL.md',
       'skills/release-archivist/SKILL.md',
     ]) {

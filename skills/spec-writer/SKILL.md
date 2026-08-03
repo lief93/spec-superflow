@@ -7,6 +7,15 @@ description: Create or refine the exact planning artifact set selected by the cu
 
 Create or refine planning artifacts when the change has moved beyond exploration.
 
+## Artifact Templates
+
+Read only the templates owned by the current bounded stage before creating or repairing artifacts:
+
+- Proposal and Specs: `references/proposal.md` and `references/spec.md`
+- Design and Tasks: `references/design.md` and `references/tasks.md`
+
+Use those files as the exact Markdown structure. Keep semantic quality, scope, and evidence rules in this Skill; do not reconstruct headings or tables from memory.
+
 ## Full Workflow Stage Boundary
 
 For exact `workflow: full`, planning is split into two bounded stages. The
@@ -62,20 +71,7 @@ Every requirement must be testable. Use SHALL or MUST. Every requirement must ha
 ### design.md
 Must have: Context, Requirement And Scenario Coverage, Decisions (Choice + Rationale + Alternatives considered), and Risks And Trade-Offs. State the minimum behavior-changing production seam in Context. Use one coverage table to map every Scenario to its design decision, affected area, applicable project baseline or reuse anchor, constraint or approved deviation, and ownership reason; do not repeat the same Scenario mapping in another baseline table. Create a Decision only when there is a real architecture choice or trade-off, never mechanically per Scenario. When multiple Scenarios use the same technical choice, reuse one Decision. Before freeze, compare every Decision's Choice, Rationale, and Alternatives; when they are semantically identical, merge them so multiple Scenarios reuse one Decision instead of splitting it by acceptance surface or resource name. Use `No design change` when a Scenario needs no technical decision, including another acceptance example covered by an existing seam. When no real architecture choice exists, keep `## Decisions`, state `No design change`, and omit every `### Decision:` entry. Requirement and Scenario cells contain only the exact titles from the spec, without `Requirement:` or `Scenario:` prefixes. Every non-`No design change` value in the coverage table must exactly match a `### Decision: <title>` heading in `## Decisions`; a descriptive sentence is not a decision heading. Use relevant project memories only for non-duplicated runtime or domain facts. Add migration or open-question sections only when the change actually has them.
 
-Use this exact coverage structure:
-
-```markdown
-## Requirement And Scenario Coverage
-| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |
-|---|---|---|---|---|---|---|
-| <exact Requirement title> | <exact Scenario title> | <exact Decision title> | path or symbol | guideline, classic implementation, or existing symbol | applicable constraint or approved deviation | ownership reason |
-
-## Decisions
-### Decision: <exact Decision title>
-- **Choice**: Selected implementation approach.
-- **Rationale**: Why this approach satisfies the Scenario.
-- **Alternatives considered**: Rejected alternatives and why.
-```
+Use the exact coverage and Decision structure from `references/design.md`.
 
 ### tasks.md
 Must include:
@@ -103,30 +99,7 @@ Must include:
 - **Zero placeholders**: no TBD, TODO, "figure out", "add appropriate"
 - **Dependency ordering**: depends only on prior tasks, explicit "Depends on: Batch N"
 
-Use these exact Markdown headings inside every `### AC:` section:
-
-```markdown
-## Batch 1: <goal>
-
-### AC: <exact Scenario title>
-- **Requirement**: <exact Requirement title>
-- **User-visible**: No
-
-#### File Changes
-##### Modify `path/to/file`
-- **Why this file**: This file owns the behavior or integration seam required by the AC.
-- **Change**: Concrete resulting behavior.
-
-#### TDD Test Plan
-| Layer | Platform | Action | Test File | Test Case | Proves |
-|---|---|---|---|---|---|
-| Unit | Actual platform | Add | path/to/test | exact test name | exact outcome |
-
-### Batch Verification
-- [ ] RED / Baseline: Run the exact focused command and record a behavior-specific failure or baseline PASS.
-- [ ] GREEN: Run the same focused command and pass every planned AC case.
-- [ ] Regression: Run the affected regression command with zero failures.
-```
+Use the exact Batch, AC, File Changes, TDD Test Plan, and Batch Verification structure from `references/tasks.md`.
 
 For file entries, use exactly `##### Create \`path/to/file\``,
 `##### Modify \`path/to/file\``, or `##### Delete \`path/to/file\``. Do not
@@ -303,6 +276,6 @@ Do not start implementation after writing planning artifacts. Once stable, valid
 ## Exception Handling
 
 - **Parse failures**: Report specific file/error; don't generate from corrupted templates
-- **Missing templates**: Fall back to artifact structure defined in this skill
+- **Missing templates**: Stop and report the missing Skill-local reference; do not reconstruct its structure from memory
 - **User interruption**: Artifacts on disk are the recovery checkpoint; resume from first missing/incomplete one
 - **Validation failure**: Run the Validation Repair Loop. If the second validation fails, report the exact remaining failures and stop before handoff.

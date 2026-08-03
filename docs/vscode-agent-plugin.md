@@ -1,7 +1,7 @@
 # VS Code Spec Superflow Agent Plugin
 
 The complete Spec Superflow repository is installed as one Agent Plugin. It
-contains the Agent, Skills, Commands, templates, CLI source, and a small
+contains the Agent, Skills with Skill-local artifact templates, Commands, CLI source, and a small
 bootstrap MCP server. Target repositories do not need a copy of those central
 resources or a separate Spec Superflow download.
 
@@ -12,12 +12,11 @@ spec-superflow-plugin/
   .plugin/plugin.json
   plugin.json
   agents/
-  skills/
+  skills/<owner>/references/
   commands/
   servers/spec-superflow-mcp-launcher.cmd
   servers/spec-superflow-mcp.mjs
   scripts/
-  templates/
   .mcp.json
   package.json
   .github/plugin/marketplace.json   # optional distribution metadata
@@ -242,7 +241,7 @@ docs/project/project-guidelines.md
 ```
 
 It leaves an existing `.github/copilot-instructions.md` unchanged. Do not copy
-the central `agents/`, `skills/`, `scripts/`, or `templates/` directories into
+the central `agents/`, `skills/`, `scripts/`, or `skills/*/references/` directories into
 each target repository.
 
 ## Update and verify

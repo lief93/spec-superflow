@@ -26,7 +26,7 @@ Use this checklist before publishing a new version of `spec-superflow`.
 
 ## Templates And Docs
 
-- templates reflect the current workflow expectations
+- Skill-local reference templates reflect the current workflow expectations
 - `docs/artifact-contract.md` matches the templates and skills
 - `docs/state-machine.md` matches the actual workflow routing model
 - examples still demonstrate the documented workflow
