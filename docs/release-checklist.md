@@ -20,6 +20,9 @@ Use this checklist before publishing a new version of `spec-superflow`.
 - `contract-builder` still requires explicit approval before execution
 - planning artifacts and execution contract roles remain distinct
 - self-contained ownership is preserved
+- exact full workflow uses one visible Primary and one fixed read-only Reviewer
+- Review CLI remains limited to `candidate`, `record`, and `check`
+- unexecuted real host or company-internal validation remains `PENDING`
 
 ## Templates And Docs
 
@@ -45,12 +48,15 @@ For each example in `docs/examples/`:
 - `node scripts/spec-superflow.mjs version <version> --dry-run` — reports all files in sync
 - `node scripts/check-version-consistency.mjs` — exits 0
 - `node scripts/spec-superflow.mjs --help` — all subcommands listed
-- `node scripts/spec-superflow.mjs install-workbuddy --dry-run` — finds all 11 skills and target paths
+- `node scripts/spec-superflow.mjs install-workbuddy --dry-run` — finds all 12 skills and target paths
 - `spec-superflow.config.json` absence still works (backward compatible defaults)
 - `package.json` `bin` field points to correct entry script
 
 ## Publishing Checks
 
+- For a Spec Superflow Plugin release, record and verify the local tgz SHA-256,
+  non-zero entry count, archive hygiene, and successful offline local install of
+  that exact archive
 - there are no stray `TODO` or `TBD` markers
 - links and referenced paths are still valid
 - no local-only junk files are included

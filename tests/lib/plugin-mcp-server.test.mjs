@@ -273,6 +273,32 @@ process.exit(child.status ?? 1);
     assert.match(launched.stderr, /login-shell-startup-noise/);
   });
 
+  it('uses the Plugin host name when the launcher cannot find Node', {
+    skip: process.platform === 'win32',
+  }, () => {
+    for (const [host, expected] of [
+      ['opencode', 'OpenCode'],
+      ['vscode', 'VS Code'],
+    ]) {
+      const launched = spawnSync(
+        join(ROOT, 'servers', 'spec-superflow-mcp-launcher.cmd'),
+        [],
+        {
+          encoding: 'utf8',
+          env: {
+            HOME: makeRoot(`ssf-launcher-${host}-`),
+            PATH: '',
+            SHELL: '',
+            SPEC_SUPERFLOW_PLUGIN_HOST: host,
+          },
+        },
+      );
+      assert.equal(launched.status, 127);
+      assert.match(launched.stderr, new RegExp(`restart ${expected.replace(' ', '\\s')}`));
+      if (host === 'opencode') assert.doesNotMatch(launched.stderr, /VS Code/);
+    }
+  });
+
   it('exposes CLI bootstrap and optional MCP setup tools', async () => {
     const client = startClient();
     try {
@@ -320,6 +346,38 @@ process.exit(child.status ?? 1);
         arguments: { workspace: ROOT, args: ['--version'] },
       });
       assert.equal(removed.error.code, -32602);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('exposes only CLI bootstrap tools to the OpenCode host', async () => {
+    const client = startClient({
+      env: {
+        SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
+      },
+    });
+    try {
+      const tools = await client.request(1, 'tools/list');
+      assert.deepEqual(
+        tools.result.tools.map(tool => tool.name),
+        [
+          'spec_superflow_cli_status',
+          'spec_superflow_install_cli',
+        ],
+      );
+
+      for (const name of [
+        'spec_superflow_run',
+        'spec_superflow_optional_mcp_status',
+        'spec_superflow_install_optional_mcp',
+      ]) {
+        const unavailable = await client.request(2, 'tools/call', {
+          name,
+          arguments: {},
+        });
+        assert.equal(unavailable.error.code, -32602, name);
+      }
     } finally {
       client.close();
     }
@@ -550,7 +608,7 @@ process.exit(child.status ?? 1);
     }
   });
 
-  it('installs a missing CLI from a Plugin path containing spaces and is idempotent', async () => {
+  it('installs a missing CLI through OpenCode from a Plugin path containing spaces and is idempotent', async () => {
     const sandbox = makeRoot('ssf-bootstrap-install-');
     const pluginRoot = copyPluginRoot(sandbox);
     const prefix = join(sandbox, 'global prefix');
@@ -565,6 +623,7 @@ process.exit(child.status ?? 1);
         FAKE_NPM_PREFIX: prefix,
         FAKE_NPM_LOG: log,
         FAKE_INSTALL_VERSION: '0.14.0',
+        SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
       },
     });
 
@@ -591,6 +650,63 @@ process.exit(child.status ?? 1);
       assert.equal(second.installed, false);
       const callsAfterSecond = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
       assert.equal(callsAfterSecond.filter(args => args[0] === 'install').length, 1);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('upgrades an older CLI through OpenCode and does not reinstall the exact version', async () => {
+    const sandbox = makeRoot('ssf-opencode-bootstrap-upgrade-');
+    const pluginRoot = copyPluginRoot(sandbox, 'OpenCode Plugin With Spaces');
+    const prefix = join(sandbox, 'global prefix');
+    const bin = join(prefix, 'bin');
+    const tools = join(sandbox, 'tools');
+    const log = join(sandbox, 'npm.log');
+    fakeSsf(join(bin, 'ssf'), '0.13.0');
+    fakeNpm(join(tools, 'npm'));
+    const client = startClient({
+      pluginRoot,
+      env: {
+        PATH: `${bin}:${tools}:/usr/bin:/bin`,
+        FAKE_NPM_PREFIX: prefix,
+        FAKE_NPM_LOG: log,
+        FAKE_INSTALL_VERSION: '0.14.0',
+        SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
+      },
+    });
+
+    try {
+      const before = parseTool(await client.request(1, 'tools/call', {
+        name: 'spec_superflow_cli_status',
+        arguments: {},
+      }));
+      assert.equal(before.status, 'mismatch');
+      assert.equal(before.cli.version, '0.13.0');
+      assert.equal(before.requiredAction, 'request-install-confirmation');
+
+      const upgraded = parseTool(await client.request(2, 'tools/call', {
+        name: 'spec_superflow_install_cli',
+        arguments: {},
+      }));
+      assert.equal(upgraded.status, 'ready');
+      assert.equal(upgraded.cli.version, '0.14.0');
+      assert.equal(upgraded.installed, true);
+      assert.equal(upgraded.upgraded, true);
+
+      const exact = parseTool(await client.request(3, 'tools/call', {
+        name: 'spec_superflow_install_cli',
+        arguments: {},
+      }));
+      assert.equal(exact.status, 'ready');
+      assert.equal(exact.installed, false);
+      assert.equal(exact.upgraded, false);
+
+      const calls = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
+      assert.equal(calls.filter(args => args[0] === 'install').length, 1);
+      assert.equal(
+        calls.find(args => args[0] === 'install').at(-1),
+        realpathSync(pluginRoot),
+      );
     } finally {
       client.close();
     }
@@ -684,14 +800,30 @@ process.exit(child.status ?? 1);
     fakeSsf(join(bin, 'ssf'), '0.13.0');
     fakeNode(join(bin, 'node'));
     const before = treeSnapshot(bin);
-    const client = startClient({ pluginRoot, env: { PATH: `${bin}:/usr/bin:/bin` } });
+    const client = startClient({
+      pluginRoot,
+      env: {
+        PATH: `${bin}:/usr/bin:/bin`,
+        SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
+      },
+    });
     try {
-      const result = parseTool(await client.request(1, 'tools/call', {
+      const status = parseTool(await client.request(1, 'tools/call', {
+        name: 'spec_superflow_cli_status',
+        arguments: {},
+      }));
+      assert.equal(status.status, 'blocked');
+      assert.equal(status.reason, 'npm-missing');
+      assert.match(status.recovery, /restart OpenCode/);
+      assert.doesNotMatch(status.recovery, /VS Code/);
+
+      const result = parseTool(await client.request(2, 'tools/call', {
         name: 'spec_superflow_install_cli',
         arguments: {},
       }));
       assert.equal(result.status, 'blocked');
       assert.equal(result.reason, 'npm-missing');
+      assert.match(result.recovery, /restart OpenCode/);
       assert.deepEqual(treeSnapshot(bin), before);
     } finally {
       client.close();
@@ -703,7 +835,13 @@ process.exit(child.status ?? 1);
     const pluginRoot = copyPluginRoot(sandbox);
     const emptyBin = join(sandbox, 'empty-bin');
     mkdirSync(emptyBin, { recursive: true });
-    const client = startClient({ pluginRoot, env: { PATH: emptyBin } });
+    const client = startClient({
+      pluginRoot,
+      env: {
+        PATH: emptyBin,
+        SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
+      },
+    });
     try {
       const result = parseTool(await client.request(1, 'tools/call', {
         name: 'spec_superflow_cli_status',
@@ -720,6 +858,8 @@ process.exit(child.status ?? 1);
       });
       assert.equal(result.npm.available, false);
       assert.equal(result.cli.available, false);
+      assert.match(result.recovery, /restart OpenCode/);
+      assert.doesNotMatch(result.recovery, /VS Code/);
     } finally {
       client.close();
     }
@@ -813,6 +953,7 @@ process.exit(child.status ?? 1);
         PATH: `${npmBin}:/usr/bin:/bin`,
         FAKE_NPM_PREFIX: prefix,
         FAKE_INSTALL_VERSION: '0.14.0',
+        SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
       },
     });
 
@@ -824,9 +965,78 @@ process.exit(child.status ?? 1);
       assert.equal(result.status, 'blocked');
       assert.equal(result.reason, 'installed-cli-not-on-path');
       assert.match(result.recovery, /PATH/);
+      assert.match(result.recovery, /restart OpenCode/);
+      assert.doesNotMatch(result.recovery, /VS Code/);
       assert.equal(statSync(join(prefix, 'bin', 'ssf')).isFile(), true);
     } finally {
       client.close();
+    }
+  });
+
+  it('preserves VS Code recovery wording for Node npm and installed CLI PATH', async () => {
+    const nodeSandbox = makeRoot('ssf-vscode-recovery-node-');
+    const nodePlugin = copyPluginRoot(nodeSandbox);
+    const emptyBin = join(nodeSandbox, 'empty-bin');
+    mkdirSync(emptyBin, { recursive: true });
+    const nodeClient = startClient({ pluginRoot: nodePlugin, env: { PATH: emptyBin } });
+    try {
+      const status = parseTool(await nodeClient.request(1, 'tools/call', {
+        name: 'spec_superflow_cli_status',
+        arguments: {},
+      }));
+      assert.equal(
+        status.recovery,
+        'Install Node.js, add it to PATH, restart VS Code, and run workflow-init again.',
+      );
+    } finally {
+      nodeClient.close();
+    }
+
+    const npmSandbox = makeRoot('ssf-vscode-recovery-npm-');
+    const npmPlugin = copyPluginRoot(npmSandbox);
+    const npmBinOnly = join(npmSandbox, 'bin');
+    fakeNode(join(npmBinOnly, 'node'));
+    const npmClient = startClient({
+      pluginRoot: npmPlugin,
+      env: { PATH: `${npmBinOnly}:/usr/bin:/bin` },
+    });
+    try {
+      const result = parseTool(await npmClient.request(1, 'tools/call', {
+        name: 'spec_superflow_install_cli',
+        arguments: {},
+      }));
+      assert.equal(
+        result.recovery,
+        'Install Node.js with npm, then run workflow-init again.',
+      );
+    } finally {
+      npmClient.close();
+    }
+
+    const pathSandbox = makeRoot('ssf-vscode-recovery-path-');
+    const pathPlugin = copyPluginRoot(pathSandbox);
+    const prefix = join(pathSandbox, 'prefix');
+    const tools = join(pathSandbox, 'tools');
+    fakeNpm(join(tools, 'npm'));
+    const pathClient = startClient({
+      pluginRoot: pathPlugin,
+      env: {
+        PATH: `${tools}:/usr/bin:/bin`,
+        FAKE_NPM_PREFIX: prefix,
+        FAKE_INSTALL_VERSION: '0.14.0',
+      },
+    });
+    try {
+      const result = parseTool(await pathClient.request(1, 'tools/call', {
+        name: 'spec_superflow_install_cli',
+        arguments: {},
+      }));
+      assert.equal(
+        result.recovery,
+        `Add ${join(prefix, 'bin')} to PATH, restart VS Code, and run workflow-init again.`,
+      );
+    } finally {
+      pathClient.close();
     }
   });
 });

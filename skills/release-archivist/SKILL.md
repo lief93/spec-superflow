@@ -7,6 +7,76 @@ description: Close out a spec-superflow change with verification, summary, and a
 
 Finish a spec-superflow change cleanly with verification evidence.
 
+## Full Workflow Two-Step Route
+
+For exact persisted `workflow: full`, use two separate steps.
+
+### Pre-review preparation
+
+Before final semantic review, complete all applicable verification below, AC
+evidence, frontend evidence, known risks, and PR summary (`pr-summary.md`).
+Record every requested real-runtime acceptance result
+honestly as `Pass`, `Fail`, or `PENDING`; a static or protocol test never
+substitutes for an unexecuted real runtime. Run final `ssf validate
+<change-dir>` and `ssf state check <change-dir>` now. Then run:
+
+```bash
+ssf guard check <change-dir> executing closing --json
+```
+
+Without a current final review, this pre-review command must exit 1 with only
+the final review dimension failing. Any other failing dimension means the evidence is not
+ready: repair it, rerun final validation and state check, and repeat the
+preflight. Do not compute a candidate or invoke Reviewer until this condition
+holds. Return the exact results to Primary without transitioning state. Primary
+then freezes
+`pr-summary.md`, `known-risks.md`, and `runtime-evidence.md`, computes the
+worktree-aware final candidate without writing another Review artifact, and
+invokes the fixed Reviewer.
+
+Before final review, `pr-summary.md > Verification Evidence` must contain these
+three exact rows with concrete evidence:
+
+- `Artifact validate`: exact command, exit status, and evidence path.
+- `State check`: exact command, exit status, and hashes.
+- `Runtime acceptance`: exact real-runtime evidence and `Pass`, or the exact
+  unexecuted boundary and `PENDING`.
+
+A delivery package is not a default full-workflow obligation. Run and record
+package, SHA-256, entry-count, and hygiene evidence only when the current Specs
+explicitly require a delivery package or `execution-contract.md > AC Test Matrix`
+explicitly requires a delivery package. Record it through the matching AC Test
+Evidence row; do not add another fixed Verification Evidence row for an ordinary
+Story.
+
+An applicable runtime failure remains blocking. An unexecuted runtime stays
+`PENDING` and is disclosed to the fixed Reviewer and in residual risks; it does
+not become `Pass` and does not by itself block a source-only change. Never claim
+real VS Code Chat or company-internal validation without the raw evidence.
+
+### Post-approval state progression
+
+After current final `Approved`, perform the state transition only, followed by
+read-only persisted-state verification:
+
+```bash
+ssf state transition <change-dir> closing
+ssf state get <change-dir> state
+```
+
+Require the persisted state returned by `state get` to be exactly `closing`.
+That read-only command does not generate or update a candidate input. The
+transition guard may read the frozen tasks, tests, evidence, runtime/delivery
+status, and current final review. It must not rerun tests,
+validation, state checks, Git/package/runtime commands, create or update
+evidence or PR summary, or modify code, tests, risks, and review context. If the
+guard reports a missing, failing, stale, or inconsistent frozen dimension, keep
+state `executing`, return to pre-review preparation, and require a fresh final review
+after the new complete freeze.
+
+The remaining sections define pre-review verification for exact `full` and the
+complete non-full closure flow. Do not repeat them after final approval.
+
 ## The Iron Law: Verification Before Completion
 
 Claiming work is complete without verification is dishonesty, not efficiency. Before claiming any status:
@@ -129,6 +199,9 @@ Verify DP-0 through DP-6 are recorded before DP-7.
 If implementation diverged from the contract, return to `bridging` before closure.
 
 ## Post-Verification
+
+This section applies only to `hotfix` and `tweak` closure. Exact `full` uses the
+two-step route above and must not repeat these commands after final approval.
 
 Run `ssf guard check <change-dir> executing closing --json` before `ssf state transition <change-dir> closing`.
 If the guard fails, fix the exact reported evidence or task-completion gap

@@ -22,7 +22,7 @@
 | GitHub Copilot CLI | marketplace | `copilot plugin update` | `copilot plugin uninstall` |
 | VS Code GitHub Copilot | Agent Plugin Git 源 | VS Code 检查 Plugin 更新 | 按 workspace 禁用或卸载 Plugin |
 | Gemini CLI | `gemini extensions install` | `gemini extensions update` | `gemini extensions uninstall` |
-| OpenCode | plugin entry / skills 目录 | `git pull` | 删除 plugin/skills |
+| OpenCode | 全局登记中央仓库路径 | `git pull` + `/workflow-init` | 从 OpenCode 全局配置移除路径 |
 | WorkBuddy | `ssf install-workbuddy` | 重新运行安装器 | 删除 marketplace 插件并禁用 |
 | Trae IDE / TRAE Work | `.trae/skills` / 上传 zip 或 .skill / marketplace | `git pull` + 重新导入 | UI 卸载或删除技能目录 |
 
@@ -298,36 +298,25 @@ gemini extensions uninstall spec-superflow
 
 ## OpenCode
 
-OpenCode 支持本地 plugin 文件和 Agent Skills 目录。仓库已提供 `.opencode/plugins/spec-superflow.js` 插件入口，以及 `.agents/skills -> ../skills` 兼容入口。
+OpenCode 可以把本仓库作为一个全局 Plugin 加载。Plugin 会统一注册一个
+primary **spec-superflow** Agent、`/workflow-init` Command、全部 Skills、
+bootstrap MCP、隐藏 setup subagent 和一个隐藏只读 Reviewer；业务仓库不需要
+复制或链接工作流文件。
 
 ### 安装（推荐：Plugin Mode）
 
 ```bash
-git clone https://github.com/MageByte-Zero/spec-superflow.git
+cd /absolute/path/to/spec-superflow
+opencode plugin "$(pwd)" -g
 ```
 
-在 OpenCode 的插件配置或 UI 中指向仓库内的插件文件：
-
-```text
-/absolute/path/to/spec-superflow/.opencode/plugins/spec-superflow.js
-```
-
-不要只复制这个 `.js` 文件到另一个项目；它会按相对路径读取仓库里的 `skills/` 和 `GEMINI.md`。如果希望项目内零配置，使用下面的 skills symlink 方式。
-
-### 安装（Skills Symlink）
-
-```bash
-git clone https://github.com/MageByte-Zero/spec-superflow.git
-mkdir -p your-project/.agents
-ln -s /absolute/path/to/spec-superflow/skills your-project/.agents/skills
-```
-
-如果 symlink 不方便，直接复制：
-
-```bash
-mkdir -p your-project/.agents
-cp -R /absolute/path/to/spec-superflow/skills your-project/.agents/skills
-```
+重启 OpenCode，在任意项目运行 `/workflow-init`。返回 `workflow=READY` 后，
+选择 **spec-superflow** Agent 并描述需求。普通需求由 primary Agent 直接完成
+规划、实现、测试和修复，并直接运行全局 `ssf`；完整工作流只在两个 Planning
+语义门禁和最终代码门禁调用隐藏 Reviewer。Primary 只传 CLI 生成的不带正文的
+candidate metadata 和必要路径。Reviewer 用普通项目读取/终端工具自行读取工件、
+固定基线 Git diff 和每个 untracked 文件；它不重复结构、状态或测试命令，也不
+修改文件或 Git。聊天摘要不能代替当前仓库证据。
 
 ### 升级
 
@@ -335,13 +324,12 @@ cp -R /absolute/path/to/spec-superflow/skills your-project/.agents/skills
 cd /path/to/spec-superflow && git pull
 ```
 
-如果用的是复制而非 symlink，升级后需要重新复制。
+重启 OpenCode 并再次运行 `/workflow-init`，使 CLI 与仓库版本一致。仓库路径
+不变时无需重新安装 Plugin。
 
 ### 卸载
 
-```bash
-rm -rf your-project/.agents/skills
-```
+从 OpenCode 全局配置的 `plugin` 列表中移除该仓库绝对路径。
 
 详细说明见 [.opencode/INSTALL.md](.opencode/INSTALL.md)。
 

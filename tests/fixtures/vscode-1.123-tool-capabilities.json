@@ -1,0 +1,127 @@
+{
+  "schema": "spec-superflow/vscode-tool-capabilities",
+  "schema_version": 1,
+  "vscode_version": "1.123.0",
+  "copilot_chat_version": "0.51.0",
+  "sources": {
+    "copilot_contribution_manifest": {
+      "path": "Contents/Resources/app/extensions/copilot/package.json",
+      "sha256": "4146fb1275ab97e6a6541f283f303ac9363c0073f36e6a3a58b440d28146817f"
+    },
+    "vscode_core_tools": {
+      "path": "Contents/Resources/app/out/vs/workbench/workbench.desktop.main.js",
+      "sha256": "aabb277f25bac6c0f3d50eb5b7f33c92c5f6b07de53c2dce6885673859ee290f"
+    }
+  },
+  "tool_sets": {
+    "edit": [
+      "createDirectory",
+      "createFile",
+      "createJupyterNotebook",
+      "editFiles",
+      "editNotebook",
+      "rename"
+    ],
+    "execute": [
+      "runNotebookCell",
+      "executionSubagent"
+    ],
+    "read": [
+      "getNotebookSummary",
+      "problems",
+      "readFile",
+      "viewImage",
+      "readNotebookCellOutput",
+      "skill"
+    ],
+    "search": [
+      "changes",
+      "codebase",
+      "fileSearch",
+      "listDirectory",
+      "textSearch",
+      "searchSubagent",
+      "usages"
+    ],
+    "vscode": [
+      "installExtension",
+      "memory",
+      "newWorkspace",
+      "resolveMemoryFileUri",
+      "runCommand",
+      "switchAgent",
+      "toolSearch",
+      "vscodeAPI"
+    ],
+    "web": [
+      "fetch",
+      "githubRepo",
+      "githubTextSearch"
+    ]
+  },
+  "direct_tools": {
+    "readFile": {
+      "capabilities": [
+        "read"
+      ],
+      "source": "copilot_contribution_manifest"
+    },
+    "listDirectory": {
+      "capabilities": [
+        "search"
+      ],
+      "source": "copilot_contribution_manifest"
+    },
+    "fileSearch": {
+      "capabilities": [
+        "search"
+      ],
+      "source": "copilot_contribution_manifest"
+    },
+    "textSearch": {
+      "capabilities": [
+        "search"
+      ],
+      "source": "copilot_contribution_manifest"
+    },
+    "applyPatch": {
+      "capabilities": [
+        "edit"
+      ],
+      "source": "copilot_contribution_manifest"
+    },
+    "createFile": {
+      "capabilities": [
+        "create"
+      ],
+      "source": "copilot_contribution_manifest"
+    },
+    "createDirectory": {
+      "capabilities": [
+        "create"
+      ],
+      "source": "copilot_contribution_manifest"
+    },
+    "runInTerminal": {
+      "capabilities": [
+        "terminal"
+      ],
+      "source": "vscode_core_tools"
+    }
+  },
+  "agent_or_subagent_refs": [
+    "agent",
+    "agent/runSubagent",
+    "runSubagent",
+    "codebase",
+    "searchSubagent",
+    "exploreSubagent",
+    "executionSubagent"
+  ],
+  "legacy_or_generic_aliases": [
+    "run_in_terminal",
+    "runCommands/runInTerminal",
+    "terminal",
+    "ReadFile"
+  ]
+}

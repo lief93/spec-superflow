@@ -4,12 +4,17 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
+import { computeReviewCandidate } from '../../scripts/lib/review-candidate.mjs';
+import { computeContractHash } from '../../scripts/lib/hash.mjs';
+import { readState, writeState } from '../../scripts/lib/state-loader.mjs';
+import { check as checkDpGate } from '../../scripts/guard/checks/dp-gate-passed.mjs';
+import { checkReviewApproved } from '../../scripts/guard/checks/review-approved.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..', '..');
@@ -230,3 +235,235 @@ describe('Fast-path validation', () => {
     }
   });
 });
+
+describe('Independent review transition gates', () => {
+  for (const workflow of ['hotfix', 'tweak']) {
+    it(`keeps ${workflow} specifying -> bridging independent of Planning review identities`, () => {
+      const fixture = makeReviewFixture();
+      try {
+        writeState(fixture.changeDir, baseReviewState('specifying', { workflow }));
+
+        const result = runGuardJson(
+          'specifying',
+          'bridging',
+          fixture.changeDir,
+          workflow,
+        );
+
+        assert.equal(result.pass, true, JSON.stringify(result));
+        assert.equal(
+          result.checks.find(check => check.dimension === 'review-approved')?.skipped,
+          true,
+          JSON.stringify(result),
+        );
+      } finally {
+        cleanup(fixture.repo);
+      }
+    });
+  }
+
+  it('wires current Design/Tasks approval into specifying -> bridging', () => {
+    const fixture = makeReviewFixture();
+    try {
+      let result = runGuardJson('specifying', 'bridging', fixture.changeDir);
+      let review = result.checks.find(check => check.dimension === 'review-approved');
+      assert.equal(review?.pass, false, JSON.stringify(result));
+
+      const proposal = writeApprovedReview(fixture, 'proposal-specs');
+      const state = baseReviewState('specifying', {
+        dp_1_result: 'confirmed: product direction',
+        dp_1_candidate_identity: proposal.identity,
+      });
+      writeState(fixture.changeDir, state);
+      const design = writeApprovedReview(fixture, 'design-tasks');
+      writeState(fixture.changeDir, {
+        ...state,
+        dp_2_result: 'confirmed: implementation direction',
+        dp_2_candidate_identity: design.identity,
+      });
+
+      result = runGuardJson('specifying', 'bridging', fixture.changeDir);
+      review = result.checks.find(check => check.dimension === 'review-approved');
+      assert.equal(review?.pass, true, JSON.stringify(result));
+    } finally {
+      cleanup(fixture.repo);
+    }
+  });
+
+  it('wires current Final approval into executing -> closing and detects Git drift', () => {
+    const fixture = makeReviewFixture();
+    try {
+      const proposal = writeApprovedReview(fixture, 'proposal-specs');
+      let state = baseReviewState('executing', {
+        dp_1_result: 'confirmed: product direction',
+        dp_1_candidate_identity: proposal.identity,
+      });
+      writeState(fixture.changeDir, state);
+      const design = writeApprovedReview(fixture, 'design-tasks');
+      state = {
+        ...state,
+        dp_2_result: 'confirmed: implementation direction',
+        dp_2_candidate_identity: design.identity,
+      };
+      writeState(fixture.changeDir, state);
+      writeApprovedReview(fixture, 'final');
+
+      let result = runGuardJson('executing', 'closing', fixture.changeDir);
+      let review = result.checks.find(check => check.dimension === 'review-approved');
+      assert.equal(review?.pass, true, JSON.stringify(result));
+
+      writeFileSync(join(fixture.repo, 'src', 'feature.mjs'), 'export const value = 2;\n');
+      result = runGuardJson('executing', 'closing', fixture.changeDir);
+      review = result.checks.find(check => check.dimension === 'review-approved');
+      assert.equal(review?.pass, false, JSON.stringify(result));
+    } finally {
+      cleanup(fixture.repo);
+    }
+  });
+
+  it('binds DP-2 to the current Design review for exact full workflow', () => {
+    const fixture = makeReviewFixture();
+    try {
+      const proposal = writeApprovedReview(fixture, 'proposal-specs');
+      let state = baseReviewState('specifying', {
+        dp_1_result: 'confirmed: product direction',
+        dp_1_candidate_identity: proposal.identity,
+      });
+      writeState(fixture.changeDir, state);
+      const design = writeApprovedReview(fixture, 'design-tasks');
+
+      state = {
+        ...state,
+        dp_2_result: 'confirmed: implementation direction',
+        dp_2_candidate_identity: `sha256:${'0'.repeat(64)}`,
+      };
+      writeState(fixture.changeDir, state);
+      assert.equal(checkReviewApproved(
+        fixture.changeDir,
+        'specifying',
+        'bridging',
+      ).pass, false);
+
+      writeState(fixture.changeDir, {
+        ...state,
+        dp_2_candidate_identity: design.identity,
+      });
+      assert.equal(checkReviewApproved(
+        fixture.changeDir,
+        'specifying',
+        'bridging',
+      ).pass, true);
+
+    } finally {
+      cleanup(fixture.repo);
+    }
+  });
+
+  it('allows a legacy approved contract to resume without a new DP-3 field', () => {
+    const fixture = makeReviewFixture();
+    try {
+      writeState(fixture.changeDir, baseReviewState('bridging', {
+        dp_3_result: 'approved: contract',
+        contract_hash: computeContractHash(fixture.changeDir),
+      }));
+
+      assert.deepEqual(
+        checkDpGate(fixture.changeDir, 'bridging', 'approved-for-build'),
+        { pass: true, failures: [] },
+      );
+    } finally {
+      cleanup(fixture.repo);
+    }
+  });
+});
+
+function makeReviewFixture() {
+  const repo = mkdtempSync(join(tmpdir(), 'ssf-review-guard-'));
+  runGit(repo, ['init', '-q', '-b', 'main']);
+  runGit(repo, ['config', 'user.email', 'tests@example.com']);
+  runGit(repo, ['config', 'user.name', 'Spec Superflow Tests']);
+  mkdirSync(join(repo, 'src'), { recursive: true });
+  writeFileSync(join(repo, 'src', 'feature.mjs'), 'export const value = 1;\n');
+  runGit(repo, ['add', '.']);
+  runGit(repo, ['commit', '-qm', 'baseline']);
+  const base = runGit(repo, ['rev-parse', 'HEAD']);
+  const changeDir = join(repo, 'changes', 'example');
+  mkdirSync(join(changeDir, 'specs', 'example'), { recursive: true });
+  mkdirSync(join(changeDir, 'reviews'), { recursive: true });
+  writeFileSync(join(changeDir, 'user-intent.md'), '# Intent\nIndependent review.\n');
+  writeFileSync(join(changeDir, 'proposal.md'), '# Proposal\nThree stages.\n');
+  writeFileSync(join(changeDir, 'specs', 'example', 'spec.md'), '# Spec\nBehavior.\n');
+  writeFileSync(join(changeDir, 'design.md'), '# Design\nOne Reviewer.\n');
+  writeFileSync(join(changeDir, 'tasks.md'), '# Tasks\n\n## Batch 1\n- [x] Done.\n');
+  writeFileSync(join(changeDir, 'execution-contract.md'), '# Contract\nApproved.\n');
+  writeFileSync(join(changeDir, 'pr-summary.md'), '# PR Summary\nTests pass.\n');
+  writeFileSync(join(changeDir, 'known-risks.md'), '# Risks\nRuntime pending.\n');
+  writeFileSync(join(changeDir, 'runtime-evidence.md'), '# Evidence\nPENDING.\n');
+  writeState(changeDir, baseReviewState('specifying'));
+  return { repo, changeDir, base };
+}
+
+function baseReviewState(state, overrides = {}) {
+  return {
+    state,
+    workflow: 'full',
+    change_name: 'example',
+    batches_completed: 1,
+    test_result: 'pass',
+    ...overrides,
+  };
+}
+
+function writeApprovedReview(fixture, stage) {
+  const state = readState(fixture.changeDir);
+  const candidate = computeReviewCandidate({
+    changeDir: fixture.changeDir,
+    stage,
+    ...(stage === 'design-tasks' ? {
+      prerequisiteIdentities: {
+        'proposal-specs': state.dp_1_candidate_identity,
+      },
+    } : {}),
+    ...(stage === 'final' ? {
+      repoRoot: fixture.repo,
+      base: fixture.base,
+      prerequisiteIdentities: {
+        'proposal-specs': state.dp_1_candidate_identity,
+        'design-tasks': state.dp_2_candidate_identity,
+      },
+    } : {}),
+  });
+  const report = {
+    stage,
+    candidate_identity: candidate.identity,
+    verdict: 'Approved',
+    findings: [],
+    questions: [],
+    review_focus: ['correctness'],
+    summary: 'Approved.',
+    residual_risks: ['Runtime pending.'],
+    ...(stage === 'final' ? { review_base: candidate.review_base } : {}),
+  };
+  writeFileSync(
+    join(fixture.changeDir, 'reviews', `${stage}-current.json`),
+    `${JSON.stringify(report)}\n`,
+  );
+  return candidate;
+}
+
+function runGuardJson(from, to, changeDir, workflow = 'full') {
+  const result = spawnSync(process.execPath, [
+    GUARD, 'check', changeDir, from, to, '--json', '--workflow', workflow,
+  ], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+  assert.ok(result.stdout, result.stderr);
+  return JSON.parse(result.stdout);
+}
+
+function runGit(cwd, args) {
+  const result = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}

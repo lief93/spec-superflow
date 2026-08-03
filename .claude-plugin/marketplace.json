@@ -1,6 +1,6 @@
 {
   "name": "spec-superflow",
-  "description": "Spec-first workflow: integrates project baselines, Claude-style shared auto memory, OpenSpec planning, and Superpowers execution discipline. 11 collaborative skills with embedded TDD, SDD, code review, debugging, and delta spec sync.",
+  "description": "Spec-first workflow: integrates project baselines, Claude-style shared auto memory, OpenSpec planning, and Superpowers execution discipline. 12 collaborative skills with embedded TDD, SDD, code review, debugging, and delta spec sync.",
   "owner": {
     "name": "MageByte",
     "url": "https://github.com/MageByte-Zero"
@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "spec-superflow",
-      "description": "8-state workflow engine with 11 collaborative skills. Bridges project baselines, Claude-style shared auto memory, planning, and execution via execution-contract.md. Embedded schema validation, TDD, SDD, code review, systematic debugging, and delta spec sync.",
+      "description": "8-state workflow engine with 12 collaborative skills. Bridges project baselines, Claude-style shared auto memory, planning, and execution via execution-contract.md. Embedded schema validation, TDD, SDD, code review, systematic debugging, and delta spec sync.",
       "version": "0.14.0",
       "source": "./",
       "author": {

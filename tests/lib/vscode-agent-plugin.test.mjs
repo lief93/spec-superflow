@@ -6,6 +6,8 @@ import { describe, it } from 'node:test';
 
 const ROOT = process.cwd();
 const read = path => readFileSync(join(ROOT, path), 'utf8');
+const primary = read('agents/spec-superflow.agent.md');
+const reviewer = read('agents/spec-superflow-reviewer.agent.md');
 
 function probeAgentRouteWithoutNode(route) {
   return spawnSync(
@@ -43,6 +45,45 @@ function probeAgentRouteWithoutNode(route) {
 }
 
 describe('VS Code Agent Plugin', () => {
+  it('exposes one visible Primary and one hidden fixed Reviewer', () => {
+    const agentFiles = readdirSync(join(ROOT, 'agents'))
+      .filter(file => file.endsWith('.agent.md'))
+      .sort();
+
+    assert.deepEqual(agentFiles, [
+      'spec-superflow-reviewer.agent.md',
+      'spec-superflow.agent.md',
+    ]);
+    assert.match(primary, /^agents: \["Spec Superflow Reviewer"\]$/m);
+    assert.match(primary, /^user-invocable: true$/m);
+    assert.match(reviewer, /^user-invocable: false$/m);
+    assert.match(reviewer, /^agents: \[\]$/m);
+    assert.doesNotMatch(reviewer, /^tools:/m);
+  });
+
+  it('adds only three exact-full independent semantic checkpoints to the Primary', () => {
+    assert.match(primary, /one independent Reviewer context at each of[\s\S]*exactly three[\s\S]*proposal-specs[\s\S]*design-tasks[\s\S]*final/i);
+    assert.match(primary, /candidate[\s\S]*freeze[\s\S]*pending-report\.json[\s\S]*record[\s\S]*check/i);
+    assert.match(primary, /first verified `Request Changes`[\s\S]*repairs only the affected\s+stage exactly once[\s\S]*same Reviewer context/i);
+    assert.match(primary, /second verified `Request Changes`[\s\S]*`BLOCKED`[\s\S]*no\s+third review/i);
+    assert.match(primary, /DP-2 and the existing user-owned DP-3[\s\S]*remain separate/i);
+    assert.doesNotMatch(primary, /dp_3_contract_hash/i);
+    assert.match(primary, /hotfix.*tweak[\s\S]*do not invoke or require/i);
+  });
+
+  it('keeps the Reviewer behavior read-only while retaining ordinary project and terminal tools', () => {
+    assert.match(
+      reviewer,
+      /ordinary project-read and terminal tools[\s\S]*git status[\s\S]*git diff/i,
+    );
+    assert.match(
+      reviewer,
+      /Do not edit[^]*stage[^]*commit[^]*push[^]*change workflow state[^]*invoke another Agent/i,
+    );
+    assert.match(reviewer, /proposal-specs[\s\S]*design-tasks[\s\S]*final/i);
+    assert.match(reviewer, /one unfenced JSON object/i);
+  });
+
   it('registers the bundled agent, skills, commands, and MCP bridge', () => {
     const manifest = JSON.parse(read('.plugin/plugin.json'));
     const mcp = JSON.parse(read('.mcp.json'));
@@ -350,7 +391,7 @@ describe('VS Code Agent Plugin', () => {
     );
     const releaseRoute = /### Route to release-archivist([\s\S]*?)(?=\n### )/
       .exec(workflow)?.[1] || '';
-    assert.match(releaseRoute, /release-archivist[\s\S]*own the `executing` → `closing`\s+transition/i);
+    assert.match(releaseRoute, /release-archivist[\s\S]*own the\s+`executing` → `closing`\s+transition/i);
     assert.match(releaseRoute, /state get <dir> state[\s\S]*require\s+`closing`/i);
     assert.doesNotMatch(releaseRoute, /guard check <dir> executing closing|state transition <dir> closing/i);
   });
@@ -383,7 +424,7 @@ describe('VS Code Agent Plugin', () => {
     assert.match(writer, /do not\s+replace these headings with bold list labels/i);
     assert.match(
       writer,
-      /Stop after each artifact and wait for explicit user confirmation before generating the next/i,
+      /Stop after each artifact and\s+wait for explicit user confirmation before generating the next/i,
     );
     assert.match(
       agent,

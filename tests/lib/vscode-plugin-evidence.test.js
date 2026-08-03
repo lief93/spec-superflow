@@ -80,4 +80,76 @@ describe('VS Code Plugin documentation boundary', () => {
     assert.match(english, /leaves an existing `.github\/copilot-instructions\.md` unchanged/);
     assert.match(chinese, /已有 `.github\/copilot-instructions\.md`，其内容保持不变/);
   });
+
+  it('documents Planning reading depth and implementation confirmation consistently', () => {
+    const english = read('docs/vscode-agent-plugin.md');
+    const chinese = read('docs/vscode-agent-plugin-zh.md');
+
+    assert.match(
+      english,
+      /Proposal\s+and\s+Specs[\s\S]*goals[\s\S]*scope[\s\S]*behaviors[\s\S]*non-goals/i,
+    );
+    assert.match(
+      chinese,
+      /Proposal\s+和\s+Specs[\s\S]*目标[\s\S]*范围[\s\S]*行为[\s\S]*非目标/,
+    );
+    assert.match(
+      english,
+      /Design\s+and\s+Tasks[\s\S]*concise summary[\s\S]*complete `design\.md` and `tasks\.md`[\s\S]*reading depth[\s\S]*implementation direction/i,
+    );
+    assert.match(
+      chinese,
+      /Design\s+和\s+Tasks[\s\S]*简明摘要[\s\S]*完整 `design\.md` 和 `tasks\.md`[\s\S]*阅读深度[\s\S]*实现方向/,
+    );
+    assert.match(english, /real VS Code[\s\S]*PENDING/i);
+    assert.match(chinese, /真实 VS Code[\s\S]*PENDING/i);
+  });
+
+  it('documents one same-context re-review per stage consistently', () => {
+    const english = read('docs/vscode-agent-plugin.md');
+    const chinese = read('docs/vscode-agent-plugin-zh.md');
+
+    assert.match(english, /each stage[\s\S]*initial review[\s\S]*fresh isolated context/i);
+    assert.match(
+      english,
+      /first `Request Changes`[\s\S]*same Reviewer context[\s\S]*second `Request Changes`[\s\S]*`BLOCKED`/i,
+    );
+    assert.match(chinese, /每个阶段[\s\S]*首次 Review[\s\S]*全新的隔离上下文/);
+    assert.match(
+      chinese,
+      /第一次 `Request Changes`[\s\S]*同一个 Reviewer 上下文[\s\S]*第二次 `Request Changes`[\s\S]*`BLOCKED`/,
+    );
+  });
+
+  it('keeps real Agent runtime acceptance PENDING until one combined run passes', () => {
+    const english = read('docs/vscode-agent-plugin.md');
+    const chinese = read('docs/vscode-agent-plugin-zh.md');
+
+    for (const [content, labels] of [
+      [english, [
+        /only `Spec Superflow`/i,
+        /exact(?:ly)? `Spec Superflow Reviewer`[\s\S]*no separate Dev Agent/i,
+        /cross-stage[\s\S]*canar(?:y|ies)[\s\S]*(?:do not leak|absent)/i,
+        /ordinary project-read and terminal tools[\s\S]*read-only Git[\s\S]*untracked canary[\s\S]*candidate identity[\s\S]*remain unchanged/i,
+        /does not run tests or workflow commands[\s\S]*mutate Git[\s\S]*invoke another\s+Agent/i,
+        /Reviewer[\s\S]*Primary[\s\S]*(?:repairs|asks the user)/i,
+      ]],
+      [chinese, [
+        /只有 `Spec Superflow`/,
+        /精确(?:调用)? `Spec Superflow Reviewer`[\s\S]*没有注册或调用独立 Dev Agent/,
+        /跨阶段 canary[\s\S]*(?:不泄漏|不存在)/,
+        /普通项目读取\/终端工具[\s\S]*只读 Git 命令[\s\S]*untracked[\s\S]*candidate identity[\s\S]*完全不变/,
+        /不运行测试或工作流命令[\s\S]*不修改[\s\S]*Git[\s\S]*不调用其他 Agent/,
+        /Reviewer[\s\S]*Primary[\s\S]*(?:修复|询问用户)/,
+      ]],
+    ]) {
+      for (const label of labels) assert.match(content, label);
+      assert.match(content, /VS Code 1\.123[\s\S]*PENDING/i);
+      assert.match(content, /automation[\s\S]*Unavailable/i);
+      assert.doesNotMatch(
+        content,
+        /(?:static|静态)[^\n]*(?:proves|证明)[^\n]*(?:picker|invocation|isolation|tool denial|mediation|调用|隔离|工具拒绝|中介)/i,
+      );
+    }
+  });
 });

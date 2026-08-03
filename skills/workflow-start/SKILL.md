@@ -55,6 +55,43 @@ If workflow is `auto`/`null`/unset: run `ssf infer-workflow <change-dir>`. Infer
 
 Validate mode against artifact content. If hotfix/tweak criteria not met → upgrade to `full` and output reason. Don't overwrite explicit mode unless user asks.
 
+After workflow is persisted, run `ssf state get <dir> workflow`. Only exact
+`full` uses the independent semantic-review checkpoints below. `hotfix` and
+`tweak` keep their existing fast paths and do not create Review artifacts.
+
+## Full Workflow Review Seams
+
+For exact `full`, Primary directly owns planning, implementation, verification,
+and finding repair. It invokes the fixed `Spec Superflow Reviewer` in one
+independent Reviewer context per stage at `proposal-specs`, `design-tasks`, and
+`final`. A first `Request Changes` permits exactly one repair and a complete
+re-review in that same context. A second `Request Changes` is `BLOCKED`, with no
+third review or state progression. Each stage records only
+`reviews/<stage>-current.json`. Missing, invalid, or stale results are `BLOCKED`.
+
+The first action after every Reviewer return is to write its raw JSON unchanged
+to `reviews/<stage>-pending-report.json`. The immediately next action is
+`ssf review record <change-dir> <stage> --json`. Immediately after record, run
+`ssf review check <change-dir> <stage> --json`; final uses the same explicit base
+for both commands. Only after write, record, and check may Primary interpret the
+verdict, edit, or invoke Reviewer again. Before all three finish, do not
+interpret, edit, or invoke Reviewer. Missing any one of write, record, or check
+is `BLOCKED`. Only a check nonzero result with JSON
+`code: "request-changes"` is a verified blocking verdict; preserve its current
+evidence. Any other nonzero is `BLOCKED`.
+
+The original request, organized scope, and current Approved Proposal and Specs
+form the immutable upstream contract for Design and Tasks. Do not generate or
+modify Design or Tasks until the Proposal and Specs review is current Approved
+and DP-1 is bound to it. A Design or Tasks repair owns only `design.md` and
+`tasks.md`; an upstream semantic change must fail closed and return to Primary
+as `upstream_conflict`. Stop for a user question and explicit Proposal and Specs
+reopen; do not repair Tasks or continue state progression. Require fresh
+first-stage review and repeated DP-1 before dependent artifacts are regenerated.
+
+For non-full `hotfix` and `tweak`, keep the existing fast paths. Do not invoke
+the fixed Reviewer and do not create, record, or check a current review result.
+
 ## Routing Rules
 
 ### Route to project-init
@@ -62,6 +99,11 @@ The user explicitly asks to initialize or refresh project coding rules, architec
 
 ### Route to need-explorer
 Change is fuzzy, scope unclear, comparing options, no stable change name.
+For exact `full`, use `need-explorer` only to clarify intent. It returns the
+clarified intent to Primary without recording DP-1 or writing planning
+artifacts. Primary then creates Proposal and Specs and completes their review;
+DP-1 remains unavailable until the current `proposal-specs` review is
+`Approved` and a new user-authored response confirms it.
 
 ### Route to spec-writer
 User knows what they want and planning artifacts are missing or incomplete.
@@ -89,13 +131,29 @@ persisted state is `executing`, then route to `build-executor`.
 ### Route to bug-investigator
 Execution hit blockage: test failure, unexpected behavior, build error, task cannot proceed. After debugging, route back to build-executor.
 
-### Route to code-reviewer
-Batch completed, batch ready for spec-compliance + code-quality verification.
+### Route to code-reviewer (non-full only)
+For `hotfix` or `tweak`, keep the existing local code-review route when it is
+applicable. For exact `full`, never add a routine per-AC or per-Batch
+`code-reviewer` route; use only the three semantic checkpoints above.
 
 ### Route to release-archivist
-Route to `release-archivist` while the state remains `executing` so it can
-produce the final test and PR evidence and own the `executing` → `closing`
-transition. After it returns, run `ssf state get <dir> state` and require
+For exact `full`, route first to the `release-archivist` pre-review preparation
+while state remains `executing`: finish every required mechanical and
+applicable runtime result, every explicit execution-contract AC obligation,
+and their evidence and PR summary without a state transition. Any runtime check
+that was not executed stays honestly `PENDING`.
+A delivery package is required only when the current Specs explicitly require a
+delivery package or `execution-contract.md > AC Test Matrix` explicitly requires
+a delivery package.
+Primary freezes the current final candidate, obtains the one final semantic
+review, and only after current `Approved` routes to the
+`release-archivist` state-only post-approval path.
+
+For `hotfix` or `tweak`, route to `release-archivist` while the state remains
+`executing` so it can produce the final test and PR evidence and own the
+`executing` → `closing` transition.
+
+After either closing path returns, run `ssf state get <dir> state` and require
 `closing`. If the persisted state is not `closing`, report BLOCKED with the
 release result; do not repeat the transition from `workflow-start`. Include
 `DP-7: Archive Confirmation`.
@@ -109,8 +167,6 @@ User explicitly requests, bug-investigator escalates after 3+ failures AND user 
 ### Fast-Path Routing
 - **Hotfix**: Skip need-explorer + spec-writer. Run `ssf guard check <dir> exploring bridging --workflow hotfix`; after it passes run `ssf state transition <dir> bridging`, then route to contract-builder (minimal). After DP-3, follow the normal approved-for-build and executing transitions, then release-archivist (lightweight).
 - **Tweak**: Skip need-explorer + spec-writer + contract-builder. Run `ssf guard check <dir> exploring approved-for-build --workflow tweak`; after it passes run `ssf state transition <dir> approved-for-build`, then record DP-4 and follow the normal executing transition before direct edit. Finish through release-archivist (lightweight).
-
-Post-transition: 💡 `ssf inject <change-dir>` to update phase-guard artifacts.
 
 ## Staleness Detection
 
@@ -128,7 +184,7 @@ Use content inspection, not timestamps.
 - No "continue" without state inspection
 - No implementation past stale contract
 - No implementation past bug without investigation
-- No closure without code review
+- No exact-full closure without a current Approved final review
 - No closure with unsynced delta specs
 - No transitions from `abandoned` (terminal)
 - No transition to `abandoned` from `closing` or `abandoned`

@@ -4,6 +4,7 @@ description: Develop changes through the spec-superflow SDD workflow.
 argument-hint: Describe the change to plan, implement, review, or resume.
 user-invocable: true
 disable-model-invocation: true
+agents: ["Spec Superflow Reviewer"]
 ---
 
 # Spec Superflow Agent
@@ -61,6 +62,109 @@ workspace.
     `ssf state check <change-dir>` after the final artifact edit and state
     transition. If any command exits nonzero, report `BLOCKED` with the exact
     failure instead of claiming the workflow is complete.
+
+## Independent Review Protocol
+
+When the persisted workflow is exact `full`, the visible Primary owns planning,
+implementation, tests, mechanical verification, and finding repair. Invoke the
+hidden `Spec Superflow Reviewer` in one independent Reviewer context at each of
+exactly three semantic checkpoints:
+
+1. `proposal-specs`: after current Proposal and delta Specs pass structural
+   validation and before Design or Tasks are authored.
+2. `design-tasks`: after current Design and Tasks pass structural validation and
+   before `execution-contract.md` is created.
+3. `final`: after implementation, tests, applicable runtime evidence, risks,
+   and PR summary are complete and frozen, before `executing -> closing`. A
+   delivery package is required only when the current Specs explicitly require
+   a delivery package or `execution-contract.md > AC Test Matrix` explicitly
+   requires a delivery package.
+
+At each checkpoint:
+
+1. Run `ssf review candidate <change-dir> <stage> --json`. For `final`, choose
+   one stable Git base and pass the same `--base <review-base>` to candidate,
+   record, and check.
+2. Freeze the candidate. Do not edit its artifacts, implementation, tests, or
+   evidence while Reviewer runs.
+3. Invoke exactly `Spec Superflow Reviewer` in a fresh independent context for
+   the first review of this stage, and retain that one stage-scoped context.
+   For the Planning handoff at `proposal-specs` and `design-tasks`, supply a
+   short reference index containing only: the exact candidate JSON unchanged;
+   project-relative paths to `user-intent.md`, current stage artifacts, and
+   applicable project standards; a necessary repository and test evidence
+   index with each project-relative path plus symbol; and exact mechanical check
+   results as command, exit code, and concise result. Reviewer opens those paths
+   itself.
+   For the Final handoff, pass the exact final candidate JSON unchanged; it
+   contains `review_base`, `worktree_identity`, `changed_files`, review targets,
+   and the finding allowlist. `changed_files` describes only implementation
+   differences outside the current Change directory. Change artifacts are
+   covered separately by the candidate `inputs` and upstream candidate
+   identities. Also pass only project-relative paths to the
+   original requirement, applicable project standards, current Change Specs,
+   Design, Tasks, execution contract, mechanical evidence, risks, and PR
+   summary. Include these suggested read-only Git commands:
+   `git status --short`, `git diff <review-base> -- .`,
+   `git log --oneline <review-base>..HEAD`, and, when necessary,
+   `git show <review-base>:<path>`. Reviewer uses ordinary project-read and
+   terminal tools to acquire the actual fixed-base diff, inspect every
+   `changed_files` entry, and read every untracked file itself. Never inline or
+   add the tracked diff, untracked source text, a whole artifact, source or test
+   file, or evidence log to the handoff. Reviewer must not edit files, stage,
+   commit, push, change workflow state, contact the user, or invoke another
+   Agent.
+4. The first action after every Reviewer return is to write its raw JSON
+   unchanged to `<change-dir>/reviews/<stage>-pending-report.json`. The
+   immediately next action is `ssf review record <change-dir> <stage> --json`.
+   Immediately after record, run
+   `ssf review check <change-dir> <stage> --json`. For `final`, append the same
+   explicit base to both commands. Candidate identity binds exact Git status,
+   including staged versus unstaged state, the complete tracked diff, and every
+   untracked byte. Therefore record and check fail on status, staged, or
+   worktree drift. Only after write, record, and check may Primary interpret or
+   act on the verdict.
+5. Before all three finish, do not interpret the verdict, edit any artifact, or
+   invoke Reviewer again. Missing any one of write, record, or check, or doing
+   another action first, is `BLOCKED`.
+6. A valid `Request Changes` is recorded as current evidence and makes check
+   exit nonzero with JSON `code: "request-changes"`. Only that exact check
+   result is a verified blocking verdict. Preserve its current evidence. Any
+   other nonzero, malformed, stale, or unavailable result is `BLOCKED`.
+7. On the first verified `Request Changes`, keep the workflow in its current state.
+   Primary repairs only the affected stage exactly once, reruns the applicable
+   checks, freezes a new candidate, and invokes the same fixed Reviewer again
+   in the same Reviewer context. The Reviewer must reread the new candidate and
+   repeat the complete stage scan; never reuse an earlier approval.
+
+A second verified `Request Changes`, including a new Finding, or a missing,
+malformed, stale, unavailable, or otherwise nonzero second review result is
+`BLOCKED`. Preserve the second current evidence. Make no second repair, no
+third review, and no workflow state progression.
+
+If a Design/Tasks Reviewer's validated `questions[0]` begins
+`upstream_conflict:`, stop instead of repairing the stage. Do not edit Design
+or Tasks. Ask the user for an explicit Proposal and Specs reopen; do not
+continue workflow state progression.
+
+After current `proposal-specs` approval, ask the user to confirm the reviewed
+goals, scope, behaviors, and non-goals. Record the existing `dp_1_result` and
+timestamp plus `dp_1_candidate_identity`; do not author Design or Tasks first.
+After current `design-tasks` approval, ask the user to confirm the reviewed
+design, batches, and test plan. Record the existing `dp_2_result` and timestamp
+plus `dp_2_candidate_identity`; only then may `contract-builder` create the
+execution contract. DP-2 and the existing user-owned DP-3 contract approval
+remain separate.
+
+After current final is `Approved`, make no substantive write. Route the single
+guarded closing transition through `release-archivist`, then run
+`ssf state get <change-dir> state` and require the persisted result to be
+exactly `closing`. Retain the final validation and state checks required by
+Operating Rule 11. Real VS Code Chat or company-internal validation without raw
+evidence remains `PENDING`.
+
+`hotfix` and `tweak` keep their existing paths and do not invoke or require the
+independent Reviewer.
 
 ## /workflow-init Protocol
 

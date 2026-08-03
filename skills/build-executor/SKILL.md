@@ -15,6 +15,28 @@ Check workflow mode first: `ssf state get <change-dir> workflow`. If `tweak` →
 
 Config check: `ssf config --get execution.inlineThreshold` (default: 3).
 
+## Full Workflow Override
+
+When persisted workflow is exact `full`, Primary is the development context.
+It executes all approved Batches
+and exact TDD/mechanical obligations in sequence without dispatching another
+implementer and without routine per-AC or per-Batch semantic review. The
+historical SDD reviewer loop below does not apply to this route.
+
+After each Batch, mark only genuinely completed `tasks.md` steps and update
+`batches_completed`. After all approved Batches and Primary-owned checks complete,
+retain the changed files, exact commands/results, known risks, and unexecuted
+real-environment tests in Primary. Primary then completes the remaining
+pre-review mechanical/runtime/evidence freeze and invokes the final stage's
+independent Reviewer context. Unexecuted real-environment checks
+remain explicitly `PENDING`; they are never upgraded from static evidence.
+
+On final `Request Changes`, Primary re-enters only the affected TDD work,
+reruns the exact affected and key tests, then reruns every required pre-review
+gate, freezes a new candidate, and invokes the same fixed Reviewer once more in
+the same stage context. A second `Request Changes` is `BLOCKED`; Primary never
+self-reviews, starts a third review, or closes before current final approval.
+
 ## Core Laws
 
 ### Law 1: Contract First
@@ -60,7 +82,7 @@ Procedure: announce mode → write failing test → confirm failure → implemen
 
 Boundaries: if any task touches >1 module, involves schema/API/config changes, or has open questions → downgrade to Inline or SDD.
 
-## SDD Workflow
+## Historical SDD Workflow (non-full compatibility)
 
 For changes with multiple execution batches. Dispatch an implementer subagent per AC, review each AC, then run a broad review after all batches.
 
@@ -109,7 +131,12 @@ DP-5 (debug escalation): `ssf state set <change-dir> dp_5_result "<resolution>"`
 
 ## Completion Standard
 
-Don't report completion until: code tests pass, planned UI tests pass or an approved `Unavailable` gap is preserved, contract obligations are satisfied, review blockers are resolved, all batches are reviewed (per-task + final), and the workflow is ready for `release-archivist` to run final UI regression and Device Test.
+Don't report completion until: code tests pass, planned UI tests pass or an
+approved `Unavailable` gap is preserved, contract obligations are satisfied,
+review blockers are resolved, and the workflow is ready for
+`release-archivist`. Exact `full` requires the one fixed final Reviewer after
+the final evidence freeze; the historical non-full path keeps its existing
+local review checks.
 
 ## Exception Handling
 

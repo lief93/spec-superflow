@@ -11,7 +11,7 @@
     {
       "name": "spec-superflow",
       "source": ".",
-      "description": "Spec-first workflow: integrates project baselines, Claude-style shared auto memory, OpenSpec planning, and Superpowers execution discipline with 11 collaborative skills."
+      "description": "Spec-first workflow: integrates project baselines, Claude-style shared auto memory, OpenSpec planning, and Superpowers execution discipline with 12 collaborative skills."
     }
   ]
 }

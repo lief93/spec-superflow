@@ -33,9 +33,19 @@ For each approach: what it is, upside, downside, best-for. Then **recommend one*
 
 Restate what you heard: "Here's what I'm hearing: [problem, scope, non-goals, success criteria]. Does this match?" Incorporate corrections and re-validate.
 
-### 6. DP-1: Requirement Confirmation Gate
+## Full Workflow Return Boundary
 
-After user confirms the summary:
+For exact `workflow: full`, return the clarified change name, problem, scope,
+non-goals, success criteria, and decomposition decision to Primary without
+calling a state tool, recording DP-1, or writing planning artifacts. Primary
+creates Proposal and Specs and invokes the stage's independent Reviewer context.
+Only after the current review is `Approved` may Primary
+ask the native visible DP-1 question; only a new user-authored response after
+that question may authorize DP-1.
+
+### 6. Non-full DP-1: Requirement Confirmation Gate
+
+For `hotfix` or `tweak` only, after the user confirms the summary:
 ```bash
 ssf state set <change-dir> dp_1_result "confirmed: <one-line summary>"
 ssf state set <change-dir> dp_1_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -44,7 +54,8 @@ DP-1 confirms scope, non-goals, and success criteria before artifact creation.
 
 ### 7. Hand Off
 
-Once DP-1 is recorded, hand off to `spec-writer`.
+For exact `full`, return the clarified intent to Primary. For `hotfix` or
+`tweak`, once DP-1 is recorded, hand off to `spec-writer`.
 
 ## Anti-Patterns
 

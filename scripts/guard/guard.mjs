@@ -7,15 +7,16 @@ import { checkTasksComplete } from './checks/tasks-complete.mjs';
 import { checkTestsPassing } from './checks/tests-passing.mjs';
 import { checkContractFresh } from './checks/contract-fresh.mjs';
 import { check as checkDpGate } from './checks/dp-gate-passed.mjs';
+import { checkReviewApproved } from './checks/review-approved.mjs';
 
 // Transition matrix: <from>:<to> → required check dimensions
 const TRANSITION_CHECKS = {
   // Forward transitions
   'exploring:specifying':           [],
-  'specifying:bridging':            ['artifacts-exist', 'schema-valid'],
+  'specifying:bridging':            ['artifacts-exist', 'schema-valid', 'review-approved', 'dp-gate-passed'],
   'bridging:approved-for-build':    ['artifacts-exist', 'schema-valid', 'contract-fresh', 'dp-gate-passed'],
   'approved-for-build:executing':   ['artifacts-exist', 'contract-fresh', 'dp-gate-passed'],
-  'executing:closing':              ['tasks-complete', 'tests-passing'],
+  'executing:closing':              ['tasks-complete', 'tests-passing', 'review-approved'],
 
   // Debugging side-path
   'executing:debugging':            [],
@@ -38,8 +39,8 @@ function applyWorkflowMode(checks, workflow) {
   if (workflow === 'full') return checks;
 
   const SKIP_DIMENSIONS = {
-    hotfix: ['schema-valid'],
-    tweak: ['schema-valid', 'contract-fresh', 'artifacts-exist'],
+    hotfix: ['schema-valid', 'review-approved'],
+    tweak: ['schema-valid', 'contract-fresh', 'artifacts-exist', 'review-approved'],
   };
 
   const skip = SKIP_DIMENSIONS[workflow] || [];
@@ -108,6 +109,7 @@ async function main() {
     'tasks-complete': (dir) => checkTasksComplete(dir),
     'tests-passing': (dir) => checkTestsPassing(dir),
     'dp-gate-passed': (dir) => checkDpGate(dir, fromState, toState),
+    'review-approved': (dir) => checkReviewApproved(dir, fromState, toState),
   };
 
   const checks = [];

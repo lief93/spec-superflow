@@ -24,6 +24,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Install pinned OpenCode runtime
+        run: npm install --global opencode-ai@1.14.48
+      - name: Verify OpenCode resolved Agent permissions
+        run: |
+          test "$(opencode --version)" = "1.14.48"
+          npm run test:opencode-runtime
       - name: Check version consistency
         run: node scripts/check-version-consistency.mjs
       - name: Token efficiency lint (warning only)
@@ -47,6 +53,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Install pinned OpenCode runtime
+        run: npm install --global opencode-ai@1.14.48
+      - name: Verify OpenCode resolved Agent permissions
+        run: |
+          test "$(opencode --version)" = "1.14.48"
+          npm run test:opencode-runtime
       - name: Check version consistency
         run: node scripts/check-version-consistency.mjs
       - name: Token efficiency lint (warning only)

@@ -21,8 +21,10 @@ const BUILTIN_DEFAULTS = {
   dp_0_confirmed: null,
   dp_0_timestamp: null,
   dp_1_result: null,
+  dp_1_candidate_identity: null,
   dp_1_timestamp: null,
   dp_2_result: null,
+  dp_2_candidate_identity: null,
   dp_2_timestamp: null,
   dp_3_result: null,
   dp_3_timestamp: null,
@@ -85,8 +87,10 @@ export function writeState(changeDir, state) {
   lines.push(`dp_0_confirmed: ${state.dp_0_confirmed ?? 'null'}`);
   lines.push(`dp_0_timestamp: ${state.dp_0_timestamp ?? 'null'}`);
   lines.push(`dp_1_result: ${state.dp_1_result ?? 'null'}`);
+  lines.push(`dp_1_candidate_identity: ${state.dp_1_candidate_identity ?? 'null'}`);
   lines.push(`dp_1_timestamp: ${state.dp_1_timestamp ?? 'null'}`);
   lines.push(`dp_2_result: ${state.dp_2_result ?? 'null'}`);
+  lines.push(`dp_2_candidate_identity: ${state.dp_2_candidate_identity ?? 'null'}`);
   lines.push(`dp_2_timestamp: ${state.dp_2_timestamp ?? 'null'}`);
   lines.push(`dp_3_result: ${state.dp_3_result ?? 'null'}`);
   lines.push(`dp_3_timestamp: ${state.dp_3_timestamp ?? 'null'}`);

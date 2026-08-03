@@ -116,11 +116,28 @@ gemini extensions install https://github.com/MageByte-Zero/spec-superflow
 gemini extensions update spec-superflow   # 升级
 ```
 
-### OpenCode / WorkBuddy / Trae
+### OpenCode
+
+```bash
+cd /absolute/path/to/spec-superflow
+opencode plugin "$(pwd)" -g
+```
+
+该命令只在 OpenCode 全局登记中央仓库路径，不会把工作流复制到业务仓库。重启
+OpenCode 后运行 `/workflow-init`；返回 `workflow=READY` 后选择
+**spec-superflow** Agent 开始需求。普通需求由该 primary Agent 直接完成规划、
+实现、测试和修复，并直接运行全局 `ssf`。完整工作流仅在两个 Planning 语义
+门禁和最终代码门禁调用一个隐藏只读 Reviewer；Primary 只传不带正文的 candidate
+metadata 和路径。Reviewer 使用普通项目读取/终端工具自行读取工件、固定基线 Git
+diff 和每个 untracked 文件，但不运行测试或工作流命令，也不修改文件或 Git。
+
+升级时只需在中央仓库执行 `git pull`，重启 OpenCode 并再次运行
+`/workflow-init`。完整说明见 [.opencode/INSTALL.md](.opencode/INSTALL.md)。
+
+### WorkBuddy / Trae
 
 | 平台 | 安装方式 | 状态 |
 |------|---------|------|
-| **OpenCode** | `.opencode/plugins/spec-superflow.js` 或 `.agents/skills -> skills/` | 已提供入口 |
 | **WorkBuddy** | `npx spec-superflow@latest install-workbuddy` | 已提供安装器 |
 | **Trae IDE / TRAE Work** | `.trae/skills/`、`~/.trae/skills/` 或上传 zip/.skill | 手动/导入 |
 
@@ -143,6 +160,7 @@ npx spec-superflow list          # 或通过 npx 使用
 | `ssf check-update` | 检查 spec-superflow 更新 |
 | `ssf infer-workflow <dir>` | 推断 hotfix、tweak 或 full 工作流 |
 | `ssf guard check ...` | 校验工作流状态转换 |
+| `ssf review candidate\|record\|check ...` | 生成、记录并校验当前阶段独立 Review 证据 |
 | `ssf task-brief ...` | 提取单个 Task 或 AC 的执行摘要 |
 | `ssf review-package ...` | 生成限定范围的 Review 包 |
 | `ssf inject <dir>` | 生成多平台 phase-guard 产物 |
@@ -205,6 +223,7 @@ npx spec-superflow list          # 或通过 npx 使用
 | 9 | `code-reviewer` | 审查 | 结构化审查，三级问题分级 |
 | 10 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
 | 11 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
+| 12 | `grill-me` | 决策澄清 | 证据穷尽后，由 Primary 一次询问一个用户决策并给出推荐与取舍 |
 
 ---
 
@@ -268,9 +287,12 @@ npx spec-superflow list          # 或通过 npx 使用
 </details>
 
 <details>
-<summary><strong>SDD (Subagent-Driven Development) 怎么工作的？</strong></summary>
+<summary><strong>完整 SDD 实现怎么工作？</strong></summary>
 
-每任务循环：派实施子代理 → 生成 review diff → 派审查子代理 → 双向判断（spec 合规 + 代码质量）→ 不合格 → 修复 → 重新审查。进度台账防止会话压缩后丢失进度。
+可见 Primary 直接按已批准 Batch 做 TDD 实现，不再派另一个实施 Agent，也不在
+每个 AC/Batch 后增加语义 Review。代码、测试和证据冻结后，由固定隐藏只读
+Reviewer 做最终语义审查；`Request Changes` 返回 Primary 做有边界的修复并重新
+在同一个阶段 Reviewer 上下文中完整审查一次新候选。
 
 </details>
 

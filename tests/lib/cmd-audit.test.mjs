@@ -29,7 +29,7 @@ describe('cmd-audit: generateReport()', () => {
       state: 'closing',
       dp_0_result: 'confirmed',
       dp_1_result: 'confirmed: csv export',
-      dp_2_result: 'approved: artifacts ok',
+      dp_2_result: 'confirmed: artifacts ok',
       dp_3_result: 'contract signed',
       dp_4_result: null,
       dp_5_result: null,
