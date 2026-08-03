@@ -35,12 +35,25 @@ describe('planning artifact slimming', () => {
   it('preserves the review chain from each AC to file rationale and exact tests', () => {
     const template = read('templates/tasks.md');
     const writer = read('skills/spec-writer/SKILL.md');
+    const exactExample = /Use these exact Markdown headings[\s\S]*?```markdown([\s\S]*?)```/i.exec(writer)?.[1] || '';
 
     assert.match(template, /^### AC: \[Exact Scenario title from the Spec\]$/m);
     assert.match(template, /\*\*Why this file\*\*/);
     assert.match(template, /^#### TDD Test Plan$/m);
     assert.match(writer, /every AC.*at least one.*test row/i);
     assert.match(writer, /exact Requirement\/Scenario titles connect Spec, Design, and Tasks/i);
+    assert.match(exactExample, /\*\*Why this file\*\*:/i);
+  });
+
+  it('uses state hashes instead of deleted contract scope prose for resume freshness', () => {
+    const workflow = read('skills/workflow-start/SKILL.md');
+    const stateMachine = read('docs/state-machine.md');
+
+    assert.match(workflow, /ssf state check <change-dir>/i);
+    assert.match(workflow, /artifacts_hash/i);
+    assert.doesNotMatch(workflow, /contract scope fence/i);
+    assert.match(stateMachine, /ssf state check/i);
+    assert.doesNotMatch(stateMachine, /execution-contract\.md intent lock/i);
   });
 
   it('uses execution-contract as a compact lock instead of copying planning content', () => {

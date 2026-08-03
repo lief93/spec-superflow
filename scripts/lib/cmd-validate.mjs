@@ -361,7 +361,11 @@ function validateDesignStructure(content, scenarioPairs) {
     return { ...makeReport(issues), coverageRows: new Map() };
   }
 
-  const table = parseMarkdownTable(coverageSection, ['requirement', 'scenario', 'design decision', 'affected area', 'why here'], 'Design coverage');
+  const table = parseMarkdownTable(
+    coverageSection,
+    ['requirement', 'scenario', 'design decision', 'affected area', 'baseline / reuse', 'constraint / deviation', 'why here'],
+    'Design coverage',
+  );
   if (table.error) {
     issues.push({ level: 'ERROR', path: 'design.md', message: table.error });
     return { ...makeReport(issues), coverageRows: new Map() };
@@ -380,7 +384,7 @@ function validateDesignStructure(content, scenarioPairs) {
       continue;
     }
     coverageRows.set(key, row);
-    for (const field of ['design decision', 'affected area', 'why here']) {
+    for (const field of ['design decision', 'affected area', 'baseline / reuse', 'constraint / deviation', 'why here']) {
       if (!isMeaningfulCell(row[field])) {
         issues.push({ level: 'ERROR', path: 'design.md', message: `Design coverage for "${row.requirement} / ${row.scenario}" requires ${field}` });
       }
@@ -697,7 +701,7 @@ function validateCompactExecutionContract(contractContent, taskTestRows, taskBat
       issues.push({ level: 'ERROR', path: 'execution-contract.md', message: table.error });
     } else {
       const sources = new Map(table.rows.map(row => [normalizeRequirementName(row.artifact), normalizeRequirementName(row['source of truth'])]));
-      for (const [artifact, expected] of [['proposal', 'proposal.md'], ['specs', 'specs/'], ['tasks', 'tasks.md']]) {
+      for (const [artifact, expected] of [['proposal', 'proposal.md'], ['specs', 'specs/'], ['design', 'design.md'], ['tasks', 'tasks.md']]) {
         if (!sources.get(artifact)?.includes(expected)) {
           issues.push({ level: 'ERROR', path: 'execution-contract.md', message: `Approved Artifacts must reference ${expected}` });
         }
