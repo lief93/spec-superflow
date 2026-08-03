@@ -122,7 +122,7 @@ Subagent (general-purpose):
     - Did I follow TDD if required?
     - Are tests comprehensive?
     - Is the test output pristine (no stray warnings or noise)?
-    - Did I execute every row using its exact Platform, Test File, and Test Case?
+    - Did I execute every row using its exact Platform, Test File, and Test Case? One grouped command may cover multiple planned rows when they share a runner and its report identifies every exact case and result; do not restart the runner per row.
     - Does each test case assert the AC's WHEN/THEN outcome rather than merely render, launch, compile, or read a document?
     - Across the planned rows, does every observable WHEN/THEN/AND outcome have an explicit assertion, including internal state/calls/persistence and visible behavior?
     - For a user-triggered UI WHEN, did the UI test act through the rendered control rather than call the ViewModel, callback, repository, or reducer directly?

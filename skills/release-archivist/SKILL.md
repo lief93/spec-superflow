@@ -122,7 +122,7 @@ Read `## Frontend Verification` from `execution-contract.md`.
 
 When `Frontend Impact: Yes`:
 
-1. Run every exact UI Test File and Test Case in `tasks.md > TDD Test Plan` fresh. A broader smoke/regression suite may be additional evidence, never a replacement.
+1. Require fresh evidence for every exact UI Test File and Test Case in `tasks.md > TDD Test Plan`; an aggregate count cannot replace per-case results. One final grouped command may cover multiple exact cases when its report identifies every case and result. Reuse the build executor's final grouped test evidence when the tested implementation and test inputs remain unchanged; do not restart the same runner solely to duplicate evidence during closing. A broader smoke/regression suite may be additional evidence, never a replacement for named per-case results.
 2. Run Device Test after all Batches are complete: exercise at least one
    reachable branch of each affected feature on one project baseline
    simulator/device per affected native platform. For Web, use the default real

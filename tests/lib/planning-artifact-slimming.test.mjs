@@ -32,6 +32,21 @@ describe('planning artifact slimming', () => {
     assert.match(writer, /no-op fake|no-op callback/i);
   });
 
+  it('keeps per-AC test evidence while grouping shared runner invocations', () => {
+    const template = read('skills/spec-writer/references/tasks.md');
+    const writer = read('skills/spec-writer/SKILL.md');
+    const executor = read('skills/build-executor/SKILL.md');
+    const implementer = read('skills/build-executor/implementer-prompt.md');
+    const archivist = read('skills/release-archivist/SKILL.md');
+
+    assert.match(writer, /evidence granularity[\s\S]*one exact Test Case per AC/i);
+    assert.match(writer, /execution granularity[\s\S]*group[\s\S]*shared runner/i);
+    assert.match(template, /one grouped command may cover multiple exact Test Cases/i);
+    assert.match(executor, /one grouped command may execute multiple\s+exact Test Cases/i);
+    assert.match(implementer, /one grouped command may cover multiple planned rows/i);
+    assert.match(archivist, /reuse[\s\S]*final grouped test evidence[\s\S]*tested implementation and test inputs remain unchanged/i);
+  });
+
   it('preserves the review chain from each AC to file rationale and exact tests', () => {
     const template = read('skills/spec-writer/references/tasks.md');
     const writer = read('skills/spec-writer/SKILL.md');

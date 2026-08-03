@@ -31,6 +31,14 @@ pre-review mechanical/runtime/evidence freeze and invokes the final stage's
 independent Reviewer context. Unexecuted real-environment checks
 remain explicitly `PENDING`; they are never upgraded from static evidence.
 
+Keep evidence and execution granularity separate. Every AC retains its exact
+Test Case and per-case result, but one grouped command may execute multiple
+exact Test Cases that share a runner, target, and lifecycle when the report
+identifies each result. Run the grouped pre-change target once for RED and
+baseline evidence, then the grouped post-change target once for GREEN and
+affected regression when the tooling supports it. Never restart the same
+runner once per AC merely to produce separate evidence rows.
+
 On final `Request Changes`, Primary re-enters only the affected TDD work,
 reruns the exact affected and key tests, then reruns every required pre-review
 gate, freezes a new candidate, and invokes the same fixed Reviewer once more in
@@ -94,7 +102,7 @@ For changes with multiple execution batches. Dispatch an implementer subagent pe
 5. **Mark complete**: Mark every completed `tasks.md` TDD checkbox as `[x]` before recording the batch complete. Append to `.superpowers/sdd/progress.md`: `AC N: complete (commits <base7>..<head7>, review clean)`.
 6. **Remember selectively**: If this AC produced verified team-wide feedback, code-invisible project context, an external reference, or an expensive-to-rediscover runtime or debugging conclusion, invoke `memory-manager` immediately. Personal feedback and ordinary fix recipes do not qualify. Most ACs should produce no Memory.
 
-Use every exact file/case row in the AC's `TDD Test Plan` to drive execution. Never substitute documentation checks, builds, another test, or an aggregate suite result for the named case. `Add` and `Update` use RED → GREEN → REFACTOR when production behavior is new or changing. When the AC only adds or strengthens coverage for behavior that already works, record a baseline PASS and preserve that behavior; never inject a sentinel or deliberate failure to manufacture RED. `Run existing` establishes the baseline before work and verifies regression afterward. For frontend UI rows:
+Use every exact file/case row in the AC's `TDD Test Plan` to drive execution. Never substitute documentation checks, builds, another test, or an aggregate count for the named case. A grouped command may execute multiple exact cases when its report names every case and result; this preserves per-AC evidence without repeated runner startups. `Add` and `Update` use RED → GREEN → REFACTOR when production behavior is new or changing. When the AC only adds or strengthens coverage for behavior that already works, record a baseline PASS and preserve that behavior; never inject a sentinel or deliberate failure to manufacture RED. `Run existing` establishes the baseline before work and verifies regression afterward. For frontend UI rows:
 
 - `Add`/`Update`: implement and run the named UI Test.
 - `Run existing`: run the exact historical UI test file and case named by the AC.
