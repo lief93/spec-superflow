@@ -31,7 +31,53 @@ function writeFrontendContract(uiObligation = 'Run existing') {
 `);
 }
 
-function writeFrontendSummary({ uiObligation = 'Run existing', uiResult = 'Pass', deviceResult = 'Pass' } = {}) {
+function writeFrontendTasks(uiObligation = 'Run existing') {
+  const testFile = uiObligation === 'Unavailable' ? 'Not configured' : '`app/src/androidTest/java/TransferResultTest.kt`';
+  const testCase = uiObligation === 'Unavailable' ? 'Searched app/src/androidTest and Gradle test configuration; no UI runner exists' : '`showsTransferFailure`';
+  writeFileSync(join(changeDir, 'tasks.md'), `# Tasks
+## Batch 1: Show transfer result
+### AC: Transfer fails
+- **Requirement**: Show transfer result
+- **User-visible**: Yes
+#### File Changes
+##### Modify \`app/src/main/java/TransferResult.kt\`
+- **Change**: Show the transfer failure state and retry action.
+#### TDD Test Plan
+| Layer | Platform | Action | Test File | Test Case | Proves |
+|---|---|---|---|---|---|
+| UI | Android | ${uiObligation} | ${testFile} | ${testCase} | The user sees the transfer failure state and can retry. |
+### Batch Verification
+- [ ] Run the focused UI test and relevant regression tests.
+`);
+}
+
+function writeCompactFrontendContract() {
+  writeFileSync(join(changeDir, 'execution-contract.md'), `# Execution Contract
+## Approved Artifacts
+- **Planning Lock**: \`.spec-superflow.yaml > artifacts_hash\`
+## Execution Mode
+- **Mode**: Inline
+## Batch Gates
+| Batch | Entry Gate | Exit Gate | Review Gate |
+|---|---|---|---|
+| Batch 1 | Approved | Tests pass | Review complete |
+## Verification
+| Check | Command Or Procedure | Evidence Required |
+|---|---|---|
+| AC tests | Run tasks.md TDD Test Plan | Exact case result |
+## Frontend Verification
+- **Frontend Impact**: Yes
+- **Reason**: The change affects a client screen.
+| Check | Obligation | Scope | Target Environment | Command Or Procedure | Evidence Required |
+|---|---|---|---|---|---|
+| UI Test | Required by tasks.md | Changed screen | Android emulator | Run focused UI tests | Test report |
+| Device Test | Required | Changed user path | Android emulator | Build, install, launch, and exercise path | Result log |
+## Stop Conditions
+- Stop when a required check fails.
+`);
+}
+
+function writeFrontendSummary({ uiObligation = 'Run existing', uiResult = 'Pass', deviceResult = 'Pass', plannedUiObligation = 'Required by AC Test Matrix' } = {}) {
   const testFile = uiObligation === 'Unavailable' ? 'Not configured' : '`app/src/androidTest/java/TransferResultTest.kt`';
   const testCase = uiObligation === 'Unavailable' ? 'Searched app/src/androidTest and Gradle test configuration; no UI runner exists' : '`showsTransferFailure`';
   writeFileSync(join(changeDir, 'pr-summary.md'), `# PR Summary
@@ -44,7 +90,7 @@ function writeFrontendSummary({ uiObligation = 'Run existing', uiResult = 'Pass'
 - **Reason**: The change affects a client screen.
 | Check | Planned Obligation | Result | Environment | Command Or Procedure | Evidence |
 |---|---|---|---|---|---|
-| UI Test | Required by AC Test Matrix | ${uiResult} | Pixel API 35 emulator | ./gradlew connectedDebugAndroidTest | 4 passed, report/build/ui |
+| UI Test | ${plannedUiObligation} | ${uiResult} | Pixel API 35 emulator | ./gradlew connectedDebugAndroidTest | 4 passed, report/build/ui |
 | Device Test | Required | ${deviceResult} | Pixel API 35 emulator | Build, install, launch, and exercise changed path | Launch and interaction completed |
 ## Exceptions And Known Risks
 - None.
@@ -110,5 +156,27 @@ describe('tests-passing frontend evidence gate', () => {
     const result = checkTestsPassing(changeDir);
     assert.equal(result.pass, false);
     assert.match(result.failures.join('\n'), /developer-confirmed conditional DP-6 decision/);
+  });
+
+  it('matches compact-contract evidence against tasks.md test plans', () => {
+    writeFrontendTasks();
+    writeCompactFrontendContract();
+    writeFrontendSummary({ plannedUiObligation: 'Required by tasks.md' });
+
+    assert.deepEqual(checkTestsPassing(changeDir), { pass: true, failures: [] });
+  });
+
+  it('fails compact-contract closure when tasks.md planned evidence is missing', () => {
+    writeFrontendTasks();
+    writeCompactFrontendContract();
+    writeFrontendSummary({ plannedUiObligation: 'Required by tasks.md' });
+    const summaryPath = join(changeDir, 'pr-summary.md');
+    const summary = readFileSync(summaryPath, 'utf-8');
+    writeFileSync(summaryPath, summary.replace(/## AC Test Evidence[\s\S]*?(?=## Frontend Verification Evidence)/, ''));
+
+    const result = checkTestsPassing(changeDir);
+
+    assert.equal(result.pass, false);
+    assert.match(result.failures.join('\n'), /missing ## AC Test Evidence/);
   });
 });

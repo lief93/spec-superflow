@@ -214,12 +214,9 @@ describe('VS Code Agent Plugin', () => {
     assert.match(english, /hidden \*\*Spec Superflow Setup\*\* Agent/i);
     assert.match(english, /only the bootstrap MCP and native question tool/i);
     assert.match(english, /does not[\s\S]*create a Change[\s\S]*start or resume development/i);
-    assert.match(chinese, /鼠标点击或按 \*\*Tab\*\*[\s\S]*结构化 Slash Command/);
-    assert.match(chinese, /`name`、`description`、`agent` 和 `tools`/);
-    assert.match(chinese, /不使用 `allowed-tools`/);
-    assert.match(chinese, /隐藏的\s+\*\*Spec Superflow Setup\*\* Agent/i);
-    assert.match(chinese, /只能调用 bootstrap MCP 和原生提问工具/i);
-    assert.match(chinese, /不生成 Change，也不启动或恢复需求/);
+    assert.match(chinese, /Click the command[\s\S]*press\s+\*\*Tab\*\*/i);
+    assert.match(chinese, /only installs, verifies, or updates the workflow runtime/i);
+    assert.match(chinese, /does not create a requirement[\s\S]*generate a Change/i);
   });
 
   it('keeps Plugin setup commands outside the development state machine', () => {
@@ -411,7 +408,7 @@ describe('VS Code Agent Plugin', () => {
     );
     assert.match(
       writer,
-      /^\| Requirement \| Scenario \| Design Decision \| Affected Area \| Why Here \|$/m,
+      /^\| Requirement \| Scenario \| Design Decision \| Affected Area \| Baseline \/ Reuse \| Constraint \/ Deviation \| Why Here \|$/m,
     );
     assert.match(writer, /^\| <exact Requirement title> \| <exact Scenario title> \| <exact Decision title> \|/m);
     assert.match(writer, /^## Batch 1: <goal>$/m);
@@ -420,7 +417,7 @@ describe('VS Code Agent Plugin', () => {
     assert.match(writer, /^#### File Changes$/m);
     assert.match(writer, /^##### (?:Create|Modify|Delete) `path\/to\/file`$/m);
     assert.match(writer, /^#### TDD Test Plan$/m);
-    assert.match(writer, /^#### TDD Steps$/m);
+    assert.match(writer, /^### Batch Verification$/m);
     assert.match(writer, /do not\s+replace these headings with bold list labels/i);
     assert.match(
       writer,
@@ -526,7 +523,7 @@ describe('VS Code Agent Plugin', () => {
     );
     assert.match(
       release,
-      /copy the first six cells exactly from each `execution-contract\.md > AC Test Matrix` row/i,
+      /copy Requirement and AC from the owning task section[\s\S]*`tasks\.md > TDD Test Plan` row/i,
     );
     assert.match(
       release,
