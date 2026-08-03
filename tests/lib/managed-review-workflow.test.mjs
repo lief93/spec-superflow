@@ -542,6 +542,33 @@ describe('fixed independent review workflow contract', () => {
     assertNoUnconditionalPlanningReviewLanguage(designTasksFocus, 'canonical Reviewer');
   });
 
+  it('keeps device verification feature-level when branches depend on external conditions', () => {
+    const designTasksFocus = /For `design-tasks`([\s\S]*?)(?=\nFor `final`)/
+      .exec(reviewer)?.[1] || '';
+    const contractTemplate = read('templates/execution-contract.md');
+    const summaryTemplate = read('templates/pr-summary.md');
+
+    for (const [label, content] of [
+      ['design-tasks Reviewer', designTasksFocus],
+      ['contract-builder', contractBuilder],
+      ['release-archivist', releaseArchivist],
+    ]) {
+      assert.match(
+        content,
+        /Device Test[\s\S]*one\s+reachable\s+branch[\s\S]*affected\s+feature/i,
+        `${label} must require one reachable affected-feature branch on device`,
+      );
+      assert.match(
+        content,
+        /external(?:ly)? controlled[\s\S]*branches?[\s\S]*(?:automated|UI|unit)[\s\S]*(?:evidence|tests?)/i,
+        `${label} must route externally controlled branches to automated evidence`,
+      );
+    }
+
+    assert.match(contractTemplate, /Device Test[\s\S]*one reachable branch per affected feature/i);
+    assert.match(summaryTemplate, /Device Test[\s\S]*one reachable branch per affected feature/i);
+  });
+
   it('runs overlap preflight before the fixed Design and Tasks scan', () => {
     const proposalFocus = /For `proposal-specs`([^]*?)(?=\nFor `design-tasks`)/
       .exec(reviewer)?.[1] || '';
