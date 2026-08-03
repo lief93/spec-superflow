@@ -97,6 +97,16 @@ describe('hash: computeArtifactsHash()', () => {
 
     assert.equal(h1, h2);
   });
+
+  it('keeps mechanical artifact and contract freshness independent from semantic review', () => {
+    writeFileSync(join(tempDir, 'tasks.md'), '# Tasks\n- [ ] Mechanical task.\n');
+    const pending = hashMod.computeArtifactsHash(tempDir);
+    writeFileSync(join(tempDir, 'tasks.md'), '# Tasks\n- [x] Mechanical task.\n');
+    const completed = hashMod.computeArtifactsHash(tempDir);
+
+    assert.notEqual(completed, pending);
+    assert.equal(typeof hashMod.computeReviewCandidate, 'undefined');
+  });
 });
 
 describe('hash: computeContractHash()', () => {

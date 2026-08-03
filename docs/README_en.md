@@ -113,11 +113,33 @@ gemini extensions install https://github.com/MageByte-Zero/spec-superflow
 gemini extensions update spec-superflow   # upgrade
 ```
 
-### OpenCode / WorkBuddy / Trae
+### OpenCode
+
+```bash
+cd /absolute/path/to/spec-superflow
+opencode plugin "$(pwd)" -g
+```
+
+This registers the central repository path globally without copying workflow
+files into target projects. Restart OpenCode, run `/workflow-init`, and select
+the **spec-superflow** Agent after setup reports `workflow=READY`. The primary
+Agent directly owns normal planning, implementation, tests, and repairs and
+runs the global `ssf` CLI directly. Full workflows use one hidden read-only
+Reviewer only at the two Planning semantic gates and final Code Review, with
+a body-free CLI-owned candidate plus current paths. Reviewer uses ordinary
+project-read and terminal tools to inspect artifacts, the fixed-base Git diff,
+and every untracked file itself. It does not mutate files or Git or run
+structural, state, workflow, or test commands; those remain primary-Agent
+responsibilities.
+
+To update, run `git pull` in the central repository, restart OpenCode, and run
+`/workflow-init` again. See
+[.opencode/INSTALL.md](../.opencode/INSTALL.md) for complete instructions.
+
+### WorkBuddy / Trae
 
 | Platform | Method | Status |
 |----------|--------|--------|
-| **OpenCode** | `.opencode/plugins/spec-superflow.js` or `.agents/skills -> skills/` | Entry provided |
 | **WorkBuddy** | `npx spec-superflow@latest install-workbuddy` | Installer provided |
 | **Trae IDE / TRAE Work** | `.trae/skills/`, `~/.trae/skills/`, or zip/.skill upload | Manual/import |
 
@@ -139,6 +161,7 @@ npm install -g spec-superflow
 | `ssf check-update` | Check for a spec-superflow update |
 | `ssf infer-workflow <dir>` | Infer hotfix, tweak, or full workflow mode |
 | `ssf guard check ...` | Validate a workflow state transition |
+| `ssf review candidate\|record\|check ...` | Build, record, and check current independent-review evidence |
 | `ssf task-brief ...` | Extract one Task or AC execution brief |
 | `ssf review-package ...` | Generate a bounded review package |
 | `ssf inject <dir>` | Generate multi-platform phase-guard artifacts |
@@ -201,6 +224,7 @@ AI coding sessions fail in one of two ways:
 | 9 | `code-reviewer` | Review | Structured review with 3-level severity classification |
 | 10 | `release-archivist` | Closing | Verification-before-completion + archive + risk summary |
 | 11 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
+| 12 | `grill-me` | Decision clarification | After evidence is exhausted, Primary asks one user-owned decision at a time with a recommendation and trade-off |
 
 ---
 
@@ -264,9 +288,13 @@ Content-level detection, not timestamps: proposal scope changed, approved spec b
 </details>
 
 <details>
-<summary><strong>How does SDD (Subagent-Driven Development) work?</strong></summary>
+<summary><strong>How does full SDD execution work?</strong></summary>
 
-Per-task loop: dispatch implementer subagent → generate review diff → dispatch reviewer subagent → dual verdict (spec compliance + code quality) → fail → fix → re-review. Progress ledger prevents session-compression loss.
+The visible Primary implements the approved Batches directly with TDD. It does
+not dispatch another implementer or add semantic review after every AC/Batch.
+After code, tests, and evidence are frozen, the fixed hidden read-only Reviewer
+performs the final semantic review; `Request Changes` returns to Primary for a
+bounded repair and one complete same-context re-review of the new candidate.
 
 </details>
 

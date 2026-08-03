@@ -1,61 +1,86 @@
-# Installing spec-superflow for OpenCode
+# Use Spec Superflow in OpenCode
 
-## Prerequisites
+Install the central repository once. OpenCode then loads its primary Agent,
+Skills, Commands, bootstrap MCP, hidden setup subagent, and one hidden read-only
+Reviewer in every project without copying workflow files.
 
-- [OpenCode.ai](https://opencode.ai) installed
+## 1. Install
 
-## Installation
-
-### Plugin Mode (recommended)
-
-Clone the repository and point OpenCode to the plugin entry:
+Clone or update the repository, then register its absolute path:
 
 ```bash
-git clone https://github.com/MageByte-Zero/spec-superflow.git ~/spec-superflow
+cd /absolute/path/to/spec-superflow
+opencode plugin "$(pwd)" -g
 ```
 
-Then in your OpenCode project, reference this plugin file by absolute path in `.opencode/config.json` (or via the UI):
+PowerShell:
 
-```text
-~/spec-superflow/.opencode/plugins/spec-superflow.js
+```powershell
+Set-Location C:\absolute\path\to\spec-superflow
+opencode plugin (Get-Location).Path -g
 ```
 
-Do not copy only `spec-superflow.js` into another project; the plugin reads `../../skills` and `../../GEMINI.md` relative to its own location.
+Restart OpenCode after the first installation.
 
-### Manual Skills Symlink
+## 2. Initialize or Update the Runtime
 
-OpenCode discovers agent skills from project skill directories. For a specific project:
+1. Open any project in OpenCode.
+2. Run `/workflow-init`.
+3. Confirm CLI installation or upgrade when prompted.
+4. Continue after the command reports `workflow=READY`.
+
+The command runs only in the hidden setup subagent and only prepares the
+matching `ssf` CLI through the two bootstrap MCP tools. It does not inspect the
+project, load workflow Skills, configure the optional VS Code MCP, or create a
+Change.
+
+## 3. Start Development
+
+Select the **spec-superflow** Agent and describe the requirement. The primary
+Agent directly owns normal requirement workflow, planning, implementation,
+tests, and repairs. It loads `workflow-start` and runs the global `ssf`
+directly. During a normal requirement, it directly invokes the global `ssf`;
+normal requirements never call bootstrap MCP tools.
+
+For a full workflow, one hidden read-only Reviewer runs only at the two
+Planning semantic gates and final Code Review. The primary Agent supplies the
+body-free CLI-owned candidate JSON plus paths to original intent, current stage
+artifacts, project standards, and necessary repository/test/runtime evidence.
+The Reviewer uses ordinary project-read and terminal tools to resolve those
+inputs. For final review it independently runs read-only Git status/diff/log/
+show commands and reads every changed and untracked file; it does not receive
+copied source or diff bodies, run tests/workflow commands, mutate files or Git,
+or call another Agent. Mechanical schema/state/test checks stay with the
+primary Agent. A delivery package check stays there too only when the current Specs
+explicitly require a delivery package or
+`execution-contract.md > AC Test Matrix` explicitly requires a delivery package.
+
+## 4. Update
 
 ```bash
-git clone https://github.com/MageByte-Zero/spec-superflow.git
-mkdir -p your-project/.agents
-ln -s /absolute/path/to/spec-superflow/skills your-project/.agents/skills
+cd /absolute/path/to/spec-superflow
+git pull
 ```
 
-If symlinks are not available, copy instead:
+Restart OpenCode, then run `/workflow-init` to align the CLI version. The
+Plugin does not need to be copied or reinstalled unless the repository path
+changes.
+
+## 5. Verify
 
 ```bash
-cp -R /absolute/path/to/spec-superflow/skills your-project/.agents/skills
+opencode agent list
+opencode debug skill
+opencode mcp list
 ```
 
-## Usage
+Expected:
 
-Ask OpenCode to use the workflow entry skill:
+- `spec-superflow` is the only primary Spec Superflow Agent.
+- `spec-superflow-setup` and `spec-superflow-reviewer` are hidden subagents.
+- Spec Superflow Skills such as `workflow-start` are listed.
+- The `spec-superflow` MCP is connected and exposes only CLI status/install
+  tools to OpenCode.
 
-```
-用 workflow-start 开始
-```
-
-Or explicitly:
-
-```
-/spec-superflow:workflow-start
-```
-
-## Troubleshooting
-
-### Skills not found
-
-1. Verify that `.agents/skills/workflow-start/SKILL.md` exists.
-2. Restart OpenCode after adding or changing the skill directory.
-3. Use a real directory copy instead of a symlink if your environment does not follow symlinks.
+If the repository moves, run the install command again with its new absolute
+path.

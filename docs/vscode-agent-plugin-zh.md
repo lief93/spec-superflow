@@ -88,6 +88,73 @@ CLI，不把 npm 返回成功直接当成 `READY`。
 运行前需要 Node.js 和 npm。CLI 直接来自已安装的 Plugin，不需要第二份 Spec
 仓库或单独的压缩包。
 
+## Full 工作流的独立 Review
+
+只有 `full` 工作流使用固定隐藏只读 Reviewer。可见 Primary 直接负责规划、实现、
+测试和 Finding 修复。第一个语义检查点在 CLI 结构校验之后审查权威用户意图、
+Proposal 和 Specs。通过后，Primary 要求用户
+明确确认或调整目标、范围、行为和非目标，之后才能开始详细规划。
+
+三个检查点都使用同一个固定身份 `Spec Superflow Reviewer`。每个阶段的首次 Review
+都会创建全新的隔离上下文。第一次 `Request Changes` 后，Primary 只修复一次并在
+同一个 Reviewer 上下文中完成一次对新候选的完整复审。第二次 `Request Changes`
+立即 `BLOCKED`，不得第三次 Review 或推进工作流状态。较早的 Finding 或 verdict
+不能作为当前候选的证据；后续阶段仍创建自己的全新上下文。
+
+第二个检查点把全部已通过的上游规划与 Design 和 Tasks 一起审查。通过后，
+Primary 默认给出覆盖主要选择、影响区域、Batch 形状、测试、Findings 和风险的
+简明摘要，同时提供完整 `design.md` 和 `tasks.md` 路径。用户自行选择阅读深度，
+并明确确认或调整实现方向。
+
+第一次阻塞 Finding 返回 Primary 做一次有边界的直接修复；校验通过后，在该阶段
+同一个 Reviewer 上下文中复审。Reviewer 必须重新读取完整当前候选，不能复用旧
+verdict。只有穷尽仓库证据后才能提出 Question；真正属于
+用户的决策由 Primary 一次询问一个，并附推荐答案。语义漂移需要重复受影响的
+Review 和用户确认；只改变真实 Tasks 执行 checkbox 不需要复审。
+
+这些指令和协议测试不能证明实际 Agent picker、全新 Reviewer 上下文、行为只读的
+工具使用或 Primary 中介行为。真实 VS Code 1.123 验收仍为 `PENDING`。
+
+### 最终 Review 与合并真实运行验收
+
+实现完成后，精确 `full` 必须先完成全部机械门禁、适用的运行时检查、要求的证据行和
+PR summary，再执行一次最终独立 Code Review。只有当前 Specs 明确要求交付包，或
+`execution-contract.md > AC Test Matrix` 明确要求交付包时，才执行对应包检查。
+Reviewer 读取冻结代码候选和精确
+测试/风险上下文，判断测试是否覆盖需求与失败路径、是否只是镜像实现，但不运行
+测试。第一次 `Request Changes` 返回 Primary，只修复一次定位到的目标；修复后
+重新冻结受影响结果和完整候选，再在同一个 Reviewer 上下文中完成唯一一次复审。
+第二次 `Request Changes` 立即 `BLOCKED`。当前结果为 `Approved` 后，只允许推进
+工作流状态。
+
+最终输入只包含不带正文的 metadata candidate，以及原始/当前意图、精简
+execution contract、项目规范、精确关键测试证据、已知风险和未执行运行时检查的
+路径。handoff 不得包含 tracked diff、untracked 源码正文或完整 artifact/source/
+test/evidence 正文。Reviewer 从 candidate 读取 review base，自行执行只读的
+`git status`、固定基线 `git diff`、`git log` 和必要的 `git show`，并逐项读取每个
+changed-file entry 和每个 untracked 文件。候选计算不会写 Review Markdown、
+bundle 或额外 report JSON。用户全局指令属于环境状态，不是 Plugin 交付内容。
+
+执行隔离的真实 VS Code 1.123 合并验收时，应同时证明：
+
+1. Agent picker 中只有 `Spec Superflow` 可由用户选择。
+2. Primary 精确调用 `Spec Superflow Reviewer`，且没有注册或调用独立 Dev Agent。
+3. Primary-only、跨阶段 canary 和前一次 invocation canary 在全新 Reviewer
+   上下文中都不泄漏。
+4. Reviewer 使用普通项目读取/终端工具执行要求的只读 Git 命令并读取 untracked
+   canary；调用前后 candidate identity、porcelain status、cached diff、文件
+   bytes 和 staged state 完全不变。Reviewer 不运行测试或工作流命令，不修改
+   Git，也不调用其他 Agent。
+5. Reviewer 结果先返回 Primary，再由 Primary 修复定位目标或询问用户；Reviewer
+   直接到用户的路径不算通过。
+
+该 Chat 验收的 automation 为 `Unavailable`。在一次真实隔离运行保存原始 trace、
+截图、包身份、canary 观测、Git/文件读取 trace、调用前后 candidate/worktree
+hash、中介 trace 和环境恢复
+记录之前，状态始终为 `PENDING`。静态 prompt、frontmatter、单元或协议测试不能把
+这些真实运行断言转换为 PASS。诚实的 `PENDING` 是已披露的真实运行边界，
+不会单独导致源码候选校验失败。
+
 ## 可选的 URL 和 Token MCP
 
 本地 stdio MCP 可以把源码和运行文件一起放进 Plugin。`stdio` 只是 VS Code

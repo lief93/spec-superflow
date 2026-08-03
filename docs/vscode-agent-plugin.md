@@ -58,6 +58,90 @@ Plugin version and restores an existing usable CLI when an upgrade fails.
 Node.js and npm are prerequisites. Installation is local to the installed
 Plugin source; no second Spec repository or archive is required.
 
+## Full workflow reviews
+
+Only a `full` workflow uses the fixed hidden read-only Reviewer. The visible
+Primary directly owns planning, implementation, tests, and finding repair. The
+first semantic checkpoint reviews authoritative user intent, Proposal and
+Specs after CLI structural validation. After approval, Primary asks the user
+to confirm or adjust goals, scope, behaviors, and non-goals before detailed
+Planning begins.
+
+All three checkpoints use the same fixed identity, `Spec Superflow Reviewer`.
+Each stage starts its initial review in a fresh isolated context. If that review
+returns a first `Request Changes`, Primary repairs the stage exactly once and
+resumes the same Reviewer context for one complete re-review of the new
+candidate. A second `Request Changes` is `BLOCKED`; there is no third review or
+workflow-state progression. Earlier findings or verdicts are not evidence for
+the current candidate, and a later stage starts its own fresh context.
+
+The second checkpoint reviews Design and Tasks together with all approved
+upstream Planning. After approval, Primary defaults to a concise summary of
+the major choices, affected areas, Batch shape, tests, findings, and risks,
+while also providing the complete `design.md` and `tasks.md` paths. The user
+chooses the desired reading depth and explicitly confirms or adjusts the
+implementation direction.
+
+A first blocking finding returns to Primary for one bounded repair, then to the
+same stage Reviewer context after validation. The Reviewer rereads the complete
+current candidate instead of reusing an earlier verdict. A question is raised
+only after repository evidence is exhausted; a genuine
+user-owned decision is asked by Primary one at a time with a recommendation.
+Semantic drift repeats the affected review and user confirmation. Changing
+only a real Tasks execution checkbox does not.
+
+These instructions and protocol tests do not prove the actual Agent picker,
+fresh Reviewer context, behaviorally read-only tool use, or Primary mediation.
+Real VS Code 1.123 acceptance remains `PENDING`.
+
+### Final review and combined runtime acceptance
+
+After implementation, exact full completes every mechanical gate, every
+applicable runtime check, required evidence rows, and PR summary before one
+final independent Code Review. A package check runs only when the current Specs
+explicitly require a delivery package or `execution-contract.md > AC Test Matrix`
+explicitly requires a delivery package. Reviewer reads the frozen code candidate and exact test/risk context,
+judges whether tests prove the requirements and failure paths rather than
+mirroring the implementation, and does not run tests. On `Request Changes`,
+Primary repairs only the located targets once; the repaired candidate and every affected
+result are refrozen before the single same-context re-review. A second `Request Changes`
+is `BLOCKED`. After current `Approved`, only workflow-state progression is allowed.
+
+Final input is limited to a body-free metadata candidate, paths to
+original/current intent, the concise execution contract, project standards,
+exact key-test evidence, known risks, and unexecuted runtime checks. It never
+contains the tracked diff, untracked source text, or whole artifact/source/test/
+evidence bodies. Reviewer takes the resolved review base from the candidate,
+runs read-only `git status`, fixed-base `git diff`, `git log`, and necessary
+`git show`, then reads every changed-file entry and every untracked file itself.
+Candidate computation writes no Review Markdown, bundle, or extra report JSON.
+A user-global instruction is environment state, not part of Plugin delivery.
+
+When a combined isolated VS Code 1.123 acceptance is executed, it should prove
+these runtime properties together:
+
+1. The Agent picker exposes only `Spec Superflow` as the user-invocable
+   workflow Agent.
+2. Primary invokes exactly `Spec Superflow Reviewer`; no separate Dev Agent is
+   registered or invoked.
+3. Primary-only, cross-stage, and prior-invocation canaries do not leak into a
+   fresh Reviewer context.
+4. Reviewer uses ordinary project-read and terminal tools to run the required
+   read-only Git commands and read an untracked canary; candidate identity,
+   porcelain status, cached diff, file bytes, and staged state remain unchanged.
+   It does not run tests or workflow commands, mutate Git, or invoke another
+   Agent.
+5. Reviewer output returns to Primary before Primary repairs the located target
+   or asks the user; no direct Reviewer-to-user path qualifies.
+
+Automation for this Chat acceptance is `Unavailable`. Its status stays
+`PENDING` until one real isolated run records the raw trace, screenshots,
+package identity, canary observations, Git/file-read trace, before/after
+candidate and worktree hashes, mediation trace, and environment restoration. Static prompt,
+frontmatter, unit, or protocol tests cannot convert these runtime assertions
+to PASS. A truthful `PENDING` result is a disclosed runtime boundary, not a
+source-only validation failure.
+
 ## Optional MCP with URL and Token
 
 A local stdio MCP server can be bundled with the Plugin. `stdio` describes how

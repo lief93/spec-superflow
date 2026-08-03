@@ -1,6 +1,6 @@
 // ssf validate <dir> — validate artifacts in a change directory
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, basename, dirname, extname, relative, resolve, sep } from 'node:path';
+import { join, basename, dirname, extname, relative, resolve, sep, posix } from 'node:path';
 
 async function getValidator() {
   const mod = await import('../../dist/index.js');
@@ -284,6 +284,14 @@ function testRowKey(row) {
   return AC_TEST_MATRIX_HEADERS.map(header => normalizeRequirementName(row[header])).join('\u0000');
 }
 
+function exactTestCaseOwnershipKey(row) {
+  const testFile = posix.normalize(
+    normalizeCell(row['test file']).replace(/\\/g, '/'),
+  ).toLowerCase();
+  const testCase = normalizeRequirementName(row['test case']);
+  return `${testFile}\u0000${testCase}`;
+}
+
 function validateAcTestMatrix(contractContent, taskTestRows) {
   const issues = [];
   const section = extractSection(contractContent, 'AC Test Matrix');
@@ -464,6 +472,7 @@ function validateFileChanges(scopeName, content, headingLevel = 5) {
 function validateTasksStructure(content, scenarioPairs, designCoverageRows, designExists, projectRoot) {
   const issues = [];
   const testRows = [];
+  const exactTestCaseOwners = new Map();
   if (content.trim().length < 50) {
     issues.push({ level: 'ERROR', path: 'tasks.md', message: 'tasks.md is too short (< 50 chars) — provide covered scenarios, concrete file changes, and ordered TDD steps' });
   }
@@ -534,6 +543,31 @@ function validateTasksStructure(content, scenarioPairs, designCoverageRows, desi
               issues.push({ level: 'ERROR', path: 'tasks.md', message: `${rowName} Action must be Add, Update, Run existing, or Unavailable` });
             }
             issues.push(...validateTestPlanRow(rowName, row, projectRoot));
+            const action = normalizeRequirementName(row.action);
+            const testFile = normalizeCell(row['test file']);
+            const testCase = normalizeCell(row['test case']);
+            if (
+              action !== 'unavailable'
+              && isTestSourcePath(testFile)
+              && isConcreteTestCase(testCase)
+            ) {
+              const ownershipKey = exactTestCaseOwnershipKey(row);
+              const ownerKey = coverageKey(requirement, ac.scenario);
+              const previousOwner = exactTestCaseOwners.get(ownershipKey);
+              if (previousOwner && previousOwner.ownerKey !== ownerKey) {
+                issues.push({
+                  level: 'ERROR',
+                  path: 'tasks.md',
+                  message: `Exact Test Case has multiple AC owners: ${normalizeCell(row['test file']).replace(/\\/g, '/').toLowerCase()} / ${normalizeRequirementName(row['test case'])}; owners: ${previousOwner.requirement} / ${previousOwner.scenario} and ${requirement} / ${ac.scenario}`,
+                });
+              } else if (!previousOwner) {
+                exactTestCaseOwners.set(ownershipKey, {
+                  ownerKey,
+                  requirement,
+                  scenario: ac.scenario,
+                });
+              }
+            }
             testRows.push({
               requirement,
               ac: ac.scenario,

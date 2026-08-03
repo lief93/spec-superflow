@@ -114,4 +114,24 @@ describe('config-loader: loadConfig()', () => {
     assert.deepStrictEqual(config.artifacts.order, ['proposal', 'specs', 'design', 'tasks']);
     assert.equal(config.execution.inlineThreshold, 3);
   });
+
+  it('keeps ordinary artifact configuration after review repair simplification', () => {
+    rmSync(join(tempDir, 'spec-superflow.config.json'), { force: true });
+    writeFileSync(
+      join(tempDir, 'spec-superflow.config.json'),
+      JSON.stringify({
+        artifacts: {
+          order: ['proposal', 'specs', 'tasks'],
+          skip: ['design'],
+        },
+      }),
+    );
+    const config = configLoader.loadConfig(tempDir);
+
+    assert.deepEqual(config.artifacts, {
+      order: ['proposal', 'specs', 'tasks'],
+      skip: ['design'],
+    });
+    assert.equal(typeof configLoader.resolveArtifactsConfig, 'undefined');
+  });
 });

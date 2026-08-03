@@ -30,6 +30,8 @@ const OPTIONAL_MCP_SOURCE = join(PLUGIN_ROOT, 'servers', 'token-example-mcp.mjs'
 const OPTIONAL_MCP_NAME = 'spec-superflow-optional-example';
 const OPTIONAL_MCP_URL_INPUT = 'spec-superflow-optional-mcp-url';
 const OPTIONAL_MCP_TOKEN_INPUT = 'spec-superflow-optional-mcp-token';
+const PLUGIN_HOST = process.env.SPEC_SUPERFLOW_PLUGIN_HOST ?? 'vscode';
+const PLUGIN_APP_NAME = PLUGIN_HOST === 'opencode' ? 'OpenCode' : 'VS Code';
 
 const TOOLS = [
   {
@@ -93,6 +95,7 @@ const TOOLS = [
     },
   },
 ];
+const AVAILABLE_TOOLS = PLUGIN_HOST === 'opencode' ? TOOLS.slice(0, 2) : TOOLS;
 
 function write(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -459,6 +462,37 @@ function readNode(env = process.env) {
   };
 }
 
+function cliRecovery(reason, { bin, previousCli } = {}) {
+  switch (reason) {
+    case 'invalid-install-request':
+      return 'Call spec_superflow_install_cli without arguments.';
+    case 'invalid-plugin-package':
+      return `Repair the Plugin installation, restart ${PLUGIN_APP_NAME}, and run workflow-init again.`;
+    case 'node-missing':
+      return `Install Node.js, add it to PATH, restart ${PLUGIN_APP_NAME}, and run workflow-init again.`;
+    case 'npm-missing':
+      return PLUGIN_HOST === 'opencode'
+        ? 'Install Node.js with npm, restart OpenCode, and run workflow-init again.'
+        : 'Install Node.js with npm, then run workflow-init again.';
+    case 'cli-version-unreadable':
+      return 'Repair the global ssf CLI, then run workflow-init again.';
+    case 'npm-prefix-unavailable':
+      return 'Fix the npm global prefix, then run workflow-init again.';
+    case 'npm-install-failed':
+      return 'The previous CLI was restored. Resolve the npm permission or prefix error, then retry.';
+    case 'installed-cli-not-on-path':
+      return `Add ${bin} to PATH, restart ${PLUGIN_APP_NAME}, and run workflow-init again.`;
+    case 'version-mismatch-after-install':
+      return previousCli
+        ? 'The previous CLI was restored. Verify the Plugin package version and retry.'
+        : 'The incomplete CLI installation was removed. Verify the Plugin package and retry.';
+    case 'install-exception':
+      return 'The previous CLI was restored. Resolve the reported error, then retry.';
+    default:
+      return 'Resolve the reported CLI error, then run workflow-init again.';
+  }
+}
+
 function cliStatus(env = process.env) {
   const node = readNode(env);
   let plugin;
@@ -473,6 +507,7 @@ function cliStatus(env = process.env) {
       requiredAction: 'repair-plugin-installation',
       error: cause.message,
       node,
+      recovery: cliRecovery('invalid-plugin-package'),
     };
   }
 
@@ -517,6 +552,7 @@ function cliStatus(env = process.env) {
     node,
     npm: { available: Boolean(npmPath), path: npmPath },
     cli,
+    ...(status === 'blocked' ? { recovery: cliRecovery(reason) } : {}),
   };
 }
 
@@ -565,6 +601,7 @@ function installCli(arguments_, env = process.env) {
       status: 'blocked',
       reason: 'invalid-install-request',
       error: 'spec_superflow_install_cli does not accept arguments',
+      recovery: cliRecovery('invalid-install-request'),
     };
   }
 
@@ -583,7 +620,7 @@ function installCli(arguments_, env = process.env) {
       installed: false,
       upgraded: false,
       rolledBack: false,
-      recovery: 'Install Node.js, add it to PATH, restart VS Code, and run workflow-init again.',
+      recovery: cliRecovery('node-missing'),
     };
   }
   if (!before.npm?.available) {
@@ -594,7 +631,7 @@ function installCli(arguments_, env = process.env) {
       installed: false,
       upgraded: false,
       rolledBack: false,
-      recovery: 'Install Node.js with npm, then run workflow-init again.',
+      recovery: cliRecovery('npm-missing'),
     };
   }
 
@@ -608,7 +645,7 @@ function installCli(arguments_, env = process.env) {
       installed: false,
       upgraded: false,
       rolledBack: false,
-      recovery: 'Fix the npm global prefix, then run workflow-init again.',
+      recovery: cliRecovery('npm-prefix-unavailable'),
       error: prefixResult.stderr || prefixResult.stdout,
     };
   }
@@ -644,7 +681,7 @@ function installCli(arguments_, env = process.env) {
         upgraded: false,
         rolledBack: true,
         previousCli: before.cli,
-        recovery: 'The previous CLI was restored. Resolve the npm permission or prefix error, then retry.',
+        recovery: cliRecovery('npm-install-failed'),
         error: installation.stderr || installation.stdout,
       };
     }
@@ -673,7 +710,7 @@ function installCli(arguments_, env = process.env) {
         rolledBack: false,
         installedCli,
         previousCli: before.cli,
-        recovery: `Add ${bin} to PATH, restart VS Code, and run workflow-init again.`,
+        recovery: cliRecovery('installed-cli-not-on-path', { bin }),
       };
     }
 
@@ -689,9 +726,9 @@ function installCli(arguments_, env = process.env) {
       rolledBack: true,
       previousCli: before.cli,
       attemptedCli: installedCli,
-      recovery: before.cli?.available
-        ? 'The previous CLI was restored. Verify the Plugin package version and retry.'
-        : 'The incomplete CLI installation was removed. Verify the Plugin package and retry.',
+      recovery: cliRecovery('version-mismatch-after-install', {
+        previousCli: before.cli?.available,
+      }),
     };
   } catch (cause) {
     rollback();
@@ -704,7 +741,7 @@ function installCli(arguments_, env = process.env) {
       upgraded: false,
       rolledBack: true,
       previousCli: before.cli,
-      recovery: 'The previous CLI was restored. Resolve the reported error, then retry.',
+      recovery: cliRecovery('install-exception'),
       error: cause.message,
     };
   } finally {
@@ -734,7 +771,7 @@ function handle(message) {
     return;
   }
   if (message.method === 'tools/list') {
-    result(message.id, { tools: TOOLS });
+    result(message.id, { tools: AVAILABLE_TOOLS });
     return;
   }
   if (message.method === 'tools/call') {
@@ -745,9 +782,9 @@ function handle(message) {
     } else if (name === 'spec_superflow_install_cli') {
       const installation = installCli(args);
       result(message.id, textResult(installation, installation.status === 'blocked'));
-    } else if (name === 'spec_superflow_optional_mcp_status') {
+    } else if (PLUGIN_HOST !== 'opencode' && name === 'spec_superflow_optional_mcp_status') {
       result(message.id, textResult(optionalMcpStatus()));
-    } else if (name === 'spec_superflow_install_optional_mcp') {
+    } else if (PLUGIN_HOST !== 'opencode' && name === 'spec_superflow_install_optional_mcp') {
       const installation = installOptionalMcp(args);
       result(message.id, textResult(installation, installation.status === 'blocked'));
     } else {

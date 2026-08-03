@@ -161,11 +161,51 @@ describe('cmd-state: transition', () => {
   it('progresses a new full-workflow Change through every mainline state', () => {
     const projectDir = mkdtempSync(join(tmpdir(), 'ssf-state-lifecycle-'));
     const changeDir = join(projectDir, 'changes', 'full-lifecycle');
+    execSync(`git -C ${projectDir} init -q -b main`);
+    execSync(`git -C ${projectDir} config user.email tests@example.com`);
+    execSync(`git -C ${projectDir} config user.name "Spec Superflow Tests"`);
+    writeFileSync(join(projectDir, 'README.md'), '# Baseline\n');
+    execSync(`git -C ${projectDir} add README.md`);
+    execSync(`git -C ${projectDir} commit -qm baseline`);
+    const reviewBase = execSync(`git -C ${projectDir} rev-parse HEAD`, {
+      encoding: 'utf8',
+    }).trim();
 
     function expectState(expected) {
       const result = ssf(`state get ${changeDir} state`);
       assert.equal(result.exitCode, 0, result.stderr);
       assert.equal(result.stdout, expected);
+    }
+
+    function approveReview(stage) {
+      const baseArgs = stage === 'final' ? ` --base ${reviewBase}` : '';
+      const current = ssf(
+        `review candidate ${changeDir} ${stage}${baseArgs} --json`,
+        { cwd: projectDir },
+      );
+      assert.equal(current.exitCode, 0, current.stderr);
+      const candidate = JSON.parse(current.stdout);
+      mkdirSync(join(changeDir, 'reviews'), { recursive: true });
+      writeFileSync(
+        join(changeDir, 'reviews', `${stage}-pending-report.json`),
+        `${JSON.stringify({
+          stage,
+          candidate_identity: candidate.identity,
+          verdict: 'Approved',
+          findings: [],
+          questions: [],
+          review_focus: ['lifecycle correctness'],
+          summary: `${stage} is approved.`,
+          residual_risks: ['Runtime acceptance remains separate.'],
+          ...(stage === 'final' ? { review_base: candidate.review_base } : {}),
+        })}\n`,
+      );
+      const recorded = ssf(
+        `review record ${changeDir} ${stage}${baseArgs} --json`,
+        { cwd: projectDir },
+      );
+      assert.equal(recorded.exitCode, 0, recorded.stderr);
+      return candidate;
     }
 
     try {
@@ -176,6 +216,7 @@ describe('cmd-state: transition', () => {
       expectState('specifying');
 
       mkdirSync(join(changeDir, 'specs', 'lifecycle'), { recursive: true });
+      writeFileSync(join(changeDir, 'user-intent.md'), '# Intent\nPersist every guarded mainline transition.\n');
       writeFileSync(join(changeDir, 'proposal.md'), `## Why
 The workflow must persist every mainline state so later guards inspect the real lifecycle instead of inferred intent.
 ## What Changes
@@ -227,6 +268,13 @@ Depends on: None
 - [ ] GREEN: Persist every successful transition.
 - [ ] REFACTOR: Run state and guard regression tests.
 `);
+
+      const proposalReview = approveReview('proposal-specs');
+      assert.equal(ssf(`state set ${changeDir} dp_1_result "confirmed: lifecycle behavior"`).exitCode, 0);
+      assert.equal(ssf(`state set ${changeDir} dp_1_candidate_identity ${proposalReview.identity}`).exitCode, 0);
+      const designReview = approveReview('design-tasks');
+      assert.equal(ssf(`state set ${changeDir} dp_2_result "confirmed: lifecycle implementation"`).exitCode, 0);
+      assert.equal(ssf(`state set ${changeDir} dp_2_candidate_identity ${designReview.identity}`).exitCode, 0);
 
       assert.equal(ssf(`state transition ${changeDir} bridging`).exitCode, 0);
       expectState('bridging');
@@ -284,9 +332,12 @@ Use the guarded state CLI.
 |---|---|---|---|---|---|---|---|---|
 | Persist workflow state | Complete the workflow | Integration | Node | \`tests/lib/cmd-state.test.mjs\` | \`progresses a new full-workflow Change through every mainline state\` | Pass | \`node --test tests/lib/cmd-state.test.mjs\` | Mainline states persisted in order. |
 `);
+      writeFileSync(join(changeDir, 'known-risks.md'), '# Known Risks\n- Runtime acceptance remains separate.\n');
+      writeFileSync(join(changeDir, 'runtime-evidence.md'), '# Runtime Evidence\n- VS Code: PENDING.\n');
       assert.equal(ssf(`state set ${changeDir} batches_completed 1`).exitCode, 0);
       assert.equal(ssf(`state set ${changeDir} test_result pass`).exitCode, 0);
       assert.equal(ssf(`state rebuild ${changeDir}`).exitCode, 0);
+      approveReview('final');
 
       const closingOwners = [
         ['release-archivist', readFileSync(join(process.cwd(), 'skills/release-archivist/SKILL.md'), 'utf-8')],
@@ -370,6 +421,20 @@ describe('cmd-state: set', () => {
     ssf(`state set ${tempDir} dp_1_result "confirmed: csv export"`);
     const get = ssf(`state get ${tempDir} dp_1_result`);
     assert.ok(get.stdout.includes('confirmed: csv export'));
+  });
+
+  it('persists the two Planning review bindings through the legacy state set command', () => {
+    ssf(`state init ${tempDir}`);
+    const bindings = {
+      dp_1_candidate_identity: `sha256:${'1'.repeat(64)}`,
+      dp_2_candidate_identity: `sha256:${'2'.repeat(64)}`,
+    };
+    for (const [field, value] of Object.entries(bindings)) {
+      const set = ssf(`state set ${tempDir} ${field} ${value}`);
+      assert.equal(set.exitCode, 0, set.stderr);
+      const get = ssf(`state get ${tempDir} ${field}`);
+      assert.equal(get.stdout, value);
+    }
   });
 
   it('persists dp_0_result when set through the CLI', () => {

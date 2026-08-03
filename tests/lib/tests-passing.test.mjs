@@ -31,7 +31,12 @@ function writeFrontendContract(uiObligation = 'Run existing') {
 `);
 }
 
-function writeFrontendSummary({ uiObligation = 'Run existing', uiResult = 'Pass', deviceResult = 'Pass' } = {}) {
+function writeFrontendSummary({
+  uiObligation = 'Run existing',
+  uiResult = 'Pass',
+  deviceResult = 'Pass',
+  environment = 'Pixel API 35 emulator',
+} = {}) {
   const testFile = uiObligation === 'Unavailable' ? 'Not configured' : '`app/src/androidTest/java/TransferResultTest.kt`';
   const testCase = uiObligation === 'Unavailable' ? 'Searched app/src/androidTest and Gradle test configuration; no UI runner exists' : '`showsTransferFailure`';
   writeFileSync(join(changeDir, 'pr-summary.md'), `# PR Summary
@@ -44,8 +49,8 @@ function writeFrontendSummary({ uiObligation = 'Run existing', uiResult = 'Pass'
 - **Reason**: The change affects a client screen.
 | Check | Planned Obligation | Result | Environment | Command Or Procedure | Evidence |
 |---|---|---|---|---|---|
-| UI Test | Required by AC Test Matrix | ${uiResult} | Pixel API 35 emulator | ./gradlew connectedDebugAndroidTest | 4 passed, report/build/ui |
-| Device Test | Required | ${deviceResult} | Pixel API 35 emulator | Build, install, launch, and exercise changed path | Launch and interaction completed |
+| UI Test | Required by AC Test Matrix | ${uiResult} | ${environment} | ./gradlew connectedDebugAndroidTest | 4 passed, report/build/ui |
+| Device Test | Required | ${deviceResult} | ${environment} | Build, install, launch, and exercise changed path | Launch and interaction completed |
 ## Exceptions And Known Risks
 - None.
 `);
@@ -83,6 +88,12 @@ describe('tests-passing frontend evidence gate', () => {
   it('passes when required UI and Device Test evidence is complete', () => {
     writeFrontendContract();
     writeFrontendSummary();
+    assert.deepEqual(checkTestsPassing(changeDir), { pass: true, failures: [] });
+  });
+
+  it('continues to accept ordinary Android emulator evidence', () => {
+    writeFrontendContract();
+    writeFrontendSummary({ environment: 'Android emulator' });
     assert.deepEqual(checkTestsPassing(changeDir), { pass: true, failures: [] });
   });
 

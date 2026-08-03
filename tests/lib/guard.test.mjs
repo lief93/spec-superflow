@@ -47,12 +47,18 @@ describe('guard: transition matrix', () => {
     assert.deepEqual(result.output.checks, []);
   });
 
-  it('specifying→bridging requires artifacts-exist + schema-valid', () => {
+  it('specifying→bridging runs artifacts, schema, current review, and DP binding checks', () => {
     const result = runGuard('specifying', 'bridging');
-    assert.equal(result.exitCode, 0, `Expected exit 0 but got ${result.exitCode}: ${JSON.stringify(result.output)}`);
+    assert.equal(result.exitCode, 1, `Expected missing review/DP bindings to block: ${JSON.stringify(result.output)}`);
     const dims = result.output.checks.map(c => c.dimension);
     assert.ok(dims.includes('artifacts-exist'));
     assert.ok(dims.includes('schema-valid'));
+    assert.ok(dims.includes('review-approved'));
+    assert.ok(dims.includes('dp-gate-passed'));
+    assert.equal(result.output.checks.find(c => c.dimension === 'artifacts-exist').pass, true);
+    assert.equal(result.output.checks.find(c => c.dimension === 'schema-valid').pass, true);
+    assert.equal(result.output.checks.find(c => c.dimension === 'review-approved').pass, false);
+    assert.equal(result.output.checks.find(c => c.dimension === 'dp-gate-passed').pass, true);
   });
 
   it('bridging→approved-for-build requires artifacts-exist + schema-valid + contract-fresh', () => {
@@ -223,7 +229,7 @@ test_result: pass
   function runClosingGuard() {
     try {
       const output = execSync(
-        `node ${GUARD_PATH} check ${changeDir} executing closing --json`,
+        `node ${GUARD_PATH} check ${changeDir} executing closing --json --workflow tweak`,
         { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
       );
       return { exitCode: 0, output: JSON.parse(output.trim()) };

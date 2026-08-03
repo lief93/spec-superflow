@@ -1,0 +1,28 @@
+{
+  "schema": "spec-superflow/runtime-regression",
+  "schema_version": 1,
+  "route": "ordinary-workflow",
+  "events": [
+    {
+      "actor": "manager",
+      "kind": "tool_call",
+      "name": "spec_superflow_cli_status"
+    },
+    {
+      "actor": "manager",
+      "kind": "tool_call",
+      "name": "spec_superflow_install_cli"
+    },
+    {
+      "actor": "user",
+      "kind": "choice",
+      "value": "Skip"
+    },
+    {
+      "actor": "manager",
+      "kind": "invalid_continuation",
+      "value": "create-planning-artifacts-directly"
+    }
+  ],
+  "required_outcome": "Use only the current phase's global ssf command. If that command fails, report BLOCKED and stop."
+}

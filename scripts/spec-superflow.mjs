@@ -18,6 +18,7 @@ const COMMANDS = {
   audit:          () => import('./lib/cmd-audit.mjs'),
   memories:       () => import('./lib/cmd-memories.mjs'),
   project:        () => import('./lib/cmd-project.mjs'),
+  review:         () => import('./lib/cmd-review.mjs'),
   'install-cursor': () => import('./lib/cmd-install-cursor.mjs'),
   'install-workbuddy': () => import('./lib/cmd-install-workbuddy.mjs'),
 };
@@ -41,11 +42,17 @@ Commands:
   version <semver>      Sync version to all manifest files
   sync <change-dir>     Merge delta specs into main specs
   config [options]      Display or modify configuration
-  state <sub> <dir>     Manage .spec-superflow.yaml state (init|check|transition|get|rebuild)
+  state <sub> <dir>     Manage state (init|check|transition|get|rebuild|set)
   inject <dir>          Generate phase-guard artifacts for Claude/Cursor/Copilot/Gemini
   audit <dir>           Generate decision-point-audit.md from .spec-superflow.yaml
   memories <sub> [root] Manage Claude-style shared auto memory (init|list|check)
   project check [root]  Validate project development baseline documents
+  review candidate <dir> <stage> [--base <git-ref>] [--json]
+                        Compute the current semantic stage identity
+  review record <dir> <stage> [--base <git-ref>] [--json]
+                        Validate the fixed pending report and replace current result
+  review check <dir> <stage> [--base <git-ref>] [--json]
+                        Check current approval and semantic freshness
   check-update          Check for a newer spec-superflow release
   infer-workflow <dir>  Infer hotfix, tweak, or full workflow mode
   guard check ...       Validate a workflow state transition
@@ -77,6 +84,9 @@ Examples:
   ssf memories init
   ssf memories check
   ssf project check
+  ssf review candidate changes/my-change/ proposal-specs --json
+  ssf review record changes/my-change/ proposal-specs --json
+  ssf review check changes/my-change/ final --json
   ssf install-cursor
   ssf install-workbuddy
 `;

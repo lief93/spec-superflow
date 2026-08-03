@@ -5,11 +5,36 @@ description: Review completed implementation batches for spec compliance and cod
 
 # Code Reviewer
 
-Two responsibilities: requesting review (dispatching a reviewer subagent) and receiving review (acting on feedback with technical rigor). **Review early, review often. Verify before implementing feedback.**
+## Full Workflow Boundary
+
+For exact `full`, semantic Code Review runs once through the fixed
+`Spec Superflow Reviewer` after all implementation, mechanical/runtime checks,
+evidence, PR summary, exact test/risk context, and the base-to-candidate
+worktree identity are frozen, using one independent Reviewer context for the
+final stage and at most one same-context re-review.
+Primary computes them with `ssf review candidate <change-dir> final --base
+<review-base> --json`, then invokes that same fixed Reviewer identity in a
+fresh isolated context for the initial review. Reviewer does not run tests or
+repeat mechanical gates.
+
+Do not dispatch the historical general-purpose reviewer after each task,
+feature, AC, or Batch on this route. On `Request Changes`, Primary directly repairs only
+the located targets exactly once, then refreezes all affected and required gates
+before re-review in the same final-stage Reviewer context. A second `Request
+Changes` is `BLOCKED`; no third review or state progression is allowed. Current
+`Approved` permits only state progression.
+
+The responsibilities below are the historical non-full route and remain
+unchanged for `hotfix` and `tweak`.
+
+Two non-full responsibilities: requesting review (dispatching a reviewer
+subagent) and receiving review (acting on feedback with technical rigor).
+**Review early, review often. Verify before implementing feedback.**
 
 ## Part 1: Requesting Review
 
-**Mandatory after**: each task in SDD, each major feature, each execution batch, before merge.
+**Mandatory on the non-full route after**: each task in SDD, each major feature,
+each execution batch, before merge.
 **Optional**: when stuck, before refactoring, after fixing complex bugs.
 
 ### Procedure

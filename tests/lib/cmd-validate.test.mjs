@@ -92,6 +92,40 @@ function runValidate(changeDir) {
   }
 }
 
+function addSecondScenario(changeDir, { testFile, testCase }) {
+  const specPath = join(changeDir, 'specs', 'rate-limit', 'spec.md');
+  writeFileSync(specPath, `${readFileSync(specPath, 'utf-8')}
+#### Scenario: Request reaches threshold
+- **WHEN** a client reaches the configured request threshold
+- **THEN** the system returns the threshold response
+`);
+
+  const designPath = join(changeDir, 'design.md');
+  writeFileSync(
+    designPath,
+    readFileSync(designPath, 'utf-8').replace(
+      '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Middleware runs before expensive handlers |',
+      '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Middleware runs before expensive handlers |\n| Rate limit requests | Request reaches threshold | Shared middleware | HTTP middleware | Middleware owns threshold responses |',
+    ),
+  );
+
+  const tasksPath = join(changeDir, 'tasks.md');
+  writeFileSync(tasksPath, `${readFileSync(tasksPath, 'utf-8')}
+### AC: Request reaches threshold
+- **Requirement**: Rate limit requests
+- **User-visible**: No
+#### File Changes
+##### Modify \`src/rate-limit.ts\`
+- **Change**: Return the configured threshold response.
+#### TDD Test Plan
+| Layer | Platform | Action | Test File | Test Case | Proves |
+|---|---|---|---|---|---|
+| Unit | Node | Add | \`${testFile}\` | \`${testCase}\` | Threshold requests return the configured response. |
+#### TDD Steps
+- [ ] Run the exact threshold test and implement the minimum change.
+`);
+}
+
 describe('cmd-validate', () => {
   before(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'ssf-validate-'));
@@ -389,6 +423,56 @@ Rate limiting runs before handlers.
     assert.equal(result.exitCode, 0, result.stderr);
     assert.ok(result.stdout.includes('All artifacts validated'));
   });
+
+  it('rejects one normalized exact test case owned by two ACs on the first validate', () => {
+    const changeDir = join(tempDir, 'tasks-cross-ac-test-case-owner');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    addSecondScenario(changeDir, {
+      testFile: 'TEST/RATE-LIMIT.TEST.TS',
+      testCase: 'Rejects  Over-Limit Requests',
+    });
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.match(
+      result.stdout,
+      /Exact Test Case has multiple AC owners:[\s\S]*test\/rate-limit\.test\.ts[\s\S]*rejects over-limit requests[\s\S]*Rate limit requests \/ Request exceeds limit[\s\S]*Rate limit requests \/ Request reaches threshold/i,
+    );
+  });
+
+  it('rejects dot and repeated-separator aliases of an exact test case across ACs', () => {
+    const changeDir = join(tempDir, 'tasks-cross-ac-test-case-path-alias');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    addSecondScenario(changeDir, {
+      testFile: './test//rate-limit.test.ts',
+      testCase: 'rejects over-limit requests',
+    });
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /Exact Test Case has multiple AC owners/i);
+  });
+
+  for (const [label, testFile, testCase] of [
+    ['the same method name in a different file', 'test/rate-limit-threshold.test.ts', 'rejects over-limit requests'],
+    ['a different method in the same file', 'test/rate-limit.test.ts', 'returns threshold response'],
+  ]) {
+    it(`allows ${label} across ACs`, () => {
+      const changeDir = join(tempDir, `tasks-valid-cross-ac-${testFile.includes('threshold') ? 'file' : 'case'}`);
+      mkdirSync(changeDir, { recursive: true });
+      writeValidPlanningArtifacts(changeDir);
+      addSecondScenario(changeDir, { testFile, testCase });
+
+      const result = runValidate(changeDir);
+
+      assert.equal(result.exitCode, 0, result.stdout);
+      assert.ok(result.stdout.includes('All artifacts validated'));
+    });
+  }
 
   it('allows a configured fast path to omit design while retaining AC-owned tasks', () => {
     const changeDir = join(tempDir, 'tasks-without-design-change');
