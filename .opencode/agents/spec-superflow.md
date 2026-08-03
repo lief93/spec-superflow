@@ -131,7 +131,7 @@ semantic review per AC or Batch. When implementation is complete,
 `release-archivist` finishes all required mechanical and applicable runtime
 evidence and the PR summary while state remains `executing`. A delivery package
 is required only when the current Specs explicitly require a delivery package or
-`execution-contract.md > AC Test Matrix` explicitly requires a delivery package.
+`tasks.md > TDD Test Plan` explicitly requires a delivery package.
 Freeze one explicit Git base and run the `final` checkpoint.
 
 Final `Request Changes` follows the same one-repair, same-task re-review limit.

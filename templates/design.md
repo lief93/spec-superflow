@@ -4,31 +4,14 @@
 
 - Current state:
 - Constraints:
-- Stakeholders:
-
-## Goals
-
-- What this design must achieve
-
-## Non-Goals
-
-- What this design intentionally does not address
-
-## Project Baseline Alignment
-
-Use the exact Scenario titles from the Spec. If the project baseline is not initialized, enter `Not configured` as the source; do not invent rules.
-
-| Scenario | Baseline Source | Classic Implementation | Applied Constraints | Deviation |
-|---|---|---|---|---|
-| Scenario title | `docs/project/project-guidelines.md` | Classic implementation title | Architecture, state, data, and reuse rules that apply to this Scenario | `None` or an approved deviation with rationale |
 
 ## Requirement And Scenario Coverage
 
-Use the exact Requirement and Scenario titles from the Spec. Map every Scenario to a design decision; enter `No design change` when it has no design impact.
+Use the exact Requirement and Scenario titles from the Spec. Keep baseline alignment in this table instead of repeating a second mapping. Enter `No design change`, `Not configured`, or `None` only when accurate.
 
-| Requirement | Scenario | Design Decision | Affected Area | Why Here |
-|---|---|---|---|---|
-| Requirement title | Scenario title | Decision title or `No design change` | Module, component, or responsibility boundary | Why this area owns the change |
+| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |
+|---|---|---|---|---|---|---|
+| Requirement title | Scenario title | Decision title or `No design change` | Module, component, or responsibility boundary | Applicable guideline, classic implementation, existing symbol, or `Not configured` | Applicable rule, or approved deviation with rationale | Why this area owns the change |
 
 ## Decisions
 
@@ -41,13 +24,3 @@ Use the exact Requirement and Scenario titles from the Spec. Map every Scenario 
 ## Risks And Trade-Offs
 
 - Risk -> Mitigation
-
-## Migration Plan
-
-- Rollout steps:
-- Rollback steps:
-
-## Open Questions
-
-- Question:
-- Decision owner:

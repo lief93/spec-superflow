@@ -77,7 +77,7 @@ exactly three semantic checkpoints:
 3. `final`: after implementation, tests, applicable runtime evidence, risks,
    and PR summary are complete and frozen, before `executing -> closing`. A
    delivery package is required only when the current Specs explicitly require
-   a delivery package or `execution-contract.md > AC Test Matrix` explicitly
+   a delivery package or `tasks.md > TDD Test Plan` explicitly
    requires a delivery package.
 
 At each checkpoint:
@@ -185,10 +185,8 @@ workflow-start.
 3. If the CLI is missing or has another version, ask whether the user wants to
    install or update the Plugin's bundled CLI globally. Call
    `spec_superflow_install_cli` only after an explicit confirmation.
-4. If the user declines, or the tool call is cancelled, unavailable, or
-   unsuccessful,
-   report `CANCELLED` or `BLOCKED` and stop. Do not try another tool or
-   installation route.
+4. If the user declines, or the tool call is cancelled or unsuccessful,
+   report `CANCELLED` or `BLOCKED` and stop. Do not try another tool.
 5. After a successful install, call `spec_superflow_cli_status` again.
 6. Report `READY` only when the second status call reports `ready: true` and
    version 0.14.0. Otherwise, report `BLOCKED` with the recovery guidance

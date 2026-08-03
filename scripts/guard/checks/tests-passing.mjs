@@ -16,6 +16,16 @@ function extractSection(content, title) {
   return content.slice(bodyStart, next ? bodyStart + next.index : content.length);
 }
 
+function extractHeadingSection(content, title, level) {
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const hashes = '#'.repeat(level);
+  const match = new RegExp(`^${hashes}[ \\t]+${escaped}[ \\t]*$`, 'mi').exec(content);
+  if (!match) return '';
+  const bodyStart = match.index + match[0].length;
+  const next = new RegExp(`^#{1,${level}}[ \\t]+.+$`, 'm').exec(content.slice(bodyStart));
+  return content.slice(bodyStart, next ? bodyStart + next.index : content.length);
+}
+
 function labeledValue(section, label) {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`^- \\*\\*${escaped}\\*\\*:[ \\t]*(.+)$`, 'mi').exec(section)?.[1]?.trim() || '';
@@ -51,11 +61,35 @@ function acEvidenceKey(row) {
     .join('\u0000');
 }
 
-function checkAcTestEvidence(changeDir, contractContent) {
+function plannedTestRows(changeDir, contractContent) {
+  const tasksPath = join(changeDir, 'tasks.md');
+  if (existsSync(tasksPath)) {
+    const content = readFileSync(tasksPath, 'utf-8');
+    const headings = [...content.matchAll(/^###\s+AC:\s*(.+?)\s*$/gim)];
+    if (headings.length > 0) {
+      const rows = [];
+      headings.forEach((heading, index) => {
+        const bodyStart = heading.index + heading[0].length;
+        const body = content.slice(bodyStart, headings[index + 1]?.index ?? content.length);
+        const requirement = labeledValue(body, 'Requirement');
+        const plan = extractHeadingSection(body, 'TDD Test Plan', 4);
+        for (const row of tableRowList(plan)) {
+          rows.push({ requirement, ac: heading[1].trim(), ...row });
+        }
+      });
+      return { configured: true, source: 'tasks.md TDD Test Plans', rows };
+    }
+  }
+
   const matrixSection = extractSection(contractContent, 'AC Test Matrix');
-  if (!matrixSection) return [];
-  const plannedRows = tableRowList(matrixSection);
-  if (plannedRows.length === 0) return ['execution-contract.md AC Test Matrix has no test obligations.'];
+  if (!matrixSection) return { configured: false, source: '', rows: [] };
+  return { configured: true, source: 'execution-contract.md AC Test Matrix', rows: tableRowList(matrixSection) };
+}
+
+function checkAcTestEvidence(changeDir, planned) {
+  if (!planned.configured) return [];
+  const plannedRows = planned.rows;
+  if (plannedRows.length === 0) return [`${planned.source} has no test obligations.`];
 
   const summaryPath = join(changeDir, 'pr-summary.md');
   if (!existsSync(summaryPath)) return ['AC test evidence is missing: pr-summary.md does not exist.'];
@@ -94,10 +128,10 @@ function checkFrontendEvidence(changeDir, state) {
   if (!existsSync(contractPath)) return [];
 
   const contractContent = readFileSync(contractPath, 'utf-8');
-  const failures = checkAcTestEvidence(changeDir, contractContent);
-  const matrixRows = tableRowList(extractSection(contractContent, 'AC Test Matrix'));
-  const uiMatrixRows = matrixRows.filter(row => normalize(row.layer) === 'ui');
-  const hasUnavailableUi = uiMatrixRows.some(row => normalize(row.action) === 'unavailable');
+  const planned = plannedTestRows(changeDir, contractContent);
+  const failures = checkAcTestEvidence(changeDir, planned);
+  const uiRows = planned.rows.filter(row => normalize(row.layer) === 'ui');
+  const hasUnavailableUi = uiRows.some(row => normalize(row.action) === 'unavailable');
   const contractSection = extractSection(contractContent, 'Frontend Verification');
   if (!contractSection || normalize(labeledValue(contractSection, 'Frontend Impact')) !== 'yes') return failures;
 

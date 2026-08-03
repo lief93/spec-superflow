@@ -5,100 +5,98 @@ description: Convert approved planning artifacts into an execution contract. Inv
 
 # Contract Builder
 
-Converts planning artifacts into a single execution handshake: `execution-contract.md`. Use `templates/execution-contract.md` as the baseline structure.
+Convert approved planning artifacts into a compact execution lock: `execution-contract.md`. Use `templates/execution-contract.md` as the exact structure. The contract records what is approved, how execution is gated, and when to stop; it does not restate planning content.
 
-Read before generating: `proposal.md`, change-local `specs/`, `design.md`, `tasks.md`, and `docs/artifact-contract.md`. Read `docs/project/project-guidelines.md` when configured and select only baseline rules and classic implementations mapped by the design. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. If `.spec-superflow/memories/MEMORY.md` exists, read the entrypoint and only topic links relevant to the design, affected modules, runtime conditions, or verification environment.
+Read before generating: `proposal.md`, change-local `specs/`, `tasks.md`, and `docs/artifact-contract.md`. Read `design.md` unless `artifacts.skip` contains `design` as a configured skip. Read `docs/project/project-guidelines.md` when configured. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only relevant topics.
 
-## Artifact Mapping
+## Source Of Truth
 
-| Source | Extract |
-|--------|---------|
-| `proposal.md` → `## Why` + `## What Changes` | Intent Lock (problem + scope) |
-| `proposal.md` → `## Scope > ### Out of Scope` | Scope Fence |
-| `specs/` → each `### Requirement:` | Approved Requirements, Scenarios, Test Obligations |
-| `design.md` → coverage map + `## Decisions` | Scenario-to-decision mapping, Architecture, Interface, Dependency Constraints |
-| Project baseline + `design.md` alignment map | Normative technology, ownership, data/state, reuse, and classic implementation constraints |
-| Relevant auto-memory topics + `design.md` | Non-obvious runtime, environment, debugging, and repeated project learnings |
-| `tasks.md` → Batch AC sections + AC-owned file changes | Execution Batches, Requirement/Scenario ownership, concrete file changes, Completion Definitions, Review Timing |
-| `tasks.md` → each AC's TDD Test Plan | Unit, Component, Integration, and UI test obligations and targets |
+- `proposal.md`: intent and scope
+- `specs/`: approved behavior and Scenarios
+- `design.md`: decisions, baseline alignment, constraints, and deviations; record `configured skip` instead when the project configuration skips Design
+- `tasks.md`: Batch/AC ownership, file changes, TDD Test Plans, and Batch Verification
 
-## Cross-Check: Requirement Coverage
+Reference these artifacts from `## Approved Artifacts`. Do not copy their behavior summaries, Requirement mappings, decisions, file lists, Task Batches, or AC test matrix into the contract. `tasks.md > TDD Test Plan` remains the source of truth for exact test obligations and later `pr-summary.md` evidence.
 
-Before finalizing:
-1. List every SHALL/MUST from `specs/`
-2. Verify every Scenario is mapped through design coverage and exactly one task Batch AC section
-3. Verify each Requirement is reflected in Approved Behavior, has a test obligation, and appears in at least one batch
-4. Flag unmapped Requirements or Scenarios in Escalation Rules
-5. Note cross-batch dependencies
-6. Copy every TDD Test Plan row unchanged into `## AC Test Matrix`; do not collapse files/cases into a suite label
-7. For every changed interface, protocol, abstract type, public constructor, or shared contract, verify that tasks enumerate all discovered production implementations, adapters, fakes, mocks, test doubles, and affected module compile/test obligations
-8. Verify every required edge case has an exact fixture or precondition and observable assertion in the AC Test Matrix; an indirect assertion is not equivalent to the required state
+## Planning Cross-Check
 
-## Frontend Verification
+Before generating the contract, verify without copying the result:
 
-Classify the repository as frontend when it contains a Web, Android, HarmonyOS, iOS, desktop, or other user-interface client, even when the current change is an internal refactor. Fill `## Frontend Verification` in the contract:
+1. Every SHALL/MUST and Scenario in `specs/` appears in exactly one task Batch AC and, unless Design is configured to skip, in the design coverage table.
+2. Unless Design is configured to skip, every task file change follows the selected baseline/reuse pattern or has an approved design deviation.
+3. Every required edge case has an exact fixture or precondition and observable assertion in `tasks.md`.
+4. Every TDD row has a controllable precondition and observable result. Reject no-op fakes, no-op callbacks, inert refreshes, inaccessible UI state, and generic suite labels.
+5. Interface changes enumerate all discovered production implementations, adapters, fakes, mocks, test doubles, and affected module compile/test obligations.
+6. Every Batch has one executable Batch Verification block and valid dependency order.
 
-- `Frontend Impact: Yes`: include `UI Test` and `Device Test` rows.
-- Set the aggregate UI obligation to `Required by AC Test Matrix`; the matrix retains each row's `Add`/`Update`/`Run existing`/`Unavailable` action. Shared navigation, shared UI, or global state changes may add broader tests, but cannot replace AC-specific rows.
-- For visible output derived from application state, require a stable injectable rendering seam in the design/tasks and preserve separate obligations for state-to-UI derivation and lazy, scrolling, or repeated content behavior. A child-parameter assertion alone is not sufficient evidence.
-- If no UI framework exists, use `Unavailable`, record the inspected test locations/configuration, and do not silently introduce a framework.
-- Device Test is always `Required`. Default to one project baseline simulator/device per affected native platform, or the default browser and desktop viewport for Web. Add environments only when an AC depends on system version, screen size, Market, permission, or device capability.
-- Read commands and runtime prerequisites from relevant shared-memory topics, build files, package scripts, and existing tests. Do not invent commands.
-- `Frontend Impact: No`: state the reason; the table is not required.
-- Screenshot tests are not part of this version.
-
-## Requirement Traceability Table
-
-`execution-contract.md` must include a `## Requirement Traceability` table with these exact columns:
-
-| Requirement | Approved Behavior | Test Obligation | Batch |
-|---|---|---|---|
-
-Rules:
-- Include one row for every `### Requirement:` from `specs/**/spec.md`.
-- `Requirement` must use the exact requirement name from the spec.
-- `Approved Behavior`, `Test Obligation`, and `Batch` must be non-empty.
-- `Batch` must reference an existing `### Batch N` heading from `## Task Batches`.
-- Do not satisfy traceability by listing requirement names without behavior/test/batch mappings.
+If any check fails, stop and route back to the owning planning artifact. Do not repair the contract by copying missing content into it.
 
 ## Contract Structure
 
-Must make obvious: approved behavior, out-of-scope, implementation constraints, batches, the exact AC Test Matrix, frontend verification, review gates, and conditions that force a rewind to planning. In Design Constraints, record the project baseline separately from relevant shared-memory topics, copy only applicable constraints, and preserve any approved deviation. Prefer compression over repeating source documents, except the AC Test Matrix must preserve exact rows for deterministic validation.
+The contract contains only:
+
+- `## Approved Artifacts`: source paths plus `.spec-superflow.yaml > artifacts_hash` as the planning lock
+- `## Execution Mode`: selected mode and rationale
+- `## Batch Gates`: one reference row for every `## Batch N` in `tasks.md`
+- `## Verification`: shared project commands or procedures; AC-specific tests stay in `tasks.md`
+- `## Frontend Verification`: aggregate UI/device environment obligations
+- `## Stop Conditions`: conditions that force a return to planning or block execution
+
+Do not add Approved Behavior, Requirement Traceability, AC Test Matrix, Design Constraints, Task Batches, Test Obligations, or Verification Dimensions sections. Their information already has an owning artifact.
+
+## Frontend Verification
+
+Classify a change as frontend when it affects a Web, Android, HarmonyOS, iOS, desktop, or other user-interface client.
+
+- `Frontend Impact: Yes`: include UI Test and Device Test rows.
+- Set UI Test to `Required by tasks.md`; exact actions, files, and cases remain in each AC's TDD Test Plan.
+- For visible output derived from application state, require an injectable rendering seam and separate proof of state-to-UI derivation from lazy, scrolling, or repeated-content behavior. A child-parameter assertion alone is insufficient.
+- Device Test is `Required`. Default to one project-baseline simulator/device per affected native platform, or the default real browser for Web. Add environments only when behavior depends on system version, screen size, Market, permission, or device capability.
+- If no UI framework exists, preserve `Unavailable` in the task row, record the inspected locations/configuration, and do not add a framework without developer approval.
+- Read commands and runtime prerequisites from code, relevant Memory, build files, package scripts, and existing tests. Do not invent commands.
+- `Frontend Impact: No`: record the concrete reason and omit the table.
+- Screenshot tests are outside this version.
 
 ## Approval Model (DP-3)
 
-After drafting: summarize handoff rules, identify ambiguity, flag unmapped requirements, ask user to approve explicitly. After approval:
+After drafting, summarize the execution mode, Batch gates, shared verification, frontend environment, and stop conditions. Ask the user to approve explicitly. After approval:
+
 ```bash
 ssf state set <change-dir> dp_3_result "approved: <summary>"
 ssf state set <change-dir> dp_3_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
-DP-3 is a hard gate — no implementation without this record.
+
+DP-3 is a hard gate. Do not start implementation without it.
 
 ## Stale Contract Detection
 
-Refresh if: scope changed in proposal, requirements changed in specs, constraints changed in design, batches changed materially in tasks, or the contract no longer matches intent.
+Refresh when the planning artifact hash changes or the execution mode, shared verification procedure, frontend environment, or Batch gates change.
 
 ## Hotfix Mode
 
-Generate minimal contract: Intent Lock (one sentence), Task List (numbered), Approval Gate (DP-3). Skip Scope Fence, Build Rules, Review Gates, Test Evidence. Still requires DP-3 approval.
-
-## Guardrails
-
-- Do not continue to implementation if ambiguity remains
-- Do not approve the contract on the user's behalf
-- Do not skip the contract because planning docs look complete
-- Flag unmapped requirements; do not silently drop them
+Use the same compact structure with only applicable artifact references and Batch gates. DP-3 is still required.
 
 ## Post-Generation
 
-Run `ssf state init <change-dir>` to create `.spec-superflow.yaml` with hashes.
-Run `ssf validate <change-dir>` after writing the contract.
+Run:
 
-If validation fails on `execution-contract.md` traceability, regenerate the whole `execution-contract.md` from `proposal.md`, `specs/`, `design.md`, and `tasks.md`; do not append a bare list of requirement names. Re-run validate once. If it still fails, report the exact unmapped requirements or missing batches before asking for approval.
+```bash
+ssf state init <change-dir>
+ssf validate <change-dir>
+```
+
+If validation fails, regenerate the contract from the approved artifact set. Do not paste planning content into it. Re-run validation once; if it still fails, report the exact missing source reference, Batch gate, verification procedure, or stop condition before asking for approval.
+
+## Guardrails
+
+- Do not approve the contract on the user's behalf.
+- Do not continue when planning ambiguity or unmapped behavior remains.
+- Do not skip the contract because planning files look complete.
+- Do not use chat history as an execution authority.
 
 ## Exception Handling
 
-- **Parse failures**: Report specific file and section. Suggest re-running `spec-writer`.
-- **Missing files**: List every missing artifact. Route back to `spec-writer`.
-- **User interruption**: Re-read all artifacts on resume; check contract staleness via content comparison.
-- **Validation failure**: Flag unmapped requirements in Escalation Rules and approval summary.
+- **Parse failures**: Report the exact file and section; route back to `spec-writer`.
+- **Missing files**: List every missing artifact; route back to `spec-writer`.
+- **User interruption**: Re-read all artifacts and check freshness on resume.
+- **Validation failure**: Return to the artifact that owns the missing information; do not duplicate it into the contract.

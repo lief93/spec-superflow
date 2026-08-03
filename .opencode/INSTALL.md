@@ -53,7 +53,7 @@ copied source or diff bodies, run tests/workflow commands, mutate files or Git,
 or call another Agent. Mechanical schema/state/test checks stay with the
 primary Agent. A delivery package check stays there too only when the current Specs
 explicitly require a delivery package or
-`execution-contract.md > AC Test Matrix` explicitly requires a delivery package.
+`tasks.md > TDD Test Plan` explicitly requires a delivery package.
 
 ## 4. Update
 

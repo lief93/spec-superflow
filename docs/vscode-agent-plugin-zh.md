@@ -119,7 +119,7 @@ Review 和用户确认；只改变真实 Tasks 执行 checkbox 不需要复审�
 
 实现完成后，精确 `full` 必须先完成全部机械门禁、适用的运行时检查、要求的证据行和
 PR summary，再执行一次最终独立 Code Review。只有当前 Specs 明确要求交付包，或
-`execution-contract.md > AC Test Matrix` 明确要求交付包时，才执行对应包检查。
+`tasks.md > TDD Test Plan` 明确要求交付包时，才执行对应包检查。
 Reviewer 读取冻结代码候选和精确
 测试/风险上下文，判断测试是否覆盖需求与失败路径、是否只是镜像实现，但不运行
 测试。第一次 `Request Changes` 返回 Primary，只修复一次定位到的目标；修复后

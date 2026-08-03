@@ -17,13 +17,12 @@ describe('project baseline workflow integration', () => {
     }
 
     const design = read('templates/design.md');
-    assert.match(design, /## Project Baseline Alignment/);
-    assert.match(design, /\| Scenario \| Baseline Source \| Classic Implementation \|/);
+    assert.doesNotMatch(design, /## Project Baseline Alignment/);
+    assert.match(design, /\| Requirement \| Scenario \| Design Decision \| Affected Area \| Baseline \/ Reuse \| Constraint \/ Deviation \| Why Here \|/);
 
     const contract = read('templates/execution-contract.md');
-    assert.match(contract, /Project baseline source/);
-    assert.match(contract, /Selected classic implementations/);
-    assert.match(contract, /Approved deviations/);
+    assert.match(contract, /\| Design \| `design\.md` or configured skip \|/);
+    assert.match(contract, /These approved files remain the source of truth/);
   });
 
   it('passes the selected baseline through implementation and independent review', () => {

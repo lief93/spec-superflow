@@ -1,6 +1,6 @@
 ---
 name: project-init
-description: Initialize or refresh a repository's AI development baseline by inspecting real code and generating Copilot instructions plus an actionable project guideline. Invoke when the user asks to initialize project context, coding rules, architecture guidance, or canonical implementation references.
+description: Initialize or refresh a repository's AI development baseline by inspecting real code and generating Copilot instructions plus an actionable project guideline. Invoke when the user asks to initialize project context, coding rules, architecture guidance, or canonical implementation references. Do not invoke for /workflow-init or Plugin, CLI, or MCP runtime setup.
 argument-hint: "[optional module or scope]"
 user-invocable: true
 disable-model-invocation: true
@@ -9,6 +9,10 @@ disable-model-invocation: true
 # Project Init
 
 Generate a developer-reviewable project baseline from repository evidence. This is project initialization, not task planning and not project memory.
+
+Do not invoke for `/workflow-init` or Plugin, CLI, or MCP runtime setup. Return
+control to the selected command. Do not inspect the workspace, read another
+Skill, or create or resume a Change.
 
 ## Outputs
 

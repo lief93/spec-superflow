@@ -99,7 +99,7 @@ Real VS Code 1.123 acceptance remains `PENDING`.
 After implementation, exact full completes every mechanical gate, every
 applicable runtime check, required evidence rows, and PR summary before one
 final independent Code Review. A package check runs only when the current Specs
-explicitly require a delivery package or `execution-contract.md > AC Test Matrix`
+explicitly require a delivery package or `tasks.md > TDD Test Plan`
 explicitly requires a delivery package. Reviewer reads the frozen code candidate and exact test/risk context,
 judges whether tests prove the requirements and failure paths rather than
 mirroring the implementation, and does not run tests. On `Request Changes`,
@@ -195,7 +195,10 @@ Token values or service-specific URLs to the Plugin repository.
 3. Enable **Spec Superflow** in the Agent Plugins view.
 4. Keep the built-in **Agent** selected, type `/workflow-init`, and select the
    Plugin-provided suggestion. Click it or press **Tab** so VS Code commits it
-   as a structured Slash Command; do not send the candidate as plain text.
+   as a structured Slash Command; do not send the candidate as plain text. The
+   command automatically uses the hidden **Spec Superflow Setup** Agent, whose
+   tool list contains only the bootstrap MCP and native question tool. It does
+   not load the development state machine from the **Spec Superflow** Agent.
 5. Approve CLI installation when needed.
 6. Choose whether to configure the optional credentialed MCP. Skipping it
    returns `workflow=READY, optionalMcp=SKIPPED`.
@@ -207,12 +210,13 @@ Token values or service-specific URLs to the Plugin repository.
    requirement. Normal workflows use the installed CLI and do not install or
    upgrade it.
 
-`/workflow-init` only prepares the runtime. It does not inspect the open
-repository, create a change, or start development.
+`/workflow-init` initializes, verifies, or updates the runtime. It does not
+inspect the open repository, ask for requirement details, create a Change, or
+start or resume development.
 
-Run the setup command from the built-in **Agent** before selecting
-**Spec Superflow**. This keeps the development Agent's state-machine
-instructions out of the setup-only Chat request.
+Run the setup command while the built-in **Agent** is selected. The command
+switches to its hidden setup-only Agent for that request. Select
+**Spec Superflow** only after setup reports `workflow=READY`.
 
 Run `/workflow-init` before starting a requirement. Run it again after updating
 the Plugin so the CLI version is synchronized before normal workflow use.

@@ -7,11 +7,11 @@ const ROOT = process.cwd();
 const read = path => readFileSync(join(ROOT, path), 'utf8');
 
 describe('VS Code Plugin documentation boundary', () => {
-  it('documents CLI bootstrap and optional credentialed MCP setup', () => {
+  it('keeps bootstrap implementation details in code and user setup steps in docs', () => {
     const productionMcp = JSON.parse(read('.mcp.json'));
     const server = read('servers/spec-superflow-mcp.mjs');
-    const english = read('docs/vscode-agent-plugin.md');
-    const chinese = read('docs/vscode-agent-plugin-zh.md');
+    const reference = read('docs/vscode-agent-plugin.md');
+    const guide = read('docs/vscode-agent-plugin-zh.md');
 
     assert.ok(productionMcp.mcpServers['spec-superflow']);
     for (const tool of [
@@ -21,64 +21,58 @@ describe('VS Code Plugin documentation boundary', () => {
       'spec_superflow_install_optional_mcp',
     ]) {
       assert.match(server, new RegExp(tool));
-      assert.match(english, new RegExp(tool));
-      assert.match(chinese, new RegExp(tool));
     }
-    assert.doesNotMatch(`${server}\n${english}\n${chinese}`, /spec_superflow_run/);
-    assert.match(english, /business MCP is optional/i);
-    assert.match(chinese, /业务 MCP 是可选能力/);
-    assert.match(english, /workflow.*READY.*optionalMcp.*SKIPPED/is);
-    assert.match(chinese, /workflow.*READY.*optionalMcp.*SKIPPED/is);
-    assert.match(english, /keeps both values visible/i);
-    assert.match(chinese, /两项输入都保持可见/);
-    assert.match(english, /VS Code[\s\S]*secure credentials\s+store/i);
-    assert.match(chinese, /VS Code[\s\S]*安全凭据存储/i);
-    assert.match(english, /spec-superflow-mcp-launcher\.cmd/);
-    assert.match(chinese, /spec-superflow-mcp-launcher\.cmd/);
+    assert.doesNotMatch(server, /spec_superflow_run/);
+    assert.match(reference, /business MCP is optional/i);
+    assert.match(reference, /workflow.*READY.*optionalMcp.*SKIPPED/is);
+    assert.match(reference, /keeps both values visible/i);
+    assert.match(reference, /VS Code[\s\S]*secure credentials\s+store/i);
+    assert.match(reference, /spec-superflow-mcp-launcher\.cmd/);
+    assert.match(guide, /选择是否配置可选 MCP/i);
+    assert.match(guide, /MCP: List Servers/i);
+    assert.match(guide, /URL、Token[\s\S]*不会写入 MCP 配置文件/i);
   });
 
   it('documents workflow-init as the only install entry and local Plugin source ownership', () => {
-    const english = read('docs/vscode-agent-plugin.md');
-    const chinese = read('docs/vscode-agent-plugin-zh.md');
+    const reference = read('docs/vscode-agent-plugin.md');
+    const guide = read('docs/vscode-agent-plugin-zh.md');
 
-    assert.match(english, /type `\/workflow-init`/i);
+    assert.match(reference, /type `\/workflow-init`/i);
     assert.match(
-      english,
+      reference,
       /setup reports `workflow=READY`[\s\S]*select \*\*Spec Superflow\*\* and describe a\s+requirement/i,
     );
-    assert.match(chinese, /输入 `\/workflow-init`/);
-    assert.match(chinese, /返回 `workflow=READY`[\s\S]*选择 \*\*Spec Superflow\*\*[\s\S]*描述需求/);
     assert.match(
-      english,
+      reference,
       /built-in \*\*Agent\*\*[\s\S]*type `\/workflow-init`[\s\S]*Click it or press \*\*Tab\*\*/i,
     );
-    assert.match(english, /reports `workflow=READY`[\s\S]*select \*\*Spec Superflow\*\*/i);
     assert.match(
-      chinese,
-      /内置 \*\*Agent\*\*[\s\S]*输入 `\/workflow-init`[\s\S]*鼠标点击或按 \*\*Tab\*\*/,
+      guide,
+      /VS Code 内置 \*\*Agent\*\*[\s\S]*输入 `\/workflow-init`[\s\S]*按 \*\*Tab\*\*/i,
     );
-    assert.match(chinese, /返回 `workflow=READY`[\s\S]*选择 \*\*Spec Superflow\*\*/);
-    assert.match(english, /Run `\/workflow-init` before starting a requirement/i);
-    assert.match(chinese, /开始需求前先执行 `\/workflow-init`/);
-    assert.doesNotMatch(english, /continues the original request once/);
-    assert.doesNotMatch(chinese, /自动继续原需求一次/);
-    assert.match(english, /current `\$\{PLUGIN_ROOT\}` only/);
-    assert.match(chinese, /当前 `\$\{PLUGIN_ROOT\}`/);
-    assert.match(english, /no second Spec repository or archive is required/i);
-    assert.match(chinese, /不需要第二份 Spec/);
-    assert.doesNotMatch(chinese, /公司|内网/);
+    assert.match(guide, /workflow=READY[\s\S]*选择 \*\*Spec Superflow\*\*/i);
+    assert.match(reference, /Run `\/workflow-init` before starting a requirement/i);
+    assert.match(guide, /`\/workflow-init` 只准备运行环境/i);
+    assert.doesNotMatch(`${reference}\n${guide}`, /continues the original request once/i);
+    assert.match(reference, /current `\$\{PLUGIN_ROOT\}` only/);
+    assert.match(reference, /no second Spec repository or archive is required/i);
+    assert.doesNotMatch(guide, /公司|内网/);
   });
 
-  it('documents direct CLI workflow execution and independent project instructions', () => {
-    const english = read('docs/vscode-agent-plugin.md');
-    const chinese = read('docs/vscode-agent-plugin-zh.md');
+  it('keeps direct CLI and project instruction ownership in their authoritative files', () => {
+    const workflow = read('skills/workflow-start/SKILL.md');
+    const projectInit = read('skills/project-init/SKILL.md');
+    const reference = read('docs/vscode-agent-plugin.md');
+    const guide = read('docs/vscode-agent-plugin-zh.md');
 
-    assert.match(english, /Skills execute `ssf state`/);
-    assert.match(chinese, /Skills 直接执行 `ssf state`/);
-    assert.match(english, /\.github\/instructions\/spec-superflow\.instructions\.md/);
-    assert.match(chinese, /\.github\/instructions\/spec-superflow\.instructions\.md/);
-    assert.match(english, /leaves an existing `.github\/copilot-instructions\.md` unchanged/);
-    assert.match(chinese, /已有 `.github\/copilot-instructions\.md`，其内容保持不变/);
+    assert.match(workflow, /ssf state init/);
+    assert.match(workflow, /ssf state transition/);
+    assert.match(projectInit, /\.github\/instructions\/spec-superflow\.instructions\.md/);
+    assert.match(projectInit, /Leave an existing `\.github\/copilot-instructions\.md` byte-for-byte unchanged/);
+    assert.match(reference, /Skills execute `ssf state`/);
+    assert.match(reference, /\.github\/instructions\/spec-superflow\.instructions\.md/);
+    assert.match(guide, /`project-init` 生成/);
+    assert.match(guide, /已有 `\.github\/copilot-instructions\.md`[\s\S]*保持不变/);
   });
 
   it('documents Planning reading depth and implementation confirmation consistently', () => {

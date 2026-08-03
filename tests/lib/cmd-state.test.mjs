@@ -89,6 +89,26 @@ describe('cmd-state: check', () => {
     assert.ok(parsed.current_hash);
     assert.equal(parsed.state, 'exploring');
   });
+
+  it('remains consistent when only task completion checkboxes change', () => {
+    const changeDir = mkdtempSync(join(tmpdir(), 'ssf-state-task-progress-'));
+
+    try {
+      writeFileSync(join(changeDir, 'proposal.md'), '## Why\nTask progress must not invalidate approved planning content.\n## What Changes\n- Track task completion independently.');
+      writeFileSync(join(changeDir, 'tasks.md'), '# Tasks\n- [ ] Implement approved behavior');
+      assert.equal(ssf(`state init ${changeDir}`).exitCode, 0);
+
+      writeFileSync(join(changeDir, 'tasks.md'), '# Tasks\n- [x] Implement approved behavior');
+      const result = ssf(`state check ${changeDir} --json`);
+      const parsed = JSON.parse(result.stdout);
+
+      assert.equal(result.exitCode, 0, result.stderr);
+      assert.equal(parsed.consistent, true);
+      assert.equal(parsed.stored_hash, parsed.current_hash);
+    } finally {
+      rmSync(changeDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('cmd-state: transition', () => {

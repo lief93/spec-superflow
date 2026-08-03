@@ -70,6 +70,19 @@ describe('hash: computeArtifactsHash()', () => {
     assert.notEqual(h1, h2);
   });
 
+  it('ignores task completion checkboxes but detects task content changes', () => {
+    const tasksPath = join(tempDir, 'tasks.md');
+    writeFileSync(tasksPath, '# Tasks\n- [ ] Implement AC\n- [ ] Run focused test\n');
+    const plannedHash = hashMod.computeArtifactsHash(tempDir);
+
+    writeFileSync(tasksPath, '# Tasks\n- [x] Implement AC\n- [X] Run focused test\n');
+    const completedHash = hashMod.computeArtifactsHash(tempDir);
+    assert.equal(completedHash, plannedHash);
+
+    writeFileSync(tasksPath, '# Tasks\n- [x] Implement changed AC\n- [X] Run focused test\n');
+    assert.notEqual(hashMod.computeArtifactsHash(tempDir), plannedHash);
+  });
+
   it('reads specs/*.md files in sorted order for determinism', () => {
     mkdirSync(join(tempDir, 'specs'), { recursive: true });
     writeFileSync(join(tempDir, 'proposal.md'), 'proposal');
@@ -98,13 +111,13 @@ describe('hash: computeArtifactsHash()', () => {
     assert.equal(h1, h2);
   });
 
-  it('keeps mechanical artifact and contract freshness independent from semantic review', () => {
+  it('keeps task progress out of artifact freshness and review candidate helpers', () => {
     writeFileSync(join(tempDir, 'tasks.md'), '# Tasks\n- [ ] Mechanical task.\n');
     const pending = hashMod.computeArtifactsHash(tempDir);
     writeFileSync(join(tempDir, 'tasks.md'), '# Tasks\n- [x] Mechanical task.\n');
     const completed = hashMod.computeArtifactsHash(tempDir);
 
-    assert.notEqual(completed, pending);
+    assert.equal(completed, pending);
     assert.equal(typeof hashMod.computeReviewCandidate, 'undefined');
   });
 });

@@ -8,6 +8,7 @@ const ROOT = process.cwd();
 const read = path => readFileSync(join(ROOT, path), 'utf8');
 const primary = read('agents/spec-superflow.agent.md');
 const reviewer = read('agents/spec-superflow-reviewer.agent.md');
+const setup = read('agents/spec-superflow-setup.agent.md');
 
 function probeAgentRouteWithoutNode(route) {
   return spawnSync(
@@ -52,6 +53,7 @@ describe('VS Code Agent Plugin', () => {
 
     assert.deepEqual(agentFiles, [
       'spec-superflow-reviewer.agent.md',
+      'spec-superflow-setup.agent.md',
       'spec-superflow.agent.md',
     ]);
     assert.match(primary, /^agents: \["Spec Superflow Reviewer"\]$/m);
@@ -59,6 +61,9 @@ describe('VS Code Agent Plugin', () => {
     assert.match(reviewer, /^user-invocable: false$/m);
     assert.match(reviewer, /^agents: \[\]$/m);
     assert.doesNotMatch(reviewer, /^tools:/m);
+    assert.match(setup, /^user-invocable: false$/m);
+    assert.match(setup, /^disable-model-invocation: true$/m);
+    assert.doesNotMatch(primary, /Spec Superflow Setup/);
   });
 
   it('adds only three exact-full independent semantic checkpoints to the Primary', () => {
@@ -162,14 +167,34 @@ describe('VS Code Agent Plugin', () => {
   it('provides an explicit CLI bootstrap workflow-init command', () => {
     const pkg = JSON.parse(read('package.json'));
     const command = read('commands/workflow-init.md');
+    const setupAgent = read('agents/spec-superflow-setup.agent.md');
 
     assert.match(command, /^name: workflow-init$/m);
-    assert.match(command, /^agent: Spec Superflow$/m);
+    assert.match(command, /^agent: Spec Superflow Setup$/m);
+    assert.doesNotMatch(command, /^agent: Spec Superflow$/m);
+    assert.match(
+      command,
+      /initialize, verify, or update the Spec Superflow workflow runtime/i,
+    );
+    assert.match(
+      command,
+      /do not ask for[^.]*change name[^.]*requirement[^.]*scope[^.]*acceptance criteria/is,
+    );
     assert.doesNotMatch(command, /^allowed-tools:/m);
     assert.match(command, /tools:\s*\n\s+- ['"]spec-superflow\/\*['"]/);
     assert.match(command, /\n\s+- ['"]spec-superflow-optional-example\/\*['"]/);
     assert.match(command, /\n\s+- ['"]vscode\/askQuestions['"]/);
-    assert.equal(existsSync(join(ROOT, 'agents', 'workflow-init.agent.md')), false);
+    assert.match(setupAgent, /^name: Spec Superflow Setup$/m);
+    assert.match(setupAgent, /^user-invocable: false$/m);
+    assert.match(setupAgent, /^disable-model-invocation: true$/m);
+    assert.match(setupAgent, /tools:\s*\n\s+- ['"]spec-superflow\/\*['"]/);
+    assert.match(setupAgent, /\n\s+- ['"]spec-superflow-optional-example\/\*['"]/);
+    assert.match(setupAgent, /\n\s+- ['"]vscode\/askQuestions['"]/);
+    assert.match(setupAgent, /never\s+call tools in parallel/i);
+    assert.doesNotMatch(
+      setupAgent,
+      /terminal|shell|read(?:ing)? (?:the )?workspace|workflow-start|project-init|state init/i,
+    );
     assert.match(command, /spec_superflow_cli_status/);
     assert.match(command, /spec_superflow_install_cli/);
     assert.match(
@@ -188,21 +213,22 @@ describe('VS Code Agent Plugin', () => {
     }
     assert.match(command, /request confirmation/i);
     assert.match(command, /status tool executes `ssf --version`/i);
-    assert.match(command, /instead of the Agent's `workflow-start` route/);
+    assert.match(command, /do not route to project-init\s+or workflow-start/i);
+    assert.doesNotMatch(command, /alternate (?:installation|path)/i);
     assert.match(
       command,
       new RegExp(`spec-superflow-plugin-version: ${pkg.version.replaceAll('.', '\\.')}`),
     );
     assert.doesNotMatch(command, /tgz|https?:\/\/|npm view|@latest/);
     assert.doesNotMatch(command, /run `ssf --version`|npm install -g/i);
-    assert.match(command, /create task artifacts, or start the\s+development workflow/);
+    assert.match(command, /create task artifacts[\s\S]*start\s+or resume the development workflow/);
     assert.match(
       command,
       /first action is #tool:spec-superflow\/spec_superflow_cli_status/i,
     );
     assert.match(
       command,
-      /after the CLI is verified[^.]*next and only tool call[^.]*spec_superflow_optional_mcp_status/is,
+      /after the CLI is\s+verified[^.]*next and only tool call[^.]*spec_superflow_optional_mcp_status/is,
     );
     assert.match(
       command,
@@ -231,9 +257,12 @@ describe('VS Code Agent Plugin', () => {
     assert.match(english, /Click it or press \*\*Tab\*\*[\s\S]*structured Slash Command/i);
     assert.match(english, /`name`, target `agent`, and restricted `tools`/);
     assert.match(english, /`allowed-tools` is not a VS Code\s+prompt-file field/i);
-    assert.match(chinese, /鼠标点击或按 \*\*Tab\*\*[\s\S]*结构化 Slash Command/);
-    assert.match(chinese, /`name`、`description`、`agent` 和 `tools`/);
-    assert.match(chinese, /不使用 `allowed-tools`/);
+    assert.match(english, /hidden \*\*Spec Superflow Setup\*\* Agent/i);
+    assert.match(english, /only the bootstrap MCP and native question tool/i);
+    assert.match(english, /does not[\s\S]*create a Change[\s\S]*start or resume development/i);
+    assert.match(chinese, /选择 Plugin 提供的候选项[\s\S]*按 \*\*Tab\*\*/i);
+    assert.match(chinese, /`\/workflow-init` 只准备运行环境/i);
+    assert.match(chinese, /不读取当前项目[\s\S]*不生成 change[\s\S]*不启动需求/i);
   });
 
   it('keeps Plugin setup commands outside the development state machine', () => {
@@ -352,6 +381,20 @@ describe('VS Code Agent Plugin', () => {
     assert.match(workflow, /`ssf guard check <dir>/);
   });
 
+  it('keeps workflow runtime setup out of development skills', () => {
+    const workflow = read('skills/workflow-start/SKILL.md');
+    const projectInit = read('skills/project-init/SKILL.md');
+
+    assert.match(workflow, /^disable-model-invocation: true$/m);
+    for (const skill of [workflow, projectInit]) {
+      assert.match(skill, /do not invoke[^.]*`?\/workflow-init`?/i);
+      assert.match(skill, /Plugin, CLI, or MCP runtime setup/i);
+      assert.match(skill, /return\s+control to the selected command/i);
+      assert.match(skill, /do not inspect the workspace/i);
+      assert.match(skill, /create or resume a Change/i);
+    }
+  });
+
   it('initializes a new change before routing and keeps planning artifacts inside it', () => {
     const workflow = read('skills/workflow-start/SKILL.md');
     const writer = read('skills/spec-writer/SKILL.md');
@@ -411,7 +454,7 @@ describe('VS Code Agent Plugin', () => {
     );
     assert.match(
       writer,
-      /^\| Requirement \| Scenario \| Design Decision \| Affected Area \| Why Here \|$/m,
+      /^\| Requirement \| Scenario \| Design Decision \| Affected Area \| Baseline \/ Reuse \| Constraint \/ Deviation \| Why Here \|$/m,
     );
     assert.match(writer, /^\| <exact Requirement title> \| <exact Scenario title> \| <exact Decision title> \|/m);
     assert.match(writer, /^## Batch 1: <goal>$/m);
@@ -420,7 +463,7 @@ describe('VS Code Agent Plugin', () => {
     assert.match(writer, /^#### File Changes$/m);
     assert.match(writer, /^##### (?:Create|Modify|Delete) `path\/to\/file`$/m);
     assert.match(writer, /^#### TDD Test Plan$/m);
-    assert.match(writer, /^#### TDD Steps$/m);
+    assert.match(writer, /^### Batch Verification$/m);
     assert.match(writer, /do not\s+replace these headings with bold list labels/i);
     assert.match(
       writer,
@@ -526,7 +569,7 @@ describe('VS Code Agent Plugin', () => {
     );
     assert.match(
       release,
-      /copy the first six cells exactly from each `execution-contract\.md > AC Test Matrix` row/i,
+      /copy Requirement and AC from the owning task section[\s\S]*`tasks\.md > TDD Test Plan` row/i,
     );
     assert.match(
       release,

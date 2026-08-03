@@ -1,66 +1,40 @@
 # Execution Contract
 
-## Intent Lock
+## Approved Artifacts
 
-- **Change name**:
-- **Problem to solve**:
-- **In scope**:
-- **Out of scope**:
+- **Planning Lock**: `.spec-superflow.yaml > artifacts_hash`
 
-## Approved Behavior
+| Artifact | Source Of Truth |
+|---|---|
+| Proposal | `proposal.md` |
+| Specs | `specs/` |
+| Design | `design.md` or configured skip |
+| Tasks | `tasks.md` |
 
-- **Approved requirement summary**:
-- **Key scenarios**:
-- **Acceptance checks**:
+These approved files remain the source of truth. Do not copy their behavior, decisions, file changes, or AC test rows into this contract.
 
-## Requirement Traceability
+## Execution Mode
 
-| Requirement | Approved Behavior | Test Obligation | Batch |
+- **Mode**: `Inline` | `Batch Inline` | `SDD`
+- **Selection rationale**:
+
+## Batch Gates
+
+Use one row for every `## Batch N` in `tasks.md`; reference it instead of copying its ACs or file changes.
+
+| Batch | Entry Gate | Exit Gate | Review Gate |
 |---|---|---|---|
-|  |  |  | Batch 1 |
+| Batch 1 | Approved planning lock; dependencies complete | Batch Verification and planned AC tests pass | Required review complete |
 
-## AC Test Matrix
+## Verification
 
-Copy every test obligation for each AC from `tasks.md` without changing it. Use one row per test file and test case; do not combine them into "related tests" or a "regression suite."
+AC-specific obligations remain in `tasks.md > TDD Test Plan`. Record only shared commands or procedures here.
 
-| Requirement | AC | Layer | Platform | Action | Test File | Test Case | Proves |
-|---|---|---|---|---|---|---|---|
-|  |  |  |  |  |  |  |  |
-
-## Design Constraints
-
-- **Project baseline source**: `docs/project/project-guidelines.md` | Not configured
-- **Selected classic implementations**:
-- **Approved deviations**: `None` | deviation with rationale
-- **Project Memory source**: `.spec-superflow/memories/MEMORY.md` + relevant topic files | Not configured
-- **Technology constraints**:
-- **Architecture constraints**:
-- **Data and interface constraints**:
-- **Dependency constraints**:
-- **Reuse targets and extension points**:
-- **Runtime and platform facts**:
-
-## Task Batches
-
-### Batch 1
-
-- **Goal**:
-- **Inputs**:
-- **Outputs**:
-- **Done when**:
-
-### Batch 2
-
-- **Goal**:
-- **Inputs**:
-- **Outputs**:
-- **Done when**:
-
-## Test Obligations
-
-- **Behavior that must start with a failing test**:
-- **Required edge cases**:
-- **Regression-sensitive areas**:
+| Check | Command Or Procedure | Evidence Required |
+|---|---|---|
+| AC tests | Run every exact test file and case planned in `tasks.md` | Per-case result in `pr-summary.md` |
+| Regression | Project-specific affected regression command | Command, exit code, and summary |
+| Build / Static | Project-specific build, lint, or type-check command | Command, exit code, and summary |
 
 ## Frontend Verification
 
@@ -71,31 +45,12 @@ Keep the table below when `Frontend Impact: Yes`; delete it when `No`.
 
 | Check | Obligation | Scope | Target Environment | Command Or Procedure | Evidence Required |
 |---|---|---|---|---|---|
-| UI Test | `Required by AC Test Matrix` | Every UI row in the `AC Test Matrix` | UI test runtime | Command that runs the exact files and cases in the matrix; when unavailable, record the search scope and capability gap | Pass/fail result and report path for each AC |
-| Device Test | `Required` | Every User-visible AC in the `AC Test Matrix` | Project-standard emulator, device, or browser environment | Run the UI files and cases from the matrix in the target environment; list separate manual steps for paths that cannot be automated | Result, environment details, and necessary logs for each AC |
+| UI Test | `Required by tasks.md` | Every UI row in `tasks.md` | UI test runtime | Run the exact planned files and cases; when unavailable, record the search scope and capability gap | Per-AC result and report path |
+| Device Test | `Required` | Every User-visible AC in `tasks.md` | Project-standard emulator, device, or browser environment | Run affected UI paths in the target environment; list manual steps only for paths that cannot be automated | Result, environment details, and necessary logs |
 
-## Execution Mode
+## Stop Conditions
 
-- **Mode**: `Inline` | `Batch Inline` | `SDD`
-- **Selection rationale**:
-
-## Verification Dimensions
-
-| Dimension | Status | Findings |
-|---|---|---|
-| Completeness | Pending | - |
-| Correctness | Pending | - |
-| Coherence | Pending | - |
-
-**Overall conclusion**: Pending
-
-## Review Gates
-
-- **Mandatory review points**:
-- **Blocking categories**:
-
-## Escalation Rules
-
-- **When to return to `specifying`**:
-- **When to return to `bridging`**:
-- **When implementation must not continue**:
+- Planning hash changes after approval.
+- Required behavior, scope, or a design assumption changes.
+- A planned test cannot run or fails after the allowed repair loop.
+- Implementation requires an unapproved dependency, interface, or architecture deviation.
