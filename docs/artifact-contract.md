@@ -38,6 +38,7 @@ Defines:
 - architecture and component boundaries
 - which Requirement and Scenario each decision serves
 - which area owns the change and why it belongs there
+- applicable project baseline, reuse anchors, constraints, and approved deviations in the same coverage row
 - interface and dependency decisions
 - trade-offs and risk areas
 
@@ -49,6 +50,7 @@ Defines:
 - one owning Batch AC section for every Requirement/Scenario
 - concrete file changes under each AC, including methods or types when known
 - one TDD test plan per AC, with one exact platform test source file, test case, and asserted AC outcome per row
+- one shared RED/baseline, GREEN, and regression verification block per Batch
 - dependency-aware work breakdown
 - completion units that can become execution batches
 
@@ -56,18 +58,14 @@ Defines:
 
 Defines:
 
-- the approved intent lock
-- the approved behavior summary
-- requirement traceability from each spec requirement to behavior, test obligation, and execution batch
-- an exact AC Test Matrix copied from task test plans
-- implementation constraints
-- task batches
-- test obligations
+- references to the approved planning artifacts and their state hash
+- execution mode
+- entry, exit, and review gates for each task Batch
+- shared verification commands or procedures
 - frontend UI and device verification requirements when the project has a user interface
-- review gates
-- escalation rules
+- stop conditions that force a return to planning
 
-`pr-summary.md` records one evidence row for every AC Test Matrix obligation, including the exact platform test file and case. For frontend changes, aggregate UI Test and Device Test evidence stays there rather than in a separate report artifact.
+The contract does not copy behavior, design constraints, file changes, or test rows. Those remain in their owning artifacts. `pr-summary.md` records one evidence row for every `tasks.md > TDD Test Plan` obligation, including the exact platform test file and case. For frontend changes, aggregate UI Test and Device Test evidence stays there rather than in a separate report artifact.
 
 ## Mapping
 

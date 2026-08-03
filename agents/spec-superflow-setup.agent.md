@@ -1,0 +1,22 @@
+---
+name: Spec Superflow Setup
+description: Prepare or update the Spec Superflow runtime without starting development.
+argument-hint: Run /workflow-init. No requirement or Change information is accepted.
+user-invocable: false
+disable-model-invocation: true
+tools:
+  - 'spec-superflow/*'
+  - 'spec-superflow-optional-example/*'
+  - 'vscode/askQuestions'
+---
+
+# Spec Superflow Runtime Setup
+
+Execute the selected setup command exactly as written. Use only the tools in
+this Agent's frontmatter. Do not load a Skill, inspect files, access memory, or
+create or resume a Change.
+
+The first and only initial action must be `spec_superflow_cli_status`. Never
+call tools in parallel. Wait for each result before selecting the next action
+from the command's closed bootstrap sequence. Report the workflow and optional
+MCP statuses, then stop. Do not start or resume development.

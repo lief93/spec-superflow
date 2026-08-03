@@ -19,9 +19,9 @@ Rate limiting runs before expensive handlers.
 ## Goals
 Reject over-limit traffic consistently.
 ## Requirement And Scenario Coverage
-| Requirement | Scenario | Design Decision | Affected Area | Why Here |
-|---|---|---|---|---|
-| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Middleware runs before expensive handlers |
+| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |
+|---|---|---|---|---|---|---|
+| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Existing route registration | No new handler contract | Middleware runs before expensive handlers |
 ## Decisions
 ### Decision: Shared middleware
 - Choice: Shared middleware
@@ -59,6 +59,49 @@ Depends on: None
 
 function writeValidExecutionContract(changeDir) {
   writeFileSync(join(changeDir, 'execution-contract.md'), '# Execution Contract\n\n## Intent Lock\n\nAdd request rate limiting.\n\n## Approved Behavior\n\nRate limit requests when clients exceed configured limits.\n\n## Requirement Traceability\n\n| Requirement | Approved Behavior | Test Obligation | Batch |\n|---|---|---|---|\n| Rate limit requests | Reject over-limit requests before expensive handlers run | Focused tests for HTTP 429 and service-call prevention | Batch 1 |\n\n## AC Test Matrix\n\n| Requirement | AC | Layer | Platform | Action | Test File | Test Case | Proves |\n|---|---|---|---|---|---|---|---|\n| Rate limit requests | Request exceeds limit | Unit | Node | Add | `test/rate-limit.test.ts` | `rejects over-limit requests` | Over-limit requests are rejected before handlers run. |\n\n## Design Constraints\n\nUse shared middleware.\n\n## Task Batches\n\n### Batch 1\n\n- Add tests and middleware.\n\n## Test Obligations\n\n- Start with failing tests for Rate limit requests.\n\n## Frontend Verification\n\n- **Frontend Impact**: No\n- **Reason**: This change only affects server-side HTTP middleware.\n\n## Execution Mode\n\n- Mode: Inline\n\n## Verification Dimensions\n\n| Dimension | Status | Findings |\n|---|---|---|\n| Completeness | Pending | - |\n\n## Review Gates\n\n- Review before closure.\n\n## Escalation Rules\n\n- Return to bridging if middleware shape changes.\n');
+}
+
+function writeCompactExecutionContract(changeDir) {
+  writeFileSync(join(changeDir, 'execution-contract.md'), `# Execution Contract
+
+## Approved Artifacts
+
+- **Planning Lock**: \`.spec-superflow.yaml > artifacts_hash\`
+
+| Artifact | Source Of Truth |
+|---|---|
+| Proposal | \`proposal.md\` |
+| Specs | \`specs/\` |
+| Design | \`design.md\` |
+| Tasks | \`tasks.md\` |
+
+## Execution Mode
+
+- **Mode**: Inline
+- **Selection rationale**: One isolated middleware batch.
+
+## Batch Gates
+
+| Batch | Entry Gate | Exit Gate | Review Gate |
+|---|---|---|---|
+| Batch 1 | Approved planning lock | Planned tests pass and files match tasks.md | Review the completed batch |
+
+## Verification
+
+| Check | Command Or Procedure | Evidence Required |
+|---|---|---|
+| AC tests | Run every row in tasks.md TDD Test Plan | Exact case result |
+| Regression | \`npm test\` | Zero failures |
+
+## Frontend Verification
+
+- **Frontend Impact**: No
+- **Reason**: This change only affects server-side HTTP middleware.
+
+## Stop Conditions
+
+- Stop when the planning hash changes, an approved assumption fails, or a required test cannot run.
+`);
 }
 
 function writeFrontendVerification(changeDir, rows) {
@@ -104,8 +147,8 @@ function addSecondScenario(changeDir, { testFile, testCase }) {
   writeFileSync(
     designPath,
     readFileSync(designPath, 'utf-8').replace(
-      '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Middleware runs before expensive handlers |',
-      '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Middleware runs before expensive handlers |\n| Rate limit requests | Request reaches threshold | Shared middleware | HTTP middleware | Middleware owns threshold responses |',
+      '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Existing route registration | No new handler contract | Middleware runs before expensive handlers |',
+      '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Existing route registration | No new handler contract | Middleware runs before expensive handlers |\n| Rate limit requests | Request reaches threshold | Shared middleware | HTTP middleware | Existing route registration | No new handler contract | Middleware owns threshold responses |',
     ),
   );
 
@@ -150,6 +193,62 @@ describe('cmd-validate', () => {
     assert.ok(result.stdout.includes('All artifacts validated'));
   });
 
+  it('accepts a compact execution lock without copied planning matrices', () => {
+    const changeDir = join(tempDir, 'compact-contract');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    const tasksPath = join(changeDir, 'tasks.md');
+    writeFileSync(
+      tasksPath,
+      readFileSync(tasksPath, 'utf-8')
+        .replace('- **Responsibility**: Enforce the shared request limit before handlers run.', '- **Why this file**: A dedicated middleware owns admission before handlers.\n- **Responsibility**: Enforce the shared request limit before handlers run.')
+        .replace(
+          /#### TDD Steps[\s\S]*$/,
+          '### Batch Verification\n- [ ] **RED / Baseline**: Run `node --test test/rate-limit.test.ts`; expect behavior-specific failure.\n- [ ] **GREEN**: Run `node --test test/rate-limit.test.ts`; expect PASS.\n- [ ] **Regression**: Run `npm test`; expect zero failures.\n',
+        ),
+    );
+    writeCompactExecutionContract(changeDir);
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 0, result.stdout || result.stderr);
+    assert.ok(result.stdout.includes('All artifacts validated'));
+  });
+
+  it('rejects a compact contract that omits a tasks batch gate', () => {
+    const changeDir = join(tempDir, 'compact-contract-missing-batch');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeCompactExecutionContract(changeDir);
+    const contractPath = join(changeDir, 'execution-contract.md');
+    writeFileSync(contractPath, readFileSync(contractPath, 'utf-8').replace('| Batch 1 | Approved planning lock | Planned tests pass and files match tasks.md | Review the completed batch |', ''));
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /Batch Gates is missing tasks\.md batch: Batch 1/);
+  });
+
+  it('rejects a slim task file that does not explain why each file is changed', () => {
+    const changeDir = join(tempDir, 'slim-tasks-missing-file-rationale');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    const tasksPath = join(changeDir, 'tasks.md');
+    writeFileSync(
+      tasksPath,
+      readFileSync(tasksPath, 'utf-8').replace(
+        /#### TDD Steps[\s\S]*$/,
+        '### Batch Verification\n- [ ] Run `node --test test/rate-limit.test.ts`; expect PASS.\n',
+      ),
+    );
+    writeCompactExecutionContract(changeDir);
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /needs a concrete Why this file explanation/);
+  });
+
   it('accepts an optional Decision prefix in design coverage', () => {
     const changeDir = join(tempDir, 'decision-prefix');
     mkdirSync(changeDir, { recursive: true });
@@ -165,6 +264,119 @@ describe('cmd-validate', () => {
     assert.ok(result.stdout.includes('All artifacts validated'));
   });
 
+  it('accepts a legacy five-column design coverage table', () => {
+    const changeDir = join(tempDir, 'legacy-design-columns');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    const designPath = join(changeDir, 'design.md');
+    writeFileSync(
+      designPath,
+      readFileSync(designPath, 'utf-8')
+        .replace(
+          '| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |',
+          '| Requirement | Scenario | Design Decision | Affected Area | Why Here |',
+        )
+        .replace('|---|---|---|---|---|---|---|', '|---|---|---|---|---|')
+        .replace(
+          '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Existing route registration | No new handler contract | Middleware runs before expensive handlers |',
+          '| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Middleware runs before expensive handlers |',
+        ),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 0, result.stdout || result.stderr);
+    assert.match(result.stdout, /All artifacts validated/);
+  });
+
+  it('rejects non-meaningful baseline or constraint coverage', () => {
+    const changeDir = join(tempDir, 'design-empty-new-columns');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    const designPath = join(changeDir, 'design.md');
+    writeFileSync(
+      designPath,
+      readFileSync(designPath, 'utf-8').replace(
+        '| Existing route registration | No new handler contract |',
+        '| TBD | N/A |',
+      ),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /requires baseline \/ reuse/i);
+    assert.match(result.stdout, /requires constraint \/ deviation/i);
+  });
+
+  it('accepts None when there is no design constraint or deviation', () => {
+    const changeDir = join(tempDir, 'design-no-constraint');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    const designPath = join(changeDir, 'design.md');
+    writeFileSync(
+      designPath,
+      readFileSync(designPath, 'utf-8').replace(
+        '| Existing route registration | No new handler contract |',
+        '| Existing route registration | None |',
+      ),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 0, result.stdout || result.stderr);
+    assert.match(result.stdout, /All artifacts validated/);
+  });
+
+  it('rejects a compact contract that does not lock design.md', () => {
+    const changeDir = join(tempDir, 'compact-contract-missing-design');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeCompactExecutionContract(changeDir);
+    const contractPath = join(changeDir, 'execution-contract.md');
+    writeFileSync(
+      contractPath,
+      readFileSync(contractPath, 'utf-8').replace('| Design | `design.md` |\n', ''),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /Approved Artifacts must reference design\.md/);
+  });
+
+  it('accepts a configured design skip in a compact contract', () => {
+    const changeDir = join(tempDir, 'compact-contract-design-skip');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    rmSync(join(changeDir, 'design.md'));
+    writeFileSync(join(changeDir, 'spec-superflow.config.json'), JSON.stringify({ artifacts: { skip: ['design'] } }));
+    const tasksPath = join(changeDir, 'tasks.md');
+    writeFileSync(
+      tasksPath,
+      readFileSync(tasksPath, 'utf-8')
+        .replace('- **Responsibility**: Enforce the shared request limit before handlers run.', '- **Why this file**: A dedicated middleware owns admission before handlers.\n- **Responsibility**: Enforce the shared request limit before handlers run.')
+        .replace(
+          /#### TDD Steps[\s\S]*$/,
+          '### Batch Verification\n- [ ] **RED / Baseline**: Run `node --test test/rate-limit.test.ts`; expect behavior-specific failure.\n- [ ] **GREEN**: Run `node --test test/rate-limit.test.ts`; expect PASS.\n- [ ] **Regression**: Run `npm test`; expect zero failures.\n',
+        ),
+    );
+    writeCompactExecutionContract(changeDir);
+    const contractPath = join(changeDir, 'execution-contract.md');
+    writeFileSync(
+      contractPath,
+      readFileSync(contractPath, 'utf-8').replace('| Design | `design.md` |', '| Design | configured skip |'),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 0, result.stdout || result.stderr);
+    assert.match(result.stdout, /All artifacts validated/);
+  });
+
   it('fails when a spec scenario is missing from design coverage', () => {
     const changeDir = join(tempDir, 'design-missing-scenario');
     mkdirSync(changeDir, { recursive: true });
@@ -174,9 +386,9 @@ describe('cmd-validate', () => {
 ## Context
 Rate limiting runs before handlers.
 ## Requirement And Scenario Coverage
-| Requirement | Scenario | Design Decision | Affected Area | Why Here |
-|---|---|---|---|---|
-| Rate limit requests | Normal request | Shared middleware | HTTP middleware | Middleware owns request admission |
+| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |
+|---|---|---|---|---|---|---|
+| Rate limit requests | Normal request | Shared middleware | HTTP middleware | Existing route registration | No new handler contract | Middleware owns request admission |
 ## Decisions
 ### Decision: Shared middleware
 - Choice: Shared middleware

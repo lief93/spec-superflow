@@ -1,11 +1,18 @@
 ---
 name: workflow-start
-description: Primary entry point for the spec-superflow state-machine workflow. Invoke when the user is inside an active spec-superflow change directory (look for .spec-superflow.yaml, changes/<name>/, proposal.md, specs/, design.md, tasks.md, or execution-contract.md) and asks to start, continue, resume, implement, plan, or figure out the next workflow step. Also invoke when the user explicitly asks to start a new spec-superflow change or route through the spec-superflow workflow. Do not invoke for unrelated coding tasks that happen to use words like start, continue, implement, or plan.
+description: Primary entry point for the spec-superflow state-machine workflow. Invoke when the user is inside an active spec-superflow change directory (look for .spec-superflow.yaml, changes/<name>/, proposal.md, specs/, design.md, tasks.md, or execution-contract.md) and asks to start, continue, resume, implement, plan, or figure out the next workflow step. Also invoke when the user explicitly asks to start a new spec-superflow change or route through the spec-superflow workflow. Do not invoke for /workflow-init or Plugin, CLI, or MCP runtime setup. Do not invoke for unrelated coding tasks that happen to use words like start, continue, implement, or plan.
+disable-model-invocation: true
 ---
 
 # Workflow Start
 
 Primary entry point for `spec-superflow`. Jobs: load the project development baseline, relevant project memories, and change artifacts; confirm DP-0; determine state; route to the correct skill; and block invalid transitions.
+
+## Hard Exclusion
+
+Do not invoke for `/workflow-init` or Plugin, CLI, or MCP runtime setup. Return
+control to the selected command. Do not inspect the workspace, read another
+Skill, or create or resume a Change.
 
 ## Use This Skill When
 
@@ -143,7 +150,7 @@ applicable runtime result, every explicit execution-contract AC obligation,
 and their evidence and PR summary without a state transition. Any runtime check
 that was not executed stays honestly `PENDING`.
 A delivery package is required only when the current Specs explicitly require a
-delivery package or `execution-contract.md > AC Test Matrix` explicitly requires
+delivery package or `tasks.md > TDD Test Plan` explicitly requires
 a delivery package.
 Primary freezes the current final candidate, obtains the one final semantic
 review, and only after current `Approved` routes to the
@@ -170,9 +177,14 @@ User explicitly requests, bug-investigator escalates after 3+ failures AND user 
 
 ## Staleness Detection
 
-Use content inspection, not timestamps.
+Use persisted content hashes, not timestamps or prose that the compact contract
+does not own.
 
-**Stale contract**: proposal scope expanded beyond contract scope fence, or contract references capabilities no longer in proposal → route back to `contract-builder`.
+**Stale contract**: run `ssf state check <change-dir> --json`. A mismatch between
+the current planning artifacts and `.spec-superflow.yaml > artifacts_hash`
+means the execution contract is stale; block resume and route back to
+`contract-builder`. The transition guard's `contract-fresh` check enforces the
+same hash rule before execution.
 
 **Stale planning artifacts**: capability in proposal has no spec file, or spec exists for capability not in proposal → drift detected.
 

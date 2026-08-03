@@ -1,7 +1,8 @@
 ---
 name: workflow-init
-description: Prepare the Spec Superflow CLI and optionally configure the bundled credentialed MCP.
-agent: Spec Superflow
+description: Initialize, verify, or update the Spec Superflow workflow runtime without starting a Change.
+argument-hint: No arguments. This command only prepares or updates the workflow runtime.
+agent: Spec Superflow Setup
 tools:
   - 'spec-superflow/*'
   - 'spec-superflow-optional-example/*'
@@ -10,12 +11,14 @@ tools:
 
 <!-- spec-superflow-plugin-version: 0.14.0 -->
 
-# Initialize Spec Superflow
+# Initialize or Update Spec Superflow
 
-This is a Plugin setup command, not a development request. Follow this command
-directly instead of the Agent's `workflow-start` route. Do not inspect the open
-workspace, read development Skills, create task artifacts, or start the
-development workflow.
+This command can initialize, verify, or update the Spec Superflow workflow
+runtime. It is a Plugin setup command, not a development request. A Change is
+never an input or output of this command. Do not ask for a change name,
+requirement, scope, or acceptance criteria. Do not inspect the open workspace,
+read development Skills, create task artifacts, run `ssf state init`, or start
+or resume the development workflow.
 
 Do not announce project initialization, workspace inspection, or artifact
 creation. The first action is #tool:spec-superflow/spec_superflow_cli_status.
@@ -27,7 +30,8 @@ before any other action.
 
 This command has a closed tool sequence. Do not read the workspace, any file,
 or any Skill, even when the workspace is empty. Do not route to project-init
-or workflow-start. After the CLI is verified, the next and only tool call is
+or workflow-start, and do not inspect or create `changes/`. After the CLI is
+verified, the next and only tool call is
 #tool:spec-superflow/spec_superflow_optional_mcp_status.
 
 1. Call #tool:spec-superflow/spec_superflow_cli_status.
@@ -40,10 +44,9 @@ or workflow-start. After the CLI is verified, the next and only tool call is
    #tool:vscode/askQuestions to ask whether the user wants to install or update
    the global `ssf` command from this Plugin's bundled source. Call
    #tool:spec-superflow/spec_superflow_install_cli only after an explicit `Yes`.
-6. If the user declines, or the tool call is cancelled, unavailable, or
-   unsuccessful,
+6. If the user declines, or the tool call is cancelled or unsuccessful,
    immediately report `CANCELLED` or `BLOCKED` and stop. Do not use terminal,
-   file, alternate installation, or development tools.
+   file, or development tools.
 7. After a successful install, call
    #tool:spec-superflow/spec_superflow_cli_status again. The workflow runtime
    is ready only when it reports `ready: true` and version `0.14.0`.
@@ -86,6 +89,6 @@ or workflow-start. After the CLI is verified, the next and only tool call is
     `workflow=READY, optionalMcp=BLOCKED` with the recovery guidance. The CLI
     workflow remains available.
 
-Do not provide a URL, registry, package name, archive, or alternate path to the
-CLI or optional MCP install tools. Do not modify the open workspace. Do not
-start or resume a development request after this command.
+Do not provide a URL, registry, package name, or archive to the CLI or optional
+MCP install tools. Do not modify the open workspace. Do not start or resume a
+development request after this command.

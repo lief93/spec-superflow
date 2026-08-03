@@ -41,11 +41,15 @@ export function computeArtifactsHash(changeDir) {
   // tasks.md
   const tasks = path.join(changeDir, 'tasks.md');
   if (fs.existsSync(tasks)) {
-    hash.update(fs.readFileSync(tasks, 'utf-8'));
+    hash.update(normalizeTaskProgress(fs.readFileSync(tasks, 'utf-8')));
     hasContent = true;
   }
 
   return hasContent ? `sha256:${hash.digest('hex')}` : null;
+}
+
+function normalizeTaskProgress(content) {
+  return content.replace(/^(\s*[-*]\s+)\[[ xX]\]/gm, '$1[ ]');
 }
 
 // Compute SHA256 hash of execution-contract.md alone.

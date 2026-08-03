@@ -44,7 +44,7 @@ three exact rows with concrete evidence:
 
 A delivery package is not a default full-workflow obligation. Run and record
 package, SHA-256, entry-count, and hygiene evidence only when the current Specs
-explicitly require a delivery package or `execution-contract.md > AC Test Matrix`
+explicitly require a delivery package or `tasks.md > TDD Test Plan`
 explicitly requires a delivery package. Record it through the matching AC Test
 Evidence row; do not add another fixed Verification Evidence row for an ordinary
 Story.
@@ -101,7 +101,7 @@ Claiming work is complete without verification is dishonesty, not efficiency. Be
 ### Step 1: Test Suite
 Run full test suite. Record total/passed/failed/skipped. Zero failures = PASS.
 
-For every row in `execution-contract.md > AC Test Matrix`, create one matching
+For every row in `tasks.md > TDD Test Plan`, create one matching
 row in `pr-summary.md` using this exact structure:
 
 ```md
@@ -112,7 +112,8 @@ row in `pr-summary.md` using this exact structure:
 | <exact Requirement> | <exact AC> | <exact Layer> | <exact Platform> | <exact Test File> | <exact Test Case> | Pass | <fresh command> | <concrete result> |
 ```
 
-Copy the first six cells exactly from each `execution-contract.md > AC Test Matrix` row.
+Copy Requirement and AC from the owning task section, then copy Layer, Platform,
+Test File, and Test Case exactly from each `tasks.md > TDD Test Plan` row.
 Do not paraphrase, combine rows, or replace the table with prose. `Result` is
 `Pass` for a successfully executed obligation and `Unavailable` only for a
 planned `Unavailable` obligation. `Command` and `Evidence` must both be concrete
@@ -124,10 +125,10 @@ Read `## Frontend Verification` from `execution-contract.md`.
 
 When `Frontend Impact: Yes`:
 
-1. Run every exact UI Test File and Test Case in `## AC Test Matrix` fresh. A broader smoke/regression suite may be additional evidence, never a replacement.
+1. Run every exact UI Test File and Test Case in `tasks.md > TDD Test Plan` fresh. A broader smoke/regression suite may be additional evidence, never a replacement.
 2. Run Device Test after all Batches are complete: execute the same AC-linked UI cases on at least one project baseline simulator/device per affected native platform, then cover only the remaining non-automatable user paths manually. For Web, use the default real browser and desktop viewport; add a mobile viewport only when responsive behavior is affected.
-3. Record one row per matrix obligation in `pr-summary.md > AC Test Evidence`, plus the aggregate UI and Device results in `Frontend Verification Evidence`.
-4. Each matrix row with `Add`, `Update`, or `Run existing` must be `Pass`. Any missing or failing required UI case is FAIL.
+3. Record one row per task test obligation in `pr-summary.md > AC Test Evidence`, plus the aggregate UI and Device results in `Frontend Verification Evidence`.
+4. Each task row with `Add`, `Update`, or `Run existing` must be `Pass`. Any missing or failing required UI case is FAIL.
 5. `Unavailable` is CONDITIONAL, not PASS. Record searched locations/configuration and the missing capability; proceed only after developer acceptance. Do not introduce a framework during release verification.
 6. Device Test must be `Pass`. Missing evidence, build/install/launch failure, or an unverified affected path is FAIL.
 
@@ -140,7 +141,7 @@ ssf state set <change-dir> dp_6_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
 
 ### Step 2: Completeness
-Compare contract batches against actual diff. Every SHALL/MUST must have implementation evidence. Missing = Critical severity.
+Compare task Batches against the actual diff. Every SHALL/MUST must have implementation evidence. Missing = Critical severity.
 
 ### Step 3: Coherence
 Compare design decisions against code. Read the configured project development baseline and selected classic implementation, then read relevant project memories for non-duplicated facts. Evaluate architecture, ownership, source-of-truth, reuse, boundary, and convention consistency. Check naming consistency. Unapproved baseline deviations or inconsistencies = IMPORTANT.

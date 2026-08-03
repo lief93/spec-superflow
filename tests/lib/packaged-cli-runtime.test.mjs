@@ -81,10 +81,9 @@ The fixture runs outside the source checkout.
 - Reuse the installed public CLI only.
 
 ## Requirement And Scenario Coverage
-
-| Requirement | Scenario | Design Decision | Affected Area | Why Here |
-|---|---|---|---|---|
-| Packed CLI reviews a tracked Change | Installed CLI records current Proposal approval | Use a tracked temporary Change | Installed CLI | The temporary repository separates package runtime from source state. |
+| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |
+|---|---|---|---|---|---|---|
+| Packed CLI reviews a tracked Change | Installed CLI records current Proposal approval | Use a tracked temporary Change | Installed CLI | Installed public CLI | No source-checkout dependency | The temporary repository separates package runtime from source state. |
 
 ## Decisions
 

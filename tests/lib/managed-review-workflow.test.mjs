@@ -26,8 +26,8 @@ function assertExplicitDeliveryTriggers(content, label) {
   );
   assert.match(
     content,
-    /execution-contract\.md > AC Test Matrix`\s+explicitly\s+requires\s+a\s+delivery\s+package/i,
-    `${label} must honor an execution-contract AC delivery package`,
+    /tasks\.md > TDD Test Plan`\s+explicitly\s+requires\s+a\s+delivery\s+package/i,
+    `${label} must honor a task-owned delivery-package obligation`,
   );
 }
 
@@ -271,7 +271,7 @@ describe('fixed independent review workflow contract', () => {
     assert.match(vscodeDocsZh, /当前 Specs 明确要求交付包/);
     assert.match(
       vscodeDocsZh,
-      /execution-contract\.md > AC Test Matrix` 明确要求交付包/,
+      /tasks\.md > TDD Test Plan` 明确要求交付包/,
     );
 
     const ordinaryWorkflow = [primary, openCodePrimary, workflowStart, vscodeDocs, vscodeDocsZh, openCodeInstall]
@@ -428,39 +428,30 @@ describe('fixed independent review workflow contract', () => {
       specWriter,
       /same[\s\S]*(?:`Run existing`|Test Case)[\s\S]*one AC[\s\S]*extend[\s\S]*`Update`[\s\S]*do not[\s\S]*parallel[\s\S]*`Add`[\s\S]*distinct acceptance risk/i,
     );
+    assert.match(specWriter, /Batch execution[\s\S]*one Batch Verification block per Batch/i);
     assert.match(
       specWriter,
-      /behavior-changing work[\s\S]*RED[\s\S]*GREEN[\s\S]*complete[\s\S]*repository-executable command[\s\S]*real project[\s\S]*class#method[\s\S]*--tests/i,
+      /complete repository-executable RED\/baseline, GREEN, and regression commands[\s\S]*behavior changes use RED and GREEN/i,
     );
     assert.match(
       specWriter,
-      /coverage-only[\s\S]*characterization[\s\S]*unchanged regression[\s\S]*baseline PASS[\s\S]*rerun[\s\S]*complete[\s\S]*repository-executable command[\s\S]*exact Test Case[\s\S]*(?:never|do not)[\s\S]*(?:manufacture|invent)[\s\S]*RED/i,
+      /coverage-only, characterization, or unchanged regression uses BASELINE PASS and RERUN[\s\S]*without manufactured failures/i,
     );
+    assert.match(specWriter, /real platform selectors[\s\S]*class#method[\s\S]*--tests/i);
     assert.doesNotMatch(
       specWriter,
       /Each AC's TDD Steps must[\s\S]*RED[\s\S]*GREEN/i,
     );
-    const tddStepsTemplate = /#### TDD Steps([\s\S]*?)```/.exec(specWriter)?.[1] || '';
+    const batchVerificationTemplate = /### Batch Verification([\s\S]*?)```/.exec(specWriter)?.[1] || '';
     assert.match(
-      tddStepsTemplate,
-      /choose[\s\S]*applicable branch[\s\S]*behavior-changing[\s\S]*RED[\s\S]*GREEN[\s\S]*coverage-only[\s\S]*BASELINE PASS[\s\S]*RERUN/i,
+      batchVerificationTemplate,
+      /RED \/ Baseline[\s\S]*behavior-specific failure or baseline PASS[\s\S]*GREEN[\s\S]*Regression/i,
     );
-    assert.match(
-      tddStepsTemplate,
-      /REFACTOR: Run `<complete repository-executable command selecting the AC tests and relevant regression tests>`/i,
-    );
-    assert.doesNotMatch(tddStepsTemplate, /REFACTOR: Run the AC tests/i);
+    assert.doesNotMatch(specWriter, /^#### TDD Steps$/m);
     const validationChecklist = /## Validation Checklist([\s\S]*?)(?=\n## Validation Repair Loop)/
       .exec(specWriter)?.[1] || '';
     const tasksChecklist = /### tasks\.md([\s\S]*)/.exec(validationChecklist)?.[1] || '';
-    assert.match(
-      tasksChecklist,
-      /behavior-changing[\s\S]*RED[\s\S]*GREEN[\s\S]*coverage-only[\s\S]*characterization[\s\S]*unchanged regression[\s\S]*BASELINE PASS[\s\S]*RERUN/i,
-    );
-    assert.match(
-      tasksChecklist,
-      /both[\s\S]*branches[\s\S]*REFACTOR[\s\S]*complete repository-executable command/i,
-    );
+    assert.match(tasksChecklist, /one executable `### Batch Verification` per Batch/i);
     assertNoUnconditionalPlanningReviewLanguage(tasksChecklist, 'tasks Validation Checklist');
     assert.match(
       specWriter,

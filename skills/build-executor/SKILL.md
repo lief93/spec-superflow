@@ -5,11 +5,11 @@ description: Govern implementation from an approved execution contract. Invoke w
 
 # Build Executor
 
-Controls the implementation phase. Uses `execution-contract.md` as the workflow authority.
+Controls the implementation phase. Uses `execution-contract.md` as the approval, mode, and gate authority; uses the referenced Specs, Design, and Tasks as the behavior, code-shape, file-change, and test authority.
 
 ## Required Inputs
 
-Read: `execution-contract.md`, `tasks.md`, relevant change-local `specs/`, relevant `design.md`, and matching project-root `specs/<capability>/spec.md`. Read the project baseline path named in the contract and the selected classic implementation before changing code. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only linked topics relevant to the execution batches. (Skip contract/spec requirements when workflow is `tweak`.)
+Read: `execution-contract.md`, `tasks.md`, relevant change-local `specs/`, relevant `design.md`, and matching project-root `specs/<capability>/spec.md`. Read the project baseline and selected classic implementation named in `design.md` before changing code. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only linked topics relevant to the execution batches. (Skip contract/spec requirements when workflow is `tweak`.)
 
 Check workflow mode first: `ssf state get <change-dir> workflow`. If `tweak` → direct edit mode. If `hotfix` or `full` → standard contract-first discipline.
 
@@ -39,8 +39,8 @@ self-reviews, starts a third review, or closes before current final approval.
 
 ## Core Laws
 
-### Law 1: Contract First
-The execution contract is the approved handoff artifact, not chat history.
+### Law 1: Approved Artifacts First
+The execution contract locks the approved artifact set, execution mode, and gates. Read behavior from Specs, implementation decisions from Design, and files/tests from Tasks; chat history is not an execution authority.
 
 ### Law 2: TDD Iron Law — No Production Code Without a Failing Test First
 RED (write test, see it fail) → GREEN (write minimal code, see it pass) → REFACTOR (clean up, suite stays green).
@@ -57,7 +57,7 @@ Return to `specifying` or `bridging` if: new behavior appears, interfaces change
 Use relevant Memory as prior project learning, not as a rule source. If current code, tests, Specs, ADRs, or project guidelines conflict with a memory, treat the memory as stale and repair it through `memory-manager`.
 
 ### Law 6: Project Baseline Governs Code Shape
-Follow the contract's selected classic implementation and applicable architecture rules. A necessary deviation must return to design/contract approval; do not silently choose a locally convenient pattern.
+Follow the design's selected classic implementation and applicable architecture rules. A necessary deviation must return to design/contract approval; do not silently choose a locally convenient pattern.
 
 ### Law 7: Frontend Verification Is Contract Work
 When `execution-contract.md` says `Frontend Impact: Yes`, UI and device obligations are part of completion, not optional polish. Do not replace them with unit tests or a successful build.
