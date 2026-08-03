@@ -72,7 +72,7 @@ export const SpecSuperflowPlugin = async () => {
       config.command['workflow-init'] = {
         description: 'Initialize or update the Spec Superflow workflow runtime.',
         agent: 'spec-superflow-setup',
-        subtask: true,
+        subtask: false,
         template: markdownBody('.opencode/commands/workflow-init.md'),
       };
 

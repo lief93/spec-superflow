@@ -62,14 +62,18 @@ describe('OpenCode Plugin independent review topology', () => {
     assert.equal(config.agent['spec-superflow-setup'].permission['spec-superflow_*'], 'allow');
   });
 
-  it('keeps /workflow-init isolated and ordinary Primary free of bootstrap access', async () => {
+  it('runs /workflow-init directly as setup without returning a subtask result to Primary', async () => {
     const { config } = await configured();
     assert.deepEqual(config.command['workflow-init'], {
       description: 'Initialize or update the Spec Superflow workflow runtime.',
       agent: 'spec-superflow-setup',
-      subtask: true,
+      subtask: false,
       template: config.command['workflow-init'].template,
     });
+    assert.match(
+      readFileSync(join(ROOT, '.opencode', 'commands', 'workflow-init.md'), 'utf8'),
+      /^subtask: false$/m,
+    );
     assert.match(config.command['workflow-init'].template, /spec_superflow_cli_status/);
     assert.match(config.command['workflow-init'].template, /spec_superflow_install_cli/);
     assert.match(config.agent['spec-superflow'].prompt, /Ordinary requests never call[\s\S]*bootstrap MCP/i);

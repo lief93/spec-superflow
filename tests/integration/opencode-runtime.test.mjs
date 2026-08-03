@@ -238,7 +238,7 @@ it('resolves hidden Agent tools through pinned OpenCode for repository and packe
 
       const config = debugConfig(cwd, home);
       assert.equal(config.command['workflow-init'].agent, 'spec-superflow-setup');
-      assert.equal(config.command['workflow-init'].subtask, true);
+      assert.equal(config.command['workflow-init'].subtask, false);
     }
 
     const runtimeRepo = join(temp, 'reviewer-runtime-repo');
