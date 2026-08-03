@@ -52,9 +52,9 @@ The fixture exercises the installed CLI outside its source checkout.
 ## Goals
 - Prove packaged validation.
 ## Requirement And Scenario Coverage
-| Requirement | Scenario | Design Decision | Affected Area | Why Here |
-|---|---|---|---|---|
-| Packaged CLI validates change artifacts | Installed CLI validates a tracked change | Use an isolated tracked fixture | Packaged CLI process | The fixture separates package runtime from source checkout state |
+| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |
+|---|---|---|---|---|---|---|
+| Packaged CLI validates change artifacts | Installed CLI validates a tracked change | Use an isolated tracked fixture | Packaged CLI process | Existing packaged CLI entry point | No source-checkout dependency | The fixture separates package runtime from source checkout state |
 ## Decisions
 ### Decision: Use an isolated tracked fixture
 - **Choice**: Create and track a complete Change in a temporary Git repository.

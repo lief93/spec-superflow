@@ -121,9 +121,14 @@ Post-transition: 💡 `ssf inject <change-dir>` to update phase-guard artifacts.
 
 ## Staleness Detection
 
-Use content inspection, not timestamps.
+Use persisted content hashes, not timestamps or prose that the compact contract
+does not own.
 
-**Stale contract**: proposal scope expanded beyond contract scope fence, or contract references capabilities no longer in proposal → route back to `contract-builder`.
+**Stale contract**: run `ssf state check <change-dir> --json`. A mismatch between
+the current planning artifacts and `.spec-superflow.yaml > artifacts_hash`
+means the execution contract is stale; block resume and route back to
+`contract-builder`. The transition guard's `contract-fresh` check enforces the
+same hash rule before execution.
 
 **Stale planning artifacts**: capability in proposal has no spec file, or spec exists for capability not in proposal → drift detected.
 

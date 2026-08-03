@@ -19,9 +19,9 @@ Rate limiting runs before expensive handlers.
 ## Goals
 Reject over-limit traffic consistently.
 ## Requirement And Scenario Coverage
-| Requirement | Scenario | Design Decision | Affected Area | Why Here |
-|---|---|---|---|---|
-| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Middleware runs before expensive handlers |
+| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |
+|---|---|---|---|---|---|---|
+| Rate limit requests | Request exceeds limit | Shared middleware | HTTP middleware | Existing route registration | No new handler contract | Middleware runs before expensive handlers |
 ## Decisions
 ### Decision: Shared middleware
 - Choice: Shared middleware
@@ -230,6 +230,64 @@ describe('cmd-validate', () => {
     assert.ok(result.stdout.includes('All artifacts validated'));
   });
 
+  it('rejects design coverage that omits the baseline and constraint columns', () => {
+    const changeDir = join(tempDir, 'design-missing-new-columns');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    const designPath = join(changeDir, 'design.md');
+    writeFileSync(
+      designPath,
+      readFileSync(designPath, 'utf-8')
+        .replace(' | Baseline / Reuse | Constraint / Deviation', '')
+        .replace(' |---|---', '')
+        .replace(' | Existing route registration | No new handler contract', ''),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /must include columns:.*baseline \/ reuse.*constraint \/ deviation/i);
+  });
+
+  it('rejects non-meaningful baseline or constraint coverage', () => {
+    const changeDir = join(tempDir, 'design-empty-new-columns');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeValidExecutionContract(changeDir);
+    const designPath = join(changeDir, 'design.md');
+    writeFileSync(
+      designPath,
+      readFileSync(designPath, 'utf-8').replace(
+        '| Existing route registration | No new handler contract |',
+        '| TBD | N/A |',
+      ),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /requires baseline \/ reuse/i);
+    assert.match(result.stdout, /requires constraint \/ deviation/i);
+  });
+
+  it('rejects a compact contract that does not lock design.md', () => {
+    const changeDir = join(tempDir, 'compact-contract-missing-design');
+    mkdirSync(changeDir, { recursive: true });
+    writeValidPlanningArtifacts(changeDir);
+    writeCompactExecutionContract(changeDir);
+    const contractPath = join(changeDir, 'execution-contract.md');
+    writeFileSync(
+      contractPath,
+      readFileSync(contractPath, 'utf-8').replace('| Design | `design.md` |\n', ''),
+    );
+
+    const result = runValidate(changeDir);
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /Approved Artifacts must reference design\.md/);
+  });
+
   it('fails when a spec scenario is missing from design coverage', () => {
     const changeDir = join(tempDir, 'design-missing-scenario');
     mkdirSync(changeDir, { recursive: true });
@@ -239,9 +297,9 @@ describe('cmd-validate', () => {
 ## Context
 Rate limiting runs before handlers.
 ## Requirement And Scenario Coverage
-| Requirement | Scenario | Design Decision | Affected Area | Why Here |
-|---|---|---|---|---|
-| Rate limit requests | Normal request | Shared middleware | HTTP middleware | Middleware owns request admission |
+| Requirement | Scenario | Design Decision | Affected Area | Baseline / Reuse | Constraint / Deviation | Why Here |
+|---|---|---|---|---|---|---|
+| Rate limit requests | Normal request | Shared middleware | HTTP middleware | Existing route registration | No new handler contract | Middleware owns request admission |
 ## Decisions
 ### Decision: Shared middleware
 - Choice: Shared middleware

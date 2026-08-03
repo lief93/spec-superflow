@@ -93,7 +93,8 @@ The workflow must move back to `specifying` or `bridging` when:
 - a critical interface changes
 - a key design assumption is wrong
 - current artifacts no longer define the intended behavior
-- `execution-contract.md` intent lock no longer matches `proposal.md` scope
+- `ssf state check <change-dir> --json` reports that the current planning
+  artifacts no longer match `.spec-superflow.yaml > artifacts_hash`
 
 ## Debugging State
 

@@ -91,6 +91,7 @@ Use these exact Markdown headings inside every `### AC:` section:
 
 #### File Changes
 ##### Modify `path/to/file`
+- **Why this file**: This file owns the behavior or integration seam required by the AC.
 - **Change**: Concrete resulting behavior.
 
 #### TDD Test Plan
