@@ -55,7 +55,7 @@ workspace.
    `workflow-start` provide phase routing, while
    `.github/copilot-instructions.md` remains unchanged and owned by the target
    repository.
-10. Do not copy centrally maintained agents, skills, scripts, or templates into
+10. Do not copy centrally maintained agents, skills, scripts, or Skill references into
    the target repository.
 11. Before the final response for a development request, run the requirement
     tests fresh, then run `ssf validate <change-dir>` and

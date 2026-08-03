@@ -14,7 +14,7 @@ Agent Plugin 是一组 AI 开发资源的分发单元。安装一次后，可以
 - Skill：定义某类任务的执行要求和结果。
 - Command：提供用户主动触发的 `/command`。
 - MCP：向 Agent 提供可调用工具。
-- Scripts、Templates、Servers：为上述组件提供运行资源。
+- Scripts、Skill-local References、Servers：为上述组件提供运行资源。
 
 Plugin 和业务项目是两个独立层级：
 
@@ -103,7 +103,7 @@ my-agent-plugin/
     bootstrap-mcp.mjs          # MCP Server 可执行入口
 
   scripts/                     # CLI 或 Skill 使用的脚本
-  templates/                   # Skill 使用的工件模板
+  skills/<owner>/references/   # 对应 Skill 使用的工件模板
   docs/                        # 维护与使用说明
   package.json                 # 有 Node CLI、构建或测试时使用
 
@@ -375,7 +375,7 @@ Plugin MCP 配置使用顶层 `mcpServers`：
    带凭据的定义放到用户级配置流程。
 6. **创建 manifest**：在仓库根目录创建 `plugin.json`，声明真实存在的组件路径。
 7. **移除项目假设**：不得要求业务项目预先复制 Plugin 的 `skills/`、`scripts/`
-   或 `templates/`。
+   或 `skills/*/references/`。
 8. **验证完整包**：在一个没有旧 Skill、旧 MCP 和旧 CLI 的环境中安装并测试。
 
 原有分散文件的对应关系：
@@ -388,7 +388,7 @@ Plugin MCP 配置使用顶层 `mcpServers`：
 | 用户手工配置的无凭据 MCP | `.mcp.json` + `servers/` |
 | 带凭据 MCP | `servers/` + 用户级注册模板或初始化流程 |
 | 每个项目复制的公共脚本 | Plugin `scripts/` 或安装后的全局 CLI |
-| 每个项目复制的公共模板 | Plugin `templates/` |
+| 每个项目复制的公共模板 | Plugin `skills/<owner>/references/` |
 | 项目自己的架构规范 | 继续保留在业务项目，不合并进公共 Plugin |
 
 ## 10. 安装与分支
@@ -422,7 +422,7 @@ Marketplace，也不需要业务项目增加 `.github/`。
 - 每个 Skill 都有合法 frontmatter 和 `SKILL.md`。
 - 每个 Agent、Command 的名称和引用能解析。
 - `.mcp.json` 使用 `mcpServers`，路径通过 `${PLUGIN_ROOT}` 定位。
-- 最终分发包包含 Server、脚本、模板和运行依赖，不包含 Token、缓存和临时文件。
+- 最终分发包包含 Server、脚本、Skill-local 模板和运行依赖，不包含 Token、缓存和临时文件。
 
 VS Code 真实验证：
 

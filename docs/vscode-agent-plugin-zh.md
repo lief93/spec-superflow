@@ -1,7 +1,7 @@
 # VS Code Spec Superflow Plugin 配置指南
 
-完整的 Spec Superflow 仓库作为一个 Agent Plugin 安装，包含 Agent、Skills、
-Commands、Templates、CLI 源码和一个轻量的 bootstrap MCP。项目仓库不需要复制
+完整的 Spec Superflow 仓库作为一个 Agent Plugin 安装，包含 Agent、内置工件模板的
+Skills、Commands、CLI 源码和一个轻量的 bootstrap MCP。项目仓库不需要复制
 这些公共资源，也不需要再下载另一份 Spec Superflow。
 
 需要自行组合或维护 Plugin 时，参见
@@ -14,12 +14,11 @@ spec-superflow-plugin/
   .plugin/plugin.json
   plugin.json
   agents/
-  skills/
+  skills/<owner>/references/
   commands/
   servers/spec-superflow-mcp-launcher.cmd
   servers/spec-superflow-mcp.mjs
   scripts/
-  templates/
   .mcp.json
   package.json
   .github/plugin/marketplace.json   # 可选的分发元数据
@@ -242,7 +241,7 @@ docs/project/project-guidelines.md
 ```
 
 如果项目已有 `.github/copilot-instructions.md`，其内容保持不变。不要把中央
-Plugin 的 `agents/`、`skills/`、`scripts/` 或 `templates/` 再复制到每个项目。
+Plugin 的 `agents/`、`skills/`、`scripts/` 或 `skills/*/references/` 再复制到每个项目。
 
 ## 更新
 

@@ -335,7 +335,7 @@ describe('VS Code Agent Plugin', () => {
     assert.doesNotMatch(agent, /spec_superflow_run|logical\s+command|Do not invoke a PATH-installed/);
     assert.match(agent, /Do not run `ssf inject` inside this agent/);
     assert.match(agent, /copilot-instructions\.md` remains unchanged/);
-    assert.match(agent, /Do not copy centrally maintained agents, skills, scripts, or templates/);
+    assert.match(agent, /Do not copy centrally maintained agents, skills, scripts, or Skill references/);
     assert.doesNotMatch(agent, /hooks:\s+PreToolUse:/);
     assert.doesNotMatch(agent, /\$\{PLUGIN_ROOT\}/);
     assert.doesNotMatch(agent, /command -v node|where node|SSF_PLUGIN_VERSION|node -e/);
@@ -443,6 +443,8 @@ describe('VS Code Agent Plugin', () => {
     const agent = read('agents/spec-superflow.agent.md');
     const workflow = read('skills/workflow-start/SKILL.md');
     const writer = read('skills/spec-writer/SKILL.md');
+    const designTemplate = read('skills/spec-writer/references/design.md');
+    const tasksTemplate = read('skills/spec-writer/references/tasks.md');
 
     assert.match(
       writer,
@@ -453,17 +455,19 @@ describe('VS Code Agent Plugin', () => {
       /Requirement and Scenario cells contain only the exact titles.*without `Requirement:` or `Scenario:` prefixes/i,
     );
     assert.match(
-      writer,
+      designTemplate,
       /^\| Requirement \| Scenario \| Design Decision \| Affected Area \| Baseline \/ Reuse \| Constraint \/ Deviation \| Why Here \|$/m,
     );
-    assert.match(writer, /^\| <exact Requirement title> \| <exact Scenario title> \| <exact Decision title> \|/m);
-    assert.match(writer, /^## Batch 1: <goal>$/m);
-    assert.match(writer, /^- \*\*Requirement\*\*: <exact Requirement title>$/m);
-    assert.match(writer, /^- \*\*User-visible\*\*: (?:Yes|No)$/m);
-    assert.match(writer, /^#### File Changes$/m);
-    assert.match(writer, /^##### (?:Create|Modify|Delete) `path\/to\/file`$/m);
-    assert.match(writer, /^#### TDD Test Plan$/m);
-    assert.match(writer, /^### Batch Verification$/m);
+    assert.match(designTemplate, /^\| Requirement title \| Scenario title \| Decision title or `No design change` \|/m);
+    assert.match(tasksTemplate, /^## Batch 1: \[Batch objective\]$/m);
+    assert.match(tasksTemplate, /^- \*\*Requirement\*\*: \[Exact Requirement title from the Spec\]$/m);
+    assert.match(tasksTemplate, /^- \*\*User-visible\*\*: `Yes` \| `No`$/m);
+    assert.match(tasksTemplate, /^#### File Changes$/m);
+    assert.match(tasksTemplate, /^##### (?:Modify|Create) `path\/to\/(?:existing-file|new-file)\.ts`$/m);
+    assert.match(tasksTemplate, /^#### TDD Test Plan$/m);
+    assert.match(tasksTemplate, /^### Batch Verification$/m);
+    assert.match(writer, /references\/design\.md/i);
+    assert.match(writer, /references\/tasks\.md/i);
     assert.match(writer, /do not\s+replace these headings with bold list labels/i);
     assert.match(
       writer,
@@ -553,6 +557,7 @@ describe('VS Code Agent Plugin', () => {
   it('requires fresh artifact and state verification before completion', () => {
     const executor = read('skills/build-executor/SKILL.md');
     const release = read('skills/release-archivist/SKILL.md');
+    const summaryTemplate = read('skills/release-archivist/references/pr-summary.md');
 
     assert.match(
       executor,
@@ -562,11 +567,12 @@ describe('VS Code Agent Plugin', () => {
       executor,
       /`ssf state set <change-dir> batches_completed <N>` only after those checkboxes are updated/i,
     );
-    assert.match(release, /^## AC Test Evidence$/m);
+    assert.match(summaryTemplate, /^## AC Test Evidence$/m);
     assert.match(
-      release,
+      summaryTemplate,
       /^\| Requirement \| AC \| Layer \| Platform \| Test File \| Test Case \| Result \| Command \| Evidence \|$/m,
     );
+    assert.match(release, /read `references\/pr-summary\.md`[\s\S]*exact structure/i);
     assert.match(
       release,
       /copy Requirement and AC from the owning task section[\s\S]*`tasks\.md > TDD Test Plan` row/i,

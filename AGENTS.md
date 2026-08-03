@@ -100,7 +100,7 @@ exploring → specifying → bridging → approved-for-build → executing → c
 
 ### Key Files
 
-- `templates/*.md` — Templates for the 5 artifacts (proposal, spec, design, tasks, execution-contract)
+- `skills/*/references/*.md` — Skill-owned templates and runtime references for generated artifacts
 - `docs/examples/` — Two complete change sets (`add-dark-mode`, `refactor-auth-boundary`) used by tests as real input data
 - `docs/state-machine.md` — Formal state machine documentation
 - `docs/artifact-contract.md` — Artifact roles and mapping from planning to execution

@@ -33,12 +33,10 @@ Current version: v0.15.0.
 - skills/memory-manager/references/MEMORY.md: Concise shared-memory index template
 - skills/memory-manager/references/TOPIC.md: Typed feedback/project/reference topic template
 - .spec-superflow/memories/: Project-shared `MEMORY.md` plus on-demand topic files
-- proposal.md: Change proposal template
-- spec.md: Capability specification template
-- design.md: Technical design template
-- tasks.md: Implementation tasks template
-- execution-contract.md: Bridge artifact template
-- pr-summary.md: Delivery, verification, exceptions, and known risks
+- skills/spec-writer/references/: Proposal, capability Spec, Design, and Tasks templates
+- skills/contract-builder/references/execution-contract.md: Bridge artifact template
+- skills/release-archivist/references/pr-summary.md: Delivery, verification, exceptions, and known risks
+- skills/workflow-start/references/abandonment-summary.md: Abandoned-change summary template
 
 ## Examples (in docs/examples/)
 - add-dark-mode: New UI feature example (dark mode)

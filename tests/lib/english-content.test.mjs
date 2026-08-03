@@ -14,8 +14,8 @@ function filesUnder(directory) {
 }
 
 describe('published workflow language', () => {
-  it('keeps skills and templates free of CJK text', () => {
-    for (const directory of ['skills', 'templates']) {
+  it('keeps skills and their templates free of CJK text', () => {
+    for (const directory of ['skills']) {
       for (const file of filesUnder(join(root, directory))) {
         assert.doesNotMatch(
           readFileSync(file, 'utf-8'),

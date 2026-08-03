@@ -11,6 +11,7 @@ const openCodePrimary = read('.opencode/agents/spec-superflow.md');
 const openCodeReviewer = read('.opencode/agents/spec-superflow-reviewer.md');
 const workflowStart = read('skills/workflow-start/SKILL.md');
 const specWriter = read('skills/spec-writer/SKILL.md');
+const tasksTemplate = read('skills/spec-writer/references/tasks.md');
 const contractBuilder = read('skills/contract-builder/SKILL.md');
 const buildExecutor = read('skills/build-executor/SKILL.md');
 const releaseArchivist = read('skills/release-archivist/SKILL.md');
@@ -455,7 +456,8 @@ describe('fixed independent review workflow contract', () => {
       specWriter,
       /Each AC's TDD Steps must[\s\S]*RED[\s\S]*GREEN/i,
     );
-    const batchVerificationTemplate = /### Batch Verification([\s\S]*?)```/.exec(specWriter)?.[1] || '';
+    const batchVerificationTemplate = /### Batch Verification([\s\S]*?)(?=$|\n---|\n## )/
+      .exec(tasksTemplate)?.[1] || '';
     assert.match(
       batchVerificationTemplate,
       /RED \/ Baseline[\s\S]*behavior-specific failure or baseline PASS[\s\S]*GREEN[\s\S]*Regression/i,
@@ -558,8 +560,8 @@ describe('fixed independent review workflow contract', () => {
   it('keeps device verification feature-level when branches depend on external conditions', () => {
     const designTasksFocus = /For `design-tasks`([\s\S]*?)(?=\nFor `final`)/
       .exec(reviewer)?.[1] || '';
-    const contractTemplate = read('templates/execution-contract.md');
-    const summaryTemplate = read('templates/pr-summary.md');
+    const contractTemplate = read('skills/contract-builder/references/execution-contract.md');
+    const summaryTemplate = read('skills/release-archivist/references/pr-summary.md');
 
     for (const [label, content] of [
       ['design-tasks Reviewer', designTasksFocus],

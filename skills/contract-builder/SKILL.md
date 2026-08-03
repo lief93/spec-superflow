@@ -5,9 +5,9 @@ description: Convert approved planning artifacts into an execution contract. Inv
 
 # Contract Builder
 
-Convert approved planning artifacts into a compact execution lock: `execution-contract.md`. Use `templates/execution-contract.md` as the exact structure. The contract records what is approved, how execution is gated, and when to stop; it does not restate planning content.
+Convert approved planning artifacts into a compact execution lock: `execution-contract.md`. Read `references/execution-contract.md` first and use it as the exact structure. The contract records what is approved, how execution is gated, and when to stop; it does not restate planning content.
 
-For exact `full`, read only `.spec-superflow.yaml`, the Batch headings, dependencies, Batch Verification blocks, and aggregate frontend obligations in `tasks.md`, plus project command configuration or build scripts needed for shared verification. The approved Proposal, Specs, Design, and Tasks remain referenced source artifacts; do not re-read them for semantic judgment.
+After the template, exact `full` reads only `.spec-superflow.yaml`, the Batch headings, dependencies, Batch Verification blocks, and aggregate frontend obligations in `tasks.md`, plus project command configuration or build scripts needed for shared verification. The approved Proposal, Specs, Design, and Tasks remain referenced source artifacts; do not re-read them for semantic judgment.
 
 For non-full paths, read before generating: `proposal.md`, change-local `specs/`, `tasks.md`, and `docs/artifact-contract.md`. Read `design.md` unless `artifacts.skip` contains `design` as a configured skip. Read `docs/project/project-guidelines.md` when configured. For each delta capability, read the project-root `specs/<capability>/spec.md` as the existing behavior baseline. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only relevant topics.
 

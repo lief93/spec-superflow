@@ -16,11 +16,11 @@ describe('project baseline workflow integration', () => {
       assert.match(read(`skills/${skill}/SKILL.md`), /docs\/project\/project-guidelines\.md/);
     }
 
-    const design = read('templates/design.md');
+    const design = read('skills/spec-writer/references/design.md');
     assert.doesNotMatch(design, /## Project Baseline Alignment/);
     assert.match(design, /\| Requirement \| Scenario \| Design Decision \| Affected Area \| Baseline \/ Reuse \| Constraint \/ Deviation \| Why Here \|/);
 
-    const contract = read('templates/execution-contract.md');
+    const contract = read('skills/contract-builder/references/execution-contract.md');
     assert.match(contract, /\| Design \| `design\.md` or configured skip \|/);
     assert.match(contract, /These approved files remain the source of truth/);
   });

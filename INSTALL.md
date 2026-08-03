@@ -121,7 +121,7 @@ cp /path/to/spec-superflow/hooks/hooks-cursor.json .cursor/hooks.json
 
 ### GitHub 导入
 
-也可以在 Cursor 的 **Customize → Rules → Add Rule → Remote Rule (Github)** 中输入仓库 URL 导入。对于需要 `scripts/`、`docs/`、`templates/` 的完整工作流，仍推荐一键脚本。
+也可以在 Cursor 的 **Customize → Rules → Add Rule → Remote Rule (Github)** 中输入仓库 URL 导入。对于需要 `scripts/`、`docs/` 和 Skill-local `references/` 的完整工作流，仍推荐一键脚本。
 
 ### 验证
 
@@ -241,7 +241,7 @@ copilot plugin uninstall spec-superflow
 
 ## VS Code GitHub Copilot
 
-VS Code Agent Plugin 将可选择的 Agent、中央 Skills、scripts、templates 和
+VS Code Agent Plugin 将可选择的 Agent、包含工件模板的中央 Skills 和 scripts 与
 bootstrap MCP 作为一个安装单元提供。项目仓库不需要保存这些公共资源的副本。
 bootstrap MCP 只在 `/workflow-init` 中检查并安装匹配版本的全局 CLI；工作流
 命令直接执行 `ssf`。
@@ -257,7 +257,7 @@ Git 地址。安装完成后：
    并等待 `READY`。该命令会自动使用隐藏的 **Spec Superflow Setup** Agent，
    只初始化、验证或更新工作流环境，不创建或恢复 Change。
 3. 在 Agent 选择器中选择 **Spec Superflow**。
-4. 用普通对话启动一个测试需求，确认 Agent 从 Plugin 读取 Skill、脚本和模板，
+4. 用普通对话启动一个测试需求，确认 Agent 从 Plugin 读取 Skill、脚本和 Skill-local 模板，
    并把任务产物写入当前业务仓库。
 
 Plugin 在用户环境安装一次即可供多个仓库使用。业务仓库只保留项目
