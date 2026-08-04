@@ -481,7 +481,7 @@ function cliRecovery(reason, { bin, previousCli } = {}) {
     case 'npm-install-failed':
       return 'The previous CLI was restored. Resolve the npm permission or prefix error, then retry.';
     case 'installed-cli-not-on-path':
-      return `Add ${bin} to PATH, restart ${PLUGIN_APP_NAME}, and run workflow-init again.`;
+      return `Add ${bin} to the front of PATH, restart ${PLUGIN_APP_NAME}, and run workflow-init again.`;
     case 'version-mismatch-after-install':
       return previousCli
         ? 'The previous CLI was restored. Verify the Plugin package version and retry.'
@@ -513,7 +513,23 @@ function cliStatus(env = process.env) {
 
   const npmPath = findExecutable('npm', env);
   const cli = readCli(findExecutable('ssf', env), env);
-  const ready = cli.version === plugin.version;
+  const prefixResult = npmPath ? run(npmPath, ['prefix', '-g'], env) : null;
+  const npmPrefix = prefixResult?.exitCode === 0 && isAbsolute(prefixResult.stdout)
+    ? prefixResult.stdout
+    : null;
+  const globalCliPath = npmPrefix
+    ? join(globalBin(npmPrefix), executableNames('ssf')[0])
+    : null;
+  const installedCli = readCli(globalCliPath, env);
+  const installedCliReady = installedCli.version === plugin.version;
+  const cliReady = cli.version === plugin.version
+    && cli.realPath === installedCli.realPath;
+  const installedCliOffPath = installedCliReady && !cliReady;
+  const ready = node.available
+    && Boolean(npmPath)
+    && Boolean(npmPrefix)
+    && installedCliReady
+    && cliReady;
   let status = 'ready';
   let reason = null;
   if (!node.available) {
@@ -522,24 +538,32 @@ function cliStatus(env = process.env) {
   } else if (!npmPath) {
     status = 'blocked';
     reason = 'npm-missing';
-  } else if (!cli.available) {
+  } else if (!npmPrefix) {
+    status = 'blocked';
+    reason = 'npm-prefix-unavailable';
+  } else if (!installedCli.available) {
     status = 'missing';
     reason = 'cli-missing';
-  } else if (!cli.version) {
+  } else if (!installedCli.version) {
     status = 'blocked';
     reason = 'cli-version-unreadable';
-  } else if (!ready) {
+  } else if (!installedCliReady) {
     status = 'mismatch';
     reason = 'cli-version-mismatch';
+  } else if (installedCliOffPath) {
+    status = 'blocked';
+    reason = 'installed-cli-not-on-path';
   }
 
   return {
     status,
     ready,
-    installRequired: node.available && Boolean(npmPath) && !ready,
+    installRequired: reason === 'cli-missing' || reason === 'cli-version-mismatch',
     reason,
     requiredAction: ready
       ? 'verify-with-ssf-version'
+      : reason === 'installed-cli-not-on-path'
+        ? 'add-cli-to-path'
       : reason === 'cli-missing' || reason === 'cli-version-mismatch'
         ? 'request-install-confirmation'
         : reason === 'node-missing'
@@ -550,9 +574,12 @@ function cliStatus(env = process.env) {
     pluginVersion: plugin.version,
     pluginRoot: plugin.root,
     node,
-    npm: { available: Boolean(npmPath), path: npmPath },
+    npm: { available: Boolean(npmPath), path: npmPath, prefix: npmPrefix },
     cli,
-    ...(status === 'blocked' ? { recovery: cliRecovery(reason) } : {}),
+    installedCli,
+    ...(status === 'blocked' ? {
+      recovery: cliRecovery(reason, { bin: npmPrefix ? globalBin(npmPrefix) : null }),
+    } : {}),
   };
 }
 
@@ -610,6 +637,9 @@ function installCli(arguments_, env = process.env) {
     return { ...before, installed: false, upgraded: false, rolledBack: false };
   }
   if (before.reason === 'invalid-plugin-package') {
+    return { ...before, installed: false, upgraded: false, rolledBack: false };
+  }
+  if (before.reason === 'installed-cli-not-on-path') {
     return { ...before, installed: false, upgraded: false, rolledBack: false };
   }
   if (!before.node?.available) {
@@ -680,7 +710,7 @@ function installCli(arguments_, env = process.env) {
         installed: false,
         upgraded: false,
         rolledBack: true,
-        previousCli: before.cli,
+        previousCli: before.installedCli,
         recovery: cliRecovery('npm-install-failed'),
         error: installation.stderr || installation.stdout,
       };
@@ -691,25 +721,28 @@ function installCli(arguments_, env = process.env) {
       return {
         ...after,
         installed: true,
-        upgraded: Boolean(before.cli?.available),
+        upgraded: Boolean(before.installedCli?.available),
         rolledBack: false,
-        previousCli: before.cli,
+        previousCli: before.installedCli,
       };
     }
 
     const installedPath = join(bin, executableNames('ssf')[0]);
     const installedCli = readCli(installedPath, env);
-    if (installedCli.version === before.pluginVersion && !after.cli.available) {
+    if (
+      installedCli.version === before.pluginVersion
+      && after.reason === 'installed-cli-not-on-path'
+    ) {
       return {
         ...after,
         status: 'blocked',
         ready: false,
         reason: 'installed-cli-not-on-path',
         installed: true,
-        upgraded: Boolean(before.cli?.available),
+        upgraded: Boolean(before.installedCli?.available),
         rolledBack: false,
         installedCli,
-        previousCli: before.cli,
+        previousCli: before.installedCli,
         recovery: cliRecovery('installed-cli-not-on-path', { bin }),
       };
     }
@@ -724,10 +757,10 @@ function installCli(arguments_, env = process.env) {
       installed: false,
       upgraded: false,
       rolledBack: true,
-      previousCli: before.cli,
+      previousCli: before.installedCli,
       attemptedCli: installedCli,
       recovery: cliRecovery('version-mismatch-after-install', {
-        previousCli: before.cli?.available,
+        previousCli: before.installedCli?.available,
       }),
     };
   } catch (cause) {
@@ -740,7 +773,7 @@ function installCli(arguments_, env = process.env) {
       installed: false,
       upgraded: false,
       rolledBack: true,
-      previousCli: before.cli,
+      previousCli: before.installedCli,
       recovery: cliRecovery('install-exception'),
       error: cause.message,
     };

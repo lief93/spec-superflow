@@ -31,15 +31,15 @@ The manifest uses a kebab-case `name`, semantic `version`, `author` object, and
 valid relative component paths. Skills live at
 `skills/<name>/SKILL.md`, Agents use `*.agent.md`, and Commands are Markdown
 prompt files under `commands/`. The `/workflow-init` prompt declares its
-`name`, built-in `agent`, and restricted `tools`; `allowed-tools` is not a VS Code
+`name`, target `agent`, and restricted `tools`; `allowed-tools` is not a VS Code
 prompt-file field.
 
 ## Runtime model
 
 The bootstrap MCP server exposes four setup tools:
 
-- `spec_superflow_cli_status`: a read-only check of Node, npm, the installed
-  `ssf` path/version, and the Plugin version.
+- `spec_superflow_cli_status`: a read-only check of Node, npm, the CLI under
+  `npm prefix -g`, its PATH resolution, and the Plugin version.
 - `spec_superflow_install_cli`: after user confirmation, installs or updates
   the global CLI from the current `${PLUGIN_ROOT}` only.
 - `spec_superflow_optional_mcp_status`: checks whether the bundled optional MCP
@@ -51,8 +51,10 @@ It does not execute workflow commands, accept another package path, use a
 registry URL, or accept URL or Token values as tool arguments.
 
 After bootstrap, Skills execute `ssf state`, `ssf validate`, `ssf guard`, and
-other CLI commands directly. The bootstrap verifies `ssf --version` against the
-Plugin version and restores an existing usable CLI when an upgrade fails.
+other CLI commands directly. The bootstrap uses the CLI under `npm prefix -g`
+as the installed version authority and returns ready only when bare `ssf`
+resolves to that same executable. It restores the existing global CLI when an
+upgrade fails.
 
 Node.js and npm are prerequisites. Installation is local to the installed
 Plugin source; no second Spec repository or archive is required.
@@ -196,9 +198,10 @@ Token values or service-specific URLs to the Plugin repository.
 4. Keep the built-in **Agent** selected, type `/workflow-init`, and select the
    Plugin-provided suggestion. Click it or press **Tab** so VS Code commits it
    as a structured Slash Command; do not send the candidate as plain text. The
-   command runs in the built-in Agent, while its prompt-level available tools
-   remain restricted to the bootstrap MCP and native question tool. It does not
-   load the development state machine from the **Spec Superflow** Agent.
+   command switches to the hidden **Spec Superflow Setup** Agent, which has only
+   the bootstrap MCP and native question tool. It cannot inspect the workspace,
+   use a terminal, access memory, or load the development state machine from the
+   **Spec Superflow** Agent.
 5. Approve CLI installation when needed.
 6. Choose whether to configure the optional credentialed MCP. Skipping it
    returns `workflow=READY, optionalMcp=SKIPPED`.
@@ -214,10 +217,10 @@ Token values or service-specific URLs to the Plugin repository.
 inspect the open repository, ask for requirement details, create a Change, or
 start or resume development.
 
-Run the setup command while the built-in **Agent** is selected. It remains in
-the same Chat after completion, so `/workflow-init` can be run again without
-opening a new Chat. Select **Spec Superflow** only after setup reports
-`workflow=READY`.
+Run the setup command while the built-in **Agent** is selected. After setup
+reports its result, click **Return to Agent** to return to the built-in Agent in
+the same Chat. `/workflow-init` can then be run again without opening a new
+Chat. Select **Spec Superflow** only after setup reports `workflow=READY`.
 
 Run `/workflow-init` before starting a requirement. Run it again after updating
 the Plugin so the CLI version is synchronized before normal workflow use.

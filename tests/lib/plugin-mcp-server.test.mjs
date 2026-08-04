@@ -576,8 +576,8 @@ process.exit(child.status ?? 1);
   it('keeps status read-only and reports an exact installed CLI as ready', async () => {
     const sandbox = makeRoot('ssf-bootstrap-status-');
     const pluginRoot = copyPluginRoot(sandbox);
-    const bin = join(sandbox, 'bin');
     const prefix = join(sandbox, 'prefix');
+    const bin = join(prefix, 'bin');
     fakeNpm(join(bin, 'npm'));
     fakeSsf(join(bin, 'ssf'), '0.15.0');
     const before = treeSnapshot(sandbox);
@@ -586,7 +586,6 @@ process.exit(child.status ?? 1);
       env: {
         PATH: `${bin}:/usr/bin:/bin`,
         FAKE_NPM_PREFIX: prefix,
-        FAKE_NPM_LOG: join(sandbox, 'npm.log'),
       },
     });
 
@@ -602,7 +601,145 @@ process.exit(child.status ?? 1);
       assert.equal(status.installRequired, false);
       assert.equal(status.requiredAction, 'verify-with-ssf-version');
       assert.deepEqual(treeSnapshot(sandbox), before);
-      assert.equal(existsSync(join(sandbox, 'npm.log')), false);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('does not treat a PATH-only CLI as the global installation', async () => {
+    const sandbox = makeRoot('ssf-bootstrap-path-only-cli-');
+    const pluginRoot = copyPluginRoot(sandbox);
+    const prefix = join(sandbox, 'global prefix');
+    const tools = join(sandbox, 'tools');
+    const log = join(sandbox, 'npm.log');
+    fakeNpm(join(tools, 'npm'));
+    fakeSsf(join(tools, 'ssf'), '0.15.0');
+    const client = startClient({
+      pluginRoot,
+      env: {
+        PATH: `${tools}:/usr/bin:/bin`,
+        FAKE_NPM_PREFIX: prefix,
+        FAKE_NPM_LOG: log,
+      },
+    });
+
+    try {
+      const status = parseTool(await client.request(1, 'tools/call', {
+        name: 'spec_superflow_cli_status',
+        arguments: {},
+      }));
+      assert.equal(status.status, 'missing');
+      assert.equal(status.ready, false);
+      assert.equal(status.reason, 'cli-missing');
+      assert.equal(status.installRequired, true);
+      assert.equal(status.requiredAction, 'request-install-confirmation');
+      assert.equal(status.cli.version, '0.15.0');
+      assert.equal(status.installedCli.available, false);
+
+      const install = parseTool(await client.request(2, 'tools/call', {
+        name: 'spec_superflow_install_cli',
+        arguments: {},
+      }));
+      assert.equal(install.status, 'blocked');
+      assert.equal(install.reason, 'installed-cli-not-on-path');
+      assert.equal(install.installed, true);
+      assert.equal(install.upgraded, false);
+      assert.equal(install.rolledBack, false);
+      assert.equal(install.installedCli.version, '0.15.0');
+      assert.equal(statSync(join(prefix, 'bin', 'ssf')).isFile(), true);
+      const calls = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
+      assert.equal(calls.filter(args => args[0] === 'install').length, 1);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('reports an exact global CLI outside PATH without reinstalling it', async () => {
+    const sandbox = makeRoot('ssf-bootstrap-global-cli-off-path-');
+    const pluginRoot = copyPluginRoot(sandbox);
+    const prefix = join(sandbox, 'global prefix');
+    const tools = join(sandbox, 'tools');
+    const log = join(sandbox, 'npm.log');
+    fakeNpm(join(tools, 'npm'));
+    fakeSsf(join(prefix, 'bin', 'ssf'), '0.15.0');
+    const client = startClient({
+      pluginRoot,
+      env: {
+        PATH: `${tools}:/usr/bin:/bin`,
+        FAKE_NPM_PREFIX: prefix,
+        FAKE_NPM_LOG: log,
+      },
+    });
+
+    try {
+      const status = parseTool(await client.request(1, 'tools/call', {
+        name: 'spec_superflow_cli_status',
+        arguments: {},
+      }));
+      assert.equal(status.status, 'blocked');
+      assert.equal(status.ready, false);
+      assert.equal(status.reason, 'installed-cli-not-on-path');
+      assert.equal(status.installRequired, false);
+      assert.equal(status.requiredAction, 'add-cli-to-path');
+      assert.equal(status.cli.available, false);
+      assert.equal(status.installedCli.version, '0.15.0');
+      assert.equal(status.installedCli.realPath, realpathSync(join(prefix, 'bin', 'ssf')));
+      assert.match(status.recovery, new RegExp(join(prefix, 'bin').replaceAll('/', '\\/')));
+
+      const install = parseTool(await client.request(2, 'tools/call', {
+        name: 'spec_superflow_install_cli',
+        arguments: {},
+      }));
+      assert.equal(install.status, 'blocked');
+      assert.equal(install.reason, 'installed-cli-not-on-path');
+      assert.equal(install.installed, false);
+
+      const calls = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
+      assert.equal(calls.filter(args => args[0] === 'install').length, 0);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('blocks when PATH shadows the exact global CLI with another copy', async () => {
+    const sandbox = makeRoot('ssf-bootstrap-shadowed-global-cli-');
+    const pluginRoot = copyPluginRoot(sandbox);
+    const prefix = join(sandbox, 'global prefix');
+    const tools = join(sandbox, 'tools');
+    const log = join(sandbox, 'npm.log');
+    fakeNpm(join(tools, 'npm'));
+    fakeSsf(join(tools, 'ssf'), '0.15.0');
+    fakeSsf(join(prefix, 'bin', 'ssf'), '0.15.0');
+    const client = startClient({
+      pluginRoot,
+      env: {
+        PATH: `${tools}:/usr/bin:/bin`,
+        FAKE_NPM_PREFIX: prefix,
+        FAKE_NPM_LOG: log,
+      },
+    });
+
+    try {
+      const status = parseTool(await client.request(1, 'tools/call', {
+        name: 'spec_superflow_cli_status',
+        arguments: {},
+      }));
+      assert.equal(status.status, 'blocked');
+      assert.equal(status.ready, false);
+      assert.equal(status.reason, 'installed-cli-not-on-path');
+      assert.equal(status.installRequired, false);
+      assert.equal(status.requiredAction, 'add-cli-to-path');
+      assert.notEqual(status.cli.realPath, status.installedCli.realPath);
+      assert.match(status.recovery, /front of PATH/);
+
+      const install = parseTool(await client.request(2, 'tools/call', {
+        name: 'spec_superflow_install_cli',
+        arguments: {},
+      }));
+      assert.equal(install.reason, 'installed-cli-not-on-path');
+      assert.equal(install.installed, false);
+      const calls = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
+      assert.equal(calls.filter(args => args[0] === 'install').length, 0);
     } finally {
       client.close();
     }
@@ -1033,7 +1170,7 @@ process.exit(child.status ?? 1);
       }));
       assert.equal(
         result.recovery,
-        `Add ${join(prefix, 'bin')} to PATH, restart VS Code, and run workflow-init again.`,
+        `Add ${join(prefix, 'bin')} to the front of PATH, restart VS Code, and run workflow-init again.`,
       );
     } finally {
       pathClient.close();

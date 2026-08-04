@@ -68,8 +68,8 @@ VS Code 按以下顺序识别 manifest：
 
 bootstrap MCP 提供四个初始化工具：
 
-- `spec_superflow_cli_status`：只读检查 Node、npm、已安装 `ssf` 的路径和
-  版本，以及 Plugin 版本。
+- `spec_superflow_cli_status`：只读检查 Node、npm、`npm prefix -g` 下的全局
+  CLI、PATH 解析结果，以及 Plugin 版本。
 - `spec_superflow_install_cli`：得到用户确认后，只从当前 `${PLUGIN_ROOT}`
   安装或升级全局 CLI。
 - `spec_superflow_optional_mcp_status`：检查可选 MCP 定义是否已注册，不读取
@@ -81,8 +81,9 @@ bootstrap MCP 提供四个初始化工具：
 URL、Token 作为工具参数。
 
 安装完成后，Skills 直接执行 `ssf state`、`ssf validate`、`ssf guard` 等全局
-CLI 命令。bootstrap 会用 `ssf --version` 校验版本；升级失败时恢复原来可用的
-CLI，不把 npm 返回成功直接当成 `READY`。
+CLI 命令。bootstrap 只把 `npm prefix -g` 下的 CLI 作为安装和版本事实来源，
+并要求普通 `ssf` 命令解析到同一文件；升级失败时恢复原来的全局 CLI，不把
+npm 返回成功直接当成 `READY`。
 
 运行前需要 Node.js 和 npm。CLI 直接来自已安装的 Plugin，不需要第二份 Spec
 仓库或单独的压缩包。
@@ -205,7 +206,8 @@ Plugin 仓库。
 3. 在 Agent Plugins 视图确认 **Spec Superflow** 已启用。
 4. 保持 VS Code 内置 **Agent**，输入 `/workflow-init` 并选择 Plugin 提供的候选项。
    用鼠标点击或按 **Tab**，让 VS Code 将它提交为结构化 Slash Command；不要把
-   候选文字当普通消息直接发送。
+   候选文字当普通消息直接发送。命令会进入隐藏的 **Spec Superflow Setup**；
+   它只能使用 bootstrap MCP 和原生确认工具，不能读取项目、使用终端或访问 Memory。
 5. 缺少 CLI 或版本不一致时确认安装。
 6. 选择是否配置可选 MCP；跳过时返回
    `workflow=READY, optionalMcp=SKIPPED`。
@@ -219,8 +221,8 @@ Plugin 仓库。
 `/workflow-init` 只准备运行环境，不读取当前项目、不生成 change，也不启动需求。
 应先在内置 **Agent** 执行该命令，再选择 **Spec Superflow**，避免开发 Agent
 的状态机指令进入初始化请求。
-命令完成后仍停留在内置 **Agent**，因此可以在同一 Chat 中重复执行，
-不需要新建 Chat。
+命令完成后点击 **Return to Agent** 返回同一 Chat 的内置 **Agent**，之后可以
+在同一 Chat 中重复执行，不需要新建 Chat。
 开始需求前先执行 `/workflow-init`。Plugin 更新后也先重新执行一次，使 CLI
 版本与 Plugin 保持一致。
 

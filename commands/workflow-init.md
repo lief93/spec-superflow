@@ -2,7 +2,7 @@
 name: workflow-init
 description: Initialize, verify, or update the Spec Superflow workflow runtime without starting a Change.
 argument-hint: No arguments. This command only prepares or updates the workflow runtime.
-agent: agent
+agent: Spec Superflow Setup
 tools:
   - 'spec-superflow/*'
   - 'spec-superflow-optional-example/*'
@@ -38,8 +38,10 @@ verified, the next and only tool call is
 2. If the tool is unavailable because `node` cannot start it, report `BLOCKED`
    with Node.js as the missing prerequisite.
 3. If npm is unavailable, report `BLOCKED` with npm as the missing prerequisite.
-4. The status tool executes `ssf --version`. If it reports `ready: true` and
-   both Plugin and CLI versions are exactly `0.15.0`, continue.
+4. The status tool treats the CLI under `npm prefix -g` as the installed
+   version and verifies that the ordinary `ssf` command resolves to that same
+   executable. Continue only when it reports `ready: true` and both Plugin and
+   global CLI versions are exactly `0.15.0`.
 5. If the CLI is missing or has another version, use
    #tool:vscode/askQuestions to ask whether the user wants to install or update
    the global `ssf` command from this Plugin's bundled source. Call
