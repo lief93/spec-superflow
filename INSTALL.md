@@ -254,8 +254,9 @@ Git 地址。安装完成后：
 1. 在 Extensions 中搜索 `@agentPlugins @installed` 确认 Plugin 已启用。
 2. 保持 VS Code 内置 **Agent**，输入 `/workflow-init`，点击候选项或按
    **Tab** 将其提交为 Plugin Slash Command；在需要时确认安装或升级 CLI，
-   并等待 `READY`。该命令继续使用内置 **Agent**，但 Prompt 工具权限仅包含
-   bootstrap MCP 和原生确认工具；同一 Chat 可以再次执行，不创建或恢复 Change。
+   并等待 `READY`。命令自动进入隐藏的 **Spec Superflow Setup**，其工具权限
+   仅包含 bootstrap MCP 和原生确认工具，不读取项目或使用终端。完成后点击
+   **Return to Agent** 返回同一 Chat；之后仍可再次执行，不创建或恢复 Change。
 3. 在 Agent 选择器中选择 **Spec Superflow**。
 4. 用普通对话启动一个测试需求，确认 Agent 从 Plugin 读取 Skill、脚本和 Skill-local 模板，
    并把任务产物写入当前业务仓库。

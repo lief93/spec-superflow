@@ -35,10 +35,13 @@ projects.
 5. If the global `ssf` CLI is missing or its version differs from the Plugin,
    confirm the installation or upgrade when prompted.
 6. Wait for initialization to finish.
+7. Click **Return to Agent** to return to the built-in Agent in the same Chat.
 
-The command remains in the built-in Agent after completion. You can run
-`/workflow-init` again in the same Chat whenever you need to verify or update
-the runtime.
+The command runs in the hidden **Spec Superflow Setup** Agent, which only has
+the bootstrap MCP and native question tool. It cannot inspect the project, use
+a terminal, or access memory. After returning to the built-in Agent, you can
+run `/workflow-init` again in the same Chat whenever you need to verify or
+update the runtime.
 
 The workflow is available when the result contains:
 
@@ -161,7 +164,9 @@ into each business project.
 ### CLI Installation or Upgrade Fails
 
 - Confirm that the terminal can run `node --version` and `npm --version`.
-- Resolve the permission or PATH issue reported by `/workflow-init`.
+- Run `npm prefix -g` to identify the authoritative global CLI location.
+- If another `ssf` shadows it, put that prefix's `bin` directory first in PATH.
+- Resolve any permission issue reported by `/workflow-init`.
 - Run `/workflow-init` again after resolving the issue.
 - The workflow reports `workflow=READY` only when the CLI and Plugin versions
   match exactly.
