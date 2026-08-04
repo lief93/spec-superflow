@@ -1,0 +1,45 @@
+{
+  "name": "spec-superflow-companion",
+  "displayName": "Spec Superflow Companion Probe",
+  "description": "Offline probe for VS Code Language Model Tool support.",
+  "version": "0.0.1",
+  "publisher": "magebyte",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MageByte-Zero/spec-superflow"
+  },
+  "engines": {
+    "vscode": "^1.123.0"
+  },
+  "categories": [
+    "AI"
+  ],
+  "activationEvents": [
+    "onLanguageModelTool:spec_superflow_companion_probe"
+  ],
+  "main": "./extension.cjs",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": true
+  },
+  "contributes": {
+    "languageModelTools": [
+      {
+        "name": "spec_superflow_companion_probe",
+        "toolReferenceName": "specSuperflowCompanionProbe",
+        "displayName": "Spec Superflow Companion Probe",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Verify that this VS Code can invoke a local Spec Superflow companion tool.",
+        "userDescription": "Verify local Spec Superflow companion tool access.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

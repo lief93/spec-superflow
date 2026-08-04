@@ -37,3 +37,19 @@ native input prompts and secure storage are supported.
 The generated user definition stores the canonical installed Plugin path. Run
 `/workflow-init` again after moving or reinstalling the Plugin so that an
 outdated definition is replaced.
+
+## One-shot client prototype
+
+`one-shot-client.prototype.mjs` tests an alternative for hosts where native MCP
+support is disabled. It starts the bundled stdio server, completes one MCP
+handshake and tool call, then closes the server. It repeats that cold-start flow
+10 times so process-exit behavior and latency are visible:
+
+```bash
+node examples/mcp/token-auth/one-shot-client.prototype.mjs
+```
+
+The prototype generates a throwaway token when no example environment variables
+are set. It prints only the same length and fingerprint returned by the example
+server. It does not register an MCP, change VS Code configuration, or start a
+long-running gateway.
