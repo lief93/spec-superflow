@@ -1,27 +1,33 @@
-# Spec Superflow Companion Probe
+# Spec Superflow for VS Code
 
-This extension is an offline capability probe. It registers one read-only VS
-Code Language Model Tool named `spec_superflow_companion_probe`. Calling it
-returns fixed local JSON:
+This offline VSIX contains three pieces in one installation:
 
-```json
-{"ok":true,"source":"spec-superflow-companion-vsix","networkUsed":false}
+- the complete Spec Superflow Agent Plugin;
+- `spec_superflow_cli_status` and `spec_superflow_install_cli` for
+  `/workflow-init`;
+- `spec_superflow_example_mcp_read`, a replaceable one-shot stdio MCP example.
+
+Do not install the same Spec Agent Plugin again from Git while this VSIX is
+enabled, because VS Code can otherwise discover duplicate Spec Agents.
+
+## Example MCP flow
+
+The bundled `example-mcp-reader` Skill recognizes an item URL or key and calls
+only `spec_superflow_example_mcp_read`. On its first call, VS Code visibly asks
+for an example service URL and Token. The URL is stored in extension state and
+the Token in VS Code SecretStorage; neither is a tool argument or Chat value.
+
+The extension then starts `servers/example-item-mcp.mjs`, performs one fixed
+MCP tool call, and closes the process. The example performs no network request.
+In a company fork, replace that server and the fixed tool mapping with the Jira
+stdio MCP while retaining the same Skill and one-shot lifecycle.
+
+## Build
+
+From the repository root:
+
+```bash
+node scripts/build-vscode-vsix.mjs
 ```
 
-It does not use MCP, start a process, access the workspace, read credentials,
-or make network requests. It does not change `/workflow-init` yet.
-
-## Offline validation
-
-The repository includes the prebuilt offline package at
-`release-assets/companion-probe/spec-superflow-companion-0.0.1.vsix` and its
-SHA-256 checksum beside it.
-
-1. Install the packaged `.vsix` with **Extensions: Install from VSIX...**.
-2. Open Chat and choose **Configure Tools**.
-3. Search for **Spec Superflow Companion Probe** and enable it.
-4. Ask Agent to call `#specSuperflowCompanionProbe`.
-5. Confirm the returned JSON exactly matches the value above.
-
-If the tool is absent, company policy also blocks Extension Language Model
-Tools. Stop there; installing the VSIX cannot replace that policy.
+The result is `release-assets/vscode/spec-superflow-<version>.vsix`.

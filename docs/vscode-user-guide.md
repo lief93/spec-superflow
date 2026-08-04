@@ -1,172 +1,108 @@
 # Use Spec Superflow in VS Code
 
-Install the Spec Superflow Plugin once to use the same Agents, Skills,
-Commands, and MCP servers across multiple projects. Business repositories do
-not need copies of the shared workflow files.
+The offline VSIX contains the Spec Agent Plugin, `/workflow-init` tools, CLI
+source, and a replaceable Example MCP bridge. A VS Code user installs one file;
+do not also install the same Agent Plugin from Git, because that can create
+duplicate Spec Agents.
 
-## 1. Install the Plugin
+## 1. Install the Offline VSIX
 
 Prerequisites: Node.js and npm are installed, and GitHub Copilot is signed in
 and enabled in VS Code.
 
-1. Open VS Code.
-2. Press `Cmd + Shift + P` on macOS or `Ctrl + Shift + P` on Windows/Linux to
-   open the Command Palette.
-3. Enter and select **Chat: Install Plugin From Source**.
-4. Follow the prompt to enter the Spec Superflow Plugin repository Git URL or
-   select a local Plugin directory.
-5. Wait for installation to finish. Select **Reload** if VS Code asks to reload
-   the window.
-6. Open Agent Plugins and confirm that **Spec Superflow** is enabled and
-   available in the Chat Agent selector.
-
-The Plugin only needs to be installed once to serve multiple business
-projects.
+1. Copy `spec-superflow-<version>.vsix` to the offline computer.
+2. Open the Command Palette.
+3. Select **Extensions: Install from VSIX...** and choose that file.
+4. Reload VS Code when prompted.
+5. Confirm that **Spec Superflow** appears once in the Chat Agent selector.
 
 ## 2. Run `/workflow-init`
 
-1. Open the Chat view.
-2. Keep the built-in VS Code **Agent** selected. Do not select
-   **Spec Superflow** yet.
-3. Enter `/workflow-init`.
-4. Click the Plugin-provided command in the suggestion list, or press **Tab**
-   to select it, then send it. Do not send the suggestion text as a regular
-   Chat message.
-5. If the global `ssf` CLI is missing or its version differs from the Plugin,
-   confirm the installation or upgrade when prompted.
-6. Wait for initialization to finish.
-7. Click **Return to Agent** to return to the built-in Agent in the same Chat.
+1. Keep the built-in VS Code **Agent** selected.
+2. Enter `/workflow-init` and select the structured Slash Command suggestion.
+3. If the global `ssf` CLI is missing or has another version, approve the
+   offline installation or upgrade.
+4. Wait for `READY`, then select **Return to Agent**.
 
-The command runs in the hidden **Spec Superflow Setup** Agent, which only has
-the bootstrap MCP and native question tool. It cannot inspect the project, use
-a terminal, or access memory. After returning to the built-in Agent, you can
-run `/workflow-init` again in the same Chat whenever you need to verify or
-update the runtime.
+`/workflow-init` only checks, installs, upgrades, and verifies the global CLI.
+It does not inspect the project, create a Change, start a requirement, or
+configure a business MCP. The command can be run repeatedly in the same Chat.
 
-The workflow is available when the result contains:
+## 3. Try the Replaceable Example MCP
+
+The VSIX includes an `example-mcp-reader` Skill. For example, ask:
 
 ```text
-workflow=READY
+Use the Example MCP to read MOBILE-123.
 ```
 
-`/workflow-init` only installs, upgrades, and verifies the workflow runtime.
-It does not inspect the current business project, create a Change, or start a
-requirement.
+The Skill calls `spec_superflow_example_mcp_read` with only the item URL or
+key. On the first call, VS Code visibly prompts for an example service URL and
+Token. The URL is kept in extension state and the Token in VS Code
+SecretStorage; neither is sent through Chat or returned by the tool.
 
-## 3. Configure an Optional MCP
-
-If `/workflow-init` asks whether to configure an optional MCP:
-
-- Skipping it does not block the Spec workflow. The result is
-  `workflow=READY, optionalMcp=SKIPPED`.
-- If you choose to configure it, wait for
-  `workflow=READY, optionalMcp=REGISTERED`, then continue with the steps below.
-
-Configuration steps:
-
-1. Open the VS Code Command Palette.
-2. Enter and select **MCP: List Servers**.
-3. Select **spec-superflow-optional-example**.
-4. Select **Start Server**.
-5. Enter the service URL and Token in the native VS Code prompts. Do not send
-   credentials through Chat.
-6. Run `/workflow-init` again.
-
-The optional MCP is callable when the result contains:
-
-```text
-workflow=READY, optionalMcp=READY
-```
-
-If the result contains `optionalMcp=BLOCKED`, the Spec workflow remains
-available; only that optional MCP is unavailable.
+The VSIX starts its bundled stdio Example MCP, performs one fixed call, and
+closes the process. The upstream example returns deterministic local data and
+does not access the network. In a company fork, replace the bundled example
+Server and fixed tool mapping with the company Jira MCP while retaining the
+same Skill and one-shot lifecycle.
 
 ## 4. Initialize a Business Project
 
-When using the workflow in a business repository for the first time:
-
-1. Open the repository root in VS Code.
-2. Select **Spec Superflow** from the Chat Agent selector.
+1. Open the repository root.
+2. Select **Spec Superflow**.
 3. Enter `Initialize the current project`.
-4. Review the generated project rules and development baseline. Add runtime
-   configuration, team constraints, or architecture requirements that cannot
-   be inferred from the code.
+4. Review the generated project baseline and add constraints that cannot be
+   inferred from the code.
 
-Skip this step if the project has already been initialized. `project-init`
-does not install or upgrade the CLI.
+`project-init` does not check, install, or upgrade the CLI.
 
 ## 5. Start or Continue a Requirement
 
-1. Select **Spec Superflow** in Chat.
-2. Describe the requirement or bug, or identify an existing Change to resume.
-3. Confirm the scope, planning results, and execution approach when prompted.
-4. The independent Reviewer runs automatically at the fixed planning and final
-   implementation checkpoints. If it finds an issue, the workflow repairs the
-   candidate and reviews it again.
-5. The Agent changes business code and tests only after planning and the
-   execution contract are approved.
-6. Follow the prompts to complete testing, final review, and closing.
+1. Select **Spec Superflow**.
+2. Describe the requirement, bug, or existing Change to resume.
+3. Confirm scope and planning decisions when requested.
+4. The fixed independent Reviewer runs at the configured planning and final
+   checkpoints.
+5. Implementation begins only after Planning and its execution contract are
+   approved.
 
-Selecting another Agent stops applying the Spec Superflow workflow
-instructions. You do not need to uninstall the Plugin.
+## 6. Update
 
-## 6. Update the Plugin
-
-1. Update Spec Superflow from Agent Plugins. If the installed VS Code version
-   does not provide an update action, run
-   **Chat: Install Plugin From Source** again with the same repository URL.
-2. Reload VS Code.
-3. Keep the built-in VS Code **Agent** selected.
-4. Run `/workflow-init` again.
-5. If the Plugin version is newer than the installed CLI, confirm the upgrade.
-6. After the result contains `workflow=READY`, select **Spec Superflow** and
-   continue the requirement.
-
-Updating the Plugin does not require copying shared Agents, Skills, or scripts
-into each business project.
+1. Copy the new offline VSIX to the computer.
+2. Run **Extensions: Install from VSIX...** again and select it.
+3. Reload VS Code.
+4. Run `/workflow-init`; approve the global CLI upgrade when requested.
 
 ## 7. Troubleshooting
 
-### `/workflow-init` Is Not Available
+### `/workflow-init` or its tools are unavailable
 
-- Confirm that the Plugin is installed and enabled.
-- Keep the built-in **Agent** selected and enter `/workflow-init` again in the
-  same Chat or any other Chat.
-- Click the suggestion or press **Tab** to select it instead of sending the
-  suggestion text as a regular message.
+- Confirm the VSIX is installed and enabled.
+- Confirm only one copy of Spec Superflow is installed.
+- Keep the built-in **Agent** selected when entering `/workflow-init`.
+- Select the Slash Command suggestion instead of sending plain text.
 - Run **Developer: Reload Window** and retry.
+- In Chat **Configure Tools**, confirm `specSuperflowCliStatus` and
+  `specSuperflowInstallCli` are available.
 
-### Installation Cannot Find the Plugin or Git Clone Fails
+The combined VSIX uses VS Code Language Model Tools and does not require the
+native VS Code MCP Host. An empty **MCP: List Servers** view does not prevent
+these tools from working.
 
-- Confirm that the repository URL can be cloned from the current computer.
-- Confirm that `plugin.json` is at the repository root, not in a parent or
-  nested directory.
-- Confirm that the current account can access the internal Git repository.
-- When using a local path, confirm that it points to the complete Plugin root.
+### CLI installation or upgrade fails
 
-### Initialization Cannot Find `spec_superflow_cli_status`
+- Confirm `node --version` and `npm --version` work.
+- Run `npm prefix -g` to identify the global installation prefix.
+- Resolve the permission or PATH error returned by `/workflow-init`.
+- Run `/workflow-init` again. It reports `READY` only when the global CLI and
+  bundled Plugin versions match exactly.
 
-- Confirm that the Plugin is enabled.
-- Open **MCP: List Servers** and confirm that the `spec-superflow` bootstrap MCP
-  is present.
-- Confirm that the workspace is not in **Restricted Mode**.
-- Run **Developer: Reload Window** and retry.
+### The Example MCP does not run
 
-### `MCP: List Servers` Is Empty
-
-- Confirm that the Agent Plugin is enabled.
-- Run **Workspaces: Manage Workspace Trust** and confirm that the workspace is
-  **Trusted**.
-- Check whether an organization policy has disabled MCP access.
-- Inspect the **GitHub Copilot Chat**, **MCP**, and **Extension Host** channels
-  in Output.
-
-### CLI Installation or Upgrade Fails
-
-- Confirm that the terminal can run `node --version` and `npm --version`.
-- Run `npm prefix -g` to identify the authoritative global CLI location.
-- If another `ssf` shadows it, put that prefix's `bin` directory first in PATH.
-- Resolve any permission issue reported by `/workflow-init`.
-- Run `/workflow-init` again after resolving the issue.
-- The workflow reports `workflow=READY` only when the CLI and Plugin versions
-  match exactly.
+- In Chat **Configure Tools**, confirm `specSuperflowExampleMcpRead` is
+  available.
+- Retry and complete both visible credential prompts.
+- Do not paste a Token into Chat or pass it as an item argument.
+- Remember that the upstream Server is an offline integration example; a
+  company fork must replace its deterministic response with the company MCP.

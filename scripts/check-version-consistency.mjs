@@ -35,6 +35,7 @@ const JSON_CHECKS = [
   { file: 'gemini-extension.json', path: ['version'] },
   { file: '.github/plugin/marketplace.json', path: ['metadata', 'version'] },
   { file: '.github/plugin/marketplace.json', path: ['plugins', '0', 'version'] },
+  { file: 'extensions/spec-superflow-companion/package.json', path: ['version'] },
 ];
 
 for (const check of JSON_CHECKS) {
@@ -68,7 +69,9 @@ const TEXT_CHECKS = [
   { file: '.claude/always/phase-guard.md', extract: /# spec-superflow v(\d+\.\d+\.\d+) \|/ },
   { file: 'GEMINI.md',              extract: /# spec-superflow v(\d+\.\d+\.\d+) \|/ },
   { file: 'commands/workflow-init.md', extract: /spec-superflow-plugin-version: (\d+\.\d+\.\d+)/ },
-  { file: 'commands/workflow-init.md', extract: /version `(\d+\.\d+\.\d+)`/ },
+  { file: 'commands/workflow-init.md', extract: /versions are exactly `(\d+\.\d+\.\d+)`/ },
+  { file: 'extensions/spec-superflow-companion/agent-plugin-additions/commands/workflow-init.md', extract: /spec-superflow-plugin-version: (\d+\.\d+\.\d+)/ },
+  { file: 'extensions/spec-superflow-companion/agent-plugin-additions/commands/workflow-init.md', extract: /versions are exactly `(\d+\.\d+\.\d+)`/ },
   { file: 'agents/spec-superflow.agent.md', extract: /spec-superflow-plugin-version: (\d+\.\d+\.\d+)/ },
 ];
 

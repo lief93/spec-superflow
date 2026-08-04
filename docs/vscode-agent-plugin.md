@@ -1,54 +1,45 @@
-# VS Code Spec Superflow Agent Plugin
+# VS Code Spec Superflow VSIX
 
-The complete Spec Superflow repository is installed as one Agent Plugin. It
-contains the Agent, Skills with Skill-local artifact templates, Commands, CLI source, and a small
-bootstrap MCP server. Target repositories do not need a copy of those central
-resources or a separate Spec Superflow download.
+The recommended offline distribution is one VSIX containing the complete Agent
+Plugin, CLI source, two bootstrap Language Model Tools, and a replaceable
+one-shot Example MCP bridge. Target repositories do not copy those shared
+resources or install a second Spec Superflow package.
 
 ## Repository layout
 
 ```text
-spec-superflow-plugin/
-  .plugin/plugin.json
-  plugin.json
-  agents/
-  skills/<owner>/references/
-  commands/
-  servers/spec-superflow-mcp-launcher.cmd
-  servers/spec-superflow-mcp.mjs
-  scripts/
-  .mcp.json
-  package.json
-  .github/plugin/marketplace.json   # optional distribution metadata
+spec-superflow-<version>.vsix
+  extension/package.json            # Language Model Tools + chatPlugins
+  extension/extension.cjs           # fixed one-shot bridge
+  extension/agent-plugin/
+    plugin.json
+    agents/
+    commands/
+    skills/
+    scripts/
+    servers/
+    package.json
 ```
 
-VS Code checks `.plugin/plugin.json`, root `plugin.json`,
-`.github/plugin/plugin.json`, and `.claude-plugin/plugin.json`, in that order.
-This repository uses the OpenPlugin manifest so `.mcp.json` can start a bundled
-server through `${PLUGIN_ROOT}`.
-
-The manifest uses a kebab-case `name`, semantic `version`, `author` object, and
-valid relative component paths. Skills live at
-`skills/<name>/SKILL.md`, Agents use `*.agent.md`, and Commands are Markdown
-prompt files under `commands/`. The `/workflow-init` prompt declares its
-`name`, target `agent`, and restricted `tools`; `allowed-tools` is not a VS Code
-prompt-file field.
+The extension manifest contributes `chatPlugins` at `./agent-plugin`, so the
+Agent Plugin and bootstrap tools are discovered from the same installation.
+The staged Agent Plugin intentionally has no `.mcp.json`: this path works when
+an organization disables the native VS Code MCP Host but still permits
+Extension Language Model Tools. Do not enable a second Git-installed copy of
+the same Agent Plugin, or duplicate Spec Agents can appear.
 
 ## Runtime model
 
-The bootstrap MCP server exposes four setup tools:
+The extension exposes two setup tools:
 
 - `spec_superflow_cli_status`: a read-only check of Node, npm, the CLI under
   `npm prefix -g`, its PATH resolution, and the Plugin version.
 - `spec_superflow_install_cli`: after user confirmation, installs or updates
-  the global CLI from the current `${PLUGIN_ROOT}` only.
-- `spec_superflow_optional_mcp_status`: checks whether the bundled optional MCP
-  definition is registered without reading URL or Token values.
-- `spec_superflow_install_optional_mcp`: after user opt-in, registers the
-  bundled stdio Server through the VS Code CLI.
+  the global CLI from the VSIX-bundled Agent Plugin only.
 
-It does not execute workflow commands, accept another package path, use a
-registry URL, or accept URL or Token values as tool arguments.
+`/workflow-init` uses only these tools and the native confirmation tool. It
+does not execute workflow commands, configure business MCPs, accept another
+package path, or use a registry URL.
 
 After bootstrap, Skills execute `ssf state`, `ssf validate`, `ssf guard`, and
 other CLI commands directly. The bootstrap uses the CLI under `npm prefix -g`
@@ -56,8 +47,8 @@ as the installed version authority and returns ready only when bare `ssf`
 resolves to that same executable. It restores the existing global CLI when an
 upgrade fails.
 
-Node.js and npm are prerequisites. Installation is local to the installed
-Plugin source; no second Spec repository or archive is required.
+Node.js and npm are prerequisites. Installation is local to the VSIX-bundled
+Plugin source; no second repository, registry, or archive is required.
 
 ## Full workflow reviews
 
@@ -144,72 +135,36 @@ frontmatter, unit, or protocol tests cannot convert these runtime assertions
 to PASS. A truthful `PENDING` result is a disclosed runtime boundary, not a
 source-only validation failure.
 
-## Optional MCP with URL and Token
+## Replaceable Example MCP bridge
 
-A local stdio MCP server can be bundled with the Plugin. `stdio` describes how
-VS Code communicates with the process; it does not require the server to be a
-separate installation. The Plugin starts bundled JavaScript through
-`${PLUGIN_ROOT}/servers/spec-superflow-mcp-launcher.cmd`. On macOS and Linux,
-the launcher falls back to the user's login shell when a GUI-launched VS Code
-does not inherit the Node.js path. On Windows, Node.js must be on the system
-`PATH`.
+The VSIX also contributes `spec_superflow_example_mcp_read`. The bundled
+`example-mcp-reader` Skill passes only the user's item URL or key. On first
+use, the extension collects the example URL through visible VS Code input and
+stores the Token in VS Code SecretStorage. Neither value is a tool argument or
+Chat value.
 
-Business MCP is optional. A user who declines it still receives:
-
-```text
-workflow=READY, optionalMcp=SKIPPED
-```
-
-The CLI, Skills, planning, tests, and review workflow continue normally.
-
-Credential configuration has a different scope:
-
-| Configuration | Top-level server key | Interactive `inputs` |
-|---|---|---|
-| Agent Plugin `.mcp.json` | `mcpServers` | Starts the bundled bootstrap server; credentials are not defined here |
-| User or workspace `mcp.json` | `servers` | Supported; VS Code prompts once and stores the value securely |
-
-When the user opts in during `/workflow-init`,
-`spec_superflow_install_optional_mcp` runs VS Code's `--add-mcp` command with
-the bundled definition. It does not receive credentials. Registration returns:
-
-```text
-workflow=READY, optionalMcp=REGISTERED
-```
-
-To start it, run **MCP: List Servers**, select
-**spec-superflow-optional-example**, and choose **Start Server**. VS Code then
-prompts for the service URL and Token and keeps both values visible so users
-can verify them. Neither value is written to the MCP configuration file or
-passed through Chat. VS Code stores the entered values in its secure credentials
-store. A later `/workflow-init` verifies the running Server and returns
-`optionalMcp=READY`.
-
-The registered definition uses the bundled
-launcher and `servers/token-example-mcp.mjs`. The equivalent generated
-configuration is documented under `examples/mcp/token-auth/`. Do not commit
-Token values or service-specific URLs to the Plugin repository.
+For each call, the extension starts `servers/example-item-mcp.mjs`, performs
+one fixed allowlisted MCP call, and closes the process. The upstream example
+returns deterministic local data and makes no network request. A company fork
+can replace the Server and fixed tool mapping with its Jira stdio MCP without
+changing the Skill-to-tool boundary. This Example MCP is independent of
+`/workflow-init` and never changes CLI readiness.
 
 ## Install and use
 
-1. Run **Chat: Install Plugin From Source** in the VS Code Command Palette.
-2. Enter the Git source for this complete repository.
-3. Enable **Spec Superflow** in the Agent Plugins view.
+1. Run **Extensions: Install from VSIX...** in the Command Palette.
+2. Select the offline `spec-superflow-<version>.vsix` file and reload VS Code.
+3. Confirm that **Spec Superflow** appears exactly once. Do not also install
+   the same Agent Plugin from Git.
 4. Keep the built-in **Agent** selected, type `/workflow-init`, and select the
    Plugin-provided suggestion. Click it or press **Tab** so VS Code commits it
    as a structured Slash Command; do not send the candidate as plain text. The
    command switches to the hidden **Spec Superflow Setup** Agent, which has only
-   the bootstrap MCP and native question tool. It cannot inspect the workspace,
+   the two extension bootstrap tools and native question tool. It cannot inspect the workspace,
    use a terminal, access memory, or load the development state machine from the
    **Spec Superflow** Agent.
 5. Approve CLI installation when needed.
-6. Choose whether to configure the optional credentialed MCP. Skipping it
-   returns `workflow=READY, optionalMcp=SKIPPED`.
-7. When enabled, wait for `optionalMcp=REGISTERED`, then run
-   **MCP: List Servers** and start **spec-superflow-optional-example**.
-8. Complete the visible native VS Code URL and Token prompts. Run
-   `/workflow-init` again to verify `optionalMcp=READY`.
-9. After setup reports `workflow=READY`, select **Spec Superflow** and describe a
+6. After setup reports `READY`, select **Spec Superflow** and describe a
    requirement. Normal workflows use the installed CLI and do not install or
    upgrade it.
 
@@ -220,18 +175,12 @@ start or resume development.
 Run the setup command while the built-in **Agent** is selected. After setup
 reports its result, click **Return to Agent** to return to the built-in Agent in
 the same Chat. `/workflow-init` can then be run again without opening a new
-Chat. Select **Spec Superflow** only after setup reports `workflow=READY`.
+Chat. Select **Spec Superflow** only after setup reports `READY`.
 
 Run `/workflow-init` before starting a requirement. Run it again after updating
 the Plugin so the CLI version is synchronized before normal workflow use.
 
-For local Plugin development:
-
-```jsonc
-"chat.pluginLocations": {
-  "/absolute/path/to/spec-superflow-plugin": true
-}
-```
+The Example MCP is invoked later by its Skill and is not part of setup.
 
 ## Target repository ownership
 
@@ -250,9 +199,9 @@ each target repository.
 
 ## Update and verify
 
-Update the Plugin source and keep all manifests, `package.json`, and
-`/workflow-init` on the same version. Run `/workflow-init` after the update; it
-detects an older CLI and requests confirmation before upgrading it.
+Install the newer offline VSIX over the existing extension, reload VS Code,
+then run `/workflow-init`. It detects an older CLI and requests confirmation
+before upgrading it from the new bundled Plugin source.
 
 Verify in a real VS Code Chat runtime:
 
@@ -260,18 +209,15 @@ Verify in a real VS Code Chat runtime:
 |---|---|
 | Plugin | Spec Superflow is installed and selectable |
 | Command | `/workflow-init` is discoverable |
-| Bootstrap MCP | `spec-superflow` starts and lists the four setup tools |
+| Bootstrap tools | `specSuperflowCliStatus` and `specSuperflowInstallCli` are available |
 | Missing CLI | Confirmation, local install, exact version, then `READY` |
 | Existing version | No reinstall |
-| Optional MCP skipped | `workflow=READY, optionalMcp=SKIPPED` |
-| Optional MCP registered | `workflow=READY, optionalMcp=REGISTERED` |
-| Optional MCP started | VS Code prompts for visible URL and Token values; bundled Server starts |
-| Optional MCP verified | A later `/workflow-init` reports `workflow=READY, optionalMcp=READY` |
+| Example MCP | Skill invokes `spec_superflow_example_mcp_read`; one process starts and exits |
+| Credentials | Native visible prompts; Token absent from Chat and tool result |
 | Requirement entry | Uses the CLI prepared by `/workflow-init` |
 | Project init | Dedicated instructions are generated; root instructions are unchanged |
 
 Protocol tests prove server behavior but do not replace this installed Plugin
 and Chat verification.
 
-Format references: [VS Code Agent plugins](https://code.visualstudio.com/docs/agent-customization/agent-plugins)
-and [MCP configuration reference](https://code.visualstudio.com/docs/agents/reference/mcp-configuration).
+Format references: [VS Code Agent plugins](https://code.visualstudio.com/docs/agent-customization/agent-plugins).

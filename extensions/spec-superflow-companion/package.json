@@ -1,8 +1,8 @@
 {
   "name": "spec-superflow-companion",
-  "displayName": "Spec Superflow Companion Probe",
-  "description": "Offline probe for VS Code Language Model Tool support.",
-  "version": "0.0.1",
+  "displayName": "Spec Superflow",
+  "description": "Offline Spec Superflow Agent Plugin, CLI bootstrap tools, and replaceable Example MCP bridge.",
+  "version": "0.15.0",
   "publisher": "magebyte",
   "license": "MIT",
   "repository": {
@@ -16,7 +16,9 @@
     "AI"
   ],
   "activationEvents": [
-    "onLanguageModelTool:spec_superflow_companion_probe"
+    "onLanguageModelTool:spec_superflow_cli_status",
+    "onLanguageModelTool:spec_superflow_install_cli",
+    "onLanguageModelTool:spec_superflow_example_mcp_read"
   ],
   "main": "./extension.cjs",
   "capabilities": {
@@ -26,17 +28,56 @@
     "virtualWorkspaces": true
   },
   "contributes": {
+    "chatPlugins": [
+      {
+        "path": "./agent-plugin"
+      }
+    ],
     "languageModelTools": [
       {
-        "name": "spec_superflow_companion_probe",
-        "toolReferenceName": "specSuperflowCompanionProbe",
-        "displayName": "Spec Superflow Companion Probe",
+        "name": "spec_superflow_cli_status",
+        "toolReferenceName": "specSuperflowCliStatus",
+        "displayName": "Spec Superflow CLI Status",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Verify that this VS Code can invoke a local Spec Superflow companion tool.",
-        "userDescription": "Verify local Spec Superflow companion tool access.",
+        "modelDescription": "Check the globally installed Spec Superflow CLI against the bundled Plugin version.",
+        "userDescription": "Check the global Spec Superflow CLI.",
         "inputSchema": {
           "type": "object",
           "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "spec_superflow_install_cli",
+        "toolReferenceName": "specSuperflowInstallCli",
+        "displayName": "Install Spec Superflow CLI",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Install or upgrade the global Spec Superflow CLI from this offline VSIX after explicit user confirmation.",
+        "userDescription": "Install or upgrade the bundled CLI globally.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "spec_superflow_example_mcp_read",
+        "toolReferenceName": "specSuperflowExampleMcpRead",
+        "displayName": "Read Example MCP Item",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Read one item through the bundled one-shot stdio Example MCP bridge. Use this as the company Jira MCP adaptation seam.",
+        "userDescription": "Read an item through the replaceable Example MCP bridge.",
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "item"
+          ],
+          "properties": {
+            "item": {
+              "type": "string",
+              "description": "Example item URL or key supplied by the user."
+            }
+          },
           "additionalProperties": false
         }
       }
