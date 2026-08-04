@@ -152,14 +152,12 @@ When the user selects `/workflow-init`, do not inspect the workspace, load a
 Skill, or create task artifacts. Do not send a setup preamble. The first tool
 invocation must be `spec_superflow_cli_status`.
 Do not read the workspace, any file, or any Skill, even when the workspace is
-empty. After the CLI is verified, the next and only tool call is
-`spec_superflow_optional_mcp_status`; do not route to project-init or
-workflow-start.
+empty. Do not route to project-init or workflow-start.
 
 1. If Node.js or npm is unavailable, report `BLOCKED` with the missing
    prerequisite.
 2. The status tool executes `ssf --version`. If it reports `ready: true` and
-   both Plugin and CLI versions are exactly 0.15.0, continue.
+   both Plugin and CLI versions are exactly 0.15.0, report `READY` and stop.
 3. If the CLI is missing or has another version, ask whether the user wants to
    install or update the Plugin's bundled CLI globally. Call
    `spec_superflow_install_cli` only after an explicit confirmation.
@@ -169,28 +167,9 @@ workflow-start.
 6. Report `READY` only when the second status call reports `ready: true` and
    version 0.15.0. Otherwise, report `BLOCKED` with the recovery guidance
    returned by the tool.
-7. Call `spec_superflow_optional_mcp_status`. Business MCP is optional and
-   must never block the Spec workflow.
-8. If the optional MCP is registered and
-   `spec_superflow_token_example_status` is available, call it. Report
-   `workflow=READY, optionalMcp=READY` only when it returns
-   `configured: true`. If the credential tool is unavailable, report
-   `workflow=READY, optionalMcp=REGISTERED`.
-9. If the optional MCP is not registered, ask whether the user wants it. If
-   the user declines, report `workflow=READY, optionalMcp=SKIPPED` and stop.
-   If the user declines optional MCP, it does not block workflow initialization.
-10. If the user opts in, call `spec_superflow_install_optional_mcp` without
-   arguments. Do not pass the service URL or Token as a tool argument and do
-   not ask the user to paste either value into Chat.
-11. Do not use `vscode/askQuestions` for the URL or Token. A newly registered
-    MCP is not guaranteed to become callable in the current Chat. Report
-    `workflow=READY, optionalMcp=REGISTERED`, then tell the user to run
-    **MCP: List Servers**, select **spec-superflow-optional-example**, and
-    choose **Start Server**. VS Code collects the URL and Token through visible
-    native prompts and its credentials store. A later `/workflow-init` can
-    verify the optional MCP without returning either credential.
-12. If optional MCP setup fails, report
-    `workflow=READY, optionalMcp=BLOCKED`; the CLI workflow remains available.
+7. Do not check, configure, or invoke an optional business MCP. Business MCP
+   tools are invoked separately by their owning Skills and never affect CLI
+   workflow readiness.
 
 Stop after reporting the setup result. Do not start or resume development.
 

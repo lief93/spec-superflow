@@ -351,35 +351,34 @@ process.exit(child.status ?? 1);
     }
   });
 
-  it('exposes only CLI bootstrap tools to the OpenCode host', async () => {
-    const client = startClient({
-      env: {
-        SPEC_SUPERFLOW_PLUGIN_HOST: 'opencode',
-      },
-    });
-    try {
-      const tools = await client.request(1, 'tools/list');
-      assert.deepEqual(
-        tools.result.tools.map(tool => tool.name),
-        [
-          'spec_superflow_cli_status',
-          'spec_superflow_install_cli',
-        ],
-      );
+  it('exposes only CLI bootstrap tools to OpenCode and the combined VSIX', async () => {
+    for (const host of ['opencode', 'vscode-extension']) {
+      const client = startClient({ env: { SPEC_SUPERFLOW_PLUGIN_HOST: host } });
+      try {
+        const tools = await client.request(1, 'tools/list');
+        assert.deepEqual(
+          tools.result.tools.map(tool => tool.name),
+          [
+            'spec_superflow_cli_status',
+            'spec_superflow_install_cli',
+          ],
+          host,
+        );
 
-      for (const name of [
-        'spec_superflow_run',
-        'spec_superflow_optional_mcp_status',
-        'spec_superflow_install_optional_mcp',
-      ]) {
-        const unavailable = await client.request(2, 'tools/call', {
-          name,
-          arguments: {},
-        });
-        assert.equal(unavailable.error.code, -32602, name);
+        for (const name of [
+          'spec_superflow_run',
+          'spec_superflow_optional_mcp_status',
+          'spec_superflow_install_optional_mcp',
+        ]) {
+          const unavailable = await client.request(2, 'tools/call', {
+            name,
+            arguments: {},
+          });
+          assert.equal(unavailable.error.code, -32602, `${host}: ${name}`);
+        }
+      } finally {
+        client.close();
       }
-    } finally {
-      client.close();
     }
   });
 

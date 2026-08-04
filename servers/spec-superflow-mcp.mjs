@@ -95,7 +95,7 @@ const TOOLS = [
     },
   },
 ];
-const AVAILABLE_TOOLS = PLUGIN_HOST === 'opencode' ? TOOLS.slice(0, 2) : TOOLS;
+const AVAILABLE_TOOLS = PLUGIN_HOST === 'vscode' ? TOOLS : TOOLS.slice(0, 2);
 
 function write(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -815,9 +815,9 @@ function handle(message) {
     } else if (name === 'spec_superflow_install_cli') {
       const installation = installCli(args);
       result(message.id, textResult(installation, installation.status === 'blocked'));
-    } else if (PLUGIN_HOST !== 'opencode' && name === 'spec_superflow_optional_mcp_status') {
+    } else if (PLUGIN_HOST === 'vscode' && name === 'spec_superflow_optional_mcp_status') {
       result(message.id, textResult(optionalMcpStatus()));
-    } else if (PLUGIN_HOST !== 'opencode' && name === 'spec_superflow_install_optional_mcp') {
+    } else if (PLUGIN_HOST === 'vscode' && name === 'spec_superflow_install_optional_mcp') {
       const installation = installOptionalMcp(args);
       result(message.id, textResult(installation, installation.status === 'blocked'));
     } else {

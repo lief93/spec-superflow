@@ -8,12 +8,15 @@ The format loosely follows Keep a Changelog.
 
 ### Added
 
-- **VS Code user guide** - Added a step-by-step guide for installing and updating the Plugin, running `/workflow-init`, configuring the optional MCP, initializing a project, starting or continuing a requirement, and troubleshooting common issues.
+- **Single offline VSIX** - Added one package containing the Spec Agent Plugin, `/workflow-init` CLI bootstrap tools, and a replaceable one-shot Example MCP bridge.
+- **Example MCP Skill** - Added a concrete Skill that calls one fixed VS Code tool; the VSIX owns native credential input, SecretStorage, the stdio MCP lifecycle, and process exit.
+- **VS Code user guide** - Updated installation, upgrade, Example MCP, project initialization, requirement, and troubleshooting steps for the single-VSIX distribution.
 
 ### Fixed
 
 - **Isolated, repeatable workflow initialization** - `/workflow-init` runs in a hidden bootstrap-only Setup Agent and offers the official **Return to Agent** handoff, so users can safely run it repeatedly in the same VS Code Chat.
 - **Global CLI path authority** - Bootstrap now uses the current `npm prefix -g` as the sole installation and version source, and returns ready only when `ssf` resolves to that same executable. A missing or shadowed PATH entry is reported without reinstalling an already-correct global CLI.
+- **Bootstrap scope** - `/workflow-init` now ends after exact global CLI verification. Example or company business MCP calls are owned by their Skills and cannot change workflow readiness.
 
 ## [0.15.0] - 2026-08-04
 

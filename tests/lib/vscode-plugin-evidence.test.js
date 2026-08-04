@@ -23,14 +23,12 @@ describe('VS Code Plugin documentation boundary', () => {
       assert.match(server, new RegExp(tool));
     }
     assert.doesNotMatch(server, /spec_superflow_run/);
-    assert.match(reference, /business MCP is optional/i);
-    assert.match(reference, /workflow.*READY.*optionalMcp.*SKIPPED/is);
-    assert.match(reference, /keeps both values visible/i);
-    assert.match(reference, /VS Code[\s\S]*secure credentials\s+store/i);
-    assert.match(reference, /spec-superflow-mcp-launcher\.cmd/);
-    assert.match(guide, /选择是否配置可选 MCP/i);
-    assert.match(guide, /MCP: List Servers/i);
-    assert.match(guide, /URL、Token[\s\S]*不会写入 MCP 配置文件/i);
+    assert.match(reference, /one fixed allowlisted MCP call/i);
+    assert.match(reference, /VS Code SecretStorage/i);
+    assert.match(reference, /independent of[\s\S]*`\/workflow-init`/i);
+    assert.match(guide, /固定白名单 MCP/i);
+    assert.match(guide, /VS Code\s+SecretStorage/i);
+    assert.match(guide, /Example MCP 与 `\/workflow-init` 相互独立/i);
   });
 
   it('documents workflow-init as the only install entry and local Plugin source ownership', () => {
@@ -40,7 +38,7 @@ describe('VS Code Plugin documentation boundary', () => {
     assert.match(reference, /type `\/workflow-init`/i);
     assert.match(
       reference,
-      /setup reports `workflow=READY`[\s\S]*select \*\*Spec Superflow\*\* and describe a\s+requirement/i,
+      /setup reports `READY`[\s\S]*select \*\*Spec Superflow\*\* and describe a\s+requirement/i,
     );
     assert.match(
       reference,
@@ -50,13 +48,12 @@ describe('VS Code Plugin documentation boundary', () => {
       guide,
       /VS Code 内置 \*\*Agent\*\*[\s\S]*输入 `\/workflow-init`[\s\S]*按 \*\*Tab\*\*/i,
     );
-    assert.match(guide, /workflow=READY[\s\S]*选择 \*\*Spec Superflow\*\*/i);
+    assert.match(guide, /初始化返回 `READY`[\s\S]*选择 \*\*Spec Superflow\*\*/i);
     assert.match(reference, /Run `\/workflow-init` before starting a requirement/i);
     assert.match(guide, /`\/workflow-init` 只准备运行环境/i);
     assert.doesNotMatch(`${reference}\n${guide}`, /continues the original request once/i);
-    assert.match(reference, /current `\$\{PLUGIN_ROOT\}` only/);
-    assert.match(reference, /no second Spec repository or archive is required/i);
-    assert.doesNotMatch(guide, /公司|内网/);
+    assert.match(reference, /VSIX-bundled Agent Plugin only/i);
+    assert.match(reference, /no second repository, registry, or archive is required/i);
   });
 
   it('keeps direct CLI and project instruction ownership in their authoritative files', () => {

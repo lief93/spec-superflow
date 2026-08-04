@@ -21,6 +21,7 @@ function checkVersionConsistency(root) {
     { name: 'gemini-extension.json', path: ['version'] },
     { name: '.github/plugin/marketplace.json', path: ['metadata', 'version'] },
     { name: '.github/plugin/marketplace.json', path: ['plugins', '0', 'version'] },
+    { name: 'extensions/spec-superflow-companion/package.json', path: ['version'] },
   ];
 
   const versions = {};

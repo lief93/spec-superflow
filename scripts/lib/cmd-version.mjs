@@ -15,6 +15,7 @@ const MANIFESTS = [
   { file: 'gemini-extension.json', path: ['version'] },
   { file: '.github/plugin/marketplace.json', path: ['metadata', 'version'] },
   { file: '.github/plugin/marketplace.json', path: ['plugins', '0', 'version'] },
+  { file: 'extensions/spec-superflow-companion/package.json', path: ['version'] },
 ];
 
 // ── Text files with regex patterns (first capture group = version to replace) ──
@@ -27,7 +28,8 @@ const TEXT_FILES = [
   { file: 'llms.txt',               pattern: /(Current version: v)0\.\d+\.\d+(\.)/g,             replacement: '$10.%MINOR%.%PATCH%$2' },
   { file: '.claude/always/phase-guard.md', pattern: /(# spec-superflow v)0\.\d+\.\d+( \|)/g,      replacement: '$10.%MINOR%.%PATCH%$2' },
   { file: 'GEMINI.md',              pattern: /(# spec-superflow v)0\.\d+\.\d+( \|)/g,              replacement: '$10.%MINOR%.%PATCH%$2' },
-  { file: 'commands/workflow-init.md', pattern: /((?:spec-superflow-plugin-version: |version `))\d+\.\d+\.\d+/g, replacement: '$1%VERSION%' },
+  { file: 'commands/workflow-init.md', pattern: /((?:spec-superflow-plugin-version: |versions are exactly `))\d+\.\d+\.\d+/g, replacement: '$1%VERSION%' },
+  { file: 'extensions/spec-superflow-companion/agent-plugin-additions/commands/workflow-init.md', pattern: /((?:spec-superflow-plugin-version: |versions are exactly `))\d+\.\d+\.\d+/g, replacement: '$1%VERSION%' },
   { file: 'agents/spec-superflow.agent.md', pattern: /(spec-superflow-plugin-version: )\d+\.\d+\.\d+/g, replacement: '$1%VERSION%' },
 ];
 

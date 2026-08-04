@@ -20,7 +20,7 @@
 | OpenAI Codex CLI | Plugin Directory / marketplace | `codex plugin update` | `codex plugin remove` |
 | OpenAI Codex App | Plugins 面板 / marketplace | CLI 更新后 App 面板启用 | App 面板禁用 |
 | GitHub Copilot CLI | marketplace | `copilot plugin update` | `copilot plugin uninstall` |
-| VS Code GitHub Copilot | Agent Plugin Git 源 | VS Code 检查 Plugin 更新 | 按 workspace 禁用或卸载 Plugin |
+| VS Code GitHub Copilot | 单个离线 VSIX | 覆盖安装新版 VSIX + `/workflow-init` | Extensions 中禁用或卸载 |
 | Gemini CLI | `gemini extensions install` | `gemini extensions update` | `gemini extensions uninstall` |
 | OpenCode | 全局登记中央仓库路径 | `git pull` + `/workflow-init` | 从 OpenCode 全局配置移除路径 |
 | WorkBuddy | `ssf install-workbuddy` | 重新运行安装器 | 删除 marketplace 插件并禁用 |
@@ -241,21 +241,20 @@ copilot plugin uninstall spec-superflow
 
 ## VS Code GitHub Copilot
 
-VS Code Agent Plugin 将可选择的 Agent、包含工件模板的中央 Skills 和 scripts 与
-bootstrap MCP 作为一个安装单元提供。项目仓库不需要保存这些公共资源的副本。
-bootstrap MCP 只在 `/workflow-init` 中检查并安装匹配版本的全局 CLI；工作流
-命令直接执行 `ssf`。
+单个离线 VSIX 同时提供可选择的 Agent、包含工件模板的中央 Skills、scripts、
+`/workflow-init` 的 CLI bootstrap tools，以及可替换的 Example MCP bridge。
+项目仓库不需要保存这些公共资源的副本。工作流命令仍直接执行全局 `ssf`。
 
 ### 安装
 
-在 VS Code 命令面板运行 **Chat: Install Plugin From Source**，输入本仓库的
-Git 地址。安装完成后：
+从仓库构建或取得 `release-assets/vscode/spec-superflow-<version>.vsix`，复制到
+离线电脑后运行 **Extensions: Install from VSIX...**。安装完成后：
 
-1. 在 Extensions 中搜索 `@agentPlugins @installed` 确认 Plugin 已启用。
+1. 确认 Agent 选择器只出现一个 **Spec Superflow**。不要再同时安装 Git 版本。
 2. 保持 VS Code 内置 **Agent**，输入 `/workflow-init`，点击候选项或按
    **Tab** 将其提交为 Plugin Slash Command；在需要时确认安装或升级 CLI，
    并等待 `READY`。命令自动进入隐藏的 **Spec Superflow Setup**，其工具权限
-   仅包含 bootstrap MCP 和原生确认工具，不读取项目或使用终端。完成后点击
+   仅包含两个 Extension bootstrap tools 和原生确认工具，不读取项目或使用终端。完成后点击
    **Return to Agent** 返回同一 Chat；之后仍可再次执行，不创建或恢复 Change。
 3. 在 Agent 选择器中选择 **Spec Superflow**。
 4. 用普通对话启动一个测试需求，确认 Agent 从 Plugin 读取 Skill、脚本和 Skill-local 模板，
@@ -265,14 +264,15 @@ Plugin 在用户环境安装一次即可供多个仓库使用。业务仓库只�
 Instructions、项目专属 Skills、任务产物、Memory 和代码。切换到其他 Agent
 即可停止使用 Spec Superflow Agent 的专属指令，不需要卸载其他 Agent。
 
-Plugin 的 `.mcp.json` 启动仓库内的 `servers/spec-superflow-mcp.mjs`。CLI 从
-Plugin 自身安装，不需要另外下载 Spec 仓库或安装包。详细结构和复现步骤见
+VSIX 内置 Plugin 不依赖 VS Code 原生 MCP Host。Extension tool 通过一次性
+stdio 调用复用仓库内的 bootstrap Server；CLI 从内置 Plugin 安装，不需要另外
+下载 Spec 仓库或安装包。详细结构和复现步骤见
 [`docs/vscode-agent-plugin-zh.md`](docs/vscode-agent-plugin-zh.md)。
 
 ### 更新和停用
 
-从 VS Code 的 Agent Plugins 视图检查更新。Plugin 可以全局启用，也可以按
-workspace 禁用；禁用后其 Agent、Skills 和 MCP 都不再可用。
+用新版 VSIX 覆盖安装，重新加载后执行 `/workflow-init` 同步全局 CLI。Extension
+可以在 Extensions 中禁用或卸载；禁用后 Agent、Skills 和 tools 都不再可用。
 
 ---
 

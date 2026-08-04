@@ -35,7 +35,7 @@ function json(path, content) {
 
 function workflowInit(version) {
   return `<!-- spec-superflow-plugin-version: ${version} -->
-The bundled Plugin runtime must report version \`${version}\`.
+Plugin and CLI versions are exactly \`${version}\`.
 `;
 }
 
@@ -61,6 +61,7 @@ function createVersionFixture(root, version) {
     metadata: { version },
     plugins: [{ version }],
   });
+  json(join(root, 'extensions/spec-superflow-companion/package.json'), { version });
   write(join(root, 'README.md'), `当前版本：\`v${version}\`\n`);
   write(join(root, 'INSTALL.md'), `当前发布版本：**v${version}**\n`);
   write(join(root, 'docs/README_en.md'), `Current: \`v${version}\`\n`);
@@ -69,6 +70,10 @@ function createVersionFixture(root, version) {
   write(join(root, '.claude/always/phase-guard.md'), `# spec-superflow v${version} | guard\n`);
   write(join(root, 'GEMINI.md'), `# spec-superflow v${version} | guard\n`);
   write(join(root, 'commands/workflow-init.md'), workflowInit(version));
+  write(
+    join(root, 'extensions/spec-superflow-companion/agent-plugin-additions/commands/workflow-init.md'),
+    `<!-- spec-superflow-plugin-version: ${version} -->\nPlugin and CLI versions are exactly \`${version}\`.\n`,
+  );
   write(join(root, 'agents/spec-superflow.agent.md'), agent(version));
 }
 
@@ -103,7 +108,13 @@ describe('maintenance CLI behavior', () => {
     const command = readFileSync(join(root, 'commands/workflow-init.md'), 'utf8');
     assert.doesNotMatch(command, /0\.14\.0/);
     assert.match(command, /spec-superflow-plugin-version: 0\.15\.0/);
-    assert.match(command, /version `0\.15\.0`/);
+    assert.match(command, /versions are exactly `0\.15\.0`/);
+    const vsixCommand = readFileSync(
+      join(root, 'extensions/spec-superflow-companion/agent-plugin-additions/commands/workflow-init.md'),
+      'utf8',
+    );
+    assert.doesNotMatch(vsixCommand, /0\.14\.0/);
+    assert.match(vsixCommand, /versions are exactly `0\.15\.0`/);
     const agentSource = readFileSync(join(root, 'agents/spec-superflow.agent.md'), 'utf8');
     assert.doesNotMatch(agentSource, /0\.14\.0/);
     assert.match(agentSource, /spec-superflow-plugin-version: 0\.15\.0/);

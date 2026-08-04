@@ -185,10 +185,10 @@ describe('VS Code Agent Plugin', () => {
     );
     assert.doesNotMatch(command, /^allowed-tools:/m);
     assert.match(command, /tools:\s*\n\s+- ['"]spec-superflow\/\*['"]/);
-    assert.match(command, /\n\s+- ['"]spec-superflow-optional-example\/\*['"]/);
+    assert.doesNotMatch(command, /spec-superflow-optional-example\/\*/);
     assert.match(command, /\n\s+- ['"]vscode\/askQuestions['"]/);
     assert.match(setupFrontmatter, /tools:\s*\n\s+- ['"]spec-superflow\/\*['"]/);
-    assert.match(setupFrontmatter, /\n\s+- ['"]spec-superflow-optional-example\/\*['"]/);
+    assert.doesNotMatch(setupFrontmatter, /spec-superflow-optional-example\/\*/);
     assert.match(setupFrontmatter, /\n\s+- ['"]vscode\/askQuestions['"]/);
     assert.doesNotMatch(setupFrontmatter, /terminal|workspace|memory|readFile|execute/i);
     assert.match(setup, /first and only initial action must be `spec_superflow_cli_status`/i);
@@ -198,24 +198,16 @@ describe('VS Code Agent Plugin', () => {
     assert.match(command, /spec_superflow_install_cli/);
     assert.match(
       command,
-      /askQuestions[\s\S]*install or update\s+the global `ssf` command/i,
+      /askQuestions[\s\S]*explicit confirmation[\s\S]*spec_superflow_install_cli/i,
     );
-    assert.match(command, /spec_superflow_optional_mcp_status/);
-    assert.match(command, /spec_superflow_install_optional_mcp/);
     for (const tool of [
       'spec_superflow_cli_status',
       'spec_superflow_install_cli',
-      'spec_superflow_optional_mcp_status',
-      'spec_superflow_install_optional_mcp',
     ]) {
       assert.match(command, new RegExp(`#tool:spec-superflow/${tool}`));
     }
-    assert.match(command, /request confirmation/i);
-    assert.match(
-      command,
-      /CLI under `npm prefix -g`[\s\S]*ordinary `ssf` command resolves to that same\s+executable/i,
-    );
-    assert.match(command, /do not route to project-init\s+or workflow-start/i);
+    assert.match(command, /explicit confirmation/i);
+    assert.match(command, /project-init, workflow-start, or optional business MCP tools/i);
     assert.doesNotMatch(command, /alternate (?:installation|path)/i);
     assert.match(
       command,
@@ -224,31 +216,9 @@ describe('VS Code Agent Plugin', () => {
     assert.doesNotMatch(command, /tgz|https?:\/\/|npm view|@latest/);
     assert.doesNotMatch(command, /run `ssf --version`|npm install -g/i);
     assert.match(command, /create task artifacts[\s\S]*start\s+or resume the development workflow/);
-    assert.match(
-      command,
-      /first action is #tool:spec-superflow\/spec_superflow_cli_status/i,
-    );
-    assert.match(
-      command,
-      /after the CLI is\s+verified[^.]*next and only tool call[^.]*spec_superflow_optional_mcp_status/is,
-    );
-    assert.match(
-      command,
-      /do not read[^.]*workspace[^.]*file[^.]*Skill/is,
-    );
-    assert.match(command, /workflow.*READY.*optionalMcp.*SKIPPED/is);
-    assert.match(
-      command,
-      /must not report.*optionalMcp=SKIPPED.*unless.*askQuestions.*No/is,
-    );
-    assert.match(command, /visible native input[\s\S]*verify both values/i);
-    assert.match(command, /URL and Token[\s\S]*VS Code[\s\S]*secure/i);
-    assert.match(command, /workflow=READY, optionalMcp=REGISTERED/);
-    assert.match(command, /MCP: List Servers[\s\S]*Start Server/i);
-    assert.match(
-      command,
-      /do not use #tool:vscode\/askQuestions[^.]*URL[^.]*Token/is,
-    );
+    assert.match(command, /Call #tool:spec-superflow\/spec_superflow_cli_status with no arguments/i);
+    assert.match(command, /After installation[\s\S]*spec_superflow_cli_status again/i);
+    assert.doesNotMatch(command, /optionalMcp=|MCP: List Servers|token_example/i);
     assert.doesNotMatch(command, /ask the user to paste.*token|token.*chat/i);
   });
 
@@ -268,14 +238,12 @@ describe('VS Code Agent Plugin', () => {
     const chinese = read('docs/vscode-agent-plugin-zh.md');
 
     assert.match(english, /Click it or press \*\*Tab\*\*[\s\S]*structured Slash Command/i);
-    assert.match(english, /`name`, target `agent`, and restricted `tools`/);
-    assert.match(english, /`allowed-tools` is not a VS Code\s+prompt-file field/i);
     assert.match(english, /hidden \*\*Spec Superflow Setup\*\* Agent/i);
     assert.match(
       english,
       /Return to Agent[\s\S]*same Chat[\s\S]*`\/workflow-init` can (?:then )?be run again/i,
     );
-    assert.match(english, /only\s+the bootstrap MCP and native question tool/i);
+    assert.match(english, /only\s+the two extension bootstrap tools and native question tool/i);
     assert.match(english, /does not[\s\S]*create a Change[\s\S]*start or resume development/i);
     assert.match(chinese, /选择 Plugin 提供的候选项[\s\S]*按 \*\*Tab\*\*/i);
     assert.match(chinese, /`\/workflow-init` 只准备运行环境/i);
@@ -311,8 +279,8 @@ describe('VS Code Agent Plugin', () => {
     assert.match(agent, /disable-model-invocation: true/);
     assert.match(agent, /spec_superflow_cli_status/);
     assert.match(agent, /spec_superflow_install_cli/);
-    assert.match(agent, /spec_superflow_optional_mcp_status/);
-    assert.match(agent, /spec_superflow_install_optional_mcp/);
+    assert.doesNotMatch(agent, /spec_superflow_optional_mcp_status/);
+    assert.doesNotMatch(agent, /spec_superflow_install_optional_mcp/);
     assert.doesNotMatch(normalWorkflow, /spec_superflow_cli_status|spec_superflow_install_cli/);
     assert.doesNotMatch(
       normalWorkflow,
@@ -359,17 +327,15 @@ describe('VS Code Agent Plugin', () => {
     assert.doesNotMatch(agent, /command -v node|where node|SSF_PLUGIN_VERSION|node -e/);
   });
 
-  it('keeps optional MCP setup from blocking workflow initialization', () => {
+  it('keeps business MCP setup outside workflow initialization', () => {
     const command = read('commands/workflow-init.md');
     const agent = read('agents/spec-superflow.agent.md');
 
     for (const content of [command, agent]) {
-      assert.match(content, /business MCP is optional/i);
-      assert.match(content, /workflow.*READY.*optionalMcp.*SKIPPED/is);
-      assert.match(content, /workflow.*READY.*optionalMcp.*REGISTERED/is);
-      assert.match(content, /declines? optional MCP, it does not block/i);
-      assert.match(content, /do not pass[^.]*URL[^.]*Token[^.]*tool argument/is);
-      assert.match(content, /MCP: List Servers[\s\S]*Start Server/i);
+      assert.match(content, /business MCP/i);
+      assert.doesNotMatch(content, /optionalMcp=|MCP: List Servers|token_example/i);
+      assert.doesNotMatch(content, /spec_superflow_optional_mcp_status/);
+      assert.doesNotMatch(content, /spec_superflow_install_optional_mcp/);
     }
   });
 
