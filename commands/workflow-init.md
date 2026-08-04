@@ -2,7 +2,7 @@
 name: workflow-init
 description: Initialize, verify, or update the Spec Superflow workflow runtime without starting a Change.
 argument-hint: No arguments. This command only prepares or updates the workflow runtime.
-agent: Spec Superflow Setup
+agent: agent
 tools:
   - 'spec-superflow/*'
   - 'spec-superflow-optional-example/*'

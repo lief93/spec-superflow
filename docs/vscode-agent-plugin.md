@@ -31,7 +31,7 @@ The manifest uses a kebab-case `name`, semantic `version`, `author` object, and
 valid relative component paths. Skills live at
 `skills/<name>/SKILL.md`, Agents use `*.agent.md`, and Commands are Markdown
 prompt files under `commands/`. The `/workflow-init` prompt declares its
-`name`, target `agent`, and restricted `tools`; `allowed-tools` is not a VS Code
+`name`, built-in `agent`, and restricted `tools`; `allowed-tools` is not a VS Code
 prompt-file field.
 
 ## Runtime model
@@ -196,9 +196,9 @@ Token values or service-specific URLs to the Plugin repository.
 4. Keep the built-in **Agent** selected, type `/workflow-init`, and select the
    Plugin-provided suggestion. Click it or press **Tab** so VS Code commits it
    as a structured Slash Command; do not send the candidate as plain text. The
-   command automatically uses the hidden **Spec Superflow Setup** Agent, whose
-   tool list contains only the bootstrap MCP and native question tool. It does
-   not load the development state machine from the **Spec Superflow** Agent.
+   command runs in the built-in Agent, while its prompt-level available tools
+   remain restricted to the bootstrap MCP and native question tool. It does not
+   load the development state machine from the **Spec Superflow** Agent.
 5. Approve CLI installation when needed.
 6. Choose whether to configure the optional credentialed MCP. Skipping it
    returns `workflow=READY, optionalMcp=SKIPPED`.
@@ -214,9 +214,10 @@ Token values or service-specific URLs to the Plugin repository.
 inspect the open repository, ask for requirement details, create a Change, or
 start or resume development.
 
-Run the setup command while the built-in **Agent** is selected. The command
-switches to its hidden setup-only Agent for that request. Select
-**Spec Superflow** only after setup reports `workflow=READY`.
+Run the setup command while the built-in **Agent** is selected. It remains in
+the same Chat after completion, so `/workflow-init` can be run again without
+opening a new Chat. Select **Spec Superflow** only after setup reports
+`workflow=READY`.
 
 Run `/workflow-init` before starting a requirement. Run it again after updating
 the Plugin so the CLI version is synchronized before normal workflow use.

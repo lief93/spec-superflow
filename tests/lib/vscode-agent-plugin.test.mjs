@@ -8,7 +8,6 @@ const ROOT = process.cwd();
 const read = path => readFileSync(join(ROOT, path), 'utf8');
 const primary = read('agents/spec-superflow.agent.md');
 const reviewer = read('agents/spec-superflow-reviewer.agent.md');
-const setup = read('agents/spec-superflow-setup.agent.md');
 
 function probeAgentRouteWithoutNode(route) {
   return spawnSync(
@@ -53,7 +52,6 @@ describe('VS Code Agent Plugin', () => {
 
     assert.deepEqual(agentFiles, [
       'spec-superflow-reviewer.agent.md',
-      'spec-superflow-setup.agent.md',
       'spec-superflow.agent.md',
     ]);
     assert.match(primary, /^agents: \["Spec Superflow Reviewer"\]$/m);
@@ -61,9 +59,6 @@ describe('VS Code Agent Plugin', () => {
     assert.match(reviewer, /^user-invocable: false$/m);
     assert.match(reviewer, /^agents: \[\]$/m);
     assert.doesNotMatch(reviewer, /^tools:/m);
-    assert.match(setup, /^user-invocable: false$/m);
-    assert.match(setup, /^disable-model-invocation: true$/m);
-    assert.doesNotMatch(primary, /Spec Superflow Setup/);
   });
 
   it('adds only three exact-full independent semantic checkpoints to the Primary', () => {
@@ -167,10 +162,9 @@ describe('VS Code Agent Plugin', () => {
   it('provides an explicit CLI bootstrap workflow-init command', () => {
     const pkg = JSON.parse(read('package.json'));
     const command = read('commands/workflow-init.md');
-    const setupAgent = read('agents/spec-superflow-setup.agent.md');
 
     assert.match(command, /^name: workflow-init$/m);
-    assert.match(command, /^agent: Spec Superflow Setup$/m);
+    assert.match(command, /^agent: agent$/m);
     assert.doesNotMatch(command, /^agent: Spec Superflow$/m);
     assert.match(
       command,
@@ -184,17 +178,6 @@ describe('VS Code Agent Plugin', () => {
     assert.match(command, /tools:\s*\n\s+- ['"]spec-superflow\/\*['"]/);
     assert.match(command, /\n\s+- ['"]spec-superflow-optional-example\/\*['"]/);
     assert.match(command, /\n\s+- ['"]vscode\/askQuestions['"]/);
-    assert.match(setupAgent, /^name: Spec Superflow Setup$/m);
-    assert.match(setupAgent, /^user-invocable: false$/m);
-    assert.match(setupAgent, /^disable-model-invocation: true$/m);
-    assert.match(setupAgent, /tools:\s*\n\s+- ['"]spec-superflow\/\*['"]/);
-    assert.match(setupAgent, /\n\s+- ['"]spec-superflow-optional-example\/\*['"]/);
-    assert.match(setupAgent, /\n\s+- ['"]vscode\/askQuestions['"]/);
-    assert.match(setupAgent, /never\s+call tools in parallel/i);
-    assert.doesNotMatch(
-      setupAgent,
-      /terminal|shell|read(?:ing)? (?:the )?workspace|workflow-start|project-init|state init/i,
-    );
     assert.match(command, /spec_superflow_cli_status/);
     assert.match(command, /spec_superflow_install_cli/);
     assert.match(
@@ -250,15 +233,26 @@ describe('VS Code Agent Plugin', () => {
     assert.doesNotMatch(command, /ask the user to paste.*token|token.*chat/i);
   });
 
+  it('keeps workflow-init repeatable in the same VS Code Chat', () => {
+    const command = read('commands/workflow-init.md');
+
+    assert.match(command, /^agent: agent$/m);
+    assert.equal(
+      existsSync(join(ROOT, 'agents', 'spec-superflow-setup.agent.md')),
+      false,
+      'workflow-init must not leave the Chat in a hidden setup-only Agent',
+    );
+  });
+
   it('documents selecting workflow-init as a structured VS Code Slash Command', () => {
     const english = read('docs/vscode-agent-plugin.md');
     const chinese = read('docs/vscode-agent-plugin-zh.md');
 
     assert.match(english, /Click it or press \*\*Tab\*\*[\s\S]*structured Slash Command/i);
-    assert.match(english, /`name`, target `agent`, and restricted `tools`/);
+    assert.match(english, /`name`, built-in `agent`, and restricted `tools`/);
     assert.match(english, /`allowed-tools` is not a VS Code\s+prompt-file field/i);
-    assert.match(english, /hidden \*\*Spec Superflow Setup\*\* Agent/i);
-    assert.match(english, /only the bootstrap MCP and native question tool/i);
+    assert.match(english, /same Chat[\s\S]*`\/workflow-init` can be run again/i);
+    assert.match(english, /available tools[\s\S]*bootstrap MCP and native question tool/i);
     assert.match(english, /does not[\s\S]*create a Change[\s\S]*start or resume development/i);
     assert.match(chinese, /选择 Plugin 提供的候选项[\s\S]*按 \*\*Tab\*\*/i);
     assert.match(chinese, /`\/workflow-init` 只准备运行环境/i);

@@ -4,25 +4,51 @@ All notable changes to `spec-superflow` will be documented in this file.
 
 The format loosely follows Keep a Changelog.
 
-## [0.15.0] - Unreleased
+## [Unreleased]
 
 ### Added
 
-- **VS Code CLI bootstrap** - Added a bundled MCP server that checks, installs, and upgrades the matching global CLI from the Plugin source.
-- **Workflow initialization command** - Added `/workflow-init` with confirmation, exact version verification, idempotency, and upgrade rollback.
-- **Plugin repository guide** - Documented the required manifest, directory layout, component naming, installation, update, and runtime verification steps.
-
-### Changed
-
-- **VS Code command execution** - Workflow Skills execute the matching global `ssf` CLI directly after entry-point bootstrap.
-- **Single-source distribution** - Installing the Git repository now supplies Agent, Skills, Commands, templates, scripts, and runtime together.
-- **Project instructions ownership** - `project-init` writes `.github/instructions/spec-superflow.instructions.md` and leaves existing root Copilot instructions unchanged.
+- **VS Code user guide** - Added a step-by-step guide for installing and updating the Plugin, running `/workflow-init`, configuring the optional MCP, initializing a project, starting or continuing a requirement, and troubleshooting common issues.
 
 ### Fixed
 
-- **Maintenance command status** - `ssf doctor` now returns non-zero when source-checkout checks fail, and is no longer used as installed CLI evidence.
-- **Workflow-init version drift** - Version synchronization and consistency checks include the bundled Plugin version declared by `/workflow-init`.
-- **Package hygiene** - Exclude change history, tests, validation evidence, `.DS_Store`, AppleDouble, and editor temporary files from npm packages.
+- **Repeatable workflow initialization** - `/workflow-init` can now be run repeatedly in the same VS Code Chat without leaving the conversation in a hidden setup-only Agent.
+
+## [0.15.0] - 2026-08-04
+
+### Added
+
+- **VS Code and OpenCode Plugin distribution** - The repository now ships the Agent, Skills, commands, templates, scripts, and runtime needed by both supported editors.
+- **Explicit workflow initialization** - Added `/workflow-init` as the only entry point that checks, installs, or upgrades the matching global `ssf` CLI from the local Plugin package.
+- **Optional credential MCP** - VS Code can collect the MCP URL and Token through native input prompts. Skipping or declining this optional setup does not block the Spec Superflow workflow.
+- **Independent planning and implementation review** - Added a fixed, read-only Reviewer at three checkpoints: Proposal and Specs, Design and Tasks, and final implementation.
+- **OpenCode integration** - Added OpenCode Agent and command support for the same Spec Superflow workflow.
+
+### Changed
+
+- **CLI bootstrap scope** - Normal requirements, `project-init`, and internal Skills no longer check, prompt for, or install the CLI. After `/workflow-init`, workflow Skills call the global `ssf` command directly.
+- **Streamlined planning artifacts** - Reduced repeated planning content while retaining requirement, design, test, dependency, and acceptance traceability.
+- **Skill-local templates** - Artifact templates now live beside the Skills that own them, making template discovery more reliable across supported editors.
+- **Compact execution contract** - The contract reuses approved planning review results instead of copying Design and Tasks content into another large artifact.
+- **Grouped shared test runners** - Multiple exact Test Cases that use the same runner execute in one pre-change run and one post-change run instead of repeatedly starting the same test command.
+- **Practical device verification** - Device evidence is required for one reachable feature branch; branches controlled by external conditions can use exact automated evidence.
+- **Project instructions ownership** - `project-init` writes `.github/instructions/spec-superflow.instructions.md` and preserves an existing `.github/copilot-instructions.md`.
+
+### Fixed
+
+- **Offline CLI installation and upgrade** - Hardened local Plugin-root installation, version verification, idempotent reinstall behavior, upgrade rollback, GUI `PATH` recovery, permission errors, and version-drift handling without downloading from a registry.
+- **Review and state stability** - Fixed stale review candidates and evidence, review handoff consistency, and duplicate or invalid closing transitions.
+- **Planning and closing gates** - Fixed Batch-count and task-completion checks, project-instruction frontmatter validation, and `.cjs`/`.mjs` test-source validation.
+- **Package hygiene** - Excluded tests, change history, validation evidence, release working files, macOS metadata, and editor temporary files from the distributed package.
+
+### Upgrade Notes
+
+- Update or reinstall the Plugin from its source repository, then reload VS Code or OpenCode.
+- In VS Code, keep the built-in Agent selected and run `/workflow-init`.
+- Confirm the requested upgrade so the bundled Plugin package installs global CLI version `0.15.0`.
+- The optional credential MCP may be skipped. If configured, start or inspect it with **MCP: List Servers**.
+- Node.js and npm remain user-managed prerequisites.
+- Keep company-specific MCP servers and Skills in separate internal commits so future upstream upgrades are easier to merge.
 
 ## [0.13.0] - 2026-07-24
 

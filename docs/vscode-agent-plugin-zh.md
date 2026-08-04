@@ -219,6 +219,8 @@ Plugin 仓库。
 `/workflow-init` 只准备运行环境，不读取当前项目、不生成 change，也不启动需求。
 应先在内置 **Agent** 执行该命令，再选择 **Spec Superflow**，避免开发 Agent
 的状态机指令进入初始化请求。
+命令完成后仍停留在内置 **Agent**，因此可以在同一 Chat 中重复执行，
+不需要新建 Chat。
 开始需求前先执行 `/workflow-init`。Plugin 更新后也先重新执行一次，使 CLI
 版本与 Plugin 保持一致。
 

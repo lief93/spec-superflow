@@ -25,7 +25,7 @@ projects.
 
 ## 2. Run `/workflow-init`
 
-1. Open a new Chat.
+1. Open the Chat view.
 2. Keep the built-in VS Code **Agent** selected. Do not select
    **Spec Superflow** yet.
 3. Enter `/workflow-init`.
@@ -35,6 +35,10 @@ projects.
 5. If the global `ssf` CLI is missing or its version differs from the Plugin,
    confirm the installation or upgrade when prompted.
 6. Wait for initialization to finish.
+
+The command remains in the built-in Agent after completion. You can run
+`/workflow-init` again in the same Chat whenever you need to verify or update
+the runtime.
 
 The workflow is available when the result contains:
 
@@ -109,7 +113,7 @@ instructions. You do not need to uninstall the Plugin.
    does not provide an update action, run
    **Chat: Install Plugin From Source** again with the same repository URL.
 2. Reload VS Code.
-3. Open a new Chat and keep the built-in VS Code **Agent** selected.
+3. Keep the built-in VS Code **Agent** selected.
 4. Run `/workflow-init` again.
 5. If the Plugin version is newer than the installed CLI, confirm the upgrade.
 6. After the result contains `workflow=READY`, select **Spec Superflow** and
@@ -123,7 +127,8 @@ into each business project.
 ### `/workflow-init` Is Not Available
 
 - Confirm that the Plugin is installed and enabled.
-- Open a new Chat and enter `/workflow-init` again.
+- Keep the built-in **Agent** selected and enter `/workflow-init` again in the
+  same Chat or any other Chat.
 - Click the suggestion or press **Tab** to select it instead of sending the
   suggestion text as a regular message.
 - Run **Developer: Reload Window** and retry.
@@ -142,7 +147,7 @@ into each business project.
 - Open **MCP: List Servers** and confirm that the `spec-superflow` bootstrap MCP
   is present.
 - Confirm that the workspace is not in **Restricted Mode**.
-- Run **Developer: Reload Window**, open a new Chat, and retry.
+- Run **Developer: Reload Window** and retry.
 
 ### `MCP: List Servers` Is Empty
 
