@@ -231,7 +231,6 @@ describe('packaged CLI runtime', () => {
     for (const path of [
       'agents/spec-superflow.agent.md',
       'agents/spec-superflow-reviewer.agent.md',
-      'agents/spec-superflow-setup.agent.md',
       '.opencode/agents/spec-superflow.md',
       '.opencode/agents/spec-superflow-reviewer.md',
       '.opencode/plugins/spec-superflow.js',
@@ -248,6 +247,7 @@ describe('packaged CLI runtime', () => {
     }
 
     assert.equal(files.has('agents/spec-superflow-dev.agent.md'), false);
+    assert.equal(files.has('agents/spec-superflow-setup.agent.md'), false);
     assert.equal(files.has('.opencode/agents/spec-superflow-dev.md'), false);
     assert.equal(
       [...files].some(path => /^(changes|tests|validation|release-assets)\//.test(path)),

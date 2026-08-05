@@ -135,8 +135,8 @@ SecretStorage；两者都不是工具参数或 Chat 内容。
 3. 确认 Agent 选择器只出现一个 **Spec Superflow**；不要再同时安装 Git 版本。
 4. 保持 VS Code 内置 **Agent**，输入 `/workflow-init` 并选择 Plugin 提供的候选项。
    用鼠标点击或按 **Tab**，让 VS Code 将它提交为结构化 Slash Command；不要把
-   候选文字当普通消息直接发送。命令会进入隐藏的 **Spec Superflow Setup**；
-   它只能使用两个 Extension bootstrap tools 和原生确认工具，不能读取项目、
+   候选文字当普通消息直接发送。命令保持在 VS Code 内置 **Agent** 和同一 Chat，
+   只声明两个 Extension bootstrap tools 和原生确认工具，并要求模型不能读取项目、
    使用终端或访问 Memory。
 5. 缺少 CLI 或版本不一致时确认安装。
 6. 初始化返回 `READY` 后选择 **Spec Superflow** 并描述需求；普通工作流只
@@ -144,9 +144,8 @@ SecretStorage；两者都不是工具参数或 Chat 内容。
 
 `/workflow-init` 只准备运行环境，不读取当前项目、不生成 change，也不启动需求。
 应先在内置 **Agent** 执行该命令，再选择 **Spec Superflow**，避免开发 Agent
-的状态机指令进入初始化请求。
-命令完成后点击 **Return to Agent** 返回同一 Chat 的内置 **Agent**，之后可以
-在同一 Chat 中重复执行，不需要新建 Chat。
+的状态机指令进入初始化请求。命令不会切换到单独的 Setup Agent，完成后可以
+在同一 Chat 中重复执行，不需要 handoff 或新建 Chat。
 开始需求前先执行 `/workflow-init`。Plugin 更新后也先重新执行一次，使 CLI
 版本与 Plugin 保持一致。
 

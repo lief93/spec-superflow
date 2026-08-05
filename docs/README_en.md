@@ -93,8 +93,9 @@ copilot plugin install spec-superflow@spec-superflow
 Run **Chat: Install Plugin From Source** from the VS Code Command Palette and
 enter this repository's Git URL. Keep the built-in **Agent** selected, type
 `/workflow-init`, and click the Plugin suggestion or press **Tab** to commit it
-as a structured Slash Command. The bootstrap installs the matching global `ssf` CLI from the
-Plugin itself. After it reports `READY`, select **Spec Superflow** from the
+as a structured Slash Command. The command remains in the current Agent and
+installs the matching global `ssf` CLI from the Plugin itself. After it reports
+`READY`, select **Spec Superflow** from the
 agent picker and start the requirement. Switching to another agent stops
 applying its agent-specific instructions. The Plugin bundles its Agent, Skills
 with their artifact templates, Commands, scripts, CLI source, and bootstrap MCP. Normal workflow

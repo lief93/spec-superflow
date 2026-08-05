@@ -10,6 +10,10 @@ This offline VSIX contains three pieces in one installation:
 Do not install the same Spec Agent Plugin again from Git while this VSIX is
 enabled, because VS Code can otherwise discover duplicate Spec Agents.
 
+`/workflow-init` remains in the current built-in Agent and limits setup to the
+status, native confirmation, install, and final verification sequence. It does
+not inspect the workspace or start a Change.
+
 ## Example MCP flow
 
 The bundled `example-mcp-reader` Skill recognizes an item URL or key and calls
