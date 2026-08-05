@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "vscode-runtime",
+  "capturedAt": "2026-08-05T09:38:18Z",
+  "host": {
+    "name": "Visual Studio Code",
+    "version": "1.123.0"
+  },
+  "package": {
+    "extensionId": "magebyte.spec-superflow-companion",
+    "vsixPath": "/tmp/spec-superflow-matt-workflow-plugin-final-20260805-ZvM56n/one.vsix",
+    "sha256": "31a3c6f2af20d7238933469e6ca5acef006c6938904ce281f8677f1ec88988ef",
+    "pluginRoots": [
+      "agent-plugin",
+      "matt-plugin"
+    ],
+    "mattCommit": "2ab958093e83e0ec752e6c1c5932da465bf23e0c"
+  },
+  "network": {
+    "allowed": [
+      "configured Copilot model service"
+    ],
+    "blocked": [
+      "upstream Git",
+      "package registry",
+      "optional MCP",
+      "Plugin content fetch"
+    ]
+  },
+  "canaries": [
+    {
+      "skill": "ask-matt",
+      "agent": "Matt Engineering",
+      "invocation": "explicit",
+      "result": "PASS",
+      "prompt": "Explicitly use the ask-matt skill. I have a medium refactor with unclear boundaries and need to choose between to-spec, wayfinder, and prototype. Recommend the next flow and explain why. Do not use Spec Superflow, do not run ssf, and do not create a changes directory.",
+      "response": "Loaded ask-matt and its linked flow definitions, recommended prototype for the local uncertainty, and explained when to use to-spec or wayfinder.",
+      "tracePath": "changes/matt-workflow-plugin/evidence/runtime/ask-matt-transcript.jsonl",
+      "forbiddenActivity": {
+        "ssf": false,
+        "workflowInit": false,
+        "specChanges": false
+      }
+    },
+    {
+      "skill": "diagnosing-bugs",
+      "agent": "Matt Engineering",
+      "invocation": "automatic",
+      "result": "PASS",
+      "prompt": "Debug this deterministic bug in the current workspace. Running node test.mjs should pass, but it fails because total([1, 2, 3]) returns 5 instead of 6. Build and run one tight feedback-loop command, reproduce the exact symptom, then stop after presenting 3 ranked falsifiable hypotheses. Do not edit any file. Do not use Spec Superflow, do not run ssf, and do not create a changes directory.",
+      "response": "Loaded diagnosing-bugs before the terminal command, reproduced actual 5 versus expected 6 with node test.mjs, and returned three ranked falsifiable hypotheses without editing files.",
+      "tracePath": "changes/matt-workflow-plugin/evidence/runtime/diagnosing-bugs-transcript.jsonl",
+      "forbiddenActivity": {
+        "ssf": false,
+        "workflowInit": false,
+        "specChanges": false
+      }
+    }
+  ],
+  "specSmoke": {
+    "agent": "Spec Superflow",
+    "result": "PASS",
+    "tracePath": "changes/matt-workflow-plugin/evidence/runtime/spec-superflow-smoke-transcript.jsonl"
+  },
+  "pendingSkills": [
+    "grill-with-docs",
+    "triage",
+    "improve-codebase-architecture",
+    "setup-matt-pocock-skills",
+    "tdd",
+    "to-spec",
+    "to-tickets",
+    "wayfinder",
+    "implement",
+    "prototype",
+    "research",
+    "domain-modeling",
+    "codebase-design",
+    "code-review",
+    "resolving-merge-conflicts",
+    "grill-me",
+    "grilling",
+    "handoff",
+    "teach",
+    "writing-great-skills"
+  ],
+  "duplicateNameResolution": {
+    "name": "grill-me",
+    "status": "PENDING"
+  },
+  "restoration": {
+    "result": "PASS",
+    "before": "d209dadc1d5e6014ab4eadb61cf4ffc968dec13e1f5da25a2d78bd530db9067c",
+    "after": "d209dadc1d5e6014ab4eadb61cf4ffc968dec13e1f5da25a2d78bd530db9067c",
+    "candidateProcesses": 0,
+    "candidateConfigReferences": 0
+  },
+  "secretScan": {
+    "exposedValues": []
+  }
+}

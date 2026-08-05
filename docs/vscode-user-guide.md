@@ -1,9 +1,10 @@
-# Use Spec Superflow in VS Code
+# Use Spec Superflow and Matt Engineering in VS Code
 
-The offline VSIX contains the Spec Agent Plugin, `/workflow-init` tools, CLI
-source, and a replaceable Example MCP bridge. A VS Code user installs one file;
-do not also install the same Agent Plugin from Git, because that can create
-duplicate Spec Agents.
+One VSIX contains two independent Agent Plugins: **Spec Superflow** plus its
+`/workflow-init` tools, CLI source, and Example MCP bridge; and **Matt
+Engineering** with Matt Pocock's source-preserved Skills. A user installs one
+file. Do not also install either Agent Plugin from Git, because that can create
+duplicate Agents.
 
 ## 1. Install the Offline VSIX
 
@@ -14,7 +15,8 @@ and enabled in VS Code.
 2. Open the Command Palette.
 3. Select **Extensions: Install from VSIX...** and choose that file.
 4. Reload VS Code when prompted.
-5. Confirm that **Spec Superflow** appears once in the Chat Agent selector.
+5. Confirm that **Spec Superflow** and **Matt Engineering** each appear once in
+   the Chat Agent selector.
 
 ## 2. Run `/workflow-init`
 
@@ -28,7 +30,19 @@ and enabled in VS Code.
 It does not inspect the project, create a Change, start a requirement, or
 configure a business MCP. The command can be run repeatedly in the same Chat.
 
-## 3. Try the Replaceable Example MCP
+## 3. Use Matt Engineering
+
+Select **Matt Engineering** when you want the independent Matt workflow. Invoke
+`ask-matt` explicitly when you want it to choose a flow. A hard bug prompt can
+select `diagnosing-bugs` automatically from its description.
+
+The packaged source is pinned to
+`2ab958093e83e0ec752e6c1c5932da465bf23e0c`: 22 Skills and 66 files selected
+by the upstream manifest. Real VS Code acceptance is limited to the two
+canaries above. `code-review`, `research`, `wayfinder`, duplicate `grill-me`
+resolution, and every other unexecuted Skill remain `PENDING`.
+
+## 4. Try the Replaceable Example MCP
 
 The VSIX includes an `example-mcp-reader` Skill. For example, ask:
 
@@ -47,7 +61,7 @@ does not access the network. In a company fork, replace the bundled example
 Server and fixed tool mapping with the company Jira MCP while retaining the
 same Skill and one-shot lifecycle.
 
-## 4. Initialize a Business Project
+## 5. Initialize a Business Project
 
 1. Open the repository root.
 2. Select **Spec Superflow**.
@@ -57,7 +71,7 @@ same Skill and one-shot lifecycle.
 
 `project-init` does not check, install, or upgrade the CLI.
 
-## 5. Start or Continue a Requirement
+## 6. Start or Continue a Requirement
 
 1. Select **Spec Superflow**.
 2. Describe the requirement, bug, or existing Change to resume.
@@ -67,14 +81,14 @@ same Skill and one-shot lifecycle.
 5. Implementation begins only after Planning and its execution contract are
    approved.
 
-## 6. Update
+## 7. Update
 
 1. Copy the new offline VSIX to the computer.
 2. Run **Extensions: Install from VSIX...** again and select it.
 3. Reload VS Code.
 4. Run `/workflow-init`; approve the global CLI upgrade when requested.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 ### `/workflow-init` or its tools are unavailable
 

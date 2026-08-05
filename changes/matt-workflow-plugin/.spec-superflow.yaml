@@ -1,0 +1,44 @@
+# .spec-superflow.yaml — lightweight state machine
+# Workflow state. Hashes are rebuildable; execution_base_commit is immutable execution provenance.
+
+# === Core state ===
+state: executing
+workflow: full
+
+# === Hashes (fast staleness detection) ===
+artifacts_hash: sha256:2da1c4a111ba9a39d587805676943f66c649c8c651b42d8778d2a8360915f130
+contract_hash: sha256:94808a1d6d068a1eef2b9e4ac55ef33a3d7c86f743222e49a9841ea39fe4ab39
+
+# === Execution progress ===
+execution_mode: Batch Inline
+execution_base_commit: f238e6cf08983a8c2c9c85f8ca95b53f3bf824e8
+batches_completed: 2
+test_result: pass
+
+# === Metadata ===
+change_name: matt-workflow-plugin
+last_transition: 2026-08-05T06:16:15.131Z
+last_transition_from: approved-for-build
+last_transition_to: executing
+
+# === Decision points ===
+dp_0_result: null
+dp_0_decisions: confirmed: one offline deterministic VSIX exposes independent Spec Superflow and Matt Engineering chat plugins; vendor exactly the 22 officially published mattpocock/skills at commit 2ab958093e83e0ec752e6c1c5932da465bf23e0c with license and provenance; keep Spec behavior unchanged and workflows isolated; no matt prefixes, conflict resolution, excluded upstream directories, network-dependent build, release, or publication
+dp_0_confirmed: true
+dp_0_timestamp: 2026-08-05T04:40:00Z
+dp_1_result: confirmed: one offline deterministic VSIX exposes separate Spec Superflow and Matt Engineering Plugins; current fixed 22-Skill inventory; real ask-matt and diagnosing-bugs Copilot validation; future manifest-driven sync reports inventory changes; duplicate-name resolution remains PENDING
+dp_1_candidate_identity: sha256:82e4633398bc736b727ac3d38608cca2675c27b601ce7684794e9b50c8b536f6
+dp_1_timestamp: 2026-08-05T04:52:33Z
+dp_2_result: confirmed: approved two-Batch design covers pinned vendor verification and transactional sync, deterministic dual-Plugin VSIX assembly, authoritative docs, and bounded real Copilot canaries with unexecuted Skills PENDING
+dp_2_candidate_identity: sha256:44b050b370aa51e58522461eafd2ad9b37e5fb77f92d05ee05d70ead94ca9bf7
+dp_2_timestamp: 2026-08-05T05:11:19Z
+dp_3_result: approved: Batch Inline execution with two guarded Batches, offline deterministic VSIX, connected canaries bounded to ask-matt and diagnosing-bugs, all other semantics PENDING
+dp_3_timestamp: 2026-08-05T06:16:14Z
+dp_4_result: approved: Batch Inline
+dp_4_timestamp: 2026-08-05T06:16:14Z
+dp_5_result: null
+dp_5_timestamp: null
+dp_6_result: confirmed conditional: approved execution contract accepts unavailable automated Agent Picker and Copilot Chat driver after documented capability search; real VS Code 1.123 Device Test passed
+dp_6_timestamp: 2026-08-05T10:00:10Z
+dp_7_result: null
+dp_7_timestamp: null

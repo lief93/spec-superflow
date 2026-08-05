@@ -31,6 +31,9 @@
     "chatPlugins": [
       {
         "path": "./agent-plugin"
+      },
+      {
+        "path": "./matt-plugin"
       }
     ],
     "languageModelTools": [

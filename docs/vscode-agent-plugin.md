@@ -1,9 +1,10 @@
-# VS Code Spec Superflow VSIX
+# VS Code Spec Superflow and Matt Engineering VSIX
 
-The recommended offline distribution is one VSIX containing the complete Agent
-Plugin, CLI source, two bootstrap Language Model Tools, and a replaceable
-one-shot Example MCP bridge. Target repositories do not copy those shared
-resources or install a second Spec Superflow package.
+The recommended offline distribution is one VSIX containing two independent
+Agent Plugins. The Spec root keeps the CLI source, two bootstrap Language Model
+Tools, and the replaceable one-shot Example MCP bridge. The Matt root contains
+only its Agent, source-preserved Skills, license, provenance, and compatibility
+ledger. Target repositories do not copy these shared resources.
 
 ## Repository layout
 
@@ -19,14 +20,36 @@ spec-superflow-<version>.vsix
     scripts/
     servers/
     package.json
+  extension/matt-plugin/
+    plugin.json
+    agents/matt-engineering.agent.md
+    skills/
+    LICENSE
+    provenance.json
+    compatibility.json
 ```
 
-The extension manifest contributes `chatPlugins` at `./agent-plugin`, so the
-Agent Plugin and bootstrap tools are discovered from the same installation.
+The extension manifest contributes `chatPlugins` at `./agent-plugin` and
+`./matt-plugin`, so both Plugin roots and the bootstrap tools are discovered
+from the same installation.
 The staged Agent Plugin intentionally has no `.mcp.json`: this path works when
 an organization disables the native VS Code MCP Host but still permits
 Extension Language Model Tools. Do not enable a second Git-installed copy of
 the same Agent Plugin, or duplicate Spec Agents can appear.
+
+## Matt source and compatibility boundary
+
+The Matt root is generated from the official `mattpocock/skills` manifest at
+commit `2ab958093e83e0ec752e6c1c5932da465bf23e0c`. It preserves 22 Skills and 66
+files byte for byte, together with the upstream MIT license and per-file
+SHA-256 provenance. `Matt Engineering` routes explicit `ask-matt` requests and
+allows `diagnosing-bugs` to be selected automatically by its original metadata.
+
+Ordinary build and install remain offline and deterministic. Only the explicit
+sync maintainer command may fetch a new fixed commit; it proposes manifest
+changes before an atomic verified replacement. `code-review`, `research`,
+`wayfinder`, duplicate `grill-me` resolution, and all other unexecuted Skills
+remain `PENDING`; package structure does not prove host semantics.
 
 ## Runtime model
 
@@ -113,8 +136,8 @@ A user-global instruction is environment state, not part of Plugin delivery.
 When a combined isolated VS Code 1.123 acceptance is executed, it should prove
 these runtime properties together:
 
-1. The Agent picker exposes only `Spec Superflow` as the user-invocable
-   workflow Agent.
+1. The Agent picker exposes one `Spec Superflow` workflow Agent and a separate
+   `Matt Engineering` Agent. This Spec acceptance evaluates only the former.
 2. Primary invokes exactly `Spec Superflow Reviewer`; no separate Dev Agent is
    registered or invoked.
 3. Primary-only, cross-stage, and prior-invocation canaries do not leak into a

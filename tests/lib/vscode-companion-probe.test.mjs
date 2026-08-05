@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { describe, it } from 'node:test';
 
 const ROOT = process.cwd();
@@ -14,14 +15,32 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
+function sha256(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+function stageManifest(root, current = root) {
+  return readdirSync(current, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .flatMap(entry => {
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) return stageManifest(root, path);
+      const name = relative(root, path).split('\\').join('/');
+      return [{ path: name, sha256: sha256(path) }];
+    });
+}
+
 describe('combined Spec Superflow VSIX', () => {
-  it('contributes one Agent Plugin plus CLI bootstrap and Example MCP tools', () => {
+  it('contributes exactly two Agent Plugins plus unchanged CLI bootstrap and Example MCP tools', () => {
     const rootPackage = readJson(join(ROOT, 'package.json'));
     const manifest = readJson(join(EXTENSION, 'package.json'));
 
     assert.equal(manifest.version, rootPackage.version);
     assert.equal(manifest.displayName, 'Spec Superflow');
-    assert.deepEqual(manifest.contributes.chatPlugins, [{ path: './agent-plugin' }]);
+    assert.deepEqual(manifest.contributes.chatPlugins, [
+      { path: './agent-plugin' },
+      { path: './matt-plugin' },
+    ]);
     assert.deepEqual(
       manifest.contributes.languageModelTools.map(tool => tool.name),
       [
@@ -57,6 +76,8 @@ describe('combined Spec Superflow VSIX', () => {
         join(extensionRoot, 'agent-plugin', 'skills', 'example-mcp-reader', 'SKILL.md'),
         'utf8',
       );
+      const mattPlugin = readJson(join(extensionRoot, 'matt-plugin', 'plugin.json'));
+      const mattProvenance = readJson(join(extensionRoot, 'matt-plugin', 'provenance.json'));
 
       assert.equal(plugin.mcpServers, undefined);
       assert.equal(
@@ -71,12 +92,58 @@ describe('combined Spec Superflow VSIX', () => {
       assert.match(setupAgent, /spec_superflow_cli_status/);
       assert.match(exampleSkill, /spec_superflow_example_mcp_read/);
       assert.doesNotMatch(exampleSkill, /JSON-RPC|child_process|server path|token argument/i);
+      assert.equal(mattPlugin.name, 'matt-engineering');
+      assert.equal(mattProvenance.selectedSkills.length, 22);
+      assert.equal(mattProvenance.files.length, 66);
+      assert.doesNotMatch(setupAgent, /Matt Engineering|ask-matt|diagnosing-bugs/);
       assert.throws(
         () => readFileSync(join(extensionRoot, 'agent-plugin', 'servers', 'token-example-mcp.mjs')),
         /ENOENT/,
       );
     } finally {
       rmSync(stagingRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('builds identical staged digests and VSIX bytes twice in npm offline mode', () => {
+    const root = mkdtempSync(join(tmpdir(), 'spec-superflow-vsix-repeat-'));
+    try {
+      const outputs = [];
+      const manifests = [];
+      for (const run of ['one', 'two']) {
+        const cache = join(root, `empty-cache-${run}`);
+        const stage = join(root, `stage-${run}`);
+        const output = join(root, `combined-${run}.vsix`);
+        const env = {
+          ...process.env,
+          npm_config_cache: cache,
+          npm_config_offline: 'true',
+          npm_config_registry: 'http://127.0.0.1:9/unreachable',
+        };
+        const staged = spawnSync(
+          process.execPath,
+          [join(ROOT, 'scripts', 'build-vscode-vsix.mjs'), '--stage-only', stage],
+          { cwd: ROOT, encoding: 'utf8', env },
+        );
+        assert.equal(staged.status, 0, staged.stderr || staged.stdout);
+        manifests.push(stageManifest(stage));
+
+        const built = spawnSync(
+          process.execPath,
+          [join(ROOT, 'scripts', 'build-vscode-vsix.mjs'), output],
+          { cwd: ROOT, encoding: 'utf8', env },
+        );
+        assert.equal(built.status, 0, built.stderr || built.stdout);
+        outputs.push(sha256(output));
+      }
+
+      assert.deepEqual(manifests[0], manifests[1]);
+      assert.equal(outputs[0], outputs[1]);
+      const builder = readFileSync(join(ROOT, 'scripts', 'build-vscode-vsix.mjs'), 'utf8');
+      assert.doesNotMatch(builder, /spawnSync\(\s*['"]git['"]|\bfetch\s*\(|https?\.request|npm\s+(install|update)/i);
+      assert.doesNotMatch(builder, /sync-matt-plugin/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 
