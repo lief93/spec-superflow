@@ -8,9 +8,6 @@ const ROOT = process.cwd();
 const read = path => readFileSync(join(ROOT, path), 'utf8');
 const primary = read('agents/spec-superflow.agent.md');
 const reviewer = read('agents/spec-superflow-reviewer.agent.md');
-const setup = existsSync(join(ROOT, 'agents', 'spec-superflow-setup.agent.md'))
-  ? read('agents/spec-superflow-setup.agent.md')
-  : '';
 
 function probeAgentRouteWithoutNode(route) {
   return spawnSync(
@@ -48,14 +45,13 @@ function probeAgentRouteWithoutNode(route) {
 }
 
 describe('VS Code Agent Plugin', () => {
-  it('exposes one visible Primary plus isolated hidden Setup and Reviewer Agents', () => {
+  it('exposes one visible Primary plus one hidden Reviewer Agent', () => {
     const agentFiles = readdirSync(join(ROOT, 'agents'))
       .filter(file => file.endsWith('.agent.md'))
       .sort();
 
     assert.deepEqual(agentFiles, [
       'spec-superflow-reviewer.agent.md',
-      'spec-superflow-setup.agent.md',
       'spec-superflow.agent.md',
     ]);
     assert.match(primary, /^agents: \["Spec Superflow Reviewer"\]$/m);
@@ -63,9 +59,7 @@ describe('VS Code Agent Plugin', () => {
     assert.match(reviewer, /^user-invocable: false$/m);
     assert.match(reviewer, /^agents: \[\]$/m);
     assert.doesNotMatch(reviewer, /^tools:/m);
-    assert.match(setup, /^name: Spec Superflow Setup$/m);
-    assert.match(setup, /^user-invocable: false$/m);
-    assert.match(setup, /^disable-model-invocation: true$/m);
+    assert.equal(existsSync(join(ROOT, 'agents', 'spec-superflow-setup.agent.md')), false);
     assert.doesNotMatch(primary, /Spec Superflow Setup/);
   });
 
@@ -170,11 +164,13 @@ describe('VS Code Agent Plugin', () => {
   it('provides an explicit CLI bootstrap workflow-init command', () => {
     const pkg = JSON.parse(read('package.json'));
     const command = read('commands/workflow-init.md');
-    const setupFrontmatter = setup.slice(0, setup.indexOf('\n---', 4));
 
     assert.match(command, /^name: workflow-init$/m);
-    assert.match(command, /^agent: Spec Superflow Setup$/m);
-    assert.doesNotMatch(command, /^agent: Spec Superflow$/m);
+    assert.doesNotMatch(command, /^agent:/m);
+    assert.match(
+      command,
+      /# Initialize or Update Spec Superflow[\s\S]{0,180}\*\*FIRST AND ONLY INITIAL ACTION:\*\* Call #tool:spec-superflow\/spec_superflow_cli_status/i,
+    );
     assert.match(
       command,
       /initialize, verify, or update the Spec Superflow workflow runtime/i,
@@ -183,19 +179,16 @@ describe('VS Code Agent Plugin', () => {
       command,
       /do not ask for[^.]*change name[^.]*requirement[^.]*scope[^.]*acceptance criteria/is,
     );
-    assert.doesNotMatch(command, /^allowed-tools:/m);
-    assert.match(command, /tools:\s*\n\s+- ['"]spec-superflow\/\*['"]/);
+    assert.match(command, /allowed-tools:\s*\n\s+- ['"]spec-superflow\/\*['"]/);
+    assert.doesNotMatch(command, /^tools:/m);
     assert.doesNotMatch(command, /spec-superflow-optional-example\/\*/);
     assert.match(command, /\n\s+- ['"]vscode\/askQuestions['"]/);
-    assert.match(setupFrontmatter, /tools:\s*\n\s+- ['"]spec-superflow\/\*['"]/);
-    assert.doesNotMatch(setupFrontmatter, /spec-superflow-optional-example\/\*/);
-    assert.match(setupFrontmatter, /\n\s+- ['"]vscode\/askQuestions['"]/);
-    assert.doesNotMatch(setupFrontmatter, /terminal|workspace|memory|readFile|execute/i);
-    assert.match(setup, /first and only initial action must be `spec_superflow_cli_status`/i);
-    assert.match(setup, /do not load a Skill, inspect files, access memory/i);
-    assert.match(setup, /do not start or resume development/i);
     assert.match(command, /spec_superflow_cli_status/);
     assert.match(command, /spec_superflow_install_cli/);
+    assert.match(
+      command,
+      /when `ready` is true[\s\S]{0,180}immediately report `READY`[\s\S]{0,80}stop; do not call another tool/i,
+    );
     assert.match(
       command,
       /askQuestions[\s\S]*explicit confirmation[\s\S]*spec_superflow_install_cli/i,
@@ -225,12 +218,8 @@ describe('VS Code Agent Plugin', () => {
   it('keeps workflow-init repeatable in the same VS Code Chat', () => {
     const command = read('commands/workflow-init.md');
 
-    assert.match(command, /^agent: Spec Superflow Setup$/m);
-    assert.match(
-      setup,
-      /handoffs:\s*\n\s+- label: Return to Agent\s*\n\s+agent: agent\s*\n\s+send: false/m,
-      'hidden Setup must offer the official Return to Agent handoff in the same Chat',
-    );
+    assert.doesNotMatch(command, /^agent:/m);
+    assert.match(command, /remain in the current Agent and Chat/i);
   });
 
   it('documents selecting workflow-init as a structured VS Code Slash Command', () => {
@@ -238,17 +227,13 @@ describe('VS Code Agent Plugin', () => {
     const chinese = read('docs/vscode-agent-plugin-zh.md');
 
     assert.match(english, /Click it or press \*\*Tab\*\*[\s\S]*structured Slash Command/i);
-    assert.match(english, /hidden \*\*Spec Superflow Setup\*\* Agent/i);
-    assert.match(
-      english,
-      /Return to Agent[\s\S]*same Chat[\s\S]*`\/workflow-init` can (?:then )?be run again/i,
-    );
-    assert.match(english, /only\s+the two extension bootstrap tools and native question tool/i);
+    assert.match(english, /remains in the built-in \*\*Agent\*\* and the same Chat/i);
+    assert.match(english, /declares only\s+the two extension bootstrap tools and native question tool/i);
     assert.match(english, /does not[\s\S]*create a Change[\s\S]*start or resume development/i);
     assert.match(chinese, /选择 Plugin 提供的候选项[\s\S]*按 \*\*Tab\*\*/i);
     assert.match(chinese, /`\/workflow-init` 只准备运行环境/i);
     assert.match(chinese, /不读取当前项目[\s\S]*不生成 change[\s\S]*不启动需求/i);
-    assert.match(chinese, /Return to Agent[\s\S]*同一 Chat/i);
+    assert.match(chinese, /保持在 VS Code 内置 \*\*Agent\*\*[\s\S]*同一 Chat/i);
   });
 
   it('keeps Plugin setup commands outside the development state machine', () => {

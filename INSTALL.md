@@ -253,9 +253,8 @@ copilot plugin uninstall spec-superflow
 1. 确认 Agent 选择器只出现一个 **Spec Superflow**。不要再同时安装 Git 版本。
 2. 保持 VS Code 内置 **Agent**，输入 `/workflow-init`，点击候选项或按
    **Tab** 将其提交为 Plugin Slash Command；在需要时确认安装或升级 CLI，
-   并等待 `READY`。命令自动进入隐藏的 **Spec Superflow Setup**，其工具权限
-   仅包含两个 Extension bootstrap tools 和原生确认工具，不读取项目或使用终端。完成后点击
-   **Return to Agent** 返回同一 Chat；之后仍可再次执行，不创建或恢复 Change。
+   并等待 `READY`。命令保持在当前 Agent 和同一 Chat，只声明两个 Extension
+   bootstrap tools 和原生确认工具，不读取项目、不使用终端，也不创建或恢复 Change。
 3. 在 Agent 选择器中选择 **Spec Superflow**。
 4. 用普通对话启动一个测试需求，确认 Agent 从 Plugin 读取 Skill、脚本和 Skill-local 模板，
    并把任务产物写入当前业务仓库。

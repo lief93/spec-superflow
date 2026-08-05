@@ -22,7 +22,7 @@ and enabled in VS Code.
 2. Enter `/workflow-init` and select the structured Slash Command suggestion.
 3. If the global `ssf` CLI is missing or has another version, approve the
    offline installation or upgrade.
-4. Wait for `READY`, then select **Return to Agent**.
+4. Wait for `READY`; the command remains in the current Agent and Chat.
 
 `/workflow-init` only checks, installs, upgrades, and verifies the global CLI.
 It does not inspect the project, create a Change, start a requirement, or
@@ -80,7 +80,8 @@ same Skill and one-shot lifecycle.
 
 - Confirm the VSIX is installed and enabled.
 - Confirm only one copy of Spec Superflow is installed.
-- Keep the built-in **Agent** selected when entering `/workflow-init`.
+- Keep the built-in **Agent** selected when entering `/workflow-init`; the
+  command does not switch to a separate setup Agent.
 - Select the Slash Command suggestion instead of sending plain text.
 - Run **Developer: Reload Window** and retry.
 - In Chat **Configure Tools**, confirm `specSuperflowCliStatus` and

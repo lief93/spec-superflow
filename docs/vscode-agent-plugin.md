@@ -159,10 +159,10 @@ changing the Skill-to-tool boundary. This Example MCP is independent of
 4. Keep the built-in **Agent** selected, type `/workflow-init`, and select the
    Plugin-provided suggestion. Click it or press **Tab** so VS Code commits it
    as a structured Slash Command; do not send the candidate as plain text. The
-   command switches to the hidden **Spec Superflow Setup** Agent, which has only
-   the two extension bootstrap tools and native question tool. It cannot inspect the workspace,
-   use a terminal, access memory, or load the development state machine from the
-   **Spec Superflow** Agent.
+   command remains in the built-in **Agent** and the same Chat. It declares only
+   the two extension bootstrap tools and native question tool, and instructs the
+   model not to inspect the workspace, use a terminal, access memory, or load the
+   development state machine.
 5. Approve CLI installation when needed.
 6. After setup reports `READY`, select **Spec Superflow** and describe a
    requirement. Normal workflows use the installed CLI and do not install or
@@ -172,10 +172,10 @@ changing the Skill-to-tool boundary. This Example MCP is independent of
 inspect the open repository, ask for requirement details, create a Change, or
 start or resume development.
 
-Run the setup command while the built-in **Agent** is selected. After setup
-reports its result, click **Return to Agent** to return to the built-in Agent in
-the same Chat. `/workflow-init` can then be run again without opening a new
-Chat. Select **Spec Superflow** only after setup reports `READY`.
+Run the setup command while the built-in **Agent** is selected. It remains in
+the current Agent and Chat, so `/workflow-init` can be run again without a
+handoff or a new Chat. Select **Spec Superflow** only after setup reports
+`READY`.
 
 Run `/workflow-init` before starting a requirement. Run it again after updating
 the Plugin so the CLI version is synchronized before normal workflow use.

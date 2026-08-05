@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -49,9 +49,11 @@ describe('combined Spec Superflow VSIX', () => {
         join(extensionRoot, 'agent-plugin', 'commands', 'workflow-init.md'),
         'utf8',
       );
-      const setupAgent = readFileSync(
-        join(extensionRoot, 'agent-plugin', 'agents', 'spec-superflow-setup.agent.md'),
-        'utf8',
+      const setupAgent = join(
+        extensionRoot,
+        'agent-plugin',
+        'agents',
+        'spec-superflow-setup.agent.md',
       );
       const exampleSkill = readFileSync(
         join(extensionRoot, 'agent-plugin', 'skills', 'example-mcp-reader', 'SKILL.md'),
@@ -68,7 +70,9 @@ describe('combined Spec Superflow VSIX', () => {
       assert.match(command, /spec_superflow_cli_status/);
       assert.match(command, /spec_superflow_install_cli/);
       assert.doesNotMatch(command, /optional_mcp|token_example|MCP: List Servers/i);
-      assert.match(setupAgent, /spec_superflow_cli_status/);
+      assert.doesNotMatch(command, /^agent:/m);
+      assert.match(command, /remain in the current Agent and Chat/i);
+      assert.equal(existsSync(setupAgent), false);
       assert.match(exampleSkill, /spec_superflow_example_mcp_read/);
       assert.doesNotMatch(exampleSkill, /JSON-RPC|child_process|server path|token argument/i);
       assert.throws(

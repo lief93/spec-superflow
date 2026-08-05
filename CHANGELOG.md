@@ -14,7 +14,7 @@ The format loosely follows Keep a Changelog.
 
 ### Fixed
 
-- **Isolated, repeatable workflow initialization** - `/workflow-init` runs in a hidden bootstrap-only Setup Agent and offers the official **Return to Agent** handoff, so users can safely run it repeatedly in the same VS Code Chat.
+- **Repeatable workflow initialization** - `/workflow-init` stays in the current built-in Agent and limits the model to the bootstrap status, confirmation, install, and verification sequence, so users can safely run it repeatedly in the same VS Code Chat.
 - **Global CLI path authority** - Bootstrap now uses the current `npm prefix -g` as the sole installation and version source, and returns ready only when `ssf` resolves to that same executable. A missing or shadowed PATH entry is reported without reinstalling an already-correct global CLI.
 - **Bootstrap scope** - `/workflow-init` now ends after exact global CLI verification. Example or company business MCP calls are owned by their Skills and cannot change workflow readiness.
 
