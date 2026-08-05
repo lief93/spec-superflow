@@ -2,21 +2,28 @@
 
 import { spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { verifyMattVendor } from './lib/matt-plugin-vendor.mjs';
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EXTENSION_SOURCE = join(ROOT, 'extensions', 'spec-superflow-companion');
+const FIXED_TIME = new Date('1980-01-01T00:00:00Z');
 
 function copy(source, destination) {
   mkdirSync(dirname(destination), { recursive: true });
@@ -58,6 +65,32 @@ function stageAgentPlugin(extensionRoot) {
   });
 }
 
+function stageMattPlugin(extensionRoot) {
+  const source = join(EXTENSION_SOURCE, 'matt-plugin');
+  verifyMattVendor(source);
+  const destination = join(extensionRoot, 'matt-plugin');
+  cpSync(source, destination, { recursive: true, force: true, dereference: false });
+  verifyMattVendor(destination);
+  return destination;
+}
+
+function normalizeStage(root, current = root) {
+  const files = [];
+  chmodSync(current, 0o755);
+  utimesSync(current, FIXED_TIME, FIXED_TIME);
+  for (const entry of readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const path = join(current, entry.name);
+    if (entry.isDirectory()) files.push(...normalizeStage(root, path));
+    else {
+      if (!lstatSync(path).isFile()) throw new Error(`Unsupported staged entry: ${path}`);
+      chmodSync(path, 0o644);
+      utimesSync(path, FIXED_TIME, FIXED_TIME);
+      files.push(relative(root, path).split('\\').join('/'));
+    }
+  }
+  return files;
+}
+
 function xml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -78,6 +111,7 @@ function stageVsix(root) {
   copy(join(EXTENSION_SOURCE, 'README.md'), join(extensionRoot, 'readme.md'));
   copy(join(EXTENSION_SOURCE, 'LICENSE'), join(extensionRoot, 'LICENSE.txt'));
   stageAgentPlugin(extensionRoot);
+  stageMattPlugin(extensionRoot);
 
   const manifest = JSON.parse(readFileSync(join(EXTENSION_SOURCE, 'package.json'), 'utf8'));
   writeFileSync(join(root, 'extension.vsixmanifest'), `<?xml version="1.0" encoding="utf-8"?>
@@ -118,6 +152,7 @@ function stageVsix(root) {
   <Default Extension="vsixmanifest" ContentType="text/xml" />
 </Types>
 `);
+  normalizeStage(root);
   return extensionRoot;
 }
 
@@ -127,7 +162,8 @@ function buildVsix(output) {
     stageVsix(stage);
     mkdirSync(dirname(output), { recursive: true });
     rmSync(output, { force: true });
-    const zipped = spawnSync('zip', ['-X', '-q', '-r', output, '.'], {
+    const files = normalizeStage(stage);
+    const zipped = spawnSync('zip', ['-X', '-q', output, ...files], {
       cwd: stage,
       encoding: 'utf8',
     });
@@ -151,4 +187,4 @@ if (mode === '--stage-only') {
   process.stdout.write(`${JSON.stringify({ output, version: rootPackage.version })}\n`);
 }
 
-export { stageVsix };
+export { normalizeStage, stageMattPlugin, stageVsix };

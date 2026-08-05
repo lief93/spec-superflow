@@ -8,6 +8,18 @@ The format loosely follows Keep a Changelog.
 
 ### Added
 
+- **Independent Matt Engineering Plugin** - Added a second Agent Plugin to the
+  same VSIX from `mattpocock/skills` commit
+  `2ab958093e83e0ec752e6c1c5932da465bf23e0c`, preserving the official 22 Skills,
+  66 files, MIT license, and per-file provenance without merging it into Spec
+  Superflow.
+- **Offline deterministic Matt packaging** - Ordinary build and installation
+  use only repository-owned files; a separate explicit sync command proposes
+  upstream manifest changes and performs a verified atomic replacement.
+- **Evidence-based Matt compatibility** - Limited real-host promotion to the
+  explicit `ask-matt` and automatic `diagnosing-bugs` canaries. `code-review`,
+  `research`, `wayfinder`, duplicate `grill-me` resolution, and all other
+  unexecuted Skills remain `PENDING`.
 - **Single offline VSIX** - Added one package containing the Spec Agent Plugin, `/workflow-init` CLI bootstrap tools, and a replaceable one-shot Example MCP bridge.
 - **Example MCP Skill** - Added a concrete Skill that calls one fixed VS Code tool; the VSIX owns native credential input, SecretStorage, the stdio MCP lifecycle, and process exit.
 - **VS Code user guide** - Updated installation, upgrade, Example MCP, project initialization, requirement, and troubleshooting steps for the single-VSIX distribution.

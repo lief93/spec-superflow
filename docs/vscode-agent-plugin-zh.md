@@ -1,8 +1,9 @@
-# VS Code Spec Superflow VSIX 配置指南
+# VS Code Spec Superflow 与 Matt Engineering VSIX 配置指南
 
-推荐的离线交付是一个 VSIX，其中同时包含完整 Agent Plugin、CLI 源码、两个
-bootstrap Language Model Tools，以及可替换的一次性 Example MCP bridge。项目
-仓库不需要复制公共资源，也不需要安装第二份 Spec Superflow。
+推荐的离线交付是一个 VSIX，其中包含两个相互独立的 Agent Plugin。Spec root
+保留 CLI 源码、两个 bootstrap Language Model Tools 和可替换的一次性 Example
+MCP bridge；Matt root 只包含 Agent、原样 Skills、license、provenance 和
+compatibility ledger。项目仓库不需要复制这些公共资源。
 
 需要自行组合或维护 Plugin 时，参见
 [VS Code Agent Plugin 结构与迁移指南](vscode-plugin-assembly-zh.md)。
@@ -21,13 +22,32 @@ spec-superflow-<version>.vsix
     scripts/
     servers/
     package.json
+  extension/matt-plugin/
+    plugin.json
+    agents/matt-engineering.agent.md
+    skills/
+    LICENSE
+    provenance.json
+    compatibility.json
 ```
 
-Extension manifest 通过 `chatPlugins: [{ "path": "./agent-plugin" }]` 暴露
-内置 Agent Plugin。VSIX 内的 Agent Plugin 刻意不包含 `.mcp.json`：即使公司
+Extension manifest 通过 `chatPlugins` 同时暴露 `./agent-plugin` 和
+`./matt-plugin`。VSIX 内的 Spec Agent Plugin 刻意不包含 `.mcp.json`：即使公司
 策略关闭原生 VS Code MCP Host，只要允许 Extension Language Model Tools，
 bootstrap 和 Example MCP bridge 仍可工作。不要同时启用同一 Plugin 的 Git
 安装副本，否则可能出现重复 Spec Agent。
+
+## Matt 源码与兼容性边界
+
+Matt root 来自官方 `mattpocock/skills` manifest，固定 commit 为
+`2ab958093e83e0ec752e6c1c5932da465bf23e0c`，原样保留 22 Skills 和 66 files，
+并携带上游 MIT license 与逐文件 SHA-256 provenance。`Matt Engineering` 对
+`ask-matt` 使用显式调用；`diagnosing-bugs` 保留原 metadata，可自动匹配 bug 请求。
+
+普通构建与安装保持离线和确定性。只有显式 sync 维护命令可以获取新的固定 commit，
+并且必须先给出 manifest 变化，再做原子校验替换。`code-review`、`research`、
+`wayfinder`、同名 `grill-me` 解析和其余未执行 Skill 都保持 `PENDING`；静态包结构
+不能证明宿主语义。
 
 ## 运行结构
 
@@ -98,7 +118,8 @@ bundle 或额外 report JSON。用户全局指令属于环境状态，不是 Plu
 
 执行隔离的真实 VS Code 1.123 合并验收时，应同时证明：
 
-1. Agent picker 中只有 `Spec Superflow` 可由用户选择。
+1. Agent picker 中有一个 `Spec Superflow` 工作流 Agent，以及独立的
+   `Matt Engineering` Agent；本段 Spec 验收只检查前者。
 2. Primary 精确调用 `Spec Superflow Reviewer`，且没有注册或调用独立 Dev Agent。
 3. Primary-only、跨阶段 canary 和前一次 invocation canary 在全新 Reviewer
    上下文中都不泄漏。

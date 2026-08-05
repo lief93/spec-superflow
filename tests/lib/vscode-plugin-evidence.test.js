@@ -118,7 +118,8 @@ describe('VS Code Plugin documentation boundary', () => {
 
     for (const [content, labels] of [
       [english, [
-        /only `Spec Superflow`/i,
+        /one `Spec Superflow` workflow Agent/i,
+        /separate\s+`Matt Engineering` Agent/i,
         /exact(?:ly)? `Spec Superflow Reviewer`[\s\S]*no separate Dev Agent/i,
         /cross-stage[\s\S]*canar(?:y|ies)[\s\S]*(?:do not leak|absent)/i,
         /ordinary project-read and terminal tools[\s\S]*read-only Git[\s\S]*untracked canary[\s\S]*candidate identity[\s\S]*remain unchanged/i,
@@ -126,7 +127,8 @@ describe('VS Code Plugin documentation boundary', () => {
         /Reviewer[\s\S]*Primary[\s\S]*(?:repairs|asks the user)/i,
       ]],
       [chinese, [
-        /只有 `Spec Superflow`/,
+        /一个 `Spec Superflow` 工作流 Agent/,
+        /独立的\s+`Matt Engineering` Agent/,
         /精确(?:调用)? `Spec Superflow Reviewer`[\s\S]*没有注册或调用独立 Dev Agent/,
         /跨阶段 canary[\s\S]*(?:不泄漏|不存在)/,
         /普通项目读取\/终端工具[\s\S]*只读 Git 命令[\s\S]*untracked[\s\S]*candidate identity[\s\S]*完全不变/,
@@ -142,5 +144,32 @@ describe('VS Code Plugin documentation boundary', () => {
         /(?:static|静态)[^\n]*(?:proves|证明)[^\n]*(?:picker|invocation|isolation|tool denial|mediation|调用|隔离|工具拒绝|中介)/i,
       );
     }
+  });
+
+  it('documents the independent Matt Plugin, pinned source, and honest compatibility boundary', () => {
+    const guide = read('docs/vscode-user-guide.md');
+    const readme = read('extensions/spec-superflow-companion/README.md');
+    const english = read('docs/vscode-agent-plugin.md');
+    const chinese = read('docs/vscode-agent-plugin-zh.md');
+    const changelog = read('CHANGELOG.md');
+    const compatibility = JSON.parse(read(
+      'extensions/spec-superflow-companion/matt-plugin/compatibility.json',
+    ));
+    const combined = `${guide}\n${readme}\n${english}\n${chinese}\n${changelog}`;
+
+    assert.match(guide, /one VSIX[\s\S]*Spec Superflow[\s\S]*Matt Engineering/i);
+    assert.match(guide, /ask-matt[\s\S]*explicit/i);
+    assert.match(guide, /diagnosing-bugs[\s\S]*automatic/i);
+    assert.match(readme, /two independent Agent Plugins/i);
+    assert.match(english, /agent-plugin[\s\S]*matt-plugin/i);
+    assert.match(chinese, /agent-plugin[\s\S]*matt-plugin/i);
+    assert.match(combined, /2ab958093e83e0ec752e6c1c5932da465bf23e0c/);
+    assert.match(combined, /22 Skills[\s\S]*66 files/i);
+    assert.match(english, /ordinary build[\s\S]*offline[\s\S]*explicit\s+sync/i);
+    assert.match(chinese, /普通构建[\s\S]*离线[\s\S]*显式\s+sync/i);
+    assert.match(combined, /code-review[\s\S]*research[\s\S]*wayfinder[\s\S]*PENDING/i);
+    assert.equal(compatibility.skills.length, 22);
+    assert.equal(compatibility.skills.every(entry => entry.status === 'PENDING'), true);
+    assert.doesNotMatch(combined, /all 22 Skills (?:are )?(?:verified|supported)/i);
   });
 });
