@@ -224,6 +224,7 @@ npx spec-superflow list          # 或通过 npx 使用
 | 10 | `release-archivist` | 收口 | 验证前完成铁律 + 归档 + 风险总结 |
 | 11 | `spec-merger` | 同步 | Delta Spec → 主规范智能合并 |
 | 12 | `grill-me` | 决策澄清 | 证据穷尽后，由 Primary 一次询问一个用户决策并给出推荐与取舍 |
+| 13 | `test-quality` | 规划与执行 | 将每个 AC 条款映射到可控前置条件、真实动作和可观察断言，拒绝假覆盖 |
 
 ---
 

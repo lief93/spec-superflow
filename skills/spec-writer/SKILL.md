@@ -36,6 +36,10 @@ production files and responsibilities that must change to satisfy the approved
 behavior. Use that seam as the starting scope instead of projecting one layer,
 Decision, test double, or Batch from each Scenario.
 
+Load the `test-quality` Skill before authoring or repairing `tasks.md`. Use its
+clause ledger and proof checks to design the existing TDD Test Plan rows; it
+does not create a separate artifact or workflow stage.
+
 ## Config Check
 
 Run `ssf config --get artifacts.order` and `ssf config --get artifacts.skip`.
