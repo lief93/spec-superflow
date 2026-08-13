@@ -96,19 +96,27 @@ describe('VS Code Plugin documentation boundary', () => {
     assert.match(chinese, /真实 VS Code[\s\S]*PENDING/i);
   });
 
-  it('documents one same-context re-review per stage consistently', () => {
+  it('documents one automatic repair and developer-controlled later reviews consistently', () => {
     const english = read('docs/vscode-agent-plugin.md');
     const chinese = read('docs/vscode-agent-plugin-zh.md');
 
     assert.match(english, /each stage[\s\S]*initial review[\s\S]*fresh isolated context/i);
     assert.match(
       english,
-      /first `Request Changes`[\s\S]*same Reviewer context[\s\S]*second `Request Changes`[\s\S]*`BLOCKED`/i,
+      /first `Request Changes`[\s\S]*same Reviewer context[\s\S]*second `Request Changes`[\s\S]*stops automatic repair[\s\S]*developer/i,
+    );
+    assert.match(
+      english,
+      /choose only[\s\S]*repair and review again[\s\S]*accept the current candidate[\s\S]*continue[\s\S]*does not[\s\S]*bypass static\/schema validation/i,
     );
     assert.match(chinese, /每个阶段[\s\S]*首次 Review[\s\S]*全新的隔离上下文/);
     assert.match(
       chinese,
-      /第一次 `Request Changes`[\s\S]*同一个 Reviewer 上下文[\s\S]*第二次 `Request Changes`[\s\S]*`BLOCKED`/,
+      /第一次 `Request Changes`[\s\S]*同一个 Reviewer 上下文[\s\S]*第二次 `Request Changes`[\s\S]*停止自动修复[\s\S]*开发者/,
+    );
+    assert.match(
+      chinese,
+      /只选择[\s\S]*修复并再次 Review[\s\S]*接受当前候选并继续[\s\S]*不能跳过静态\/Schema 校验/,
     );
   });
 

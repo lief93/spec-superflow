@@ -79,7 +79,7 @@ describe('OpenCode Plugin independent review topology', () => {
     assert.match(config.agent['spec-superflow'].prompt, /Ordinary requests never call[\s\S]*bootstrap MCP/i);
   });
 
-  it('uses one fresh Reviewer task per stage and resumes it once for same-stage re-review', async () => {
+  it('uses one fresh Reviewer task per stage and stops only the automatic repair loop', async () => {
     const { config } = await configured();
     const primary = config.agent['spec-superflow'].prompt;
     const reviewer = config.agent['spec-superflow-reviewer'].prompt;
@@ -97,10 +97,10 @@ describe('OpenCode Plugin independent review topology', () => {
     assert.match(primary, /resume[\s\S]*same Reviewer task[\s\S]*same `task_id`/i);
     assert.match(
       primary,
-      /second[\s\S]*`Request Changes`[\s\S]*new Finding[\s\S]*malformed[\s\S]*unavailable[\s\S]*nonzero[\s\S]*`BLOCKED`/i,
+      /second[\s\S]*`Request Changes`[\s\S]*stop automatic repair[\s\S]*(?:repair and review|fix and review)[\s\S]*accept the current candidate[\s\S]*not capped/i,
     );
-    assert.match(primary, /never start a third review/i);
-    assert.match(primary, /(?:do not|never|or) progress workflow state/i);
+    assert.match(primary, /Missing, malformed, stale,[\s\S]*remain `BLOCKED`/i);
+    assert.match(primary, /developer's clear, explicit intent[\s\S]*higher priority[\s\S]*grill-me[\s\S]*one question/i);
     assert.match(
       primary,
       /never write[\s\S]*`task_id`[\s\S]*(?:Review|candidate|workflow-state) artifact/i,

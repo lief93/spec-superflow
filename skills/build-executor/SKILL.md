@@ -42,8 +42,14 @@ runner once per AC merely to produce separate evidence rows.
 On final `Request Changes`, Primary re-enters only the affected TDD work,
 reruns the exact affected and key tests, then reruns every required pre-review
 gate, freezes a new candidate, and invokes the same fixed Reviewer once more in
-the same stage context. A second `Request Changes` is `BLOCKED`; Primary never
-self-reviews, starts a third review, or closes before current final approval.
+the same stage context. A second `Request Changes` stops automatic repair;
+Primary asks the developer to choose only **repair and review again** or
+**accept the current candidate and continue**. The first choice requires fresh
+explicit authorization for every later round; the second records a
+content-bound `waive-review`. No response accepts nothing. Primary never
+self-reviews or closes without current final approval or that exact waiver.
+The waiver cannot bypass static/schema validation, mechanical gates, state or
+contract freshness, or tests.
 
 ## Core Laws
 

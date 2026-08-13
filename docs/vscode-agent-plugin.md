@@ -63,9 +63,14 @@ All three checkpoints use the same fixed identity, `Spec Superflow Reviewer`.
 Each stage starts its initial review in a fresh isolated context. If that review
 returns a first `Request Changes`, Primary repairs the stage exactly once and
 resumes the same Reviewer context for one complete re-review of the new
-candidate. A second `Request Changes` is `BLOCKED`; there is no third review or
-workflow-state progression. Earlier findings or verdicts are not evidence for
-the current candidate, and a later stage starts its own fresh context.
+candidate. A second `Request Changes` stops automatic repair. The developer can
+choose only **repair and review again** or **accept the current candidate and
+continue**. Every later repair and review round requires fresh explicit
+authorization; no response accepts anything, and authorized rounds are not
+capped. Accepting records a waiver bound to that exact candidate. It does not
+bypass static/schema validation, mechanical gates, state or contract freshness,
+or tests. Earlier findings or verdicts are not evidence for the current
+candidate, and a later stage starts its own fresh context.
 
 The second checkpoint reviews Design and Tasks together with all approved
 upstream Planning. After approval, Primary defaults to a concise summary of
@@ -97,7 +102,20 @@ judges whether tests prove the requirements and failure paths rather than
 mirroring the implementation, and does not run tests. On `Request Changes`,
 Primary repairs only the located targets once; the repaired candidate and every affected
 result are refrozen before the single same-context re-review. A second `Request Changes`
-is `BLOCKED`. After current `Approved`, only workflow-state progression is allowed.
+stops automatic repair and returns control to the developer. After current
+`Approved` or an explicit content-bound developer waiver, workflow-state
+progression may continue only after all non-semantic gates pass.
+
+### Developer overrides
+
+Use ordinary Chat language; no override command needs to be memorized. A clear
+request such as “modify the Plan and do not review it again” updates the
+affected Proposal/Specs, Design, and Tasks, validates them, records the exact
+review waiver, regenerates `execution-contract.md`, and asks for its separate
+approval before implementation resumes. The Change remains in `executing` for
+this Light Replan. Larger scope changes can return to an earlier planning state,
+and an explicit abandonment ends the Change. Ambiguous intent is clarified one
+question at a time with a recommendation.
 
 Final invocation contains only the Change directory and `final` stage. Reviewer
 runs the read-only `ssf review candidate` command to discover the current
