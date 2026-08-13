@@ -9,12 +9,16 @@ The format loosely follows Keep a Changelog.
 ### Added
 
 - **Test quality Skill** - Added reusable AC-clause coverage, test-layer selection, harness validation, interface-closure, persistence, concurrency, and visible-transition rules for planning and implementation without adding another Agent or workflow stage.
+- **Natural-language developer overrides** - Developers can waive an exact review candidate, authorize another review, replan during execution, rewind, or abandon without memorizing CLI commands; ambiguous requests route through one-question clarification.
+- **Auditable override evidence** - Added content-bound review waivers and a Change-local append-only decision log so Planning changes automatically invalidate an earlier waiver.
 - **Single offline VSIX** - Added one package containing the Spec Agent Plugin, `/workflow-init` CLI bootstrap tools, and a replaceable one-shot Example MCP bridge.
 - **Example MCP Skill** - Added a concrete Skill that calls one fixed VS Code tool; the VSIX owns native credential input, SecretStorage, the stdio MCP lifecycle, and process exit.
 - **VS Code user guide** - Updated installation, upgrade, Example MCP, project initialization, requirement, and troubleshooting steps for the single-VSIX distribution.
 
 ### Fixed
 
+- **Review retry ownership** - The second `Request Changes` now stops unattended repair and asks the developer to repair and review again or accept the exact current candidate. Every later review round requires fresh authorization; accepting the semantic Review never bypasses static, state, contract, or test gates.
+- **Execution amendment safety** - Light Replan keeps execution state while invalidating the old contract and downstream approvals, then requires refreshed Planning, Contract, DP-3, and DP-4 before implementation resumes.
 - **Repeatable workflow initialization** - `/workflow-init` stays in the current built-in Agent and limits the model to the bootstrap status, confirmation, install, and verification sequence, so users can safely run it repeatedly in the same VS Code Chat.
 - **Global CLI path authority** - Bootstrap now uses the current `npm prefix -g` as the sole installation and version source, and returns ready only when `ssf` resolves to that same executable. A missing or shadowed PATH entry is reported without reinstalling an already-correct global CLI.
 - **Bootstrap scope** - `/workflow-init` now ends after exact global CLI verification. Example or company business MCP calls are owned by their Skills and cannot change workflow readiness.

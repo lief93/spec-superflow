@@ -22,8 +22,14 @@ Do not dispatch the historical general-purpose reviewer after each task,
 feature, AC, or Batch on this route. On `Request Changes`, Primary directly repairs only
 the located targets exactly once, then refreezes all affected and required gates
 before re-review in the same final-stage Reviewer context. A second `Request
-Changes` is `BLOCKED`; no third review or state progression is allowed. Current
-`Approved` permits only state progression.
+Changes` stops automatic repair. The developer then chooses only **repair and
+review again** or **accept the current candidate and continue**. Every later
+repair and review round requires fresh explicit authorization; no response
+accepts nothing, and authorized rounds have no fixed total limit. The second
+choice records a content-bound developer waiver. Current `Approved` or that
+exact waiver permits state progression, but the waiver cannot bypass
+static/schema validation, mechanical gates, state or contract freshness, or
+tests.
 
 The responsibilities below are the historical non-full route and remain
 unchanged for `hotfix` and `tweak`.
