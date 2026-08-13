@@ -8,6 +8,7 @@ The format loosely follows Keep a Changelog.
 
 ### Added
 
+- **Test quality Skill** - Added reusable AC-clause coverage, test-layer selection, harness validation, interface-closure, persistence, concurrency, and visible-transition rules for planning and implementation without adding another Agent or workflow stage.
 - **Single offline VSIX** - Added one package containing the Spec Agent Plugin, `/workflow-init` CLI bootstrap tools, and a replaceable one-shot Example MCP bridge.
 - **Example MCP Skill** - Added a concrete Skill that calls one fixed VS Code tool; the VSIX owns native credential input, SecretStorage, the stdio MCP lifecycle, and process exit.
 - **VS Code user guide** - Updated installation, upgrade, Example MCP, project initialization, requirement, and troubleshooting steps for the single-VSIX distribution.

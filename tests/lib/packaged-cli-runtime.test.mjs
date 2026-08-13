@@ -242,6 +242,7 @@ describe('packaged CLI runtime', () => {
       'scripts/guard/checks/review-approved.mjs',
       'servers/spec-superflow-mcp.mjs',
       'skills/grill-me/SKILL.md',
+      'skills/test-quality/SKILL.md',
     ]) {
       assert.equal(files.has(path), true, `${path} must be packaged`);
     }

@@ -11,6 +11,10 @@ Controls the implementation phase. Uses `execution-contract.md` as the approval,
 
 Read: `execution-contract.md`, `tasks.md`, relevant change-local `specs/`, relevant `design.md`, and matching project-root `specs/<capability>/spec.md`. Read the project baseline and selected classic implementation named in `design.md` before changing code. If `.spec-superflow/memories/MEMORY.md` exists, read its entrypoint and only linked topics relevant to the execution batches. (Skip contract/spec requirements when workflow is `tweak`.)
 
+Load the `test-quality` Skill before writing or changing any planned test. Use
+it to verify the approved case's setup, action, assertions, and AC clause
+coverage. It does not add an Agent or change this Skill's RED → GREEN ownership.
+
 Check workflow mode first: `ssf state get <change-dir> workflow`. If `tweak` → direct edit mode. If `hotfix` or `full` → standard contract-first discipline.
 
 Config check: `ssf config --get execution.inlineThreshold` (default: 3).
