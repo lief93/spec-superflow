@@ -58,8 +58,11 @@ Proposal 和 Specs。通过后，Primary 要求用户
 三个检查点都使用同一个固定身份 `Spec Superflow Reviewer`。每个阶段的首次 Review
 都会创建全新的隔离上下文。第一次 `Request Changes` 后，Primary 只修复一次并在
 同一个 Reviewer 上下文中完成一次对新候选的完整复审。第二次 `Request Changes`
-立即 `BLOCKED`，不得第三次 Review 或推进工作流状态。较早的 Finding 或 verdict
-不能作为当前候选的证据；后续阶段仍创建自己的全新上下文。
+会停止自动修复，由开发者只选择“修复并再次 Review”或“接受当前候选并继续”。此后
+每轮修复和 Review 都需要开发者重新明确授权；没有回复不代表接受，授权总次数不设
+上限。接受会记录与当前精确候选绑定的 Review 豁免，但不能跳过静态/Schema 校验、
+机械门禁、状态或 Contract 新鲜度检查以及测试。较早的 Finding 或 verdict 不能作为
+当前候选的证据；后续阶段仍创建自己的全新上下文。
 
 第二个检查点把全部已通过的上游规划与 Design 和 Tasks 一起审查。通过后，
 Primary 默认给出覆盖主要选择、影响区域、Batch 形状、测试、Findings 和风险的
@@ -84,8 +87,17 @@ Reviewer 读取冻结代码候选和精确
 测试/风险上下文，判断测试是否覆盖需求与失败路径、是否只是镜像实现，但不运行
 测试。第一次 `Request Changes` 返回 Primary，只修复一次定位到的目标；修复后
 重新冻结受影响结果和完整候选，再在同一个 Reviewer 上下文中完成唯一一次复审。
-第二次 `Request Changes` 立即 `BLOCKED`。当前结果为 `Approved` 后，只允许推进
-工作流状态。
+第二次 `Request Changes` 会停止自动修复并把决定权交还开发者。当前结果为
+`Approved`，或开发者对当前内容绑定的候选做了明确 Review 豁免后，才能继续推进。
+Review 豁免只覆盖语义 Review 结论；其他机械门禁仍必须通过。
+
+### 开发者覆盖
+
+直接使用自然语言，不需要记忆 Override 命令。例如“修改一下 Plan，不想再做
+Review”，会更新受影响的 Proposal/Specs、Design 和 Tasks，完成校验并记录精确候选
+的 Review 豁免，然后重新生成 `execution-contract.md`，单独取得 Contract 批准后再
+恢复实现。这个 Light Replan 保持 `executing`；较大的范围变化可以回到更早的规划
+状态，明确放弃则终止 Change。只有意图不清楚时才会一次询问一个问题并给出建议。
 
 最终调用只包含 Change 目录和 `final` 阶段。Reviewer 运行只读的
 `ssf review candidate`，自行发现当前工件、证据路径、changed files 和解析后的

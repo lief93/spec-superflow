@@ -71,9 +71,11 @@ After workflow is persisted, run `ssf state get <dir> workflow`. Only exact
 For exact `full`, Primary directly owns planning, implementation, verification,
 and finding repair. It invokes the fixed `Spec Superflow Reviewer` in one
 independent Reviewer context per stage at `proposal-specs`, `design-tasks`, and
-`final`. A first `Request Changes` permits exactly one repair and a complete
-re-review in that same context. A second `Request Changes` is `BLOCKED`, with no
-third review or state progression. Each stage records only
+`final`. A first `Request Changes` permits exactly one automatic repair and a
+complete re-review in that same context. A second `Request Changes` stops
+automatic repair and asks the developer to choose only **repair and review
+again** or **accept the current candidate and continue**. Do not automatically
+start another review; developer-authorized review rounds are not capped. Each stage records
 `reviews/<stage>-current.json`. Missing, invalid, or stale results are `BLOCKED`.
 
 The first action after every Reviewer return is to write its raw JSON unchanged
@@ -99,6 +101,38 @@ first-stage review and repeated DP-1 before dependent artifacts are regenerated.
 
 For non-full `hotfix` and `tweak`, keep the existing fast paths. Do not invoke
 the fixed Reviewer and do not create, record, or check a current review result.
+
+## Developer Override
+On a second `Request Changes`, stop automatic repair. Clear, explicit developer
+intent is authoritative over workflow defaults. Each additional repair and
+review requires fresh explicit developer authorization. No response does not
+waive, decline, or accept the Review. Ambiguous intent routes to `grill-me` for
+one question at a time, with a recommendation. Execute a clear explicit
+override without asking for the same confirmation again.
+
+- `ssf override continue-review <change-dir> <stage> --reason "<reason>"`
+  authorizes another review after the automatic repair limit.
+- `ssf override waive-review <change-dir> <stage> --reason "<reason>"` records
+  a developer waiver bound to the exact current candidate. It is not Reviewer
+  approval and becomes stale when that candidate changes.
+- A semantic Review waiver cannot bypass static/schema validation, mechanical
+  gates, state or Contract freshness, or tests; those failures remain blocking.
+- **Light Replan**: while `executing`, run `ssf override light-replan
+  <change-dir> --reason "<reason>"`; use `spec-writer` to update affected
+  Proposal/Specs, Design, and Tasks; validate; complete the applicable review
+  or developer waiver; bind DP-1 and DP-2 to the current candidate identities;
+  route to `contract-builder` to regenerate `execution-contract.md`; complete
+  DP-3; re-evaluate DP-4; and require `ssf override resume-check <change-dir>
+  --json` to return `ready: true` before resuming implementation. Remain
+  `executing`. An explicit behavior and implementation direction supplies
+  DP-1/DP-2 without repeated questions.
+- **Full Replan**: run `ssf override rewind <change-dir> <earlier-state>
+  --reason "<reason>"`, then follow normal state routing.
+- `ssf override abandon <change-dir> --reason "<reason>"` records abandonment
+  and enters the terminal `abandoned` state.
+
+Natural language drives this mapping. “Modify the Plan and do not review it” means
+Light Replan plus `waive-review`, never skipping Planning, validation, Contract Builder, or DP-3.
 
 ## Routing Rules
 
@@ -198,7 +232,8 @@ same hash rule before execution.
 - No "continue" without state inspection
 - No implementation past stale contract
 - No implementation past bug without investigation
-- No exact-full closure without a current Approved final review
+- No exact-full closure without a current Approved final review or a
+  content-bound developer waiver for the exact final candidate
 - No closure with unsynced delta specs
 - No transitions from `abandoned` (terminal)
 - No transition to `abandoned` from `closing` or `abandoned`

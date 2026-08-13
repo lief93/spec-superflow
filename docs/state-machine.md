@@ -96,6 +96,26 @@ The workflow must move back to `specifying` or `bridging` when:
 - `ssf state check <change-dir> --json` reports that the current planning
   artifacts no longer match `.spec-superflow.yaml > artifacts_hash`
 
+An explicit developer Light Replan is the narrow exception: it stays in
+`executing`, invalidates the old contract and downstream approvals, updates and
+validates the affected Planning artifacts, completes review or a content-bound
+developer waiver, regenerates the execution contract, and repeats DP-3 and DP-4
+before `ssf override resume-check <change-dir> --json` permits implementation
+to resume. A larger scope or architecture change still uses a full rewind.
+
+## Developer Override
+
+Workflow routing is the default; clear developer intent is authoritative. The
+Agent maps natural language to an auditable review waiver, another review,
+Light Replan, Full Replan, or abandonment. Ambiguous intent routes to
+`grill-me` for one recommended question. A first `Request Changes` gets one
+automatic repair and re-review; a second stops automatic repair but does not
+limit developer-authorized review rounds. At that point the developer chooses
+only another repair-and-review round or acceptance of the exact current
+candidate. Each later round requires fresh authorization. Acceptance waives
+only semantic Review; static/schema validation, mechanical gates, state and
+contract freshness, and tests remain mandatory.
+
 ## Debugging State
 
 During `executing`, if a bug, test failure, or unexpected behavior blocks progress:

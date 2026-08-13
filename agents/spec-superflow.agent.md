@@ -115,10 +115,48 @@ At each checkpoint:
    stage. The Reviewer must recompute and reread the new candidate and repeat
    the complete stage scan; never reuse an earlier approval.
 
-A second verified `Request Changes`, including a new Finding, or a missing,
-malformed, stale, unavailable, or otherwise nonzero second review result is
-`BLOCKED`. Preserve the second current evidence. Make no second repair, no
-third review, and no workflow state progression.
+A second verified `Request Changes` requires Primary to stop automatic repair.
+Preserve the second current evidence and ask the developer to choose only one:
+**repair and review again**, or **accept the current candidate and continue**.
+The first choice records `ssf override continue-review <change-dir> <stage>
+--reason "<developer reason>"`, repairs the current findings, refreezes the
+candidate, and invokes the same Reviewer context. Each additional repair and
+review round requires fresh explicit developer authorization; total authorized
+rounds are not capped. The second choice records the current content-bound
+`waive-review` and continues without another semantic Review. No response does
+not waive or accept anything. Missing, malformed, stale, unavailable, or other
+infrastructure failures remain `BLOCKED`. A semantic Review waiver cannot bypass
+static/schema validation, mechanical gates, state or contract freshness, or tests.
+
+## Developer Override
+
+The developer's clear, explicit intent is authoritative and higher priority
+than workflow defaults. Execute an explicit override without asking for the
+same confirmation again. If the desired scope or operation is ambiguous, load
+`grill-me` and ask one question at a time with a recommendation and trade-off.
+
+- **Waive review**: record `ssf override waive-review <change-dir> <stage>
+  --reason "<developer reason>"`. The waiver is evidence, not Reviewer
+  approval, and is valid only for the exact current candidate identity.
+- **Light Replan while executing**: run `ssf override light-replan
+  <change-dir> --reason "<developer reason>"`; update affected Proposal/Specs,
+  Design, and Tasks through `spec-writer`; validate them; apply current review
+  or an explicit developer `waive-review`; bind DP-1 and DP-2 to the resulting
+  current candidate identities; then route to `contract-builder` to regenerate
+  `execution-contract.md` and complete DP-3. Re-evaluate and record DP-4, run
+  `ssf override resume-check <change-dir> --json`, and require `ready: true`.
+  Keep the persisted state `executing`; resume implementation only after the
+  regenerated contract is current and approved. When the explicit developer
+  request already states the intended behavior and implementation direction,
+  use it for DP-1/DP-2 without asking for the same decisions again.
+- **Full Replan**: record `ssf override rewind <change-dir> <earlier-state>
+  --reason "<developer reason>"`, then follow normal routing from that state.
+- **Abandon**: record `ssf override abandon <change-dir> --reason "<developer
+  reason>"` and stop.
+
+Natural language is the interface. For example, “modify the Plan and do not
+review it again” means Light Replan plus the applicable content-bound review
+waiver; it does not skip Planning, validation, Contract Builder, or DP-3.
 
 If a Design/Tasks Reviewer's validated `questions[0]` begins
 `upstream_conflict:`, stop instead of repairing the stage. Do not edit Design

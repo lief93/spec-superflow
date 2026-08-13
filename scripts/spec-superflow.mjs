@@ -19,6 +19,7 @@ const COMMANDS = {
   memories:       () => import('./lib/cmd-memories.mjs'),
   project:        () => import('./lib/cmd-project.mjs'),
   review:         () => import('./lib/cmd-review.mjs'),
+  override:       () => import('./lib/cmd-override.mjs'),
   'install-cursor': () => import('./lib/cmd-install-cursor.mjs'),
   'install-workbuddy': () => import('./lib/cmd-install-workbuddy.mjs'),
 };
@@ -53,6 +54,7 @@ Commands:
                         Validate the fixed pending report and replace current result
   review check <dir> <stage> [--base <git-ref>] [--json]
                         Check current approval and semantic freshness
+  override <action> ... Record an explicit developer waiver, replan, retry, or abandonment
   check-update          Check for a newer spec-superflow release
   infer-workflow <dir>  Infer hotfix, tweak, or full workflow mode
   guard check ...       Validate a workflow state transition
@@ -87,6 +89,8 @@ Examples:
   ssf review candidate changes/my-change/ proposal-specs --json
   ssf review record changes/my-change/ proposal-specs --json
   ssf review check changes/my-change/ final --json
+  ssf override waive-review changes/my-change/ design-tasks --reason "Developer accepted the risk"
+  ssf override resume-check changes/my-change/ --json
   ssf install-cursor
   ssf install-workbuddy
 `;

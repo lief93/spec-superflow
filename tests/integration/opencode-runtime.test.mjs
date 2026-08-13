@@ -224,7 +224,7 @@ it('resolves hidden Agent tools through pinned OpenCode for repository and packe
       );
       assert.match(
         primary.prompt,
-        /second verified result[\s\S]*Request Changes[\s\S]*immediately report `BLOCKED`[\s\S]*Never start a third review/i,
+        /second verified result[\s\S]*Request Changes[\s\S]*stop automatic repair[\s\S]*developer[\s\S]*continue-review[\s\S]*not capped/i,
       );
       assert.doesNotMatch(primary.prompt, /state next|state confirm|review begin|review cancel|candidate_graph|message_graph|handoff_attestation|repair[-_ ]delta/i);
 
