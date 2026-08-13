@@ -82,7 +82,10 @@ describe('fixed independent review workflow contract', () => {
   });
 
   it('uses stage-scoped Reviewer -> fixed inbox -> record -> check', () => {
-    for (const host of [primary, openCodePrimary]) {
+    for (const [label, host] of [
+      ['VS Code Primary', primary],
+      ['OpenCode Primary', openCodePrimary],
+    ]) {
       assert.match(host, /one independent Reviewer context|one fresh `task`/i);
       assert.match(host, /reviews\/<stage>-pending-report\.json/);
       assert.match(host, /ssf review record <change-dir> <stage> --json/i);
@@ -90,10 +93,67 @@ describe('fixed independent review workflow contract', () => {
       assert.match(host, /Request Changes[\s\S]*state unchanged|keep the workflow in its current state/i);
       assert.match(host, /first[\s\S]*Request Changes[\s\S]*repair[\s\S]*(?:exactly )?once/i);
       assert.match(host, /same[\s\S]*Reviewer (?:context|task)[\s\S]*(?:re-review|resume)/i);
-      assert.match(host, /second[\s\S]*Request Changes[\s\S]*BLOCKED/i);
-      assert.match(host, /never[\s\S]*third review/i);
+      assert.match(host, /second[\s\S]*Request Changes[\s\S]*stop automatic repair/i);
+      assert.match(host, /developer[\s\S]*(?:continue-review|waive-review|replan|abandon)/i);
+      assert.match(
+        host,
+        /second[^]*Request Changes[^]*(?:ask|choose)[^]*(?:repair and review|fix and review)[^]*(?:accept the current candidate|waive-review)[^]*continue/i,
+        `${label} must reduce the post-auto-repair decision to review again or accept the candidate`,
+      );
+      assert.match(
+        host,
+        /(?:semantic|Reviewer)[^]*(?:waiver|decline)[^]*(?:cannot|must still|not waived)[^]*(?:static|schema|validation|mechanical)/i,
+        `${label} must not treat developer review rejection as a static-gate bypass`,
+      );
     }
     assert.match(reviewer, /ssf review candidate <change-dir> <stage>[\s\S]*--json/i);
+  });
+
+  it('treats explicit developer intent as authoritative while grilling only ambiguity', () => {
+    for (const [label, host] of [
+      ['VS Code Primary', primary],
+      ['OpenCode Primary', openCodePrimary],
+      ['workflow-start', workflowStart],
+    ]) {
+      assert.match(
+        host,
+        /(?:clear,? explicit developer intent|developer[^]*(?:explicit|clear))[^]*(?:higher|overrides|authoritative)[^]*workflow/i,
+        label,
+      );
+      assert.match(host, /ambiguous[^]*grill-me[^]*one question/i, label);
+      assert.match(host, /explicit[^]*(?:do not ask|without asking|no repeated confirmation)/i, label);
+    }
+  });
+
+  it('asks again before every developer-authorized repair and review round', () => {
+    for (const [label, host] of [
+      ['VS Code Primary', primary],
+      ['OpenCode Primary', openCodePrimary],
+      ['workflow-start', workflowStart],
+    ]) {
+      assert.match(
+        host,
+        /each (?:additional|later)[^]*(?:repair[^]*review|fix[^]*review)[^]*(?:fresh[^]*explicit|explicit)[^]*developer authorization/i,
+        label,
+      );
+      assert.match(host, /no response[^]*(?:does not|must not)[^]*(?:waive|decline|accept)/i, label);
+    }
+  });
+
+  it('keeps execution amendments planned and contracted without forcing full review', () => {
+    for (const [label, host] of [
+      ['VS Code Primary', primary],
+      ['OpenCode Primary', openCodePrimary],
+      ['workflow-start', workflowStart],
+    ]) {
+      assert.match(host, /Light Replan/i, label);
+      assert.match(host, /update[^]*(?:Proposal|Spec)[^]*Design[^]*Tasks/i, label);
+      assert.match(host, /contract-builder[^]*(?:regenerate|rebuild)[^]*execution-contract\.md/i, label);
+      assert.match(host, /remain[^]*`executing`|keep[^]*`executing`/i, label);
+      assert.match(host, /waive-review[^]*developer/i, label);
+      assert.match(host, /DP-1[^]*DP-2[^]*candidate identit/i, label);
+      assert.match(host, /DP-3[^]*DP-4[^]*resume-check/i, label);
+    }
   });
 
   it('invokes Reviewer with only change and stage while Reviewer discovers the candidate', () => {

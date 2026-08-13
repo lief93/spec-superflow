@@ -16,6 +16,7 @@ import {
   REVIEW_VERDICTS,
 } from './review-candidate.mjs';
 import { readState } from './state-loader.mjs';
+import { readDeveloperWaiver } from './developer-override.mjs';
 
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
 const GIT_COMMIT = /^[a-f0-9]{40}$/;
@@ -146,15 +147,6 @@ export function checkCurrentReview({
       stage,
       repoRoot: effectiveRepoRoot,
     });
-    const currentPath = join(changeDir, currentReviewRelativePath(stage));
-    let bytes;
-    try {
-      bytes = readRegularFileNoFollow(currentPath, 'Current review result');
-    } catch (error) {
-      if (error.code === 'ENOENT') return failure('missing', `Current ${stage} review is missing`);
-      return failure('invalid', error.message);
-    }
-
     const requestedBase = stage === 'final'
       ? resolveFinalReviewBase(changeDir, base)
       : base;
@@ -165,29 +157,62 @@ export function checkCurrentReview({
       base: requestedBase,
       prerequisiteIdentities,
     });
-    let review;
+    let reviewFailure = null;
     try {
-      review = parseCurrentReview(bytes, {
+      const bytes = readRegularFileNoFollow(
+        join(changeDir, currentReviewRelativePath(stage)),
+        'Current review result',
+      );
+      const review = parseCurrentReview(bytes, {
         expectedStage: stage,
         expectedIdentity: candidate.identity,
         expectedBase: candidate.review_base,
         allowedFindingPaths: candidate.allowed_finding_paths,
       });
+      if (review.verdict === 'Approved') {
+        return {
+          pass: true,
+          code: 'approved',
+          failures: [],
+          candidate_identity: candidate.identity,
+          review,
+        };
+      }
+      reviewFailure = failure(
+        'request-changes',
+        `Current ${stage} review requested changes`,
+        candidate.identity,
+      );
     } catch (error) {
-      const code = /identity does not match|base does not match/i.test(error.message)
-        ? 'stale'
-        : 'invalid';
-      return failure(code, error.message, candidate.identity);
+      reviewFailure = error.code === 'ENOENT'
+        ? failure('missing', `Current ${stage} review is missing`, candidate.identity)
+        : failure(
+          /identity does not match|base does not match/i.test(error.message) ? 'stale' : 'invalid',
+          error.message,
+          candidate.identity,
+        );
     }
-    if (review.verdict !== 'Approved') {
-      return failure('request-changes', `Current ${stage} review requested changes`, candidate.identity);
+
+    let waiver;
+    try {
+      waiver = readDeveloperWaiver(changeDir, stage);
+    } catch (error) {
+      return failure('invalid-waiver', error.message, candidate.identity);
+    }
+    if (!waiver) return reviewFailure;
+    if (waiver.candidate_identity !== candidate.identity) {
+      return failure(
+        'stale-waiver',
+        `Developer ${stage} review waiver does not match current content`,
+        candidate.identity,
+      );
     }
     return {
       pass: true,
-      code: 'approved',
+      code: 'developer-waived',
       failures: [],
       candidate_identity: candidate.identity,
-      review,
+      waiver,
     };
   } catch (error) {
     return failure('prerequisite', error.message);

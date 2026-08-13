@@ -67,7 +67,8 @@ describe('VS Code Agent Plugin', () => {
     assert.match(primary, /one independent Reviewer context at each of[\s\S]*exactly three[\s\S]*proposal-specs[\s\S]*design-tasks[\s\S]*final/i);
     assert.match(primary, /Freeze the current stage inputs[\s\S]*only the exact Change directory and stage[\s\S]*pending-report\.json[\s\S]*record[\s\S]*check/i);
     assert.match(primary, /first verified `Request Changes`[\s\S]*repairs only the affected\s+stage exactly once[\s\S]*same Reviewer context/i);
-    assert.match(primary, /second verified `Request Changes`[\s\S]*`BLOCKED`[\s\S]*no\s+third review/i);
+    assert.match(primary, /second verified `Request Changes`[\s\S]*stop automatic repair[\s\S]*(?:repair and review|fix and review)[\s\S]*accept the current candidate[\s\S]*not capped/i);
+    assert.match(primary, /developer's clear, explicit intent[\s\S]*higher priority[\s\S]*grill-me[\s\S]*one question/i);
     assert.match(primary, /DP-2 and the existing user-owned DP-3[\s\S]*remain separate/i);
     assert.doesNotMatch(primary, /dp_3_contract_hash/i);
     assert.match(primary, /hotfix.*tweak[\s\S]*do not invoke or require/i);

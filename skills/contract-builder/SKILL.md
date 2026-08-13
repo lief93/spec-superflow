@@ -95,6 +95,13 @@ ssf state set <change-dir> dp_3_timestamp $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 DP-3 is a hard gate. Do not start implementation without it.
 
+When `workflow-start` routes a Light Replan from `executing`, regenerate the
+contract from the updated, validated Planning artifacts, complete DP-3, and
+return with state still `executing`. Re-evaluate DP-4, then run `ssf override
+resume-check <change-dir> --json`; do not resume implementation unless it
+returns `ready: true`. Do not require a state rewind and do not reuse the
+previous contract approval.
+
 ## Stale Contract Detection
 
 Refresh when the planning artifact hash changes or the execution mode, shared verification procedure, frontend environment, or Batch gates change.
