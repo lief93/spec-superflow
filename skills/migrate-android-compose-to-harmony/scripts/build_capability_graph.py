@@ -1267,8 +1267,17 @@ def route_sources(contract: dict[str, Any]) -> dict[str, str]:
 def infer_root_qualifications(
     contract: dict[str, Any],
     nodes: list[dict[str, Any]],
+    resolved_edges: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     route_by_source = route_sources(contract)
+    roots_with_resolved_closure = {
+        edge["from_node_id"]
+        for edge in resolved_edges
+        if isinstance(edge, dict)
+        and isinstance(edge.get("from_node_id"), str)
+        and edge.get("consumed_by_planner") == "closure_and_assignment"
+        and edge.get("kind") != "shared_foundation_member"
+    }
     qualifications: list[dict[str, Any]] = []
     for node in sorted(nodes, key=lambda item: item["id"]):
         layer = node.get("layer")
@@ -1278,18 +1287,35 @@ def infer_root_qualifications(
             if isinstance(node.get("source_evidence"), list) and node.get("source_evidence")
             else ""
         )
-        source_symbol = Path(source_path).stem if source_path else node["id"]
+        declared_symbol = node.get("source_symbol")
+        source_symbol = (
+            declared_symbol
+            if isinstance(declared_symbol, str) and declared_symbol
+            else Path(source_path).stem
+            if source_path
+            else node["id"]
+        )
+        normalized_symbol = slugify(source_symbol)
         qualified = False
         qualification_kind = "non_root_child"
         evidence: dict[str, str] = {"kind": "classification", "detail": str(layer)}
         if layer == "page":
-            if source_path in route_by_source:
+            if "preview" in normalized_symbol:
+                qualification_kind = "non_root_preview"
+                evidence = {"kind": "declaration", "detail": source_symbol}
+            elif (
+                source_path in route_by_source
+                and node["id"] in roots_with_resolved_closure
+            ):
                 qualified = True
                 qualification_kind = "route_inventory_root"
                 evidence = {"kind": "route", "detail": route_by_source[source_path]}
-            elif any(
-                token in source_symbol.lower()
-                for token in ("screen", "activity", "fragment", "page")
+            elif (
+                any(
+                    normalized_symbol.endswith(token)
+                    for token in ("screen", "activity", "fragment", "page")
+                )
+                and node["id"] in roots_with_resolved_closure
             ):
                 qualified = True
                 qualification_kind = "entry_screen_root"
@@ -1510,6 +1536,107 @@ def infer_resolved_edges(
                 evidence_detail=node["id"],
                 consumed_by_planner="closure_and_assignment",
             )
+
+    page_source_files = {
+        source
+        for page_node in page_nodes
+        for source in node_primary_sources(page_node)
+    }
+    foundation_sources: set[str] = set()
+    foundation_batch_ids_by_source: dict[str, set[str]] = {}
+    for batch in batches if isinstance(batches, list) else []:
+        if not isinstance(batch, dict):
+            continue
+        batch_sources = {
+            source
+            for source in batch.get("source_files", [])
+            if isinstance(source, str) and source
+        }
+        if not batch_sources or batch_sources & page_source_files:
+            continue
+        batch_id = str(batch.get("id", "foundation"))
+        foundation_sources.update(batch_sources)
+        for source in batch_sources:
+            foundation_batch_ids_by_source.setdefault(source, set()).add(batch_id)
+    page_node_ids = {node["id"] for node in page_nodes}
+    locally_connected_pages = {
+        edge["from_node_id"]
+        for edge in edges
+        if edge.get("consumed_by_planner") == "closure_and_assignment"
+        and edge.get("kind") != "shared_foundation_member"
+        and isinstance(edge.get("from_node_id"), str)
+        and edge["from_node_id"] in page_node_ids
+    }
+    foundation_layers = {"business", "network", "storage", "platform", "ui_system"}
+    node_layer_by_id = {
+        node["id"]: node.get("layer")
+        for node in nodes
+        if isinstance(node.get("id"), str)
+    }
+    page_consumers_by_target: dict[str, set[str]] = {}
+    for edge in edges:
+        from_node_id = edge.get("from_node_id")
+        to_node_id = edge.get("to_node_id")
+        if (
+            isinstance(from_node_id, str)
+            and from_node_id in locally_connected_pages
+            and isinstance(to_node_id, str)
+            and node_layer_by_id.get(to_node_id) in foundation_layers
+        ):
+            page_consumers_by_target.setdefault(to_node_id, set()).add(from_node_id)
+    foundation_node_ids = {
+        node["id"]
+        for node in nodes
+        if node.get("layer") in foundation_layers
+        and set(node_primary_sources(node)) & foundation_sources
+    }
+    foundation_node_ids.update(
+        node_id
+        for node_id, consumers in page_consumers_by_target.items()
+        if len(consumers) >= 2
+    )
+    changed = True
+    while changed:
+        changed = False
+        for edge in edges:
+            from_node_id = edge.get("from_node_id")
+            to_node_id = edge.get("to_node_id")
+            if (
+                from_node_id in foundation_node_ids
+                and isinstance(to_node_id, str)
+                and node_layer_by_id.get(to_node_id) in foundation_layers
+                and to_node_id not in foundation_node_ids
+            ):
+                foundation_node_ids.add(to_node_id)
+                changed = True
+    foundation_nodes = [
+        node for node in nodes if node.get("id") in foundation_node_ids
+    ]
+    for page_node in sorted(page_nodes, key=lambda item: item["id"]):
+        if page_node["id"] not in locally_connected_pages:
+            continue
+        page_sources = node_primary_sources(page_node)
+        if not page_sources:
+            continue
+        for node in sorted(foundation_nodes, key=lambda item: item["id"]):
+            node_sources = node_primary_sources(node)
+            batch_ids = sorted(
+                {
+                    batch_id
+                    for source in node_sources
+                    for batch_id in foundation_batch_ids_by_source.get(source, set())
+                }
+            )
+            add_edge(
+                kind="shared_foundation_member",
+                from_node_id=page_node["id"],
+                to_node_id=node["id"],
+                source_path=page_sources[0],
+                source_symbol=str(page_node.get("source_symbol", Path(page_sources[0]).stem)),
+                evidence_kind="migration_batch",
+                evidence_detail=",".join(batch_ids) or "resolved-shared-closure",
+                consumed_by_planner="closure_and_assignment",
+            )
     return sorted(edges, key=lambda item: item["edge_id"])
 
 
@@ -1632,6 +1759,7 @@ def build_graph(contract: dict[str, Any], contract_sha256: str, registry: dict[s
                 applicability="applicable",
                 unresolved=[],
                 evidence_references=[],
+                source_symbol=name,
             )
             assign_primary(page_node, [source_path], primary_owners)
             nodes.append(page_node)
@@ -1904,6 +2032,7 @@ def build_graph(contract: dict[str, Any], contract_sha256: str, registry: dict[s
         ),
     }
     nodes.sort(key=lambda item: item["id"])
+    resolved_edges = infer_resolved_edges(contract, nodes)
     graph = {
         "schema": GRAPH_SCHEMA,
         "source_revision": source_revision,
@@ -1912,8 +2041,12 @@ def build_graph(contract: dict[str, Any], contract_sha256: str, registry: dict[s
         "selected_skill": "migrate-android-compose-to-harmony",
         "gate_registry_schema": registry["schema"],
         "coverage": coverage,
-        "root_qualification": infer_root_qualifications(contract, nodes),
-        "resolved_edges": infer_resolved_edges(contract, nodes),
+        "root_qualification": infer_root_qualifications(
+            contract,
+            nodes,
+            resolved_edges,
+        ),
+        "resolved_edges": resolved_edges,
         "nodes": nodes,
     }
     review_queue = build_review_queue(graph, nodes)

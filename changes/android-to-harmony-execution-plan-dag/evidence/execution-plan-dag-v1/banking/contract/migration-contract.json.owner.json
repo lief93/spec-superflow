@@ -1,0 +1,6 @@
+{
+  "schema": "android-to-harmony.contract-owner.v1",
+  "generator": "migrate-android-compose-to-harmony",
+  "output_name": "migration-contract.json",
+  "contract_sha256": "aa92639352997ce7de44fdb25eb9a1aa0fea36404ae3780ce057629167ad5b2f"
+}

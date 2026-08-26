@@ -21,6 +21,7 @@ SCRIPTS = Path(__file__).resolve().parent
 AGENT = SCRIPTS / "migration_agent.py"
 HASH_TARGET = SCRIPTS / "hash_target_source.py"
 EVIDENCE_RUNNER = SCRIPTS / "evidence_runner.py"
+CAPTURE_EXECUTION_PLAN = SCRIPTS / "capture_execution_plan_regressions.py"
 SLICE_GATES = ("build", "unit_tests", "ui_tests", "device_test")
 EVIDENCE_GATES = SLICE_GATES + ("visual_review",)
 
@@ -523,6 +524,192 @@ def assert_capability_artifacts(
 
 
 class MigrationAgentTests(unittest.TestCase):
+    def test_capture_execution_plan_regressions_freezes_complete_banking_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reuse = create_compose_source(root / "reuse")
+            subprocess.run(["git", "init", "-q", str(reuse)], check=True)
+            subprocess.run(
+                ["git", "-C", str(reuse), "config", "user.email", "test@example.com"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(reuse), "config", "user.name", "Test"],
+                check=True,
+            )
+            subprocess.run(["git", "-C", str(reuse), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(reuse), "commit", "-qm", "fixture"],
+                check=True,
+            )
+            source_url = "https://github.com/alexandr7035/Banking-App-Mock-Compose.git"
+            subprocess.run(
+                ["git", "-C", str(reuse), "remote", "add", "origin", source_url],
+                check=True,
+            )
+            revision = subprocess.check_output(
+                ["git", "-C", str(reuse), "rev-parse", "HEAD"],
+                text=True,
+            ).strip()
+            change = root / "change"
+            evidence = change / "evidence"
+            central = evidence / "skill-identities"
+            central.mkdir(parents=True)
+            manifest = central / "bundled-skill-tree-manifest.json"
+            binding = central / "repo-skill-binding.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "schema": "android-to-harmony.skill-tree-manifest.v1",
+                        "local_root": "skills/migrate-android-compose-to-harmony",
+                        "file_count": 1,
+                        "tree_sha256": "a" * 64,
+                        "files": [],
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            binding.write_text(
+                json.dumps(
+                    {
+                        "schema": "android-to-harmony.repo-skill-binding.v1",
+                        "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
+                        "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                        "bundled_tree_sha256": "a" * 64,
+                        "file_count": 1,
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            subtree = evidence / "execution-plan-dag-v1/banking"
+            captured = run_script(
+                CAPTURE_EXECUTION_PLAN,
+                "--change-dir",
+                str(change),
+                "--project",
+                "banking",
+                "--source-url",
+                source_url,
+                "--expected-revision",
+                revision,
+                "--source-dir",
+                str(evidence / "sources/banking/source"),
+                "--reuse-candidate",
+                str(reuse),
+                "--project-name",
+                "BankingExecutionPlanDag",
+                "--bundle-name",
+                "com.specsuperflow.banking.executionplandag",
+                "--run-root",
+                str(subtree / "run-root"),
+                "--target-dir",
+                str(subtree / "target"),
+                "--evidence-subtree",
+                str(subtree),
+            )
+            self.assertEqual(captured.returncode, 0, captured.stdout + captured.stderr)
+            payload = json.loads(captured.stdout)
+            self.assertEqual(payload["source_revision"], revision)
+            required = [
+                "contract/migration-contract.json",
+                "capability-graph.json",
+                "fact-packs",
+                "review-queue.json",
+                "gate-report.json",
+                "execution-plan.json",
+                "frozen-task-state.json",
+                "logs/01-start.stdout.txt",
+                "logs/01-start.stderr.txt",
+                "logs/01-start.command.log",
+                "logs/02-status.stdout.txt",
+                "logs/02-status.stderr.txt",
+                "logs/02-status.command.log",
+                "exit/01-start.exit.json",
+                "exit/02-status.exit.json",
+                "tests/start-status.test.log",
+                "skill-identity-reference.json",
+                "source-identity.json",
+            ]
+            for relative in required:
+                self.assertTrue((subtree / relative).exists(), relative)
+            reference = json.loads(
+                (subtree / "skill-identity-reference.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                reference["manifest_sha256"],
+                hashlib.sha256(manifest.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                reference["binding_sha256"],
+                hashlib.sha256(binding.read_bytes()).hexdigest(),
+            )
+            source_identity = json.loads(
+                (subtree / "source-identity.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(source_identity["remote_url"], source_url)
+            self.assertEqual(source_identity["revision"], revision)
+
+            unknown = run_script(CAPTURE_EXECUTION_PLAN, "--command", "echo unsafe")
+            self.assertNotEqual(unknown.returncode, 0)
+
+    def test_capture_execution_plan_regressions_rejects_wrong_banking_remote(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = create_compose_source(root)
+            subprocess.run(["git", "init", "-q", str(source)], check=True)
+            subprocess.run(
+                ["git", "-C", str(source), "config", "user.email", "test@example.com"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(source), "config", "user.name", "Test"],
+                check=True,
+            )
+            subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(source), "commit", "-qm", "fixture"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(source), "remote", "add", "origin", "https://example.com/wrong.git"],
+                check=True,
+            )
+            revision = subprocess.check_output(
+                ["git", "-C", str(source), "rev-parse", "HEAD"],
+                text=True,
+            ).strip()
+            change = root / "change"
+            change.mkdir()
+            subtree = change / "evidence/execution-plan-dag-v1/banking"
+            rejected = run_script(
+                CAPTURE_EXECUTION_PLAN,
+                "--change-dir",
+                str(change),
+                "--project",
+                "banking",
+                "--source-url",
+                "https://github.com/alexandr7035/Banking-App-Mock-Compose.git",
+                "--expected-revision",
+                revision,
+                "--source-dir",
+                str(source),
+                "--project-name",
+                "BankingExecutionPlanDag",
+                "--bundle-name",
+                "com.specsuperflow.banking.executionplandag",
+                "--run-root",
+                str(subtree / "run-root"),
+                "--target-dir",
+                str(subtree / "target"),
+                "--evidence-subtree",
+                str(subtree),
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("remote", rejected.stdout)
     def test_validator_rejects_resigned_legacy_ui_evidence_without_installs(
         self,
     ) -> None:

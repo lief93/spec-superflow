@@ -1,0 +1,86 @@
+{
+  "schema": "android-to-harmony.review-queue.v1",
+  "source_revision": "8f06a3fdc2dfb74b675b1c300560df19a9c2e142",
+  "contract_sha256": "aa92639352997ce7de44fdb25eb9a1aa0fea36404ae3780ce057629167ad5b2f",
+  "skill_tree_digest": "3d407b10ff2ec544e2d385a6bb14df8b387319d0d482456b95d97271af0e373f",
+  "entry_count": 5,
+  "unclassified_source_files": [
+    "app/src/main/java/by/alexandr7035/banking/ui/components/pages/Page.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_account/components/account_actions/AccountAction.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_cards/screen_add_card/AddCardFormFields.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_cards/screen_add_card/UiField.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_onboarding/OnboardingPage.kt"
+  ],
+  "entries": [
+    {
+      "source_path": "app/src/main/java/by/alexandr7035/banking/ui/components/pages/Page.kt",
+      "candidate_layers": [
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/by/alexandr7035/banking/ui/feature_account/components/account_actions/AccountAction.kt",
+      "candidate_layers": [
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/by/alexandr7035/banking/ui/feature_cards/screen_add_card/AddCardFormFields.kt",
+      "candidate_layers": [
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/by/alexandr7035/banking/ui/feature_cards/screen_add_card/UiField.kt",
+      "candidate_layers": [
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/by/alexandr7035/banking/ui/feature_onboarding/OnboardingPage.kt",
+      "candidate_layers": [
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    }
+  ]
+}

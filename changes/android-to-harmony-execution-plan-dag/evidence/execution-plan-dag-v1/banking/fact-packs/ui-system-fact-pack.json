@@ -1,0 +1,39 @@
+{
+  "schema": "android-to-harmony.fact-pack.v1",
+  "layer": "ui_system",
+  "source_revision": "8f06a3fdc2dfb74b675b1c300560df19a9c2e142",
+  "contract_sha256": "aa92639352997ce7de44fdb25eb9a1aa0fea36404ae3780ce057629167ad5b2f",
+  "skill_tree_digest": "3d407b10ff2ec544e2d385a6bb14df8b387319d0d482456b95d97271af0e373f",
+  "candidate_source_files": [
+    "app/src/main/java/by/alexandr7035/banking/MainActivity.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/components/snackbar/SnackBarMode.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/components/snackbar/SnackbarColors.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_app_lock/lock_screen/LockScreenState.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_cards/helpers/CardUiHelpers.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_cards/model/CardUi.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_profile/menu/MenuEntry.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/theme/Color.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/theme/Type.kt",
+    "app/src/main/res/values/colors.xml",
+    "app/src/main/res/values/ic_launcher_background.xml",
+    "app/src/main/res/values/string_errors.xml",
+    "app/src/main/res/values/strings.xml",
+    "app/src/main/res/values/strings_help_content.xml",
+    "app/src/main/res/values/themes.xml"
+  ],
+  "node_ids": [
+    "ui-system:resources",
+    "ui_system:appsrcmainjavabyalexandr7035bankingmainactivitykt",
+    "ui_system:appsrcmainjavabyalexandr7035bankinguicomponentssnackbarsnackbarcolorskt",
+    "ui_system:appsrcmainjavabyalexandr7035bankinguicomponentssnackbarsnackbarmodekt",
+    "ui_system:appsrcmainjavabyalexandr7035bankinguifeatureapplocklockscreenlockscreenstatekt",
+    "ui_system:appsrcmainjavabyalexandr7035bankinguifeaturecardshelperscarduihelperskt",
+    "ui_system:appsrcmainjavabyalexandr7035bankinguifeaturecardsmodelcarduikt",
+    "ui_system:appsrcmainjavabyalexandr7035bankinguifeatureprofilemenumenuentrykt",
+    "ui_system:appsrcmainjavabyalexandr7035bankinguithemecolorkt",
+    "ui_system:appsrcmainjavabyalexandr7035bankinguithemetypekt"
+  ],
+  "status": "candidate",
+  "authoritative": false,
+  "project_source_file_count": 344
+}

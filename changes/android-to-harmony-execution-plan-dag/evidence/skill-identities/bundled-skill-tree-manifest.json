@@ -1,0 +1,428 @@
+{
+  "schema": "android-to-harmony.skill-tree-manifest.v1",
+  "local_root": "skills/migrate-android-compose-to-harmony",
+  "file_count": 70,
+  "tree_sha256": "3d407b10ff2ec544e2d385a6bb14df8b387319d0d482456b95d97271af0e373f",
+  "files": [
+    {
+      "path": "SKILL.md",
+      "type": "file",
+      "bytes": 44753,
+      "sha256": "1865aa411c973e204e42e4cb353215d01718aa6c9beef8eb866e78ff21e31ed1"
+    },
+    {
+      "path": "agents/openai.yaml",
+      "type": "file",
+      "bytes": 317,
+      "sha256": "4b230bee27664ea60b7eb8478ffa48d0c2aed56aff0ed97e517e47abbe53628d"
+    },
+    {
+      "path": "assets/android-compose-uitest-component-bounds/ComponentBounds.kt",
+      "type": "file",
+      "bytes": 4149,
+      "sha256": "ba8462c7d5e63f09695b20e2e81ee4a33c85fd86c5f737b1ea805310b432cc54"
+    },
+    {
+      "path": "assets/android-compose-uitest-component-bounds/ComposeSemanticsComponentBounds.kt",
+      "type": "file",
+      "bytes": 3518,
+      "sha256": "35d680d050d65fb429116190a9e6e7f5ddd2eb8eea36a9c9c6bf1c8a03f9edcf"
+    },
+    {
+      "path": "assets/compose-arkui-primitive-mappings.json",
+      "type": "file",
+      "bytes": 43469,
+      "sha256": "68878c2866aeb3da778a3c28517e8e3f56070e02b5df76bfc9aec24ffcdc5087"
+    },
+    {
+      "path": "assets/gate-profile-registry.json",
+      "type": "file",
+      "bytes": 2775,
+      "sha256": "e227d5821e6c8190756f74f8c3a9a7796c680fdb5371a769497d3ffda2b46404"
+    },
+    {
+      "path": "assets/harmony-stage-template/AppScope/app.json5",
+      "type": "file",
+      "bytes": 208,
+      "sha256": "43856255642517b1b80dfa58711ceab6e3ce6cea2acdf7f7fe5c304f3548e298"
+    },
+    {
+      "path": "assets/harmony-stage-template/AppScope/resources/base/element/string.json",
+      "type": "file",
+      "bytes": 94,
+      "sha256": "2ba9df08294512cde72b6dfa094798e0951cb392785188cb20534f0e8f652306"
+    },
+    {
+      "path": "assets/harmony-stage-template/AppScope/resources/base/media/app_icon.svg",
+      "type": "file",
+      "bytes": 229,
+      "sha256": "aa5784c384242275246707c39138adbf02cbc60e76c818a8e9b02e715a60e24c"
+    },
+    {
+      "path": "assets/harmony-stage-template/build-profile.json5",
+      "type": "file",
+      "bytes": 769,
+      "sha256": "f24f3b36c246365fcc1fe4f6eaed73bc6944ab05dfa4a74757508e2f56ee1485"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/build-profile.json5",
+      "type": "file",
+      "bytes": 233,
+      "sha256": "26d66b967fc481fb7d021ef3f25de3de97583218e7ac198b6910a5f2c884a72e"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/hvigorfile.ts",
+      "type": "file",
+      "bytes": 107,
+      "sha256": "43991ae4e8fe1cfef2560248345825f41ebabc8001c92bc7c9fbe21af298c7c9"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/oh-package.json5",
+      "type": "file",
+      "bytes": 170,
+      "sha256": "429c0068a03fcb1b833d8304427844e1ab06c37202afe4f5da6427f02cd24c6a"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/main/ets/entryability/EntryAbility.ets",
+      "type": "file",
+      "bytes": 620,
+      "sha256": "e1bc678b749aaf2ea4ec9e4e84ed573282c7c2d68be82844a6e73be8d8148218"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/main/ets/pages/Index.ets",
+      "type": "file",
+      "bytes": 449,
+      "sha256": "fd531c3855bb52c3f91a289d5ff0053f0c5d12ea2c03bc6d19864a28e5a7c334"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/main/module.json5",
+      "type": "file",
+      "bytes": 751,
+      "sha256": "9be8b6a21461297c109b2d0763ffa0ded435ffd788688733494ab0aadc5412d0"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/main/resources/base/element/color.json",
+      "type": "file",
+      "bytes": 99,
+      "sha256": "5856e62bafbe1433fc9ffacc05176711aaad9b3a5dc8b25278a1ab055ccaa0d1"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/main/resources/base/media/start_icon.svg",
+      "type": "file",
+      "bytes": 229,
+      "sha256": "aa5784c384242275246707c39138adbf02cbc60e76c818a8e9b02e715a60e24c"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/main/resources/base/profile/main_pages.json",
+      "type": "file",
+      "bytes": 37,
+      "sha256": "f21984fb1d5096f0db41314da0bb94c573e7ad018e5afae3044f8d5ff71b0bfc"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/ohosTest/ets/test/Ability.test.ets",
+      "type": "file",
+      "bytes": 790,
+      "sha256": "bd297a9fd9503326e6caa484ae2136158cc1212f5713a270f06ba77c77ff8162"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/ohosTest/ets/test/List.test.ets",
+      "type": "file",
+      "bytes": 100,
+      "sha256": "9d5f9b253cae63cf0bc81207f8147a6e2fb9f078d8ac0bc7787e5dc19d629948"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/ohosTest/module.json5",
+      "type": "file",
+      "bytes": 206,
+      "sha256": "9bc137b290d79721c16e16d7895e5892f03e8de66b470bcec8849b759e184de5"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/test/List.test.ets",
+      "type": "file",
+      "bytes": 124,
+      "sha256": "5fd698fd1799e758cbbb2d530083dc2f999062735a430ded6d4158053cf87913"
+    },
+    {
+      "path": "assets/harmony-stage-template/entry/src/test/Migration.test.ets",
+      "type": "file",
+      "bytes": 232,
+      "sha256": "e206c525b61f4ad2441902fa7660f11c0bdd1b0e722e1f0455acf10e294f0674"
+    },
+    {
+      "path": "assets/harmony-stage-template/hvigor/hvigor-config.json5",
+      "type": "file",
+      "bytes": 71,
+      "sha256": "34308ddf4d1ea07e8f185abff4bd41e9013cbd7524e8d00536f074a1dc0721e1"
+    },
+    {
+      "path": "assets/harmony-stage-template/hvigorfile.ts",
+      "type": "file",
+      "bytes": 107,
+      "sha256": "2438d9d66674d5cf7d40d426a925f3ccfa2015791f62fa38473c3a27d7474b09"
+    },
+    {
+      "path": "assets/harmony-stage-template/oh-package-lock.json5",
+      "type": "file",
+      "bytes": 976,
+      "sha256": "bab8f5d1a2f40b22a1d078c3fa827085ffd5e9a1bf62ab661b2b140f892afc3d"
+    },
+    {
+      "path": "assets/harmony-stage-template/oh-package.json5",
+      "type": "file",
+      "bytes": 190,
+      "sha256": "e4a1c2b0b93bafcbcd7799164e1ad1a5a448483fb966a429eba0ad731674e12f"
+    },
+    {
+      "path": "assets/ohos-uitest-component-bounds/ComponentBounds.ets",
+      "type": "file",
+      "bytes": 2586,
+      "sha256": "539366cf3af865cd17d054366336206cc0eabb59b9cc11044807985ef10d7ff7"
+    },
+    {
+      "path": "references/capability-graph-and-gates.md",
+      "type": "file",
+      "bytes": 4111,
+      "sha256": "bb908263d2e4fbf13d0c5b40a406d2dfa41151367e2bf918214adcb3cad9a9cd"
+    },
+    {
+      "path": "references/compose-arkui-mapping.md",
+      "type": "file",
+      "bytes": 23032,
+      "sha256": "54edfcaf86e466d5ca7ccdd486d6021dde3351e420d9959e74d6ea616b8256b1"
+    },
+    {
+      "path": "references/local-image-comparison.md",
+      "type": "file",
+      "bytes": 14387,
+      "sha256": "3bcfdf81f5edef3be4af0b9fcb333167d567ed72f1d34acefecb3d107b1098ea"
+    },
+    {
+      "path": "references/platform-capabilities.md",
+      "type": "file",
+      "bytes": 3771,
+      "sha256": "a569b089908105d86cf5373816743f333839af259704b054695385fbf5b2b60a"
+    },
+    {
+      "path": "references/privacy-boundary.md",
+      "type": "file",
+      "bytes": 6142,
+      "sha256": "52d9a92303c1c06314c9e81820a29802b9bdeee7373588647afe17b72e067d74"
+    },
+    {
+      "path": "references/verification-contract.md",
+      "type": "file",
+      "bytes": 9781,
+      "sha256": "bc227850a0ee4ddbc8ee4f8fd893992a90b4d6fcc44a4bf4adb363de653190e7"
+    },
+    {
+      "path": "scripts/aggregate_gate_evidence.py",
+      "type": "file",
+      "bytes": 17923,
+      "sha256": "9e2dd20942c10185ec6d8ea5eeb1d069c470741c4d177bac9e67e6eeb1693efb"
+    },
+    {
+      "path": "scripts/analyze_compose_project.py",
+      "type": "file",
+      "bytes": 177751,
+      "sha256": "da60f88e399dc60924eb4167d5f0d9b62de185a0effd5bcfe6ac10b8e2d6f2e2"
+    },
+    {
+      "path": "scripts/attach_contract_to_target.py",
+      "type": "file",
+      "bytes": 7538,
+      "sha256": "8a343ee403f26f9897647d8a293c22d52f04f42cd7f02e41a18cfdba4c62592a"
+    },
+    {
+      "path": "scripts/build_capability_graph.py",
+      "type": "file",
+      "bytes": 78767,
+      "sha256": "4776815b5c5c3999ecfa8f663076c8be2ed59cceee095b9885248c5decb137c8"
+    },
+    {
+      "path": "scripts/build_execution_plan.py",
+      "type": "file",
+      "bytes": 59691,
+      "sha256": "12e2d1277919c4da58c1a31d7eb8ea26499ed968f74e0fb8d4df5ff417b03cf9"
+    },
+    {
+      "path": "scripts/capture_execution_plan_regressions.py",
+      "type": "file",
+      "bytes": 15367,
+      "sha256": "8b8ec7f26edf691812e4075fb29f34ff4b2e27d193e2e66eb6b9c2fc3285a131"
+    },
+    {
+      "path": "scripts/compare_local_screenshots.py",
+      "type": "file",
+      "bytes": 46096,
+      "sha256": "ebe86cd25287a64c047b77ad680fa3bf5a4149bef630b2d37c7264968152c0c2"
+    },
+    {
+      "path": "scripts/convert_android_vector.py",
+      "type": "file",
+      "bytes": 31033,
+      "sha256": "32fe2e06db65e3516257f77966433146e352a4e3ddb568c2f1c24b2acc9503e0"
+    },
+    {
+      "path": "scripts/copy_local_asset.py",
+      "type": "file",
+      "bytes": 13769,
+      "sha256": "3a923e5dddc044c6fc4d8959f9215d0766cc56ef306275902b1c041972f4949d"
+    },
+    {
+      "path": "scripts/evidence_attestation.py",
+      "type": "file",
+      "bytes": 13519,
+      "sha256": "ea7d5a3a413d358e963da1c7d3544128071220988f4ba6d89cc3647ecb6f35e7"
+    },
+    {
+      "path": "scripts/evidence_runner.py",
+      "type": "file",
+      "bytes": 76322,
+      "sha256": "56a9b24c91caee72bfbb2b7e269ddea9f4005895c2dae667cf26fbcd68f48bb7"
+    },
+    {
+      "path": "scripts/extract_android_component_bounds.py",
+      "type": "file",
+      "bytes": 6014,
+      "sha256": "c07469323548008fa99c5a66a12c67bc47ccea2a45bee1263ede7b77a10cfafe"
+    },
+    {
+      "path": "scripts/extract_ohos_component_bounds.py",
+      "type": "file",
+      "bytes": 6026,
+      "sha256": "4d21cc5129923a778ae13c89c3b8538af7360dea1b00491c870f2937008bbeb1"
+    },
+    {
+      "path": "scripts/generate_arkui_page.py",
+      "type": "file",
+      "bytes": 424832,
+      "sha256": "ea50d2e0cb87a0f3d1e30eff8235f49a517de1fa9e5c9a9f9d806dc6b77671a5"
+    },
+    {
+      "path": "scripts/generate_changed_path_summary.py",
+      "type": "file",
+      "bytes": 9418,
+      "sha256": "36ee8e4c6cb6d1be35b57b580a5b64fd5e33f9093461c3aa1ed68852db594c9f"
+    },
+    {
+      "path": "scripts/generate_harmony_theme_resources.py",
+      "type": "file",
+      "bytes": 29014,
+      "sha256": "bc4636f441ae97a778db9070510f817d415cf0900c8657c2820e563417865504"
+    },
+    {
+      "path": "scripts/generate_migration_backlog.py",
+      "type": "file",
+      "bytes": 46754,
+      "sha256": "cac19b74b77cfcca0428db957f860f1e1566324917aeb92e7e98fa3954877a91"
+    },
+    {
+      "path": "scripts/generate_slot_container_summary.py",
+      "type": "file",
+      "bytes": 15359,
+      "sha256": "e7e9db517891aa4e98e3777446ca8b0c755b6fcb6ca5b90a58a45aec4fa1c732"
+    },
+    {
+      "path": "scripts/generate_source_attribute_inventory.py",
+      "type": "file",
+      "bytes": 13991,
+      "sha256": "5a1445bc7a5f643f9cacff63ce80a0ef1b30f767c7dcdbf340e6577267739fca"
+    },
+    {
+      "path": "scripts/hash_evidence_tree.py",
+      "type": "file",
+      "bytes": 12465,
+      "sha256": "ada6dd8802934e352472588f33236b2251c74385e72350b45f8bce88f964c30f"
+    },
+    {
+      "path": "scripts/hash_skill_tree.py",
+      "type": "file",
+      "bytes": 4598,
+      "sha256": "1cb96bcb6cd58a6460bb12a5e75c2908e30d69867caae33fc780be96085a8f54"
+    },
+    {
+      "path": "scripts/hash_target_source.py",
+      "type": "file",
+      "bytes": 18940,
+      "sha256": "6019191b5db2755a30d98b3db9768948438e21978d6f40a36c286afb58bb3688"
+    },
+    {
+      "path": "scripts/init_harmony_project.py",
+      "type": "file",
+      "bytes": 26562,
+      "sha256": "290dae0b5360101478a37e0dc19e8b0a5a1454ccb357ecbc4b794ecd599c2bf7"
+    },
+    {
+      "path": "scripts/materialize_static_drawables.py",
+      "type": "file",
+      "bytes": 11721,
+      "sha256": "70bd5fd32ce9f098c06a587fa7c25c5265a81a6b4ea65d0f40c5645e00760ec9"
+    },
+    {
+      "path": "scripts/migration_agent.py",
+      "type": "file",
+      "bytes": 103517,
+      "sha256": "4b2f842822b72de32be22f4d2b71bc5a5fb2258320e5c98f42d90e8209c2d083"
+    },
+    {
+      "path": "scripts/prepare_safe_snapshot.py",
+      "type": "file",
+      "bytes": 23474,
+      "sha256": "c7665253825c30d1cc88c9af600f6f6f8b0efc1a8b11dba7d08d9cf2e2de14bb"
+    },
+    {
+      "path": "scripts/test_compare_local_screenshots.py",
+      "type": "file",
+      "bytes": 26209,
+      "sha256": "02786153e3abaaa4571e53c6d3b55da01dc10ada791e392edc155c3dba5ee154"
+    },
+    {
+      "path": "scripts/test_component_bounds_asset.py",
+      "type": "file",
+      "bytes": 3766,
+      "sha256": "9c5b44961404ed13f1eb2b76ac1ad14393788242a407a166bb7ef9c04c71fafc"
+    },
+    {
+      "path": "scripts/test_evidence_runner.py",
+      "type": "file",
+      "bytes": 63875,
+      "sha256": "1854926646486b52072fbe38c5d1e6633a1225f0e4379af1289da605cdb3b993"
+    },
+    {
+      "path": "scripts/test_extract_android_component_bounds.py",
+      "type": "file",
+      "bytes": 3535,
+      "sha256": "2be3038b789980627f7f5c8780d53a5aea38640ec15ae03afe7b872831a73cb3"
+    },
+    {
+      "path": "scripts/test_extract_ohos_component_bounds.py",
+      "type": "file",
+      "bytes": 3492,
+      "sha256": "b2fd60c91a549301433b832e1bb0e8f2f4182903d389015152833b1f5ee13c9e"
+    },
+    {
+      "path": "scripts/test_orchestrator.py",
+      "type": "file",
+      "bytes": 94200,
+      "sha256": "1800b870f43b5ea51e93a729a2cd68caddb4555d7ee60054df5adfe76ae02b71"
+    },
+    {
+      "path": "scripts/test_security_hardening.py",
+      "type": "file",
+      "bytes": 25902,
+      "sha256": "2ae5373542120bf957f6fd538cb293a6ab1f74d16f13fac47da7fb29c348cb60"
+    },
+    {
+      "path": "scripts/test_tools.py",
+      "type": "file",
+      "bytes": 1300256,
+      "sha256": "45c2d966d71aa4f94e08802662acfb65f0ac45cd31beb81fd1572e7a4d430270"
+    },
+    {
+      "path": "scripts/validate_ai_safe_tree.py",
+      "type": "file",
+      "bytes": 21146,
+      "sha256": "5d852a3153198deccc248d5a1c045b6ec360e8b3e6623871639e87773e916f1a"
+    }
+  ]
+}

@@ -1,0 +1,643 @@
+{
+  "schema": "android-to-harmony.execution-task-state.v1",
+  "plan_identity": "7fd9695350abb3f1cf0166ea3a3b3ef8b41419663e6e55b780d77b40dc8175da",
+  "tasks": {
+    "foundation:accountrepository": {
+      "status": "ready"
+    },
+    "foundation:addcardpayload": {
+      "status": "ready"
+    },
+    "foundation:addcardusecase": {
+      "status": "ready"
+    },
+    "foundation:apperror": {
+      "status": "ready"
+    },
+    "foundation:applockrepository": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcorediappmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainaccountusecaseskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainapplockusecaseskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomaincardusecasesmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainconnectionsmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomaincontactsmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainloginusecasesmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainonboardingmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainotpusecasesmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainprofileusecasesmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainsavingsusecasesmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainsignupmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomaintransactionsmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoredidomainvalidationusecasesmodulekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingcoreextensionscollectionextensionskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingdataappapprepositoryimplkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingdataappappsettignsrepositorykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingdataapplockcryptoutilskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingdataappprefkeyskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingdatahelpersmoneyextensionskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingdatatransactionstransactionsourcekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankingmainactivitykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguiapphostappintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguiapphostappstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguiapphosthostutilslocalsnackbarhoststatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicomponentspermissionspermissioncontenthelperkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicomponentssnackbarresultsnackbarvisualskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicomponentssnackbarsnackbarcolorskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicomponentssnackbarsnackbarmodekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicoreerroruierrormapperkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicoreextensionscontextextensionskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicoreextensionsstringextensionskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicoreextensionstimeextensionskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicorenotificationsnotificationuikt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguicorepermissionspermissionhelpercompositionlocalkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureaccountactionsendsendmoneyscreenintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureaccountactionsendsendmoneyscreenstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureaccountactiontopuptopupscreenintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureaccountactiontopuptopupscreenstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureaccountamountpickersstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureaccountcardpickerstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureaccountcontactpickerstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureaccountmoneyamountuikt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureapplockcomponentsapplockuistatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureapplockcoreapplockintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureapplockcorebiometricsbiometricauthresultkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureapplockcorebiometricsbiometricsintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureapplockcorebiometricsbiometricspromptuikt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureapplocklockscreenlockscreenstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureapplocksetupapplockbiometricsenablebiometricsstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureapplocksetupapplockpincreatepinstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureapplocksetupapplockpinpincreatedresultkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureappsettingsappsettingsstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardsdialogcardpickercardpickerintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardsdialogcardpickercardpickerstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardshelperscarduihelperskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardsmodelcarduikt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardsscreenaddcardaddcardintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardsscreenaddcardaddcardstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardsscreencarddetailscarddetailsintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardsscreencarddetailscarddetailsstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardsscreencardlistcardlistintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecardsscreencardlistcardliststatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecontactsdialogcontactpickercontactpickerdialogintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecontactsdialogcontactpickercontactpickerdialogstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecontactsmodelcontactuikt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecontactsscannedcontactscannedcontactintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturecontactsscannedcontactscannedcontactscreenstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturehelphelpitemkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturehomemodelhomeintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturehomemodelhomestatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureloginloginintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureloginloginscreenstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturelogoutlogoutintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturelogoutlogoutstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureonboardingonboardingintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureotpotpconfirmationintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureotpotpconfirmationstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureprofilemenumenuentrykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureprofilemenumenuitemkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureprofilemodelprofileuikt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureprofileprofilescreenintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureprofileprofilescreenstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureqrcodesdisplayqrintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeatureqrcodesdisplayqrstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturesavingsmodelsavinguikt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturesavingssavingslistintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturesavingssavingsliststatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturesavingsscreensavingdetailssavingdetailsintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturesavingsscreensavingdetailssavingdetailsstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturesignupconfirmsignupconfirmsignupscreenstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturesignupinitsignupintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturesignupinitsignupstatekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturetransactionsmodeltransactionuikt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguifeaturetransactionstransactionhistoryintentkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguithemecolorkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavabyalexandr7035bankinguithemetypekt": {
+      "status": "ready"
+    },
+    "foundation:authenticatewithpinusecase": {
+      "status": "ready"
+    },
+    "foundation:authenticationresult": {
+      "status": "ready"
+    },
+    "foundation:balancecurrency": {
+      "status": "ready"
+    },
+    "foundation:biometrics": {
+      "status": "ready"
+    },
+    "foundation:biometricsavailability": {
+      "status": "ready"
+    },
+    "foundation:cardentity": {
+      "status": "ready"
+    },
+    "foundation:cardsdao": {
+      "status": "ready"
+    },
+    "foundation:cardsrepository": {
+      "status": "ready"
+    },
+    "foundation:cardtype": {
+      "status": "ready"
+    },
+    "foundation:checkapplockedwithbiometricsusecase": {
+      "status": "ready"
+    },
+    "foundation:checkapplockusecase": {
+      "status": "ready"
+    },
+    "foundation:checkifbiometricsavailableusecase": {
+      "status": "ready"
+    },
+    "foundation:checkifloggedinusecase": {
+      "status": "ready"
+    },
+    "foundation:checkifpassedonboardingusecase": {
+      "status": "ready"
+    },
+    "foundation:compactprofile": {
+      "status": "ready"
+    },
+    "foundation:confirmsignupwithemailusecase": {
+      "status": "ready"
+    },
+    "foundation:contact": {
+      "status": "ready"
+    },
+    "foundation:contactsrepository": {
+      "status": "ready"
+    },
+    "foundation:errortype": {
+      "status": "ready"
+    },
+    "foundation:for": {
+      "status": "ready"
+    },
+    "foundation:generateqrcodeusecase": {
+      "status": "ready"
+    },
+    "foundation:getallcardsusecase": {
+      "status": "ready"
+    },
+    "foundation:getallsavingsusecase": {
+      "status": "ready"
+    },
+    "foundation:getcardbalanceobservableusecase": {
+      "status": "ready"
+    },
+    "foundation:getcardbyidusecase": {
+      "status": "ready"
+    },
+    "foundation:getcompactprofileusecase": {
+      "status": "ready"
+    },
+    "foundation:getcontactbyidusecase": {
+      "status": "ready"
+    },
+    "foundation:getcontactsusecase": {
+      "status": "ready"
+    },
+    "foundation:getdefaultcardusecase": {
+      "status": "ready"
+    },
+    "foundation:gethomecardsusecase": {
+      "status": "ready"
+    },
+    "foundation:gethomesavingsusecase": {
+      "status": "ready"
+    },
+    "foundation:getrecentcontactusecase": {
+      "status": "ready"
+    },
+    "foundation:getsavingbyidusecase": {
+      "status": "ready"
+    },
+    "foundation:getsuggestedsendvaluesforcardbalance": {
+      "status": "ready"
+    },
+    "foundation:getsuggestedtopupvaluesusecase": {
+      "status": "ready"
+    },
+    "foundation:gettotalaccountbalanceusecase": {
+      "status": "ready"
+    },
+    "foundation:gettransactionsusecase": {
+      "status": "ready"
+    },
+    "foundation:loaduserfromqrcodeusecase": {
+      "status": "ready"
+    },
+    "foundation:local-files": {
+      "status": "ready"
+    },
+    "foundation:loginrepository": {
+      "status": "ready"
+    },
+    "foundation:loginwithemailusecase": {
+      "status": "ready"
+    },
+    "foundation:logoutusecase": {
+      "status": "ready"
+    },
+    "foundation:navigation-compose": {
+      "status": "ready"
+    },
+    "foundation:notifications-push": {
+      "status": "ready"
+    },
+    "foundation:observetransactionstatususecase": {
+      "status": "ready"
+    },
+    "foundation:operationresult": {
+      "status": "ready"
+    },
+    "foundation:otpconfiguration": {
+      "status": "ready"
+    },
+    "foundation:otpgenerationresponse": {
+      "status": "ready"
+    },
+    "foundation:otpoperationtype": {
+      "status": "ready"
+    },
+    "foundation:otprepository": {
+      "status": "ready"
+    },
+    "foundation:otptype": {
+      "status": "ready"
+    },
+    "foundation:otpverificationresponse": {
+      "status": "ready"
+    },
+    "foundation:passonboardingusecase": {
+      "status": "ready"
+    },
+    "foundation:paymentcard": {
+      "status": "ready"
+    },
+    "foundation:preferences": {
+      "status": "ready"
+    },
+    "foundation:profilerepository": {
+      "status": "ready"
+    },
+    "foundation:profiletier": {
+      "status": "ready"
+    },
+    "foundation:qrpurpose": {
+      "status": "ready"
+    },
+    "foundation:removecardusecase": {
+      "status": "ready"
+    },
+    "foundation:requestotpgenerationusecase": {
+      "status": "ready"
+    },
+    "foundation:resources": {
+      "status": "ready"
+    },
+    "foundation:room-database": {
+      "status": "ready"
+    },
+    "foundation:runtime-permission": {
+      "status": "ready"
+    },
+    "foundation:saving": {
+      "status": "ready"
+    },
+    "foundation:savingsrepository": {
+      "status": "ready"
+    },
+    "foundation:scheduled-work": {
+      "status": "ready"
+    },
+    "foundation:sendmoneyusecase": {
+      "status": "ready"
+    },
+    "foundation:setcardasprimaryusecase": {
+      "status": "ready"
+    },
+    "foundation:setupapplockedwithbiometricsusecase": {
+      "status": "ready"
+    },
+    "foundation:setupapplockusecase": {
+      "status": "ready"
+    },
+    "foundation:signuppayload": {
+      "status": "ready"
+    },
+    "foundation:signuprepository": {
+      "status": "ready"
+    },
+    "foundation:signupwithemailusecase": {
+      "status": "ready"
+    },
+    "foundation:topupaccountusecase": {
+      "status": "ready"
+    },
+    "foundation:transaction": {
+      "status": "ready"
+    },
+    "foundation:transactionrepository": {
+      "status": "ready"
+    },
+    "foundation:transactionrowpayload": {
+      "status": "ready"
+    },
+    "foundation:transactionstatus": {
+      "status": "ready"
+    },
+    "foundation:transactiontype": {
+      "status": "ready"
+    },
+    "foundation:validatebillingaddressusecase": {
+      "status": "ready"
+    },
+    "foundation:validatecardexpirationusecase": {
+      "status": "ready"
+    },
+    "foundation:validatecardholderusecase": {
+      "status": "ready"
+    },
+    "foundation:validatecardnumberusecase": {
+      "status": "ready"
+    },
+    "foundation:validatecvvcodeusecase": {
+      "status": "ready"
+    },
+    "foundation:validateemailusecase": {
+      "status": "ready"
+    },
+    "foundation:validatepasswordusecase": {
+      "status": "ready"
+    },
+    "foundation:validationresult": {
+      "status": "ready"
+    },
+    "foundation:viewmodel-stateflow": {
+      "status": "ready"
+    },
+    "slice:accountsend?selectedcard={selectedcard}": {
+      "status": "blocked"
+    },
+    "slice:addcardscreen": {
+      "status": "blocked"
+    },
+    "slice:appcontainerscreen": {
+      "status": "blocked"
+    },
+    "slice:appsettingsscreen": {
+      "status": "blocked"
+    },
+    "slice:carddetailsscreen": {
+      "status": "blocked"
+    },
+    "slice:cardlistscreen": {
+      "status": "blocked"
+    },
+    "slice:completesignupscreen": {
+      "status": "blocked"
+    },
+    "slice:confirmsignupscreen": {
+      "status": "blocked"
+    },
+    "slice:createpinscreen": {
+      "status": "blocked"
+    },
+    "slice:enablebiometricsscreen": {
+      "status": "blocked"
+    },
+    "slice:errorfullscreen": {
+      "status": "blocked"
+    },
+    "slice:homescreen": {
+      "status": "blocked"
+    },
+    "slice:initsignupscreen": {
+      "status": "blocked"
+    },
+    "slice:lockscreen": {
+      "status": "blocked"
+    },
+    "slice:onboardingscreen": {
+      "status": "blocked"
+    },
+    "slice:otpconfirmationscreen": {
+      "status": "blocked"
+    },
+    "slice:profilescreen": {
+      "status": "blocked"
+    },
+    "slice:scannedcontactscreen": {
+      "status": "blocked"
+    },
+    "slice:sendmoneyscreen": {
+      "status": "blocked"
+    },
+    "slice:topupscreen": {
+      "status": "blocked"
+    },
+    "slice:transactionhistoryscreen": {
+      "status": "blocked"
+    },
+    "slice:webviewscreen": {
+      "status": "blocked"
+    }
+  },
+  "task_state_identity": "b705ebf85b53e943bef2a90fbb0633c74aa307d2c7edb9f1d910340adef7e217"
+}

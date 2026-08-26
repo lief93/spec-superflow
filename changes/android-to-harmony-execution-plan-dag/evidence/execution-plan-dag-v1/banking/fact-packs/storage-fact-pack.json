@@ -1,0 +1,28 @@
+{
+  "schema": "android-to-harmony.fact-pack.v1",
+  "layer": "storage",
+  "source_revision": "8f06a3fdc2dfb74b675b1c300560df19a9c2e142",
+  "contract_sha256": "aa92639352997ce7de44fdb25eb9a1aa0fea36404ae3780ce057629167ad5b2f",
+  "skill_tree_digest": "3d407b10ff2ec544e2d385a6bb14df8b387319d0d482456b95d97271af0e373f",
+  "candidate_source_files": [
+    "app/src/main/java/by/alexandr7035/banking/data/app/AppRepositoryImpl.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/app/AppSettignsRepository.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/app/PrefKeys.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/cards/cache/CardEntity.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/cards/cache/CardsDao.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_profile/ProfileScreenIntent.kt",
+    "app/src/main/java/by/alexandr7035/banking/ui/feature_profile/ProfileScreenState.kt"
+  ],
+  "node_ids": [
+    "storage:appsrcmainjavabyalexandr7035bankingdataappapprepositoryimplkt",
+    "storage:appsrcmainjavabyalexandr7035bankingdataappappsettignsrepositorykt",
+    "storage:appsrcmainjavabyalexandr7035bankingdataappprefkeyskt",
+    "storage:appsrcmainjavabyalexandr7035bankinguifeatureprofileprofilescreenintentkt",
+    "storage:appsrcmainjavabyalexandr7035bankinguifeatureprofileprofilescreenstatekt",
+    "storage:cardentity",
+    "storage:cardsdao"
+  ],
+  "status": "candidate",
+  "authoritative": false,
+  "project_source_file_count": 344
+}

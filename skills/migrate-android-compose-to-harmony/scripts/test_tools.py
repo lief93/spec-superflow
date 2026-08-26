@@ -35,6 +35,7 @@ GENERATE_CHANGED_PATH_SUMMARY = SCRIPTS / "generate_changed_path_summary.py"
 BUILD_CAPABILITY_GRAPH = SCRIPTS / "build_capability_graph.py"
 AGGREGATE_GATE_EVIDENCE = SCRIPTS / "aggregate_gate_evidence.py"
 BUILD_EXECUTION_PLAN = SCRIPTS / "build_execution_plan.py"
+HASH_EVIDENCE_TREE = SCRIPTS / "hash_evidence_tree.py"
 TEMPLATED_OUTPUT_FILES = (
     "build-profile.json5",
     "AppScope/app.json5",
@@ -397,6 +398,220 @@ def capability_contract_fixture(source_root: Path, snapshot_root: Path) -> dict[
 
 
 class MigrationToolTests(unittest.TestCase):
+    def test_banking_evidence_tree_manifest_lists_complete_portable_membership(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "evidence"
+            banking = evidence / "execution-plan-dag-v1/banking"
+            central = evidence / "skill-identities"
+            required_files = {
+                "contract/migration-contract.json": b"contract\n",
+                "contract/migration-contract.json.owner.json": b"owner\n",
+                "capability-graph.json": b"graph\n",
+                "fact-packs/page-fact-pack.json": b"facts\n",
+                "review-queue.json": b"queue\n",
+                "gate-report.json": b"gates\n",
+                "execution-plan.json": b"plan\n",
+                "frozen-task-state.json": b"state\n",
+                "logs/01-start.stdout.txt": b"start stdout\n",
+                "logs/01-start.stderr.txt": b"",
+                "logs/01-start.command.log": b"python migration_agent.py start\n",
+                "logs/02-status.stdout.txt": b"status stdout\n",
+                "logs/02-status.stderr.txt": b"",
+                "logs/02-status.command.log": b"python migration_agent.py status\n",
+                "exit/01-start.exit.json": b"{\"exit_code\": 0}\n",
+                "exit/02-status.exit.json": b"{\"exit_code\": 0}\n",
+                "tests/start-status.test.log": b"PASS\n",
+                "source-identity.json": b"source\n",
+            }
+            for relative, content in required_files.items():
+                path = banking / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+            manifest = central / "bundled-skill-tree-manifest.json"
+            binding = central / "repo-skill-binding.json"
+            write_json(
+                manifest,
+                {
+                    "schema": "android-to-harmony.skill-tree-manifest.v1",
+                    "local_root": "skills/migrate-android-compose-to-harmony",
+                    "file_count": 1,
+                    "tree_sha256": "a" * 64,
+                    "files": [],
+                },
+            )
+            write_json(
+                binding,
+                {
+                    "schema": "android-to-harmony.repo-skill-binding.v1",
+                    "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
+                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                    "bundled_tree_sha256": "a" * 64,
+                    "file_count": 1,
+                },
+            )
+            write_json(
+                banking / "skill-identity-reference.json",
+                {
+                    "schema": "android-to-harmony.skill-identity-reference.v1",
+                    "project": "banking",
+                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                    "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                    "binding_path": "skill-identities/repo-skill-binding.json",
+                    "binding_sha256": hashlib.sha256(binding.read_bytes()).hexdigest(),
+                },
+            )
+            output = evidence / "execution-plan-dag-v1/evidence-tree-manifest.json"
+
+            generated = run_script(
+                HASH_EVIDENCE_TREE,
+                "--change-dir",
+                str(root),
+                "--evidence-root",
+                str(evidence),
+                "--output",
+                str(output),
+            )
+            self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            paths = {entry["path"] for entry in payload["files"]}
+            self.assertIn(
+                "execution-plan-dag-v1/banking/skill-identity-reference.json",
+                paths,
+            )
+            self.assertIn("skill-identities/repo-skill-binding.json", paths)
+            self.assertEqual(payload["projects"], ["banking"])
+
+            verified = run_script(
+                HASH_EVIDENCE_TREE,
+                "--verify",
+                "--change-dir",
+                str(root),
+                "--evidence-root",
+                str(evidence),
+                "--input",
+                str(output),
+            )
+            self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
+
+    def test_banking_evidence_tree_manifest_rejects_missing_extra_and_tampered_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "evidence"
+            banking = evidence / "execution-plan-dag-v1/banking"
+            central = evidence / "skill-identities"
+            central.mkdir(parents=True)
+            write_json(
+                central / "bundled-skill-tree-manifest.json",
+                {
+                    "schema": "android-to-harmony.skill-tree-manifest.v1",
+                    "local_root": "skills/migrate-android-compose-to-harmony",
+                    "file_count": 1,
+                    "tree_sha256": "a" * 64,
+                    "files": [],
+                },
+            )
+            write_json(
+                central / "repo-skill-binding.json",
+                {
+                    "schema": "android-to-harmony.repo-skill-binding.v1",
+                    "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
+                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                    "bundled_tree_sha256": "a" * 64,
+                    "file_count": 1,
+                },
+            )
+            fixture_files = [
+                "contract/migration-contract.json",
+                "contract/migration-contract.json.owner.json",
+                "capability-graph.json",
+                "fact-packs/page-fact-pack.json",
+                "review-queue.json",
+                "gate-report.json",
+                "execution-plan.json",
+                "frozen-task-state.json",
+                "logs/01-start.stdout.txt",
+                "logs/01-start.stderr.txt",
+                "logs/01-start.command.log",
+                "logs/02-status.stdout.txt",
+                "logs/02-status.stderr.txt",
+                "logs/02-status.command.log",
+                "exit/01-start.exit.json",
+                "exit/02-status.exit.json",
+                "tests/start-status.test.log",
+                "source-identity.json",
+            ]
+            for relative in fixture_files:
+                path = banking / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(relative + "\n", encoding="utf-8")
+            manifest_path = central / "bundled-skill-tree-manifest.json"
+            binding_path = central / "repo-skill-binding.json"
+            write_json(
+                banking / "skill-identity-reference.json",
+                {
+                    "schema": "android-to-harmony.skill-identity-reference.v1",
+                    "project": "banking",
+                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                    "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                    "binding_path": "skill-identities/repo-skill-binding.json",
+                    "binding_sha256": hashlib.sha256(binding_path.read_bytes()).hexdigest(),
+                },
+            )
+            output = evidence / "execution-plan-dag-v1/evidence-tree-manifest.json"
+            generated = run_script(
+                HASH_EVIDENCE_TREE,
+                "--change-dir",
+                str(root),
+                "--evidence-root",
+                str(evidence),
+                "--output",
+                str(output),
+            )
+            self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
+
+            plan = banking / "execution-plan.json"
+            original_plan = plan.read_bytes()
+            plan.write_bytes(original_plan + b"tampered")
+            tampered = run_script(
+                HASH_EVIDENCE_TREE,
+                "--verify",
+                "--change-dir",
+                str(root),
+                "--evidence-root",
+                str(evidence),
+                "--input",
+                str(output),
+            )
+            self.assertNotEqual(tampered.returncode, 0)
+            plan.write_bytes(original_plan)
+
+            plan.unlink()
+            missing = run_script(
+                HASH_EVIDENCE_TREE,
+                "--verify",
+                "--change-dir",
+                str(root),
+                "--evidence-root",
+                str(evidence),
+                "--input",
+                str(output),
+            )
+            self.assertNotEqual(missing.returncode, 0)
+            plan.write_bytes(original_plan)
+
+            (banking / "unexpected.txt").write_text("extra\n", encoding="utf-8")
+            extra = run_script(
+                HASH_EVIDENCE_TREE,
+                "--verify",
+                "--change-dir",
+                str(root),
+                "--evidence-root",
+                str(evidence),
+                "--input",
+                str(output),
+            )
+            self.assertNotEqual(extra.returncode, 0)
     def test_slot_container_summary_accepts_fresh_bound_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -29295,7 +29510,64 @@ class MigrationToolTests(unittest.TestCase):
             (skill_root / "scripts").mkdir(parents=True)
             (skill_root / "scripts/generate_arkui_page.py").write_text("# fixture\n", encoding="utf-8")
             manifest = root / "skill-manifest.json"
-            write_json(contract, capability_contract_fixture(source, snapshot))
+            contract_payload = capability_contract_fixture(source, snapshot)
+            settings_source = "app/src/main/java/example/ui/SettingsScreen.kt"
+            shared_source = "app/src/main/java/example/domain/SharedSession.kt"
+            shared_storage_source = (
+                "app/src/main/java/example/ui/SettingsPreferencesState.kt"
+            )
+            contract_payload["inventory"]["files_by_layer"]["source"].extend(
+                [settings_source, shared_source, shared_storage_source]
+            )
+            contract_payload["ui"]["routes"].append(
+                {
+                    "source": settings_source,
+                    "route": "settings",
+                    "kind": "string",
+                    "arguments": [],
+                    "detector": "fixture",
+                }
+            )
+            contract_payload["ui"]["composables"].append(
+                {
+                    "source": settings_source,
+                    "name": "SettingsScreen",
+                    "components": {"Text": []},
+                    "modifiers": {},
+                    "custom_image_component_candidates": [],
+                    "rejected_suffix_only_image_call_count": 0,
+                    "resource_keys": [],
+                    "literal_text": [],
+                }
+            )
+            contract_payload["business"]["models"].append(
+                {
+                    "source": shared_source,
+                    "kind": "class",
+                    "name": "SharedSession",
+                    "layer": "source",
+                }
+            )
+            contract_payload["business"]["models"].append(
+                {
+                    "source": shared_storage_source,
+                    "kind": "data class",
+                    "name": "SettingsPreferencesState",
+                    "layer": "source",
+                }
+            )
+            contract_payload["migration_batches"][0]["source_files"].append(
+                shared_storage_source
+            )
+            contract_payload["migration_batches"].append(
+                {
+                    "id": "foundation",
+                    "goal": "Shared foundation",
+                    "status": "pending",
+                    "source_files": [shared_source],
+                }
+            )
+            write_json(contract, contract_payload)
             write_json(registry, gate_registry_fixture())
             self.assertEqual(
                 run_script(
@@ -29342,6 +29614,26 @@ class MigrationToolTests(unittest.TestCase):
             self.assertIn("page_uses_business", edge_kinds)
             self.assertIn("page_declares_control", edge_kinds)
             self.assertIn("test_obligation", edge_kinds)
+            shared_edges = [
+                edge
+                for edge in payload["resolved_edges"]
+                if edge["kind"] == "shared_foundation_member"
+                and edge["to_node_id"] == "business:sharedsession"
+            ]
+            self.assertEqual(
+                {edge["from_node_id"] for edge in shared_edges},
+                {"page:profilescreen", "page:settingsscreen"},
+            )
+            downstream_shared_edges = [
+                edge
+                for edge in payload["resolved_edges"]
+                if edge["kind"] == "shared_foundation_member"
+                and edge["to_node_id"] == "storage:settingspreferencesstate"
+            ]
+            self.assertEqual(
+                {edge["from_node_id"] for edge in downstream_shared_edges},
+                {"page:profilescreen", "page:settingsscreen"},
+            )
             profile_to_business = next(
                 entry
                 for entry in payload["resolved_edges"]
@@ -29356,6 +29648,83 @@ class MigrationToolTests(unittest.TestCase):
             self.assertEqual(
                 profile_to_business["consumed_by_planner"],
                 "closure_and_assignment",
+            )
+
+    def test_capability_graph_does_not_promote_screen_previews_or_ui_helpers_to_roots(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            contract = root / "contract.json"
+            registry = root / "gate-registry.json"
+            graph = root / "graph.json"
+            fact_packs = root / "fact-packs"
+            skill_root = root / "skill"
+            manifest = root / "skill-manifest.json"
+            (skill_root / "SKILL.md").parent.mkdir(parents=True)
+            (skill_root / "SKILL.md").write_text("fixture\n", encoding="utf-8")
+            payload = capability_contract_fixture(root / "source", root / "snapshot")
+            screen_source = "app/src/main/java/example/ui/AddCardScreen.kt"
+            payload["inventory"]["files_by_layer"]["source"].append(screen_source)
+            payload["ui"]["composables"].extend(
+                [
+                    {
+                        "source": screen_source,
+                        "name": name,
+                        "components": components,
+                        "modifiers": {},
+                        "custom_image_component_candidates": [],
+                        "rejected_suffix_only_image_call_count": 0,
+                        "resource_keys": [],
+                        "literal_text": [],
+                    }
+                    for name, components in (
+                        ("AddCardScreen", {"Text": []}),
+                        ("AddCardScreen_Datepicker_Preview", {"ScreenPreview": []}),
+                        ("AddCardScreen_Ui", {"Box": []}),
+                        ("AppLoadingScreen", {}),
+                    )
+                ]
+            )
+            write_json(contract, payload)
+            write_json(registry, gate_registry_fixture())
+            hashed = run_script(
+                HASH_SKILL_TREE,
+                "--root",
+                str(skill_root),
+                "--output",
+                str(manifest),
+            )
+            self.assertEqual(hashed.returncode, 0, hashed.stdout + hashed.stderr)
+            built = run_script(
+                BUILD_CAPABILITY_GRAPH,
+                "--contract",
+                str(contract),
+                "--skill-manifest",
+                str(manifest),
+                "--gate-registry",
+                str(registry),
+                "--fact-pack-dir",
+                str(fact_packs),
+                "--output",
+                str(graph),
+            )
+            self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
+            qualifications = {
+                entry["node_id"]: entry
+                for entry in json.loads(graph.read_text(encoding="utf-8"))[
+                    "root_qualification"
+                ]
+            }
+            self.assertTrue(qualifications["page:addcardscreen"]["qualified_as_root"])
+            self.assertFalse(
+                qualifications["page:addcardscreendatepickerpreview"]["qualified_as_root"]
+            )
+            self.assertFalse(
+                qualifications["page:addcardscreenui"]["qualified_as_root"]
+            )
+            self.assertFalse(
+                qualifications["page:apploadingscreen"]["qualified_as_root"]
             )
 
     def test_execution_plan_builder_builds_cross_layer_slice_from_resolved_relationships(

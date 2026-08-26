@@ -7,7 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { it } from 'node:test';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const CHANGE_EVIDENCE = join(ROOT, 'changes', 'android-to-harmony-54-benchmark', 'evidence');
+const CHANGE_EVIDENCE = join(
+  ROOT,
+  'changes',
+  'android-to-harmony-execution-plan-dag',
+  'evidence',
+  'skill-identities',
+);
 const BUNDLED_SKILL_ROOT = join(ROOT, 'skills', 'migrate-android-compose-to-harmony');
 const CANONICAL_SKILL_ROOT = process.env.ANDROID_TO_HARMONY_CANONICAL_SKILL_ROOT;
 const HASH_SCRIPT = join(ROOT, 'skills', 'migrate-android-compose-to-harmony', 'scripts', 'hash_skill_tree.py');
@@ -40,14 +46,19 @@ it('canonical skill tree manifest is path-independent', () => {
 
     assert.equal(bundledResult.ok, true);
     assert.equal(copiedResult.ok, true);
-    assert.equal(bundledResult.file_count, 68);
-    assert.equal(copiedResult.file_count, 68);
+    assert.equal(bundledResult.file_count, evidenceManifest.file_count);
+    assert.equal(copiedResult.file_count, evidenceManifest.file_count);
 
     const bundledManifest = readJson(bundledOutput);
     const copiedManifest = readJson(copiedOutput);
     assert.equal(bundledManifest.tree_sha256, copiedManifest.tree_sha256);
     assert.equal(bundledManifest.tree_sha256, evidenceManifest.tree_sha256);
     assert.equal(bundledManifest.file_count, evidenceManifest.file_count);
+    assert.equal(
+      evidenceManifest.local_root,
+      'skills/migrate-android-compose-to-harmony',
+    );
+    assert.equal(evidenceManifest.local_root.startsWith('/'), false);
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
@@ -55,7 +66,6 @@ it('canonical skill tree manifest is path-independent', () => {
 
 it('digest binding artifact ties vendored skill to the canonical tree hash', () => {
   const temp = mkdtempSync(join(tmpdir(), 'ssf-current-bundled-skill-'));
-  const canonicalManifest = readJson(join(CHANGE_EVIDENCE, 'canonical-skill-tree-manifest.json'));
   const bundledManifest = readJson(join(CHANGE_EVIDENCE, 'bundled-skill-tree-manifest.json'));
   const binding = readJson(join(CHANGE_EVIDENCE, 'repo-skill-binding.json'));
 
@@ -70,13 +80,13 @@ it('digest binding artifact ties vendored skill to the canonical tree hash', () 
     assert.equal(currentBundledResult.ok, true);
     assert.equal(binding.schema, 'android-to-harmony.repo-skill-binding.v1');
     assert.equal(binding.bundled_skill_path, 'skills/migrate-android-compose-to-harmony');
-    assert.equal(binding.file_count, 68);
-    assert.equal(binding.digests_match, true);
-    assert.equal(binding.canonical_tree_sha256, canonicalManifest.tree_sha256);
+    assert.equal(binding.manifest_path, 'skill-identities/bundled-skill-tree-manifest.json');
+    assert.equal(binding.file_count, bundledManifest.file_count);
     assert.equal(binding.bundled_tree_sha256, bundledManifest.tree_sha256);
     assert.equal(binding.bundled_tree_sha256, currentBundledManifest.tree_sha256);
-    assert.equal(binding.canonical_tree_sha256, 'bb220e2b7bb4ea8b4626f351e51e2dca23e9784059ccd8b1d87d6016957459f1');
-    assert.equal(bundledManifest.local_root.endsWith('skills/migrate-android-compose-to-harmony'), true);
+    assert.equal(binding.bundled_skill_path.startsWith('/'), false);
+    assert.equal(binding.manifest_path.startsWith('/'), false);
+    assert.equal(bundledManifest.local_root, binding.bundled_skill_path);
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }

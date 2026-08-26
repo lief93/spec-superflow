@@ -1,0 +1,32 @@
+{
+  "schema": "android-to-harmony.fact-pack.v1",
+  "layer": "test_support",
+  "source_revision": "8f06a3fdc2dfb74b675b1c300560df19a9c2e142",
+  "contract_sha256": "aa92639352997ce7de44fdb25eb9a1aa0fea36404ae3780ce057629167ad5b2f",
+  "skill_tree_digest": "3d407b10ff2ec544e2d385a6bb14df8b387319d0d482456b95d97271af0e373f",
+  "candidate_source_files": [
+    "app/src/androidTest/java/by/alexandr7035/banking/ExampleInstrumentedTest.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/account/AccountRepositoryMock.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/cards/CardsRepositoryMock.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/cards/MockCardConstants.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/contacts/ContactsRepositoryMock.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/otp/OtpRepositoryMock.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/profile/ProfileRepositoryMock.kt",
+    "app/src/main/java/by/alexandr7035/banking/data/savings/SavingsRepositoryMock.kt",
+    "app/src/test/java/by/alexandr7035/banking/ExampleUnitTest.kt"
+  ],
+  "node_ids": [
+    "test_support:appsrcandroidtestjavabyalexandr7035bankingexampleinstrumentedtestkt",
+    "test_support:appsrcmainjavabyalexandr7035bankingdataaccountaccountrepositorymockkt",
+    "test_support:appsrcmainjavabyalexandr7035bankingdatacardscardsrepositorymockkt",
+    "test_support:appsrcmainjavabyalexandr7035bankingdatacardsmockcardconstantskt",
+    "test_support:appsrcmainjavabyalexandr7035bankingdatacontactscontactsrepositorymockkt",
+    "test_support:appsrcmainjavabyalexandr7035bankingdataotpotprepositorymockkt",
+    "test_support:appsrcmainjavabyalexandr7035bankingdataprofileprofilerepositorymockkt",
+    "test_support:appsrcmainjavabyalexandr7035bankingdatasavingssavingsrepositorymockkt",
+    "test_support:appsrctestjavabyalexandr7035bankingexampleunittestkt"
+  ],
+  "status": "candidate",
+  "authoritative": false,
+  "project_source_file_count": 344
+}
