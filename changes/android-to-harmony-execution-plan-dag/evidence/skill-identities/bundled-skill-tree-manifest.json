@@ -2,7 +2,7 @@
   "schema": "android-to-harmony.skill-tree-manifest.v1",
   "local_root": "skills/migrate-android-compose-to-harmony",
   "file_count": 70,
-  "tree_sha256": "67ca0525163cec7b73299868009d305cc8d02df53fa3b93497e6bb5d12deefa9",
+  "tree_sha256": "019c8c55efeb9a0e5bf343a46549ed86fea050a17398d8777f3d8e01646b0d23",
   "files": [
     {
       "path": "SKILL.md",
@@ -235,8 +235,8 @@
     {
       "path": "scripts/build_capability_graph.py",
       "type": "file",
-      "bytes": 78767,
-      "sha256": "4776815b5c5c3999ecfa8f663076c8be2ed59cceee095b9885248c5decb137c8"
+      "bytes": 79737,
+      "sha256": "216020c7f60aacd6f5d7139a9e468cf02bb12a824f53ac9bcc3dd004202c209d"
     },
     {
       "path": "scripts/build_execution_plan.py",
@@ -247,8 +247,8 @@
     {
       "path": "scripts/capture_execution_plan_regressions.py",
       "type": "file",
-      "bytes": 16248,
-      "sha256": "82d4d9828e5b240acc5423fdf3eff544f5f680b2d6dba93df2b750655a36747e"
+      "bytes": 16784,
+      "sha256": "9c84030f9416720635919ee8021167f4a42af2738ea742839f42a4f7719bb7c2"
     },
     {
       "path": "scripts/compare_local_screenshots.py",
@@ -331,8 +331,8 @@
     {
       "path": "scripts/hash_evidence_tree.py",
       "type": "file",
-      "bytes": 12892,
-      "sha256": "348fd24974c86b076ee6eb7e4b1e24fa24cf8ff1153a146dc65b44c4c43ef14f"
+      "bytes": 14122,
+      "sha256": "87d48c89e77b7d4f4e238e475b72728a82178c6f6f1db765e8a948937a7027a8"
     },
     {
       "path": "scripts/hash_skill_tree.py",
@@ -403,8 +403,8 @@
     {
       "path": "scripts/test_orchestrator.py",
       "type": "file",
-      "bytes": 109279,
-      "sha256": "9904c46edbefae44f0ad06546a6926ec39eede3cb22f67d081c820572471130b"
+      "bytes": 118066,
+      "sha256": "adb74c81eb2fca41d7a7de4d07f422e90d84a906940ebbf480ecb33e0ef55112"
     },
     {
       "path": "scripts/test_security_hardening.py",
@@ -415,8 +415,8 @@
     {
       "path": "scripts/test_tools.py",
       "type": "file",
-      "bytes": 1297169,
-      "sha256": "08576866eec107e827097cca2cceca48b33a9b6c440d7db4a5d980cb9a420a3a"
+      "bytes": 1302266,
+      "sha256": "e75ab5fdcbae0ae4bdb5482f5fb51b45e181647aa6baa985da721a21f2a1306f"
     },
     {
       "path": "scripts/validate_ai_safe_tree.py",

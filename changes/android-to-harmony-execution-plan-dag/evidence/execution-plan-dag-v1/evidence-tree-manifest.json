@@ -3,10 +3,11 @@
   "evidence_root": ".",
   "projects": [
     "banking",
-    "ekspensify"
+    "ekspensify",
+    "buckwheat"
   ],
-  "file_count": 126,
-  "tree_sha256": "973e62152fcc3b5e99f9b3f0ed1ebf8dae87a1aafbcb0c4b5a956623a7a00304",
+  "file_count": 190,
+  "tree_sha256": "50f8a9e36f4a1c439505bb63e51aa410f873c89b43ce077e63c6cdc940f30238",
   "files": [
     {
       "path": "execution-plan-dag-v1/banking/capability-graph.json",
@@ -301,7 +302,7 @@
     {
       "path": "execution-plan-dag-v1/banking/skill-identity-reference.json",
       "bytes": 400,
-      "sha256": "c0e71fce37cb32225ecdce1ecc5afeaab9c1703efefd62bcba5f99d0abd34fb8"
+      "sha256": "610148a24f393271399b3304f06763991242ec098d6c5cacb64a94d054f53982"
     },
     {
       "path": "execution-plan-dag-v1/banking/source-identity.json",
@@ -310,6 +311,326 @@
     },
     {
       "path": "execution-plan-dag-v1/banking/tests/start-status.test.log",
+      "bytes": 147,
+      "sha256": "78f62ccd3461b81f8260893d1ca0bc2002f7f03b3e9f354ca4fb954d7a8e859b"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/capability-graph.json",
+      "bytes": 6062447,
+      "sha256": "8e2b2d3f44ca7a26e76fc67958a0e2b90f26f9723b37aa243036c23136d287ef"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/contract/migration-contract.json",
+      "bytes": 5018141,
+      "sha256": "a47cc37f87dfda12f07bc703d1543dd43e734f19dd19bf7af3e749aad2430b2b"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/contract/migration-contract.json.owner.json",
+      "bytes": 241,
+      "sha256": "41c033eda9b9d823431646fba15d407a80d5b84a63cf67912f04dad6d00dc873"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/execution-plan.json",
+      "bytes": 2454096,
+      "sha256": "1e2298b68fe2b192cac381e9895f0697b3ba74551783a16cddbf0d5ade8e2c15"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/00-checkout.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/00-clone.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/00-reuse-head.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/00-reuse-remote.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/00-revision-present.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/00-set-origin.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/00-source-final-detached.exit.json",
+      "bytes": 71,
+      "sha256": "a9a46766f2330eacd26f226235cd37fc19cfcce3b01593336b9943eef5409234"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/00-source-final-head.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/00-source-final-remote.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/01-start.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/exit/02-status.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/business-fact-pack.json",
+      "bytes": 2399,
+      "sha256": "5ba49016d0bb3bd95f57c346c38a095c0b51111909ab3e66fb569042818e768f"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/control-fact-pack.json",
+      "bytes": 41966,
+      "sha256": "b17a443055090aa67f4ff31f19b199092a25d27afc1725eb528a631dc5c33982"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/page-fact-pack.json",
+      "bytes": 15906,
+      "sha256": "79cbf44e5ee3935b25b7382040b3b3b92e70226013b31db53e33746aca879cac"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/platform-fact-pack.json",
+      "bytes": 7006,
+      "sha256": "306ab31e46d00f30adba407d692e01eb2bf9240b00ca507c549f79ff03940fb7"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/project-fact-pack.json",
+      "bytes": 17890,
+      "sha256": "39a6c241dde7696bf3a8b6b6e2356f3f9299ef2cbc8edaad486f9f423346e6a0"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/project-support-fact-pack.json",
+      "bytes": 2997,
+      "sha256": "dcba1f161ad565ae14f2b9e7ed3b333204aacf5d9728cc4152911428f72b9fc3"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/storage-fact-pack.json",
+      "bytes": 1366,
+      "sha256": "2ff5be2a9d69eed19928b7f3888bcf5ffcdfc29e0104c4c998d0c722a9dfb1ca"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/test-support-fact-pack.json",
+      "bytes": 1245,
+      "sha256": "440bf9d517d4f3ef3263c6f18c8c0aef72c0ada7e494b087b24bec7247580dfe"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/ui-system-fact-pack.json",
+      "bytes": 4247,
+      "sha256": "49d99453d75e355525d774b928feabc82e4199f0f71ea74f4b27ebc8dbc476ff"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/fact-packs/unclassified-fact-pack.json",
+      "bytes": 1761,
+      "sha256": "56631e50541088db9a358a67b0b204f8e09734c23ffbb690f9c6c821b0cf1cbd"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/frozen-task-state.json",
+      "bytes": 4741,
+      "sha256": "e5275e1f0831cd970af8c17cdfa899cdc3537d484a1e1220d23b0fee8b9f378a"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/gate-report.json",
+      "bytes": 513732,
+      "sha256": "29240c0c32cd2f3b14e345984177ad46cdd1da95de666a031d50e2455a796d31"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-checkout.command.log",
+      "bytes": 214,
+      "sha256": "ca6532e9cbe54213c555e17424ad931827baab3eaa7cb1024c0a2c3e2fb99cde"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-checkout.stderr.txt",
+      "bytes": 57,
+      "sha256": "c26b12c0b57db90083fb13fd3d326476acf0d9713e55ed495038dfec10270957"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-checkout.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-clone.command.log",
+      "bytes": 274,
+      "sha256": "aee6aa6b6101369ad470ab4b9480eb792a22f0b89c1c2dc1b12ca3f0ec3ad185"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-clone.stderr.txt",
+      "bytes": 166,
+      "sha256": "de5fce8d413a77a70a2f482ef074357907d495436257cf6d4cbf161b6ca0e7d8"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-clone.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-reuse-head.command.log",
+      "bytes": 127,
+      "sha256": "ed403f3017251b459ebf4cd56de945aaf04a7fbcfc620f462f20d55acd9e9669"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-reuse-head.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-reuse-head.stdout.txt",
+      "bytes": 41,
+      "sha256": "41e43699c94bff1d8bf5e17a6f2bddcfbbb14e6eedcfeda3c668c809793abba4"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-reuse-remote.command.log",
+      "bytes": 143,
+      "sha256": "c7d019a7468b1d873fb1b6116404e54aa9b91b11cd10f1dbf461b73c600fb1ce"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-reuse-remote.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-reuse-remote.stdout.txt",
+      "bytes": 45,
+      "sha256": "431d2324eb38602deafe4a664ca0e4d03e975f11d3f609ab433d4dcf5e1fe61a"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-revision-present.command.log",
+      "bytes": 219,
+      "sha256": "f62079b72c0333d969801376b8436ad54140f6f116671e3e6d0c906578731bc3"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-revision-present.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-revision-present.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-set-origin.command.log",
+      "bytes": 222,
+      "sha256": "8e987874456f8fc3f98f94496b8876820172a31713c1feff8738dc30d5fc0f31"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-set-origin.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-set-origin.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-source-final-detached.command.log",
+      "bytes": 176,
+      "sha256": "c5c3ce71b98f4d406d319eddc43a90d7d8412e236371e4068e9fdf05e2b9d3ab"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-source-final-detached.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-source-final-detached.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-source-final-head.command.log",
+      "bytes": 170,
+      "sha256": "dcff297f4f3082961af09221bb50252bd6291ce4513f5c54cfbaac085fc7ee09"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-source-final-head.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-source-final-head.stdout.txt",
+      "bytes": 41,
+      "sha256": "41e43699c94bff1d8bf5e17a6f2bddcfbbb14e6eedcfeda3c668c809793abba4"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-source-final-remote.command.log",
+      "bytes": 186,
+      "sha256": "2df4e655f36047cd16ba2950cf5bbaf16fe5a6512df28b10381fc4ec543b078d"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-source-final-remote.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/00-source-final-remote.stdout.txt",
+      "bytes": 45,
+      "sha256": "431d2324eb38602deafe4a664ca0e4d03e975f11d3f609ab433d4dcf5e1fe61a"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/01-start.command.log",
+      "bytes": 791,
+      "sha256": "4a4808fff0def9d2c6008482448aa5ba8258c4d9e06a929b6aa1741072284d72"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/01-start.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/01-start.stdout.txt",
+      "bytes": 4128886,
+      "sha256": "112827db948ca3cb3914a473db42af0dfc7e35532558a762ade6f460fbc6206e"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/02-status.command.log",
+      "bytes": 364,
+      "sha256": "5379308a2dfce1794822cf271afe9c473fd6cbff168c83bd4474a2b4af57c567"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/02-status.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/logs/02-status.stdout.txt",
+      "bytes": 4146360,
+      "sha256": "e6f7a02eab3d9f5dba44cf20951962e81432dd618c1736e2531a2d0a0a975bbc"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/review-queue.json",
+      "bytes": 5426,
+      "sha256": "705f7606e9b4272a1b8558544e3d463d9cb5c750d0b70ac75e3b74838e10eea3"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/skill-identity-reference.json",
+      "bytes": 402,
+      "sha256": "0a5ca7b0352fea545f88c1b5d06b568006c51e45c0088c1bff50d71d85938cc3"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/source-identity.json",
+      "bytes": 211,
+      "sha256": "59e965f5df1d01a7e62123fd3de3655885249ede46450a9a71f99ee523bd3762"
+    },
+    {
+      "path": "execution-plan-dag-v1/buckwheat/tests/start-status.test.log",
       "bytes": 147,
       "sha256": "78f62ccd3461b81f8260893d1ca0bc2002f7f03b3e9f354ca4fb954d7a8e859b"
     },
@@ -616,7 +937,7 @@
     {
       "path": "execution-plan-dag-v1/ekspensify/skill-identity-reference.json",
       "bytes": 403,
-      "sha256": "95365621b187a27bd88582d8ace8e6acbc6a52b0ee9d4c85a3b81f2d95af0204"
+      "sha256": "7148faaf42f2d849d5c0e45aeac96a34bd539fd9e351be57f8b3fc6190298a18"
     },
     {
       "path": "execution-plan-dag-v1/ekspensify/source-identity.json",
@@ -631,12 +952,12 @@
     {
       "path": "skill-identities/bundled-skill-tree-manifest.json",
       "bytes": 14336,
-      "sha256": "b62dab91ec7a49f5c370d543ae0477c37635f9e4ff095b62966356551ee1fd61"
+      "sha256": "2881f387a7930724946dd61f1c0819757d5c0a442b4f663289703b17bdf9f728"
     },
     {
       "path": "skill-identities/repo-skill-binding.json",
       "bytes": 313,
-      "sha256": "f9160c5455ae7623dbeeaa279069373062d8922b3d863c1bfeb82c03aecdb042"
+      "sha256": "fc1cb866d228e9870e31f07d50e3e336fc89854c0fc55237c1400a0ceac97ef7"
     }
   ]
 }

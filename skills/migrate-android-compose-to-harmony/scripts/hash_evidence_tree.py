@@ -14,7 +14,7 @@ from typing import Any
 
 
 SCHEMA = "android-to-harmony.execution-plan-evidence-tree.v1"
-PROJECTS = ("banking", "ekspensify")
+PROJECTS = ("banking", "ekspensify", "buckwheat")
 CENTRAL_MANIFEST = "skill-identities/bundled-skill-tree-manifest.json"
 CENTRAL_BINDING = "skill-identities/repo-skill-binding.json"
 PROJECT_REQUIRED_FILES = (
@@ -36,6 +36,32 @@ PROJECT_REQUIRED_FILES = (
     "tests/start-status.test.log",
     "skill-identity-reference.json",
     "source-identity.json",
+)
+BUCKWHEAT_ACQUISITION_REQUIRED_FILES = (
+    "logs/00-clone.stdout.txt",
+    "logs/00-clone.stderr.txt",
+    "logs/00-clone.command.log",
+    "logs/00-revision-present.stdout.txt",
+    "logs/00-revision-present.stderr.txt",
+    "logs/00-revision-present.command.log",
+    "logs/00-checkout.stdout.txt",
+    "logs/00-checkout.stderr.txt",
+    "logs/00-checkout.command.log",
+    "logs/00-source-final-remote.stdout.txt",
+    "logs/00-source-final-remote.stderr.txt",
+    "logs/00-source-final-remote.command.log",
+    "logs/00-source-final-head.stdout.txt",
+    "logs/00-source-final-head.stderr.txt",
+    "logs/00-source-final-head.command.log",
+    "logs/00-source-final-detached.stdout.txt",
+    "logs/00-source-final-detached.stderr.txt",
+    "logs/00-source-final-detached.command.log",
+    "exit/00-clone.exit.json",
+    "exit/00-revision-present.exit.json",
+    "exit/00-checkout.exit.json",
+    "exit/00-source-final-remote.exit.json",
+    "exit/00-source-final-head.exit.json",
+    "exit/00-source-final-detached.exit.json",
 )
 
 
@@ -162,6 +188,9 @@ def validate_project_evidence(evidence_root: Path, project: str) -> None:
     subtree = project_root / project
     for relative in PROJECT_REQUIRED_FILES:
         require_regular_file(subtree / relative, f"{project} artifact {relative}")
+    if project == "buckwheat":
+        for relative in BUCKWHEAT_ACQUISITION_REQUIRED_FILES:
+            require_regular_file(subtree / relative, f"{project} artifact {relative}")
     fact_packs = subtree / "fact-packs"
     if fact_packs.is_symlink() or not fact_packs.is_dir():
         raise EvidenceManifestError(f"{project} fact-pack directory is missing")
@@ -180,7 +209,7 @@ def validate_evidence_layout(evidence_root: Path) -> None:
         for path in project_root.iterdir()
         if path.is_dir() and not path.is_symlink()
     )
-    if present_projects != list(PROJECTS):
+    if present_projects != sorted(PROJECTS):
         raise EvidenceManifestError(
             f"unexpected project evidence membership: {present_projects}"
         )

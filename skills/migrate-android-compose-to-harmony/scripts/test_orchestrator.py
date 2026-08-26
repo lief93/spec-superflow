@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,8 @@ AGENT = SCRIPTS / "migration_agent.py"
 HASH_TARGET = SCRIPTS / "hash_target_source.py"
 EVIDENCE_RUNNER = SCRIPTS / "evidence_runner.py"
 CAPTURE_EXECUTION_PLAN = SCRIPTS / "capture_execution_plan_regressions.py"
+BUCKWHEAT_URL = "https://github.com/danilkinkin/buckwheat.git"
+BUCKWHEAT_REVISION = "4b60102db5293059aadb7be22bf6390ae4b345a7"
 SLICE_GATES = ("build", "unit_tests", "ui_tests", "device_test")
 EVIDENCE_GATES = SLICE_GATES + ("visual_review",)
 
@@ -578,7 +581,322 @@ def create_wrong_head_public_source(
     return reuse, source, revision, wrong_revision
 
 
+def create_fixed_revision_git_boundary(
+    root: Path,
+    mode: str = "success",
+) -> dict[str, str]:
+    fixture = create_compose_source(root / "fixture")
+    subprocess.run(["git", "init", "-q", str(fixture)], check=True)
+    subprocess.run(
+        ["git", "-C", str(fixture), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(fixture), "config", "user.name", "Test"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(fixture), "add", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(fixture), "commit", "-qm", "fixture"],
+        check=True,
+    )
+    fixture_revision = subprocess.check_output(
+        ["git", "-C", str(fixture), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    executable = root / "git-boundary/git"
+    executable.parent.mkdir()
+    executable.write_text(
+        """#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+
+real_git = os.environ["CAPTURE_TEST_REAL_GIT"]
+fixture = os.environ["CAPTURE_TEST_FIXTURE"]
+fixture_revision = os.environ["CAPTURE_TEST_FIXTURE_REVISION"]
+source_url = os.environ["CAPTURE_TEST_SOURCE_URL"]
+fixed_revision = os.environ["CAPTURE_TEST_FIXED_REVISION"]
+mode = os.environ["CAPTURE_TEST_MODE"]
+arguments = sys.argv[1:]
+
+if arguments[:3] == ["clone", "--no-checkout", source_url]:
+    destination = arguments[3]
+    result = subprocess.run(
+        [real_git, "clone", "--no-checkout", fixture, destination],
+        check=False,
+    )
+    if result.returncode == 0:
+        remote = "https://example.com/wrong.git" if mode == "wrong-remote" else source_url
+        result = subprocess.run(
+            [real_git, "-C", destination, "remote", "set-url", "origin", remote],
+            check=False,
+        )
+    raise SystemExit(result.returncode)
+
+if len(arguments) >= 3 and arguments[0] == "-C":
+    repository = arguments[1]
+    command = arguments[2:]
+    if command == ["cat-file", "-e", fixed_revision + "^{commit}"]:
+        raise SystemExit(0)
+    if command == ["checkout", "--detach", fixed_revision]:
+        raise SystemExit(
+            subprocess.run(
+                [real_git, "-C", repository, "checkout", "--detach", fixture_revision],
+                check=False,
+            ).returncode
+        )
+    if command == ["rev-parse", "HEAD"]:
+        print("b" * 40 if mode == "final-mismatch" else fixed_revision)
+        raise SystemExit(0)
+
+raise SystemExit(subprocess.run([real_git, *arguments], check=False).returncode)
+""",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "PATH": f"{executable.parent}{os.pathsep}{environment['PATH']}",
+            "CAPTURE_TEST_REAL_GIT": shutil.which("git") or "git",
+            "CAPTURE_TEST_FIXTURE": str(fixture),
+            "CAPTURE_TEST_FIXTURE_REVISION": fixture_revision,
+            "CAPTURE_TEST_SOURCE_URL": BUCKWHEAT_URL,
+            "CAPTURE_TEST_FIXED_REVISION": BUCKWHEAT_REVISION,
+            "CAPTURE_TEST_MODE": mode,
+        }
+    )
+    return environment
+
+
+def write_capture_skill_identity(change: Path) -> tuple[Path, Path]:
+    central = change / "evidence/skill-identities"
+    manifest = central / "bundled-skill-tree-manifest.json"
+    binding = central / "repo-skill-binding.json"
+    central.mkdir(parents=True)
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": "android-to-harmony.skill-tree-manifest.v1",
+                "local_root": "skills/migrate-android-compose-to-harmony",
+                "file_count": 1,
+                "tree_sha256": "a" * 64,
+                "files": [],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    binding.write_text(
+        json.dumps(
+            {
+                "schema": "android-to-harmony.repo-skill-binding.v1",
+                "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
+                "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                "bundled_tree_sha256": "a" * 64,
+                "file_count": 1,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return manifest, binding
+
+
+def run_buckwheat_capture(
+    change: Path,
+    source: Path,
+    subtree: Path,
+    environment: dict[str, str],
+    *,
+    revision: str = BUCKWHEAT_REVISION,
+) -> subprocess.CompletedProcess[str]:
+    return run_script(
+        CAPTURE_EXECUTION_PLAN,
+        "--change-dir",
+        str(change),
+        "--project",
+        "buckwheat",
+        "--source-url",
+        BUCKWHEAT_URL,
+        "--expected-revision",
+        revision,
+        "--source-dir",
+        str(source),
+        "--project-name",
+        "BuckwheatExecutionPlanDag",
+        "--bundle-name",
+        "com.specsuperflow.buckwheat.executionplandag",
+        "--run-root",
+        str(subtree / "run-root"),
+        "--target-dir",
+        str(subtree / "target"),
+        "--evidence-subtree",
+        str(subtree),
+        environment=environment,
+    )
+
+
 class MigrationAgentTests(unittest.TestCase):
+    def test_capture_execution_plan_regressions_acquires_missing_buckwheat_source(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            change = root / "change"
+            write_capture_skill_identity(change)
+            subtree = change / "evidence/execution-plan-dag-v1/buckwheat"
+            source = change / "sources/buckwheat/source"
+            self.assertFalse(source.exists())
+
+            captured = run_buckwheat_capture(
+                change,
+                source,
+                subtree,
+                create_fixed_revision_git_boundary(root),
+            )
+
+            self.assertEqual(captured.returncode, 0, captured.stdout + captured.stderr)
+            self.assertFalse(source.exists())
+            self.assertEqual(
+                (subtree / "logs/00-clone.command.log").read_text(encoding="utf-8"),
+                shlex.join(
+                    [
+                        "git",
+                        "clone",
+                        "--no-checkout",
+                        BUCKWHEAT_URL,
+                        str(source.resolve()),
+                    ]
+                )
+                + "\n",
+            )
+            for command in (
+                "00-clone",
+                "00-revision-present",
+                "00-checkout",
+                "00-source-final-remote",
+                "00-source-final-head",
+                "00-source-final-detached",
+                "01-start",
+                "02-status",
+            ):
+                for suffix in ("stdout.txt", "stderr.txt", "command.log"):
+                    self.assertTrue((subtree / f"logs/{command}.{suffix}").is_file())
+                self.assertTrue((subtree / f"exit/{command}.exit.json").is_file())
+            self.assertEqual(
+                json.loads(
+                    (subtree / "exit/00-source-final-detached.exit.json").read_text(
+                        encoding="utf-8"
+                    )
+                )["exit_code"],
+                1,
+            )
+
+    def test_capture_execution_plan_regressions_rejects_nonfixed_buckwheat_revision(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            change = root / "change"
+            change.mkdir()
+            subtree = change / "evidence/execution-plan-dag-v1/buckwheat"
+            source = change / "sources/buckwheat/source"
+
+            rejected = run_buckwheat_capture(
+                change,
+                source,
+                subtree,
+                os.environ.copy(),
+                revision="a" * 40,
+            )
+
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn(
+                "expected revision is not fixed for project buckwheat",
+                rejected.stdout,
+            )
+            self.assertFalse(source.exists())
+            self.assertFalse(subtree.exists())
+
+    def test_capture_execution_plan_regressions_rejects_wrong_buckwheat_remote_with_evidence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            change = root / "change"
+            change.mkdir()
+            subtree = change / "evidence/execution-plan-dag-v1/buckwheat"
+            source = change / "sources/buckwheat/source"
+
+            rejected = run_buckwheat_capture(
+                change,
+                source,
+                subtree,
+                create_fixed_revision_git_boundary(root, "wrong-remote"),
+            )
+
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("source remote mismatch", rejected.stdout)
+            self.assertEqual(
+                (subtree / "logs/00-source-final-remote.stdout.txt").read_text(
+                    encoding="utf-8"
+                ),
+                "https://example.com/wrong.git\n",
+            )
+            self.assertEqual(
+                json.loads(
+                    (subtree / "exit/00-source-final-remote.exit.json").read_text(
+                        encoding="utf-8"
+                    )
+                )["exit_code"],
+                0,
+            )
+            self.assertTrue((subtree / "logs/00-clone.command.log").is_file())
+            self.assertTrue((subtree / "logs/00-source-final-remote.stderr.txt").is_file())
+            self.assertFalse((subtree / "logs/01-start.command.log").exists())
+
+    def test_capture_execution_plan_regressions_rejects_buckwheat_final_revision_mismatch_with_evidence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            change = root / "change"
+            change.mkdir()
+            subtree = change / "evidence/execution-plan-dag-v1/buckwheat"
+            source = change / "sources/buckwheat/source"
+
+            rejected = run_buckwheat_capture(
+                change,
+                source,
+                subtree,
+                create_fixed_revision_git_boundary(root, "final-mismatch"),
+            )
+
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("source revision mismatch", rejected.stdout)
+            self.assertEqual(
+                (subtree / "logs/00-source-final-head.stdout.txt").read_text(
+                    encoding="utf-8"
+                ),
+                "b" * 40 + "\n",
+            )
+            self.assertEqual(
+                json.loads(
+                    (subtree / "exit/00-source-final-head.exit.json").read_text(
+                        encoding="utf-8"
+                    )
+                )["exit_code"],
+                0,
+            )
+            self.assertTrue((subtree / "logs/00-source-final-head.command.log").is_file())
+            self.assertTrue((subtree / "logs/00-source-final-head.stderr.txt").is_file())
+            self.assertFalse((subtree / "logs/00-source-final-detached.command.log").exists())
+            self.assertFalse((subtree / "logs/01-start.command.log").exists())
+
     def test_capture_execution_plan_regressions_rejects_nonfixed_ekspensify_revision(
         self,
     ) -> None:
@@ -644,38 +962,7 @@ class MigrationAgentTests(unittest.TestCase):
 
             change = root / "change"
             evidence = change / "evidence"
-            central = evidence / "skill-identities"
-            central.mkdir(parents=True)
-            manifest = central / "bundled-skill-tree-manifest.json"
-            binding = central / "repo-skill-binding.json"
-            manifest.write_text(
-                json.dumps(
-                    {
-                        "schema": "android-to-harmony.skill-tree-manifest.v1",
-                        "local_root": "skills/migrate-android-compose-to-harmony",
-                        "file_count": 1,
-                        "tree_sha256": "a" * 64,
-                        "files": [],
-                    },
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            binding.write_text(
-                json.dumps(
-                    {
-                        "schema": "android-to-harmony.repo-skill-binding.v1",
-                        "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
-                        "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
-                        "bundled_tree_sha256": "a" * 64,
-                        "file_count": 1,
-                    },
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            write_capture_skill_identity(change)
             subtree = evidence / "execution-plan-dag-v1/banking"
             environment = os.environ.copy()
             environment.update(
@@ -941,38 +1228,7 @@ class MigrationAgentTests(unittest.TestCase):
             ).strip()
             change = root / "change"
             evidence = change / "evidence"
-            central = evidence / "skill-identities"
-            central.mkdir(parents=True)
-            manifest = central / "bundled-skill-tree-manifest.json"
-            binding = central / "repo-skill-binding.json"
-            manifest.write_text(
-                json.dumps(
-                    {
-                        "schema": "android-to-harmony.skill-tree-manifest.v1",
-                        "local_root": "skills/migrate-android-compose-to-harmony",
-                        "file_count": 1,
-                        "tree_sha256": "a" * 64,
-                        "files": [],
-                    },
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            binding.write_text(
-                json.dumps(
-                    {
-                        "schema": "android-to-harmony.repo-skill-binding.v1",
-                        "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
-                        "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
-                        "bundled_tree_sha256": "a" * 64,
-                        "file_count": 1,
-                    },
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            manifest, binding = write_capture_skill_identity(change)
             subtree = evidence / "execution-plan-dag-v1/banking"
             captured = run_script(
                 CAPTURE_EXECUTION_PLAN,

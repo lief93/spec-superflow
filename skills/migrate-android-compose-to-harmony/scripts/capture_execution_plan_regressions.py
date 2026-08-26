@@ -24,9 +24,11 @@ MIGRATION_AGENT = SCRIPTS / "migration_agent.py"
 PROJECT_URLS = {
     "banking": "https://github.com/alexandr7035/Banking-App-Mock-Compose.git",
     "ekspensify": "https://github.com/dilipsuthar264/ekspensify-android.git",
+    "buckwheat": "https://github.com/danilkinkin/buckwheat.git",
 }
 PROJECT_REVISIONS = {
     "ekspensify": "0292c62e267a8b9cbc0d9dc580d80c549701661c",
+    "buckwheat": "4b60102db5293059aadb7be22bf6390ae4b345a7",
 }
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 PROJECT_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,63}$")
@@ -165,6 +167,8 @@ def verify_repository(
     repository: Path,
     source_url: str,
     expected_revision: str,
+    *,
+    require_detached: bool = False,
 ) -> None:
     if not repository.is_dir() or repository.is_symlink():
         raise CaptureError(f"Git source is missing or unsafe: {repository}")
@@ -183,6 +187,14 @@ def verify_repository(
         raise CaptureError(
             f"source revision mismatch: expected {expected_revision}, got {revision}"
         )
+    if require_detached:
+        detached = recorder.run(
+            f"{prefix}-detached",
+            ["git", "-C", str(repository), "symbolic-ref", "-q", "HEAD"],
+            allow_failure=True,
+        )
+        if detached.returncode != 1:
+            raise CaptureError("source checkout is not detached at the expected revision")
 
 
 def acquire_source(args: argparse.Namespace, recorder: CommandRecorder) -> bool:
@@ -259,6 +271,7 @@ def acquire_source(args: argparse.Namespace, recorder: CommandRecorder) -> bool:
         args.source_dir,
         args.source_url,
         args.expected_revision,
+        require_detached=True,
     )
     return source_created
 

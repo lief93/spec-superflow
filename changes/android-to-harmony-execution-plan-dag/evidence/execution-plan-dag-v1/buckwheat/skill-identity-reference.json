@@ -1,6 +1,6 @@
 {
   "schema": "android-to-harmony.skill-identity-reference.v1",
-  "project": "ekspensify",
+  "project": "buckwheat",
   "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
   "manifest_sha256": "2881f387a7930724946dd61f1c0819757d5c0a442b4f663289703b17bdf9f728",
   "binding_path": "skill-identities/repo-skill-binding.json",

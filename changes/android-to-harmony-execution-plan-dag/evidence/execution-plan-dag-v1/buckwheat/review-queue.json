@@ -1,0 +1,155 @@
+{
+  "schema": "android-to-harmony.review-queue.v1",
+  "source_revision": "4b60102db5293059aadb7be22bf6390ae4b345a7",
+  "contract_sha256": "a47cc37f87dfda12f07bc703d1543dd43e734f19dd19bf7af3e749aad2430b2b",
+  "skill_tree_digest": "dd7c033b1a11164cee7cf1d00292e2f72e005daa458bd23949c566c730a7a0b2",
+  "entry_count": 9,
+  "unclassified_source_files": [
+    "app/src/main/java/com/danilkinkin/buckwheat/data/ExtendCurrency.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/effects/vector.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/history/Spent.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/Swipeable.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/YearMonthExt.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/collectEnvInfo.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/observeLiveData.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/string.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/toSP.kt"
+  ],
+  "entries": [
+    {
+      "source_path": "app/src/main/java/com/danilkinkin/buckwheat/data/ExtendCurrency.kt",
+      "candidate_layers": [
+        "business",
+        "network",
+        "storage"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/com/danilkinkin/buckwheat/effects/vector.kt",
+      "candidate_layers": [
+        "business",
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/com/danilkinkin/buckwheat/history/Spent.kt",
+      "candidate_layers": [
+        "business",
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/com/danilkinkin/buckwheat/util/Swipeable.kt",
+      "candidate_layers": [
+        "business",
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/com/danilkinkin/buckwheat/util/YearMonthExt.kt",
+      "candidate_layers": [
+        "business",
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/com/danilkinkin/buckwheat/util/collectEnvInfo.kt",
+      "candidate_layers": [
+        "business",
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/com/danilkinkin/buckwheat/util/observeLiveData.kt",
+      "candidate_layers": [
+        "business",
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/com/danilkinkin/buckwheat/util/string.kt",
+      "candidate_layers": [
+        "business",
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    },
+    {
+      "source_path": "app/src/main/java/com/danilkinkin/buckwheat/util/toSP.kt",
+      "candidate_layers": [
+        "business",
+        "page",
+        "ui_system"
+      ],
+      "supporting_evidence": [],
+      "opposing_evidence": [],
+      "confidence": "low",
+      "why_not_auto_classified": "semantic and heuristic evidence were insufficient for a single high-confidence primary owner",
+      "blocking_parent_gates": [
+        "project.child_dispositions"
+      ]
+    }
+  ]
+}

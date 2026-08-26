@@ -1,0 +1,32 @@
+{
+  "schema": "android-to-harmony.fact-pack.v1",
+  "layer": "unclassified",
+  "source_revision": "4b60102db5293059aadb7be22bf6390ae4b345a7",
+  "contract_sha256": "a47cc37f87dfda12f07bc703d1543dd43e734f19dd19bf7af3e749aad2430b2b",
+  "skill_tree_digest": "dd7c033b1a11164cee7cf1d00292e2f72e005daa458bd23949c566c730a7a0b2",
+  "candidate_source_files": [
+    "app/src/main/java/com/danilkinkin/buckwheat/data/ExtendCurrency.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/effects/vector.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/history/Spent.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/Swipeable.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/YearMonthExt.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/collectEnvInfo.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/observeLiveData.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/string.kt",
+    "app/src/main/java/com/danilkinkin/buckwheat/util/toSP.kt"
+  ],
+  "node_ids": [
+    "unclassified:appsrcmainjavacomdanilkinkinbuckwheatdataextendcurrencykt",
+    "unclassified:appsrcmainjavacomdanilkinkinbuckwheateffectsvectorkt",
+    "unclassified:appsrcmainjavacomdanilkinkinbuckwheathistoryspentkt",
+    "unclassified:appsrcmainjavacomdanilkinkinbuckwheatutilcollectenvinfokt",
+    "unclassified:appsrcmainjavacomdanilkinkinbuckwheatutilobservelivedatakt",
+    "unclassified:appsrcmainjavacomdanilkinkinbuckwheatutilstringkt",
+    "unclassified:appsrcmainjavacomdanilkinkinbuckwheatutilswipeablekt",
+    "unclassified:appsrcmainjavacomdanilkinkinbuckwheatutiltospkt",
+    "unclassified:appsrcmainjavacomdanilkinkinbuckwheatutilyearmonthextkt"
+  ],
+  "status": "candidate",
+  "authoritative": false,
+  "project_source_file_count": 245
+}

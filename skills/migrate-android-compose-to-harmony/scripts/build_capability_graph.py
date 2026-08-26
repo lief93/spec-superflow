@@ -1730,6 +1730,26 @@ def build_graph(contract: dict[str, Any], contract_sha256: str, registry: dict[s
     composables = ui.get("composables", [])
     if not isinstance(composables, list):
         raise GraphError("contract ui.composables must be a list")
+    preferred_page_owner_by_source: dict[str, str] = {}
+    preferred_page_owner_rank: dict[str, tuple[bool, bool]] = {}
+    for composable in composables:
+        if not isinstance(composable, dict):
+            continue
+        name = composable.get("name")
+        source_path = composable.get("source")
+        if not isinstance(name, str) or not isinstance(source_path, str):
+            continue
+        normalized_name = slugify(name)
+        rank = (
+            "preview" in normalized_name,
+            not any(
+                normalized_name.endswith(token)
+                for token in ("screen", "activity", "fragment", "page")
+            ),
+        )
+        if source_path not in preferred_page_owner_rank or rank < preferred_page_owner_rank[source_path]:
+            preferred_page_owner_rank[source_path] = rank
+            preferred_page_owner_by_source[source_path] = name
     for composable in composables:
         if not isinstance(composable, dict):
             continue
@@ -1761,7 +1781,8 @@ def build_graph(contract: dict[str, Any], contract_sha256: str, registry: dict[s
                 evidence_references=[],
                 source_symbol=name,
             )
-            assign_primary(page_node, [source_path], primary_owners)
+            if preferred_page_owner_by_source.get(source_path) == name:
+                assign_primary(page_node, [source_path], primary_owners)
             nodes.append(page_node)
             nodes_by_id[page_id] = page_node
             parent_children.setdefault(project_id, []).append(page_id)

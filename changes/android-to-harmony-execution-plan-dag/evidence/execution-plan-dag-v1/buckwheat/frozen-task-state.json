@@ -1,0 +1,151 @@
+{
+  "schema": "android-to-harmony.execution-task-state.v1",
+  "plan_identity": "71ddf68e3d10d0a13a7890666795ac8959578d2dc501fe7d5c51297937a29c28",
+  "tasks": {
+    "foundation:app-widget-glance": {
+      "status": "ready"
+    },
+    "foundation:appschemascomdanilkinkinbuckwheatdidatabasemodule1json": {
+      "status": "ready"
+    },
+    "foundation:appschemascomdanilkinkinbuckwheatdidatabasemodule2json": {
+      "status": "ready"
+    },
+    "foundation:appschemascomdanilkinkinbuckwheatdidatabasemodule3json": {
+      "status": "ready"
+    },
+    "foundation:appschemascomdanilkinkinbuckwheatdidatabasemodule4json": {
+      "status": "ready"
+    },
+    "foundation:appschemascomdanilkinkinbuckwheatdidatabasemodule5json": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatbasewavyshapekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatdigetcurrentdateusecasekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuicolorkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizeblendblendjava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizehctcam16java": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizehctcamsolverjava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizehcthctjava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizehctviewingconditionsjava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizepalettescorepalettejava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizepalettestonalpalettejava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizeschemeschemejava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizescorescorejava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizeutilscolorutilsjava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizeutilsmathutilsjava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuiharmonizeutilsstringutilsjava": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatuishapekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatutilnumberextensionskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatutilnumberformatkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatutilopeninkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatwidgetextendextendwidgetreceiverkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomdanilkinkinbuckwheatwidgetminimalminimalwidgetreceiverkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainresxmlextendappwidgetproviderxml": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainresxmlminimalappwidgetproviderxml": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainresxmlv31extendappwidgetproviderxml": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainresxmlv31minimalappwidgetproviderxml": {
+      "status": "ready"
+    },
+    "foundation:calendarstate": {
+      "status": "ready"
+    },
+    "foundation:dailebudgetstate": {
+      "status": "ready"
+    },
+    "foundation:editmode": {
+      "status": "ready"
+    },
+    "foundation:keyboardviewmodel": {
+      "status": "ready"
+    },
+    "foundation:month": {
+      "status": "ready"
+    },
+    "foundation:preferences": {
+      "status": "ready"
+    },
+    "foundation:recalcbudgetviewmodel": {
+      "status": "ready"
+    },
+    "foundation:resources": {
+      "status": "ready"
+    },
+    "foundation:restedbudgetdistributionmethod": {
+      "status": "ready"
+    },
+    "foundation:room-database": {
+      "status": "ready"
+    },
+    "foundation:roomconverters": {
+      "status": "ready"
+    },
+    "foundation:storagedao": {
+      "status": "ready"
+    },
+    "foundation:systembarstate": {
+      "status": "ready"
+    },
+    "foundation:transactiondao": {
+      "status": "ready"
+    },
+    "foundation:viewmodel-stateflow": {
+      "status": "ready"
+    },
+    "foundation:week": {
+      "status": "ready"
+    },
+    "slice:mainscreen": {
+      "status": "blocked"
+    }
+  },
+  "task_state_identity": "0a07bc3eab1b465402b384184940c9d4b6aaa2dd0570d8932bb53ca93c124c25"
+}

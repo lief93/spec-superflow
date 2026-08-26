@@ -119,12 +119,42 @@ def write_execution_plan_evidence_fixture(evidence: Path) -> Path:
         "tests/start-status.test.log",
         "source-identity.json",
     )
-    for project in ("banking", "ekspensify"):
+    for project in ("banking", "ekspensify", "buckwheat"):
         project_root = evidence / "execution-plan-dag-v1" / project
         for relative in project_files:
             path = project_root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(relative + "\n", encoding="utf-8")
+    buckwheat = evidence / "execution-plan-dag-v1/buckwheat"
+    for relative in (
+        "logs/00-clone.stdout.txt",
+        "logs/00-clone.stderr.txt",
+        "logs/00-clone.command.log",
+        "logs/00-revision-present.stdout.txt",
+        "logs/00-revision-present.stderr.txt",
+        "logs/00-revision-present.command.log",
+        "logs/00-checkout.stdout.txt",
+        "logs/00-checkout.stderr.txt",
+        "logs/00-checkout.command.log",
+        "logs/00-source-final-remote.stdout.txt",
+        "logs/00-source-final-remote.stderr.txt",
+        "logs/00-source-final-remote.command.log",
+        "logs/00-source-final-head.stdout.txt",
+        "logs/00-source-final-head.stderr.txt",
+        "logs/00-source-final-head.command.log",
+        "logs/00-source-final-detached.stdout.txt",
+        "logs/00-source-final-detached.stderr.txt",
+        "logs/00-source-final-detached.command.log",
+        "exit/00-clone.exit.json",
+        "exit/00-revision-present.exit.json",
+        "exit/00-checkout.exit.json",
+        "exit/00-source-final-remote.exit.json",
+        "exit/00-source-final-head.exit.json",
+        "exit/00-source-final-detached.exit.json",
+    ):
+        path = buckwheat / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative + "\n", encoding="utf-8")
 
     central = evidence / "skill-identities"
     manifest = central / "bundled-skill-tree-manifest.json"
@@ -149,7 +179,7 @@ def write_execution_plan_evidence_fixture(evidence: Path) -> Path:
             "file_count": 1,
         },
     )
-    for project in ("banking", "ekspensify"):
+    for project in ("banking", "ekspensify", "buckwheat"):
         write_json(
             evidence
             / "execution-plan-dag-v1"
@@ -490,8 +520,15 @@ class MigrationToolTests(unittest.TestCase):
                 "execution-plan-dag-v1/banking/skill-identity-reference.json",
                 paths,
             )
+            self.assertIn(
+                "execution-plan-dag-v1/buckwheat/logs/00-clone.command.log",
+                paths,
+            )
             self.assertIn("skill-identities/repo-skill-binding.json", paths)
-            self.assertEqual(payload["projects"], ["banking", "ekspensify"])
+            self.assertEqual(
+                payload["projects"],
+                ["banking", "ekspensify", "buckwheat"],
+            )
 
             verified = run_script(
                 HASH_EVIDENCE_TREE,
@@ -29678,6 +29715,86 @@ class MigrationToolTests(unittest.TestCase):
             self.assertFalse(
                 qualifications["page:apploadingscreen"]["qualified_as_root"]
             )
+
+    def test_capability_graph_prefers_entry_screen_over_helper_for_shared_source_ownership(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            contract = root / "contract.json"
+            registry = root / "gate-registry.json"
+            graph = root / "graph.json"
+            fact_packs = root / "fact-packs"
+            skill_root = root / "skill"
+            manifest = root / "skill-manifest.json"
+            (skill_root / "SKILL.md").parent.mkdir(parents=True)
+            (skill_root / "SKILL.md").write_text("fixture\n", encoding="utf-8")
+            payload = capability_contract_fixture(root / "source", root / "snapshot")
+            main_source = "app/src/main/java/example/home/MainScreen.kt"
+            payload["inventory"]["files_by_layer"]["source"].append(main_source)
+            payload["ui"]["composables"].extend(
+                [
+                    {
+                        "source": main_source,
+                        "name": "BoxScope",
+                        "components": {"Column": []},
+                        "modifiers": {},
+                        "custom_image_component_candidates": [],
+                        "rejected_suffix_only_image_call_count": 0,
+                        "resource_keys": [],
+                        "literal_text": [],
+                    },
+                    {
+                        "source": main_source,
+                        "name": "MainScreen",
+                        "components": {"Surface": []},
+                        "modifiers": {},
+                        "custom_image_component_candidates": [],
+                        "rejected_suffix_only_image_call_count": 0,
+                        "resource_keys": [],
+                        "literal_text": [],
+                    },
+                ]
+            )
+            write_json(contract, payload)
+            write_json(registry, gate_registry_fixture())
+            hashed = run_script(
+                HASH_SKILL_TREE,
+                "--root",
+                str(skill_root),
+                "--output",
+                str(manifest),
+            )
+            self.assertEqual(hashed.returncode, 0, hashed.stdout + hashed.stderr)
+
+            built = run_script(
+                BUILD_CAPABILITY_GRAPH,
+                "--contract",
+                str(contract),
+                "--skill-manifest",
+                str(manifest),
+                "--gate-registry",
+                str(registry),
+                "--fact-pack-dir",
+                str(fact_packs),
+                "--output",
+                str(graph),
+            )
+            self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
+            graph_payload = json.loads(graph.read_text(encoding="utf-8"))
+            qualifications = {
+                entry["node_id"]: entry
+                for entry in graph_payload["root_qualification"]
+            }
+            nodes = {entry["id"]: entry for entry in graph_payload["nodes"]}
+            self.assertTrue(qualifications["page:mainscreen"]["qualified_as_root"])
+            self.assertEqual(
+                qualifications["page:mainscreen"]["qualification_kind"],
+                "entry_screen_root",
+            )
+            self.assertFalse(qualifications["page:boxscope"]["qualified_as_root"])
+            self.assertEqual(nodes["page:mainscreen"]["primary_source_files"], [main_source])
+            self.assertEqual(nodes["page:boxscope"]["primary_source_files"], [])
 
     def test_execution_plan_builder_builds_cross_layer_slice_from_resolved_relationships(
         self,
