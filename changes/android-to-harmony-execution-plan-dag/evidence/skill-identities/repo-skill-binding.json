@@ -2,6 +2,6 @@
   "schema": "android-to-harmony.repo-skill-binding.v1",
   "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
   "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
-  "bundled_tree_sha256": "019c8c55efeb9a0e5bf343a46549ed86fea050a17398d8777f3d8e01646b0d23",
+  "bundled_tree_sha256": "77c257a61cc2437943bdf4d1a19a4a9bc47e88a3e6a29745d8447fdf8091de59",
   "file_count": 70
 }

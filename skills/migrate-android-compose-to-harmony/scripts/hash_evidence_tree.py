@@ -12,11 +12,15 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from hash_skill_tree import create_manifest as create_skill_manifest
+
 
 SCHEMA = "android-to-harmony.execution-plan-evidence-tree.v1"
 PROJECTS = ("banking", "ekspensify", "buckwheat")
 CENTRAL_MANIFEST = "skill-identities/bundled-skill-tree-manifest.json"
 CENTRAL_BINDING = "skill-identities/repo-skill-binding.json"
+BUNDLED_SKILL_PATH = "skills/migrate-android-compose-to-harmony"
+CURRENT_SKILL_ROOT = Path(__file__).resolve().parent.parent
 PROJECT_REQUIRED_FILES = (
     "contract/migration-contract.json",
     "contract/migration-contract.json.owner.json",
@@ -140,7 +144,7 @@ def validate_skill_identity(evidence_root: Path, project: str) -> None:
         raise EvidenceManifestError("central Skill manifest schema is invalid")
     local_root = manifest.get("local_root")
     if (
-        local_root != "skills/migrate-android-compose-to-harmony"
+        local_root != BUNDLED_SKILL_PATH
         or Path(local_root).is_absolute()
     ):
         raise EvidenceManifestError("central Skill manifest root is not portable")
@@ -174,6 +178,17 @@ def validate_skill_identity(evidence_root: Path, project: str) -> None:
     ):
         raise EvidenceManifestError(
             f"{project} Skill identity reference is stale or tampered"
+        )
+
+
+def validate_current_skill_identity(evidence_root: Path) -> None:
+    manifest_path = evidence_root / CENTRAL_MANIFEST
+    recorded = load_json(manifest_path, "central Skill manifest")
+    current = create_skill_manifest(CURRENT_SKILL_ROOT)
+    current["local_root"] = BUNDLED_SKILL_PATH
+    if recorded != current:
+        raise EvidenceManifestError(
+            "central Skill manifest does not match the current bundled Skill tree"
         )
 
 
@@ -215,6 +230,59 @@ def validate_evidence_layout(evidence_root: Path) -> None:
         )
     for project in PROJECTS:
         validate_project_evidence(evidence_root, project)
+    validate_current_skill_identity(evidence_root)
+
+
+def required_families(evidence_root: Path) -> dict[str, dict[str, list[str]]]:
+    project_root = evidence_root / "execution-plan-dag-v1"
+    result: dict[str, dict[str, list[str]]] = {}
+    for project in PROJECTS:
+        subtree = project_root / project
+
+        def relative(path: Path) -> str:
+            return path.relative_to(evidence_root).as_posix()
+
+        result[project] = {
+            "contract": [
+                relative(subtree / "contract/migration-contract.json"),
+                relative(subtree / "contract/migration-contract.json.owner.json"),
+            ],
+            "capability_graph": [relative(subtree / "capability-graph.json")],
+            "fact_packs": [
+                relative(path)
+                for path in sorted((subtree / "fact-packs").glob("*-fact-pack.json"))
+            ],
+            "review_queue": [relative(subtree / "review-queue.json")],
+            "gate_report": [relative(subtree / "gate-report.json")],
+            "immutable_execution_plan": [relative(subtree / "execution-plan.json")],
+            "frozen_task_state": [relative(subtree / "frozen-task-state.json")],
+            "command_stdout": [
+                relative(path) for path in sorted((subtree / "logs").glob("*.stdout.txt"))
+            ],
+            "command_stderr": [
+                relative(path) for path in sorted((subtree / "logs").glob("*.stderr.txt"))
+            ],
+            "command_logs": [
+                relative(path) for path in sorted((subtree / "logs").glob("*.command.log"))
+            ],
+            "exit_results": [
+                relative(path) for path in sorted((subtree / "exit").glob("*.exit.json"))
+            ],
+            "test_logs": [
+                relative(path) for path in sorted((subtree / "tests").glob("*.test.log"))
+            ],
+            "skill_identity": [relative(subtree / "skill-identity-reference.json")],
+            "source_identity": [relative(subtree / "source-identity.json")],
+        }
+    return result
+
+
+def central_skill_identity() -> dict[str, str]:
+    return {
+        "bundled_skill_path": BUNDLED_SKILL_PATH,
+        "manifest_path": CENTRAL_MANIFEST,
+        "binding_path": CENTRAL_BINDING,
+    }
 
 
 def collect_files(evidence_root: Path, manifest_path: Path) -> list[dict[str, Any]]:
@@ -250,6 +318,8 @@ def create_manifest(evidence_root: Path, manifest_path: Path) -> dict[str, Any]:
         "schema": SCHEMA,
         "evidence_root": ".",
         "projects": list(PROJECTS),
+        "required_families": required_families(evidence_root),
+        "central_skill_identity": central_skill_identity(),
         "file_count": len(files),
         "tree_sha256": hashlib.sha256(digest_payload).hexdigest(),
         "files": files,
@@ -280,6 +350,8 @@ def verify_manifest(
         manifest.get("schema") != SCHEMA
         or manifest.get("evidence_root") != "."
         or manifest.get("projects") != list(PROJECTS)
+        or manifest.get("required_families") != required_families(evidence_root)
+        or manifest.get("central_skill_identity") != central_skill_identity()
         or not isinstance(manifest.get("files"), list)
     ):
         raise EvidenceManifestError("evidence manifest envelope is invalid")

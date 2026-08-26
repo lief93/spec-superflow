@@ -26,6 +26,7 @@ describe('state-loader: readState()', () => {
     assert.equal(state.state, 'exploring');
     assert.equal(state.workflow, 'auto');
     assert.equal(state.batches_completed, 0);
+    assert.equal(state.capability, null);
   });
 
   it('infers change_name from directory when no state file', () => {
@@ -41,6 +42,7 @@ describe('state-loader: readState()', () => {
       'artifacts_hash: sha256:abc123',
       'batches_completed: 3',
       'test_result: pass',
+      'capability: android-to-harmony',
       'change_name: export-csv',
       'dp_0_confirmed: true',
       'dp_1_result: confirmed: add csv export',
@@ -55,6 +57,7 @@ describe('state-loader: readState()', () => {
     assert.equal(state.artifacts_hash, 'sha256:abc123');
     assert.equal(state.batches_completed, 3);
     assert.equal(state.test_result, 'pass');
+    assert.equal(state.capability, 'android-to-harmony');
     assert.equal(state.change_name, 'export-csv');
     assert.equal(state.dp_0_confirmed, 'true');
     assert.equal(state.dp_1_result, 'confirmed: add csv export');
@@ -130,6 +133,7 @@ describe('state-loader: writeState()', () => {
       contract_hash: null,
       batches_completed: 2,
       test_result: null,
+      capability: 'android-to-harmony',
       change_name: 'test-change',
       dp_0_confirmed: 'true',
     };
@@ -145,6 +149,7 @@ describe('state-loader: writeState()', () => {
     assert.ok(content.includes('artifacts_hash: sha256:def456'));
     assert.ok(content.includes('contract_hash: null'));
     assert.ok(content.includes('batches_completed: 2'));
+    assert.ok(content.includes('capability: android-to-harmony'));
     assert.ok(content.includes('change_name: test-change'));
     assert.ok(content.includes('dp_0_confirmed: true'));
   });
@@ -179,6 +184,7 @@ describe('state-loader: writeState()', () => {
     const original = {
       state: 'bridging',
       workflow: 'hotfix',
+      capability: 'android-to-harmony',
       artifacts_hash: 'sha256:xyz789',
       batches_completed: 0,
       dp_1_result: 'confirmed: refactor auth',
@@ -190,6 +196,7 @@ describe('state-loader: writeState()', () => {
 
     assert.equal(read.state, original.state);
     assert.equal(read.workflow, original.workflow);
+    assert.equal(read.capability, original.capability);
     assert.equal(read.artifacts_hash, original.artifacts_hash);
     assert.equal(read.batches_completed, original.batches_completed);
     assert.equal(read.dp_1_result, original.dp_1_result);

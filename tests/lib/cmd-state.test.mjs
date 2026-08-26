@@ -561,6 +561,14 @@ describe('cmd-state: set', () => {
     assert.ok(result.stdout.includes('hotfix'));
   });
 
+  it('sets the optional capability field', () => {
+    ssf(`state init ${tempDir}`);
+    const result = ssf(`state set ${tempDir} capability android-to-harmony`);
+    assert.equal(result.exitCode, 0, result.stderr);
+    const get = ssf(`state get ${tempDir} capability`);
+    assert.equal(get.stdout, 'android-to-harmony');
+  });
+
   it('sets a DP field', () => {
     ssf(`state init ${tempDir}`);
     ssf(`state set ${tempDir} dp_1_result "confirmed: csv export"`);

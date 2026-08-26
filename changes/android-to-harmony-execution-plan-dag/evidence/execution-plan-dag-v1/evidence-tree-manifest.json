@@ -6,8 +6,293 @@
     "ekspensify",
     "buckwheat"
   ],
+  "required_families": {
+    "banking": {
+      "contract": [
+        "execution-plan-dag-v1/banking/contract/migration-contract.json",
+        "execution-plan-dag-v1/banking/contract/migration-contract.json.owner.json"
+      ],
+      "capability_graph": [
+        "execution-plan-dag-v1/banking/capability-graph.json"
+      ],
+      "fact_packs": [
+        "execution-plan-dag-v1/banking/fact-packs/business-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/control-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/network-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/page-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/platform-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/project-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/project-support-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/storage-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/test-support-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/ui-system-fact-pack.json",
+        "execution-plan-dag-v1/banking/fact-packs/unclassified-fact-pack.json"
+      ],
+      "review_queue": [
+        "execution-plan-dag-v1/banking/review-queue.json"
+      ],
+      "gate_report": [
+        "execution-plan-dag-v1/banking/gate-report.json"
+      ],
+      "immutable_execution_plan": [
+        "execution-plan-dag-v1/banking/execution-plan.json"
+      ],
+      "frozen_task_state": [
+        "execution-plan-dag-v1/banking/frozen-task-state.json"
+      ],
+      "command_stdout": [
+        "execution-plan-dag-v1/banking/logs/00-checkout.stdout.txt",
+        "execution-plan-dag-v1/banking/logs/00-clone.stdout.txt",
+        "execution-plan-dag-v1/banking/logs/00-reuse-head.stdout.txt",
+        "execution-plan-dag-v1/banking/logs/00-reuse-remote.stdout.txt",
+        "execution-plan-dag-v1/banking/logs/00-revision-present.stdout.txt",
+        "execution-plan-dag-v1/banking/logs/00-set-origin.stdout.txt",
+        "execution-plan-dag-v1/banking/logs/00-source-final-head.stdout.txt",
+        "execution-plan-dag-v1/banking/logs/00-source-final-remote.stdout.txt",
+        "execution-plan-dag-v1/banking/logs/01-start.stdout.txt",
+        "execution-plan-dag-v1/banking/logs/02-status.stdout.txt"
+      ],
+      "command_stderr": [
+        "execution-plan-dag-v1/banking/logs/00-checkout.stderr.txt",
+        "execution-plan-dag-v1/banking/logs/00-clone.stderr.txt",
+        "execution-plan-dag-v1/banking/logs/00-reuse-head.stderr.txt",
+        "execution-plan-dag-v1/banking/logs/00-reuse-remote.stderr.txt",
+        "execution-plan-dag-v1/banking/logs/00-revision-present.stderr.txt",
+        "execution-plan-dag-v1/banking/logs/00-set-origin.stderr.txt",
+        "execution-plan-dag-v1/banking/logs/00-source-final-head.stderr.txt",
+        "execution-plan-dag-v1/banking/logs/00-source-final-remote.stderr.txt",
+        "execution-plan-dag-v1/banking/logs/01-start.stderr.txt",
+        "execution-plan-dag-v1/banking/logs/02-status.stderr.txt"
+      ],
+      "command_logs": [
+        "execution-plan-dag-v1/banking/logs/00-checkout.command.log",
+        "execution-plan-dag-v1/banking/logs/00-clone.command.log",
+        "execution-plan-dag-v1/banking/logs/00-reuse-head.command.log",
+        "execution-plan-dag-v1/banking/logs/00-reuse-remote.command.log",
+        "execution-plan-dag-v1/banking/logs/00-revision-present.command.log",
+        "execution-plan-dag-v1/banking/logs/00-set-origin.command.log",
+        "execution-plan-dag-v1/banking/logs/00-source-final-head.command.log",
+        "execution-plan-dag-v1/banking/logs/00-source-final-remote.command.log",
+        "execution-plan-dag-v1/banking/logs/01-start.command.log",
+        "execution-plan-dag-v1/banking/logs/02-status.command.log"
+      ],
+      "exit_results": [
+        "execution-plan-dag-v1/banking/exit/00-checkout.exit.json",
+        "execution-plan-dag-v1/banking/exit/00-clone.exit.json",
+        "execution-plan-dag-v1/banking/exit/00-reuse-head.exit.json",
+        "execution-plan-dag-v1/banking/exit/00-reuse-remote.exit.json",
+        "execution-plan-dag-v1/banking/exit/00-revision-present.exit.json",
+        "execution-plan-dag-v1/banking/exit/00-set-origin.exit.json",
+        "execution-plan-dag-v1/banking/exit/00-source-final-head.exit.json",
+        "execution-plan-dag-v1/banking/exit/00-source-final-remote.exit.json",
+        "execution-plan-dag-v1/banking/exit/01-start.exit.json",
+        "execution-plan-dag-v1/banking/exit/02-status.exit.json"
+      ],
+      "test_logs": [
+        "execution-plan-dag-v1/banking/tests/start-status.test.log"
+      ],
+      "skill_identity": [
+        "execution-plan-dag-v1/banking/skill-identity-reference.json"
+      ],
+      "source_identity": [
+        "execution-plan-dag-v1/banking/source-identity.json"
+      ]
+    },
+    "ekspensify": {
+      "contract": [
+        "execution-plan-dag-v1/ekspensify/contract/migration-contract.json",
+        "execution-plan-dag-v1/ekspensify/contract/migration-contract.json.owner.json"
+      ],
+      "capability_graph": [
+        "execution-plan-dag-v1/ekspensify/capability-graph.json"
+      ],
+      "fact_packs": [
+        "execution-plan-dag-v1/ekspensify/fact-packs/business-fact-pack.json",
+        "execution-plan-dag-v1/ekspensify/fact-packs/control-fact-pack.json",
+        "execution-plan-dag-v1/ekspensify/fact-packs/network-fact-pack.json",
+        "execution-plan-dag-v1/ekspensify/fact-packs/page-fact-pack.json",
+        "execution-plan-dag-v1/ekspensify/fact-packs/platform-fact-pack.json",
+        "execution-plan-dag-v1/ekspensify/fact-packs/project-fact-pack.json",
+        "execution-plan-dag-v1/ekspensify/fact-packs/project-support-fact-pack.json",
+        "execution-plan-dag-v1/ekspensify/fact-packs/storage-fact-pack.json",
+        "execution-plan-dag-v1/ekspensify/fact-packs/ui-system-fact-pack.json"
+      ],
+      "review_queue": [
+        "execution-plan-dag-v1/ekspensify/review-queue.json"
+      ],
+      "gate_report": [
+        "execution-plan-dag-v1/ekspensify/gate-report.json"
+      ],
+      "immutable_execution_plan": [
+        "execution-plan-dag-v1/ekspensify/execution-plan.json"
+      ],
+      "frozen_task_state": [
+        "execution-plan-dag-v1/ekspensify/frozen-task-state.json"
+      ],
+      "command_stdout": [
+        "execution-plan-dag-v1/ekspensify/logs/00-checkout.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-fetch.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-reuse-head.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-reuse-remote.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-revision-present.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-final-head.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-final-remote.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-head-before.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-remote-before.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/01-start.stdout.txt",
+        "execution-plan-dag-v1/ekspensify/logs/02-status.stdout.txt"
+      ],
+      "command_stderr": [
+        "execution-plan-dag-v1/ekspensify/logs/00-checkout.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-fetch.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-reuse-head.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-reuse-remote.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-revision-present.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-final-head.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-final-remote.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-head-before.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-remote-before.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/01-start.stderr.txt",
+        "execution-plan-dag-v1/ekspensify/logs/02-status.stderr.txt"
+      ],
+      "command_logs": [
+        "execution-plan-dag-v1/ekspensify/logs/00-checkout.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/00-fetch.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/00-reuse-head.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/00-reuse-remote.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/00-revision-present.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-final-head.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-final-remote.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-head-before.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/00-source-remote-before.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/01-start.command.log",
+        "execution-plan-dag-v1/ekspensify/logs/02-status.command.log"
+      ],
+      "exit_results": [
+        "execution-plan-dag-v1/ekspensify/exit/00-checkout.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/00-fetch.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/00-reuse-head.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/00-reuse-remote.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/00-revision-present.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/00-source-final-head.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/00-source-final-remote.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/00-source-head-before.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/00-source-remote-before.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/01-start.exit.json",
+        "execution-plan-dag-v1/ekspensify/exit/02-status.exit.json"
+      ],
+      "test_logs": [
+        "execution-plan-dag-v1/ekspensify/tests/start-status.test.log"
+      ],
+      "skill_identity": [
+        "execution-plan-dag-v1/ekspensify/skill-identity-reference.json"
+      ],
+      "source_identity": [
+        "execution-plan-dag-v1/ekspensify/source-identity.json"
+      ]
+    },
+    "buckwheat": {
+      "contract": [
+        "execution-plan-dag-v1/buckwheat/contract/migration-contract.json",
+        "execution-plan-dag-v1/buckwheat/contract/migration-contract.json.owner.json"
+      ],
+      "capability_graph": [
+        "execution-plan-dag-v1/buckwheat/capability-graph.json"
+      ],
+      "fact_packs": [
+        "execution-plan-dag-v1/buckwheat/fact-packs/business-fact-pack.json",
+        "execution-plan-dag-v1/buckwheat/fact-packs/control-fact-pack.json",
+        "execution-plan-dag-v1/buckwheat/fact-packs/page-fact-pack.json",
+        "execution-plan-dag-v1/buckwheat/fact-packs/platform-fact-pack.json",
+        "execution-plan-dag-v1/buckwheat/fact-packs/project-fact-pack.json",
+        "execution-plan-dag-v1/buckwheat/fact-packs/project-support-fact-pack.json",
+        "execution-plan-dag-v1/buckwheat/fact-packs/storage-fact-pack.json",
+        "execution-plan-dag-v1/buckwheat/fact-packs/test-support-fact-pack.json",
+        "execution-plan-dag-v1/buckwheat/fact-packs/ui-system-fact-pack.json",
+        "execution-plan-dag-v1/buckwheat/fact-packs/unclassified-fact-pack.json"
+      ],
+      "review_queue": [
+        "execution-plan-dag-v1/buckwheat/review-queue.json"
+      ],
+      "gate_report": [
+        "execution-plan-dag-v1/buckwheat/gate-report.json"
+      ],
+      "immutable_execution_plan": [
+        "execution-plan-dag-v1/buckwheat/execution-plan.json"
+      ],
+      "frozen_task_state": [
+        "execution-plan-dag-v1/buckwheat/frozen-task-state.json"
+      ],
+      "command_stdout": [
+        "execution-plan-dag-v1/buckwheat/logs/00-checkout.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-clone.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-reuse-head.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-reuse-remote.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-revision-present.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-set-origin.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-source-final-detached.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-source-final-head.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-source-final-remote.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/01-start.stdout.txt",
+        "execution-plan-dag-v1/buckwheat/logs/02-status.stdout.txt"
+      ],
+      "command_stderr": [
+        "execution-plan-dag-v1/buckwheat/logs/00-checkout.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-clone.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-reuse-head.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-reuse-remote.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-revision-present.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-set-origin.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-source-final-detached.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-source-final-head.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/00-source-final-remote.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/01-start.stderr.txt",
+        "execution-plan-dag-v1/buckwheat/logs/02-status.stderr.txt"
+      ],
+      "command_logs": [
+        "execution-plan-dag-v1/buckwheat/logs/00-checkout.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/00-clone.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/00-reuse-head.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/00-reuse-remote.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/00-revision-present.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/00-set-origin.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/00-source-final-detached.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/00-source-final-head.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/00-source-final-remote.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/01-start.command.log",
+        "execution-plan-dag-v1/buckwheat/logs/02-status.command.log"
+      ],
+      "exit_results": [
+        "execution-plan-dag-v1/buckwheat/exit/00-checkout.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/00-clone.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/00-reuse-head.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/00-reuse-remote.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/00-revision-present.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/00-set-origin.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/00-source-final-detached.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/00-source-final-head.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/00-source-final-remote.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/01-start.exit.json",
+        "execution-plan-dag-v1/buckwheat/exit/02-status.exit.json"
+      ],
+      "test_logs": [
+        "execution-plan-dag-v1/buckwheat/tests/start-status.test.log"
+      ],
+      "skill_identity": [
+        "execution-plan-dag-v1/buckwheat/skill-identity-reference.json"
+      ],
+      "source_identity": [
+        "execution-plan-dag-v1/buckwheat/source-identity.json"
+      ]
+    }
+  },
+  "central_skill_identity": {
+    "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
+    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+    "binding_path": "skill-identities/repo-skill-binding.json"
+  },
   "file_count": 190,
-  "tree_sha256": "50f8a9e36f4a1c439505bb63e51aa410f873c89b43ce077e63c6cdc940f30238",
+  "tree_sha256": "b02973a30771f8f16989593c45dd27780816b7988cbec4d1ece4d0a83b04997a",
   "files": [
     {
       "path": "execution-plan-dag-v1/banking/capability-graph.json",
@@ -302,7 +587,7 @@
     {
       "path": "execution-plan-dag-v1/banking/skill-identity-reference.json",
       "bytes": 400,
-      "sha256": "610148a24f393271399b3304f06763991242ec098d6c5cacb64a94d054f53982"
+      "sha256": "0f27e048ba142698e99800a2409eac3bdda4eaca18bda67300c635f6ed55ab08"
     },
     {
       "path": "execution-plan-dag-v1/banking/source-identity.json",
@@ -622,7 +907,7 @@
     {
       "path": "execution-plan-dag-v1/buckwheat/skill-identity-reference.json",
       "bytes": 402,
-      "sha256": "0a5ca7b0352fea545f88c1b5d06b568006c51e45c0088c1bff50d71d85938cc3"
+      "sha256": "8764d717520c009eb1018374ea0f54052692ebf6c341fb7308d7b04a0f979053"
     },
     {
       "path": "execution-plan-dag-v1/buckwheat/source-identity.json",
@@ -937,7 +1222,7 @@
     {
       "path": "execution-plan-dag-v1/ekspensify/skill-identity-reference.json",
       "bytes": 403,
-      "sha256": "7148faaf42f2d849d5c0e45aeac96a34bd539fd9e351be57f8b3fc6190298a18"
+      "sha256": "8ffdec259b067bf63f20621fafefc5cfa8a5c3e48752912008c0bf25c7630f76"
     },
     {
       "path": "execution-plan-dag-v1/ekspensify/source-identity.json",
@@ -952,12 +1237,12 @@
     {
       "path": "skill-identities/bundled-skill-tree-manifest.json",
       "bytes": 14336,
-      "sha256": "2881f387a7930724946dd61f1c0819757d5c0a442b4f663289703b17bdf9f728"
+      "sha256": "cc27df875a204ae71f4d267c23764b8f7471ff03e87152b550e3eba38527317d"
     },
     {
       "path": "skill-identities/repo-skill-binding.json",
       "bytes": 313,
-      "sha256": "fc1cb866d228e9870e31f07d50e3e336fc89854c0fc55237c1400a0ceac97ef7"
+      "sha256": "7a6fa628fc9a7eed157497ced7fde9f76b1a4da9583d38be17759a237b32739e"
     }
   ]
 }

@@ -18,6 +18,7 @@ const GIT_COMMIT = /^[a-f0-9]{40}$/;
 
 const SETTABLE_FIELDS = [
   'workflow', 'execution_mode', 'test_result', 'batches_completed',
+  'capability',
   'dp_0_decisions', 'dp_0_confirmed', 'dp_0_timestamp', 'dp_0_result',
   'dp_1_result', 'dp_1_timestamp', 'dp_1_decisions', 'dp_1_confirmed',
   'dp_1_candidate_identity',

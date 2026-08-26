@@ -2,7 +2,7 @@
   "schema": "android-to-harmony.skill-identity-reference.v1",
   "project": "banking",
   "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
-  "manifest_sha256": "2881f387a7930724946dd61f1c0819757d5c0a442b4f663289703b17bdf9f728",
+  "manifest_sha256": "cc27df875a204ae71f4d267c23764b8f7471ff03e87152b550e3eba38527317d",
   "binding_path": "skill-identities/repo-skill-binding.json",
-  "binding_sha256": "fc1cb866d228e9870e31f07d50e3e336fc89854c0fc55237c1400a0ceac97ef7"
+  "binding_sha256": "7a6fa628fc9a7eed157497ced7fde9f76b1a4da9583d38be17759a237b32739e"
 }

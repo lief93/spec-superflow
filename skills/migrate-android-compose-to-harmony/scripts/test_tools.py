@@ -159,26 +159,37 @@ def write_execution_plan_evidence_fixture(evidence: Path) -> Path:
     central = evidence / "skill-identities"
     manifest = central / "bundled-skill-tree-manifest.json"
     binding = central / "repo-skill-binding.json"
-    write_json(
-        manifest,
-        {
-            "schema": "android-to-harmony.skill-tree-manifest.v1",
-            "local_root": "skills/migrate-android-compose-to-harmony",
-            "file_count": 1,
-            "tree_sha256": "a" * 64,
-            "files": [],
-        },
+    hashed = run_script(
+        HASH_SKILL_TREE,
+        "--root",
+        str(SCRIPTS.parent),
+        "--output",
+        str(manifest),
     )
+    if hashed.returncode != 0:
+        raise RuntimeError(hashed.stdout + hashed.stderr)
+    manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
+    manifest_payload["local_root"] = "skills/migrate-android-compose-to-harmony"
+    write_json(manifest, manifest_payload)
     write_json(
         binding,
         {
             "schema": "android-to-harmony.repo-skill-binding.v1",
             "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
             "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
-            "bundled_tree_sha256": "a" * 64,
-            "file_count": 1,
+            "bundled_tree_sha256": manifest_payload["tree_sha256"],
+            "file_count": manifest_payload["file_count"],
         },
     )
+    write_skill_identity_references(evidence, manifest, binding)
+    return evidence / "execution-plan-dag-v1/banking"
+
+
+def write_skill_identity_references(
+    evidence: Path,
+    manifest: Path,
+    binding: Path,
+) -> None:
     for project in ("banking", "ekspensify", "buckwheat"):
         write_json(
             evidence
@@ -194,7 +205,6 @@ def write_execution_plan_evidence_fixture(evidence: Path) -> Path:
                 "binding_sha256": hashlib.sha256(binding.read_bytes()).hexdigest(),
             },
         )
-    return evidence / "execution-plan-dag-v1/banking"
 
 
 def gate_registry_fixture() -> dict[str, object]:
@@ -529,6 +539,41 @@ class MigrationToolTests(unittest.TestCase):
                 payload["projects"],
                 ["banking", "ekspensify", "buckwheat"],
             )
+            expected_families = {
+                "capability_graph",
+                "command_logs",
+                "command_stderr",
+                "command_stdout",
+                "contract",
+                "exit_results",
+                "fact_packs",
+                "frozen_task_state",
+                "gate_report",
+                "immutable_execution_plan",
+                "review_queue",
+                "skill_identity",
+                "source_identity",
+                "test_logs",
+            }
+            for project in payload["projects"]:
+                families = payload["required_families"][project]
+                self.assertEqual(set(families), expected_families)
+                self.assertTrue(all(families.values()))
+                self.assertTrue(
+                    all(
+                        path.startswith(f"execution-plan-dag-v1/{project}/")
+                        for members in families.values()
+                        for path in members
+                    )
+                )
+            self.assertEqual(
+                payload["central_skill_identity"],
+                {
+                    "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
+                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                    "binding_path": "skill-identities/repo-skill-binding.json",
+                },
+            )
 
             verified = run_script(
                 HASH_EVIDENCE_TREE,
@@ -559,10 +604,29 @@ class MigrationToolTests(unittest.TestCase):
             )
             self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
 
-            plan = banking / "execution-plan.json"
-            original_plan = plan.read_bytes()
-            plan.write_bytes(original_plan + b"tampered")
-            tampered = run_script(
+            for project in ("banking", "ekspensify", "buckwheat"):
+                plan = evidence / f"execution-plan-dag-v1/{project}/execution-plan.json"
+                original_plan = plan.read_bytes()
+                plan.write_bytes(original_plan + b"tampered")
+                tampered = run_script(
+                    HASH_EVIDENCE_TREE,
+                    "--verify",
+                    "--change-dir",
+                    str(root),
+                    "--evidence-root",
+                    str(evidence),
+                    "--input",
+                    str(output),
+                )
+                self.assertNotEqual(tampered.returncode, 0, project)
+                plan.write_bytes(original_plan)
+
+            original_manifest = output.read_bytes()
+            incomplete_manifest = json.loads(original_manifest)
+            incomplete_manifest["files"] = incomplete_manifest["files"][1:]
+            incomplete_manifest["file_count"] -= 1
+            write_json(output, incomplete_manifest)
+            missing_membership = run_script(
                 HASH_EVIDENCE_TREE,
                 "--verify",
                 "--change-dir",
@@ -572,9 +636,11 @@ class MigrationToolTests(unittest.TestCase):
                 "--input",
                 str(output),
             )
-            self.assertNotEqual(tampered.returncode, 0)
-            plan.write_bytes(original_plan)
+            self.assertNotEqual(missing_membership.returncode, 0)
+            output.write_bytes(original_manifest)
 
+            plan = banking / "execution-plan.json"
+            original_plan = plan.read_bytes()
             plan.unlink()
             missing = run_script(
                 HASH_EVIDENCE_TREE,
@@ -601,6 +667,68 @@ class MigrationToolTests(unittest.TestCase):
                 str(output),
             )
             self.assertNotEqual(extra.returncode, 0)
+
+    def test_execution_plan_evidence_tree_manifest_rejects_current_skill_drift_and_historical_substitution(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "evidence"
+            write_execution_plan_evidence_fixture(evidence)
+            output = evidence / "execution-plan-dag-v1/evidence-tree-manifest.json"
+            generated = run_script(
+                HASH_EVIDENCE_TREE,
+                "--change-dir",
+                str(root),
+                "--evidence-root",
+                str(evidence),
+                "--output",
+                str(output),
+            )
+            self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
+
+            central = evidence / "skill-identities"
+            current_manifest = central / "bundled-skill-tree-manifest.json"
+            current_binding = central / "repo-skill-binding.json"
+            historical = (
+                root
+                / "changes/android-to-harmony-54-benchmark/evidence"
+            )
+            historical_manifest = historical / "bundled-skill-tree-manifest.json"
+            historical_binding = historical / "repo-skill-binding.json"
+            stale_manifest = json.loads(current_manifest.read_text(encoding="utf-8"))
+            stale_manifest["tree_sha256"] = "b" * 64
+            write_json(historical_manifest, stale_manifest)
+            write_json(
+                historical_binding,
+                {
+                    "schema": "android-to-harmony.repo-skill-binding.v1",
+                    "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
+                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                    "bundled_tree_sha256": "b" * 64,
+                    "file_count": stale_manifest["file_count"],
+                },
+            )
+            current_manifest.write_bytes(historical_manifest.read_bytes())
+            current_binding.write_bytes(historical_binding.read_bytes())
+            write_skill_identity_references(
+                evidence,
+                current_manifest,
+                current_binding,
+            )
+            output.unlink()
+
+            rejected = run_script(
+                HASH_EVIDENCE_TREE,
+                "--change-dir",
+                str(root),
+                "--evidence-root",
+                str(evidence),
+                "--output",
+                str(output),
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("current bundled Skill tree", rejected.stdout)
     def test_slot_container_summary_accepts_fresh_bound_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

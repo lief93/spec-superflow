@@ -55,16 +55,49 @@ Config-aware routing: check `artifacts.order` and `artifacts.skip` from project 
 
 ## Mode Detection
 
+After DP-0 and before routing, run `ssf infer-workflow <change-dir>` once for
+every Change, then inspect both `mode` and `capability`. Capability detection
+uses `dp_0_decisions` plus any available `proposal.md` and `tasks.md`, so a
+fresh Change does not need planning artifacts before it can select a scoped
+capability. Apply the capability override below before ordinary mode routing.
+
 When the user explicitly requests the full workflow, persist `workflow` as
 `full` and do not infer `hotfix` or `tweak`.
 
-If workflow is `auto`/`null`/unset: run `ssf infer-workflow <change-dir>`. Inference: **hotfix** (≤2 tasks, ≤2 files, no schema/API/new modules), **tweak** (≤4 tasks, config/doc only), **full** (anything larger). Persist with `ssf state set <dir> workflow <mode>`.
+When capability is not `android-to-harmony` and workflow is
+`auto`/`null`/unset, persist the inferred result with
+`ssf state set <dir> workflow <mode>`. Inference selects **hotfix** (≤2 tasks,
+≤2 files, no schema/API/new modules), **tweak** (≤4 tasks, config/doc only), or
+**full** (anything larger). Preserve an explicit `hotfix` or `tweak` for an
+ordinary non-migration Change.
 
 Validate mode against artifact content. If hotfix/tweak criteria not met → upgrade to `full` and output reason. Don't overwrite explicit mode unless user asks.
 
 After workflow is persisted, run `ssf state get <dir> workflow`. Only exact
 `full` uses the independent semantic-review checkpoints below. `hotfix` and
 `tweak` keep their existing fast paths and do not create Review artifacts.
+
+## Optional Capability Detection
+
+Use the same inference result described above. If it contains
+`capability: "android-to-harmony"`, persist that capability exactly once with:
+
+```bash
+ssf state set <change-dir> capability android-to-harmony
+```
+
+Also persist `workflow: full` for that Change, overriding an explicit or
+inferred fast-path mode. `android-to-harmony` therefore forces `workflow: full` for that Change only. It does not add HarmonyOS, HDC, screenshot, or migration evidence checks to ordinary
+projects. A Change without this persisted
+capability stays on the normal spec-superflow route.
+
+When `ssf state get <change-dir> capability` returns `android-to-harmony`, use
+the linked `migrate-android-compose-to-harmony` Skill as the domain-specific
+authority for migration intake, asset isolation, code-first UI transcription,
+business-slice ledgers, Harmony build/UITest/device evidence, and local
+screenshot diagnostics. Continue to use the ordinary state machine for
+planning, approval, and review timing; the migration Skill owns only the
+Android-to-Harmony path inside that Change.
 
 ## Full Workflow Review Seams
 

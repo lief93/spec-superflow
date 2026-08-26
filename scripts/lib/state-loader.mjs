@@ -13,6 +13,7 @@ const BUILTIN_DEFAULTS = {
   execution_base_commit: null,
   batches_completed: 0,
   test_result: null,
+  capability: null,
   change_name: null,
   last_transition: null,
   last_transition_from: null,
@@ -78,6 +79,7 @@ export function writeState(changeDir, state) {
   lines.push(`test_result: ${state.test_result ?? 'null'}`);
   lines.push('');
   lines.push('# === Metadata ===');
+  lines.push(`capability: ${state.capability ?? 'null'}`);
   lines.push(`change_name: ${state.change_name ?? path.basename(changeDir)}`);
   lines.push(`last_transition: ${state.last_transition ?? 'null'}`);
   lines.push(`last_transition_from: ${state.last_transition_from ?? 'null'}`);

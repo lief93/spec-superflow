@@ -17,6 +17,14 @@ coverage. It does not add an Agent or change this Skill's RED → GREEN ownershi
 
 Check workflow mode first: `ssf state get <change-dir> workflow`. If `tweak` → direct edit mode. If `hotfix` or `full` → standard contract-first discipline.
 
+Check optional capability next: `ssf state get <change-dir> capability`. If it
+returns `android-to-harmony`, load `migrate-android-compose-to-harmony` before
+implementation and follow that Skill for migration intake, safe snapshot,
+contract analysis, source-to-ArkUI transcription, asset copy/conversion,
+business-slice ledgers, Harmony build/UITest/device evidence, and local
+screenshot diagnostics. These checks are scoped to that Change and must not be
+applied to ordinary non-migration projects.
+
 Config check: `ssf config --get execution.inlineThreshold` (default: 3).
 
 ## Full Workflow Override
