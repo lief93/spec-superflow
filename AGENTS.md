@@ -22,6 +22,20 @@ node --test --experimental-strip-types tests/e2e.test.ts --test-name-pattern="pa
 npm run validate
 ```
 
+## Agent skills
+
+### Issue tracker
+
+Engineering specs and tickets are tracked as local Markdown under `.scratch/`; no remote issue state is created. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Local tickets use the canonical Matt workflow role names. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository using a root `CONTEXT.md` and repository-wide ADRs when those documents exist. See `docs/agents/domain.md`.
+
 ## Architecture
 
 ### Source Code (`src/`)

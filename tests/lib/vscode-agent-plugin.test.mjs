@@ -465,6 +465,37 @@ describe('VS Code Agent Plugin', () => {
     );
   });
 
+  it('routes Android to Harmony as a persisted optional capability, not a global workflow gate', () => {
+    const workflow = read('skills/workflow-start/SKILL.md');
+    const executor = read('skills/build-executor/SKILL.md');
+
+    assert.match(workflow, /## Optional Capability Detection/);
+    assert.match(workflow, /ssf infer-workflow <change-dir>/);
+    assert.match(workflow, /capability:\s+"android-to-harmony"/);
+    assert.match(workflow, /ssf state set <change-dir> capability android-to-harmony/);
+    assert.match(workflow, /forces `workflow: full` for that Change only/i);
+    assert.match(workflow, /does[\s\S]*not add HarmonyOS, HDC, screenshot, or migration evidence checks to ordinary\s+projects/i);
+    assert.match(workflow, /migrate-android-compose-to-harmony[\s\S]*domain-specific\s+authority/i);
+
+    assert.match(executor, /ssf state get <change-dir> capability/);
+    assert.match(executor, /returns `android-to-harmony`, load `migrate-android-compose-to-harmony`/);
+    assert.match(executor, /scoped to that Change[\s\S]*ordinary non-migration projects/i);
+  });
+
+  it('keeps executable planning behind the workflow seam and relegates helper CLIs to maintainer debug use', () => {
+    const migration = read('skills/migrate-android-compose-to-harmony/SKILL.md');
+    const reference = read('skills/migrate-android-compose-to-harmony/references/capability-graph-and-gates.md');
+
+    for (const content of [migration, reference]) {
+      assert.match(content, /workflow and `migration_agent\.py`(?: are| must also derive).*only normal user entry|normal entry remains the existing workflow or\s+`migration_agent\.py`/i);
+      assert.match(content, /start`, `resume`, and `status`|for `start`, `resume`, and `status`/i);
+      assert.match(content, /maintainer\/debug helper|maintainer\/debug seam/i);
+      assert.doesNotMatch(content, /python3 .*build_capability_graph\.py[\s\S]*normal user/i);
+      assert.doesNotMatch(content, /python3 .*aggregate_gate_evidence\.py[\s\S]*normal user/i);
+      assert.doesNotMatch(content, /python3 .*build_execution_plan\.py[\s\S]*normal user/i);
+    }
+  });
+
   it('requires dependency-closed planning and precise behavioral test seams', () => {
     const writer = read('skills/spec-writer/SKILL.md');
     const contract = read('skills/contract-builder/SKILL.md');

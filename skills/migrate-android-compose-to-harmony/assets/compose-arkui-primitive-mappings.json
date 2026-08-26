@@ -1,0 +1,1432 @@
+{
+  "schema": "android-to-harmony.primitive-component-mapping-catalog.v1",
+  "status": "candidate_requires_review",
+  "authoritative": false,
+  "mappings": [
+    {
+      "id": "compose.foundation.layout.box",
+      "source_components": [
+        "Box"
+      ],
+      "source_family": "Compose Foundation Layout",
+      "target_components": [
+        "Stack"
+      ],
+      "target_strategy": "stack_with_explicit_child_alignment_position_and_z_order",
+      "required_semantics": [
+        "child_order",
+        "contentAlignment",
+        "propagateMinConstraints",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default"
+      ],
+      "geometry_contract": [
+        "constraints",
+        "child_alignment",
+        "offset",
+        "clip",
+        "z_order"
+      ],
+      "version_resolution_required": false
+    },
+    {
+      "id": "compose.foundation.layout.column",
+      "source_components": [
+        "Column"
+      ],
+      "source_family": "Compose Foundation Layout",
+      "target_components": [
+        "Column"
+      ],
+      "target_strategy": "column_with_preserved_child_order_arrangement_and_parent_data",
+      "required_semantics": [
+        "child_order",
+        "verticalArrangement",
+        "horizontalAlignment",
+        "weight",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default"
+      ],
+      "geometry_contract": [
+        "constraints",
+        "spacing",
+        "alignment",
+        "child_weight"
+      ],
+      "version_resolution_required": false
+    },
+    {
+      "id": "compose.foundation.layout.row",
+      "source_components": [
+        "Row"
+      ],
+      "source_family": "Compose Foundation Layout",
+      "target_components": [
+        "Row"
+      ],
+      "target_strategy": "row_with_preserved_child_order_arrangement_and_parent_data",
+      "required_semantics": [
+        "child_order",
+        "horizontalArrangement",
+        "verticalAlignment",
+        "weight",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default"
+      ],
+      "geometry_contract": [
+        "constraints",
+        "spacing",
+        "alignment",
+        "child_weight"
+      ],
+      "version_resolution_required": false
+    },
+    {
+      "id": "compose.ui.text",
+      "source_components": [
+        "Text"
+      ],
+      "source_family": "Compose UI or Material Typography",
+      "target_components": [
+        "Text"
+      ],
+      "target_strategy": "native_text_with_resolved_typography_and_overflow_semantics",
+      "required_semantics": [
+        "text",
+        "style",
+        "color",
+        "fontSize",
+        "fontWeight",
+        "fontFamily",
+        "letterSpacing",
+        "lineHeight",
+        "textAlign",
+        "maxLines",
+        "overflow"
+      ],
+      "states": [
+        "default",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "bounds",
+        "baseline",
+        "line_count",
+        "font_scale"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.button",
+      "source_components": [
+        "Button"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Button"
+      ],
+      "target_strategy": "native_button_with_resolved_shape_padding_typography_and_interaction",
+      "required_semantics": [
+        "onClick",
+        "enabled",
+        "shape",
+        "colors",
+        "elevation",
+        "contentPadding",
+        "interactionSource",
+        "content"
+      ],
+      "states": [
+        "default",
+        "pressed",
+        "focused",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "minimum_height",
+        "content_padding",
+        "touch_target",
+        "shape"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.checkbox",
+      "source_components": [
+        "Checkbox"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Checkbox"
+      ],
+      "target_strategy": "native_checkbox_with_explicit_tristate_color_and_enabled_semantics",
+      "required_semantics": [
+        "checked",
+        "onCheckedChange",
+        "enabled",
+        "colors",
+        "interactionSource"
+      ],
+      "states": [
+        "unchecked",
+        "checked",
+        "indeterminate",
+        "focused",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "indicator_size",
+        "touch_target",
+        "stroke_width"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.switch",
+      "source_components": [
+        "Switch"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Toggle"
+      ],
+      "target_strategy": "switch_toggle_with_explicit_thumb_track_icon_and_enabled_semantics",
+      "required_semantics": [
+        "checked",
+        "onCheckedChange",
+        "enabled",
+        "colors",
+        "thumbContent",
+        "interactionSource"
+      ],
+      "states": [
+        "unchecked",
+        "checked",
+        "pressed",
+        "focused",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "track_size",
+        "thumb_size",
+        "touch_target"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.dropdown-menu",
+      "source_components": [
+        "DropdownMenu"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Menu"
+      ],
+      "target_strategy": "anchored_overlay_menu_with_preserved_dismissal_offset_and_item_content",
+      "required_semantics": [
+        "expanded",
+        "onDismissRequest",
+        "offset",
+        "properties",
+        "content"
+      ],
+      "states": [
+        "collapsed",
+        "expanded",
+        "dismissed"
+      ],
+      "geometry_contract": [
+        "anchor_bounds",
+        "menu_bounds",
+        "offset",
+        "item_height"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material3.date-picker",
+      "source_components": [
+        "DatePicker"
+      ],
+      "source_family": "Compose Material 3",
+      "target_components": [
+        "DatePicker"
+      ],
+      "target_strategy": "native_date_picker_with_explicit_selection_range_mode_and_change_contract",
+      "required_semantics": [
+        "state",
+        "dateValidator",
+        "showModeToggle",
+        "title",
+        "headline",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "initial",
+        "date_selected",
+        "range_constrained",
+        "mode_changed",
+        "restored"
+      ],
+      "geometry_contract": [
+        "picker_bounds",
+        "header_bounds",
+        "calendar_grid",
+        "mode_toggle_bounds",
+        "touch_target"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material3.date-picker-dialog",
+      "source_components": [
+        "DatePickerDialog"
+      ],
+      "source_family": "Compose Material 3",
+      "target_components": [
+        "DatePicker",
+        "CustomDialogController"
+      ],
+      "target_strategy": "date_picker_in_explicit_dialog_with_confirm_cancel_and_state_contract",
+      "required_semantics": [
+        "selected_date",
+        "onDismissRequest",
+        "confirmButton",
+        "dismissButton",
+        "shape",
+        "colors",
+        "properties",
+        "content"
+      ],
+      "states": [
+        "opened",
+        "date_selected",
+        "confirmed",
+        "cancelled",
+        "dismissed"
+      ],
+      "geometry_contract": [
+        "dialog_bounds",
+        "calendar_grid",
+        "header_height",
+        "action_row"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.outlined-text-field",
+      "source_components": [
+        "OutlinedTextField"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "TextInput"
+      ],
+      "target_strategy": "native_input_with_explicit_outline_label_and_state_semantics",
+      "required_semantics": [
+        "value",
+        "onValueChange",
+        "label",
+        "placeholder",
+        "enabled",
+        "isError",
+        "singleLine",
+        "keyboardOptions",
+        "visualTransformation"
+      ],
+      "states": [
+        "default",
+        "focused",
+        "error",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "minimum_height",
+        "content_padding",
+        "label_position",
+        "border_width",
+        "shape"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.text-field",
+      "source_components": [
+        "TextField"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "TextInput",
+        "TextArea"
+      ],
+      "target_strategy": "native_input_selected_by_single_or_multi_line_semantics_with_explicit_decoration_and_state",
+      "required_semantics": [
+        "value",
+        "onValueChange",
+        "label",
+        "placeholder",
+        "leadingIcon",
+        "trailingIcon",
+        "prefix",
+        "suffix",
+        "supportingText",
+        "enabled",
+        "readOnly",
+        "isError",
+        "singleLine",
+        "minLines",
+        "maxLines",
+        "keyboardOptions",
+        "keyboardActions",
+        "visualTransformation",
+        "shape",
+        "colors"
+      ],
+      "states": [
+        "default",
+        "focused",
+        "filled",
+        "error",
+        "read_only",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "minimum_height",
+        "content_padding",
+        "label_position",
+        "indicator_width",
+        "shape"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.foundation.image",
+      "source_components": [
+        "Image"
+      ],
+      "source_family": "Compose Foundation",
+      "target_components": [
+        "Image"
+      ],
+      "target_strategy": "native_image_with_hash_checked_asset_content_scale_alignment_and_clip_contract",
+      "required_semantics": [
+        "painter",
+        "imageVector",
+        "bitmap",
+        "contentDescription",
+        "alignment",
+        "contentScale",
+        "alpha",
+        "colorFilter",
+        "filterQuality",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default"
+      ],
+      "geometry_contract": [
+        "bounds",
+        "aspect_ratio",
+        "scale_mode",
+        "alignment",
+        "clip"
+      ],
+      "version_resolution_required": false
+    },
+    {
+      "id": "compose.material.icon",
+      "source_components": [
+        "Icon"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Image",
+        "SymbolGlyph"
+      ],
+      "target_strategy": "converted_vector_or_verified_native_symbol_with_explicit_tint_and_rtl_semantics",
+      "required_semantics": [
+        "imageVector",
+        "bitmap",
+        "painter",
+        "contentDescription",
+        "tint",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "icon_bounds",
+        "intrinsic_size",
+        "scale_mode",
+        "layout_direction"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.icon-button",
+      "source_components": [
+        "IconButton",
+        "OutlinedIconButton"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Button"
+      ],
+      "target_strategy": "button_with_icon_content_explicit_touch_target_shape_colors_and_interaction_state",
+      "required_semantics": [
+        "onClick",
+        "enabled",
+        "colors",
+        "interactionSource",
+        "content"
+      ],
+      "states": [
+        "default",
+        "pressed",
+        "focused",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "container_size",
+        "icon_size",
+        "touch_target",
+        "shape"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.text-button",
+      "source_components": [
+        "TextButton"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Button"
+      ],
+      "target_strategy": "flat_button_with_preserved_content_padding_typography_colors_and_interaction_state",
+      "required_semantics": [
+        "onClick",
+        "enabled",
+        "shape",
+        "colors",
+        "elevation",
+        "contentPadding",
+        "interactionSource",
+        "content"
+      ],
+      "states": [
+        "default",
+        "pressed",
+        "focused",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "minimum_height",
+        "content_padding",
+        "touch_target",
+        "shape"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.outlined-button",
+      "source_components": [
+        "OutlinedButton"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Button"
+      ],
+      "target_strategy": "outlined_button_with_explicit_border_shape_content_padding_colors_and_interaction_state",
+      "required_semantics": [
+        "onClick",
+        "enabled",
+        "shape",
+        "colors",
+        "elevation",
+        "border",
+        "contentPadding",
+        "interactionSource",
+        "content"
+      ],
+      "states": [
+        "default",
+        "pressed",
+        "focused",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "minimum_height",
+        "content_padding",
+        "border_width",
+        "touch_target",
+        "shape"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.foundation.lazy-column",
+      "source_components": [
+        "LazyColumn"
+      ],
+      "source_family": "Compose Foundation Lazy Layout",
+      "target_components": [
+        "List"
+      ],
+      "target_strategy": "vertical_list_with_stable_identity_source_order_viewport_anchor_and_scroll_state",
+      "required_semantics": [
+        "items",
+        "keys",
+        "contentPadding",
+        "reverseLayout",
+        "verticalArrangement",
+        "horizontalAlignment",
+        "state",
+        "flingBehavior",
+        "userScrollEnabled",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "initial",
+        "scrolling",
+        "restored",
+        "item_inserted",
+        "end_reached"
+      ],
+      "geometry_contract": [
+        "viewport_bounds",
+        "content_padding",
+        "item_spacing",
+        "item_bounds",
+        "scroll_anchor"
+      ],
+      "version_resolution_required": false
+    },
+    {
+      "id": "compose.foundation.lazy-row",
+      "source_components": [
+        "LazyRow"
+      ],
+      "source_family": "Compose Foundation Lazy Layout",
+      "target_components": [
+        "List"
+      ],
+      "target_strategy": "horizontal_list_with_stable_identity_source_order_viewport_anchor_and_scroll_state",
+      "required_semantics": [
+        "items",
+        "keys",
+        "contentPadding",
+        "reverseLayout",
+        "horizontalArrangement",
+        "verticalAlignment",
+        "state",
+        "flingBehavior",
+        "userScrollEnabled",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "initial",
+        "scrolling",
+        "restored",
+        "item_inserted",
+        "end_reached"
+      ],
+      "geometry_contract": [
+        "viewport_bounds",
+        "content_padding",
+        "item_spacing",
+        "item_bounds",
+        "scroll_anchor"
+      ],
+      "version_resolution_required": false
+    },
+    {
+      "id": "compose.foundation.lazy-vertical-grid",
+      "source_components": [
+        "LazyVerticalGrid"
+      ],
+      "source_family": "Compose Foundation Lazy Grid",
+      "target_components": [
+        "Grid"
+      ],
+      "target_strategy": "vertical_grid_with_preserved_cell_policy_span_identity_spacing_and_scroll_state",
+      "required_semantics": [
+        "columns",
+        "items",
+        "keys",
+        "spans",
+        "contentPadding",
+        "reverseLayout",
+        "verticalArrangement",
+        "horizontalArrangement",
+        "state",
+        "flingBehavior",
+        "userScrollEnabled",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "initial",
+        "scrolling",
+        "restored",
+        "item_inserted",
+        "end_reached"
+      ],
+      "geometry_contract": [
+        "viewport_bounds",
+        "column_count_or_min_size",
+        "content_padding",
+        "row_spacing",
+        "column_spacing",
+        "item_span"
+      ],
+      "version_resolution_required": false
+    },
+    {
+      "id": "compose.foundation.lazy-vertical-staggered-grid",
+      "source_components": [
+        "LazyVerticalStaggeredGrid"
+      ],
+      "source_family": "Compose Foundation Lazy Staggered Grid",
+      "target_components": [
+        "WaterFlow"
+      ],
+      "target_strategy": "water_flow_with_preserved_lane_policy_item_identity_spacing_padding_and_scroll_state",
+      "required_semantics": [
+        "columns",
+        "items",
+        "keys",
+        "contentPadding",
+        "verticalItemSpacing",
+        "horizontalArrangement",
+        "state",
+        "flingBehavior",
+        "userScrollEnabled",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "initial",
+        "scrolling",
+        "restored",
+        "item_inserted",
+        "end_reached"
+      ],
+      "geometry_contract": [
+        "viewport_bounds",
+        "lane_count_or_min_size",
+        "content_padding",
+        "item_spacing",
+        "item_bounds",
+        "scroll_anchor"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.foundation.canvas",
+      "source_components": [
+        "Canvas"
+      ],
+      "source_family": "Compose Foundation Drawing",
+      "target_components": [
+        "Canvas"
+      ],
+      "target_strategy": "native_canvas_with_explicit_coordinate_density_layout_direction_and_draw_order_contract",
+      "required_semantics": [
+        "onDraw",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default",
+        "redrawn"
+      ],
+      "geometry_contract": [
+        "canvas_bounds",
+        "coordinate_space",
+        "density",
+        "layout_direction",
+        "clip",
+        "draw_order"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.foundation.clickable-text",
+      "source_components": [
+        "ClickableText"
+      ],
+      "source_family": "Compose Foundation Text",
+      "target_components": [
+        "Text"
+      ],
+      "target_strategy": "styled_text_with_preserved_annotation_offsets_layout_overflow_and_click_position_contract",
+      "required_semantics": [
+        "text",
+        "style",
+        "softWrap",
+        "overflow",
+        "maxLines",
+        "onTextLayout",
+        "onClick",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default",
+        "pressed",
+        "focused",
+        "clicked_offset"
+      ],
+      "geometry_contract": [
+        "text_bounds",
+        "line_bounds",
+        "annotation_ranges",
+        "click_offset_mapping"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.card",
+      "source_components": [
+        "Card",
+        "ElevatedCard",
+        "OutlinedCard"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Column",
+        "Stack"
+      ],
+      "target_strategy": "layout_container_with_explicit_shape_colors_border_elevation_click_and_clip_contract",
+      "required_semantics": [
+        "onClick",
+        "enabled",
+        "shape",
+        "colors",
+        "border",
+        "elevation",
+        "interactionSource",
+        "content"
+      ],
+      "states": [
+        "default",
+        "pressed",
+        "focused",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "content_bounds",
+        "shape",
+        "border_width",
+        "shadow",
+        "clip"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.surface",
+      "source_components": [
+        "Surface"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Stack"
+      ],
+      "target_strategy": "layout_surface_with_explicit_color_content_color_shape_border_shadow_click_and_clip_contract",
+      "required_semantics": [
+        "onClick",
+        "enabled",
+        "shape",
+        "color",
+        "contentColor",
+        "border",
+        "elevation",
+        "tonalElevation",
+        "shadowElevation",
+        "interactionSource",
+        "content"
+      ],
+      "states": [
+        "default",
+        "pressed",
+        "focused",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "content_bounds",
+        "shape",
+        "border_width",
+        "shadow",
+        "clip"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.tab",
+      "source_components": [
+        "Tab"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "TabContent"
+      ],
+      "target_strategy": "tab_bar_item_with_explicit_selected_enabled_content_colors_and_click_semantics",
+      "required_semantics": [
+        "selected",
+        "onClick",
+        "enabled",
+        "text",
+        "icon",
+        "selectedContentColor",
+        "unselectedContentColor",
+        "interactionSource",
+        "content"
+      ],
+      "states": [
+        "unselected",
+        "selected",
+        "pressed",
+        "focused",
+        "disabled"
+      ],
+      "geometry_contract": [
+        "tab_bounds",
+        "minimum_height",
+        "content_alignment",
+        "touch_target"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.tab-row",
+      "source_components": [
+        "TabRow",
+        "SecondaryTabRow",
+        "PrimaryTabRow"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Tabs",
+        "TabContent"
+      ],
+      "target_strategy": "tabs_container_with_preserved_selected_index_distribution_indicator_divider_and_scroll_behavior",
+      "required_semantics": [
+        "selectedTabIndex",
+        "containerColor",
+        "contentColor",
+        "indicator",
+        "divider",
+        "tabs"
+      ],
+      "states": [
+        "initial",
+        "selection_changed",
+        "restored"
+      ],
+      "geometry_contract": [
+        "row_bounds",
+        "tab_distribution",
+        "indicator_bounds",
+        "divider_bounds",
+        "scroll_offset"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.alert-dialog",
+      "source_components": [
+        "AlertDialog"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "CustomDialogController"
+      ],
+      "target_strategy": "custom_dialog_with_explicit_title_text_icon_actions_dismissal_properties_and_back_contract",
+      "required_semantics": [
+        "onDismissRequest",
+        "confirmButton",
+        "dismissButton",
+        "icon",
+        "title",
+        "text",
+        "shape",
+        "containerColor",
+        "properties"
+      ],
+      "states": [
+        "opened",
+        "confirmed",
+        "cancelled",
+        "dismissed",
+        "back_pressed"
+      ],
+      "geometry_contract": [
+        "dialog_bounds",
+        "content_padding",
+        "title_bounds",
+        "body_bounds",
+        "action_row"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.circular-progress-indicator",
+      "source_components": [
+        "CircularProgressIndicator"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "LoadingProgress",
+        "Progress"
+      ],
+      "target_strategy": "loading_or_determinate_progress_selected_from_source_overload_with_explicit_color_track_and_stroke",
+      "required_semantics": [
+        "progress",
+        "color",
+        "trackColor",
+        "strokeWidth",
+        "strokeCap",
+        "gapSize"
+      ],
+      "states": [
+        "indeterminate",
+        "determinate",
+        "complete",
+        "hidden"
+      ],
+      "geometry_contract": [
+        "indicator_bounds",
+        "diameter",
+        "stroke_width",
+        "track_bounds"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.linear-progress-indicator",
+      "source_components": [
+        "LinearProgressIndicator"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Progress"
+      ],
+      "target_strategy": "linear_progress_with_source_overload_progress_range_direction_color_track_and_stroke_contract",
+      "required_semantics": [
+        "progress",
+        "color",
+        "trackColor",
+        "strokeCap",
+        "gapSize",
+        "drawStopIndicator"
+      ],
+      "states": [
+        "indeterminate",
+        "determinate",
+        "complete",
+        "hidden"
+      ],
+      "geometry_contract": [
+        "indicator_bounds",
+        "track_height",
+        "progress_length",
+        "track_bounds"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.foundation.layout.spacer",
+      "source_components": [
+        "Spacer"
+      ],
+      "source_family": "Compose Foundation Layout",
+      "target_components": [
+        "Blank"
+      ],
+      "target_strategy": "blank_layout_node_with_preserved_size_weight_and_parent_data",
+      "required_semantics": [
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default"
+      ],
+      "geometry_contract": [
+        "width",
+        "height",
+        "weight",
+        "parent_alignment"
+      ],
+      "version_resolution_required": false
+    },
+    {
+      "id": "compose.material.divider",
+      "source_components": [
+        "Divider",
+        "HorizontalDivider"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Divider"
+      ],
+      "target_strategy": "native_divider_with_explicit_orientation_thickness_color_and_insets",
+      "required_semantics": [
+        "color",
+        "thickness",
+        "startIndent",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default"
+      ],
+      "geometry_contract": [
+        "bounds",
+        "thickness",
+        "insets"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.scaffold",
+      "source_components": [
+        "Scaffold"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Column",
+        "Stack",
+        "Navigation"
+      ],
+      "target_strategy": "explicit_page_slot_layout_with_safe_area_bars_body_overlay_and_content_padding",
+      "required_semantics": [
+        "topBar",
+        "bottomBar",
+        "snackbarHost",
+        "floatingActionButton",
+        "floatingActionButtonPosition",
+        "containerColor",
+        "contentColor",
+        "contentWindowInsets",
+        "content"
+      ],
+      "states": [
+        "default",
+        "snackbar_visible",
+        "drawer_open"
+      ],
+      "geometry_contract": [
+        "viewport_bounds",
+        "safe_area_insets",
+        "top_bar_bounds",
+        "bottom_bar_bounds",
+        "body_padding",
+        "floating_action_bounds"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.top-app-bar",
+      "source_components": [
+        "TopAppBar"
+      ],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": [
+        "Navigation",
+        "Row",
+        "Stack"
+      ],
+      "target_strategy": "explicit_title_bar_with_preserved_navigation_title_actions_centering_colors_and_scroll_behavior",
+      "required_semantics": [
+        "title",
+        "navigationIcon",
+        "actions",
+        "colors",
+        "windowInsets",
+        "scrollBehavior"
+      ],
+      "states": [
+        "default",
+        "scrolled",
+        "collapsed"
+      ],
+      "geometry_contract": [
+        "bar_bounds",
+        "content_insets",
+        "navigation_bounds",
+        "title_bounds",
+        "action_bounds"
+      ],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.animation.animated-content",
+      "source_components": ["AnimatedContent"],
+      "source_family": "Compose Animation",
+      "target_components": ["Stack", "TransitionEffect"],
+      "target_strategy": "state_keyed_content_with_explicit_enter_exit_size_and_interruption_contract",
+      "required_semantics": ["targetState", "transitionSpec", "contentKey", "content"],
+      "states": ["initial", "transitioning", "settled", "interrupted"],
+      "geometry_contract": ["content_bounds", "size_transform", "z_order", "clip"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.animation.animated-visibility",
+      "source_components": ["AnimatedVisibility"],
+      "source_family": "Compose Animation",
+      "target_components": ["Stack", "TransitionEffect"],
+      "target_strategy": "visibility_state_with_explicit_enter_exit_and_interruption_contract",
+      "required_semantics": ["visible", "enter", "exit", "content"],
+      "states": ["hidden", "entering", "visible", "exiting", "interrupted"],
+      "geometry_contract": ["visible_bounds", "transition_origin", "clip", "parent_measurement"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.ui.dialog",
+      "source_components": ["Dialog"],
+      "source_family": "Compose UI Window",
+      "target_components": ["CustomDialogController"],
+      "target_strategy": "custom_dialog_with_explicit_dismissal_properties_back_and_content_contract",
+      "required_semantics": ["onDismissRequest", "properties", "content"],
+      "states": ["opened", "dismissed", "back_pressed", "outside_tapped"],
+      "geometry_contract": ["window_bounds", "content_bounds", "safe_area", "scrim"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.foundation.layout.box-with-constraints",
+      "source_components": ["BoxWithConstraints"],
+      "source_family": "Compose Foundation Layout",
+      "target_components": ["Stack", "RelativeContainer"],
+      "target_strategy": "measured_container_with_explicit_min_max_constraint_dependent_content",
+      "required_semantics": ["contentAlignment", "propagateMinConstraints", "constraint_scope", "ordered_modifier_chain"],
+      "states": ["measured"],
+      "geometry_contract": ["min_width", "max_width", "min_height", "max_height", "child_alignment"],
+      "version_resolution_required": false
+    },
+    {
+      "id": "compose.foundation.layout.flow-row",
+      "source_components": ["FlowRow", "ContextualFlowRow"],
+      "source_family": "Compose Foundation Layout",
+      "target_components": ["Flex"],
+      "target_strategy": "wrapping_flex_layout_with_preserved_order_line_limits_spacing_and_contextual_index",
+      "required_semantics": ["horizontalArrangement", "verticalArrangement", "itemVerticalAlignment", "maxItemsInEachRow", "maxLines", "overflow", "itemCount"],
+      "states": ["default", "overflow"],
+      "geometry_contract": ["wrap_policy", "row_spacing", "item_spacing", "line_count", "item_order"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.foundation.basic-text-field",
+      "source_components": ["BasicTextField"],
+      "source_family": "Compose Foundation Text",
+      "target_components": ["TextInput", "TextArea"],
+      "target_strategy": "unstyled_native_input_with_explicit_decoration_cursor_selection_keyboard_and_line_contract",
+      "required_semantics": ["value", "onValueChange", "enabled", "readOnly", "textStyle", "keyboardOptions", "keyboardActions", "singleLine", "minLines", "maxLines", "visualTransformation", "decorationBox"],
+      "states": ["empty", "focused", "filled", "read_only", "disabled"],
+      "geometry_contract": ["text_bounds", "cursor_bounds", "decoration_bounds", "line_count", "scroll_offset"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.radio-button",
+      "source_components": ["RadioButton"],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": ["Radio"],
+      "target_strategy": "native_radio_with_group_selection_color_enabled_and_interaction_contract",
+      "required_semantics": ["selected", "onClick", "enabled", "colors", "interactionSource"],
+      "states": ["unselected", "selected", "pressed", "focused", "disabled"],
+      "geometry_contract": ["indicator_size", "stroke_width", "touch_target", "group_spacing"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.slider",
+      "source_components": ["Slider"],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": ["Slider"],
+      "target_strategy": "native_slider_with_explicit_range_steps_thumb_track_enabled_and_finish_contract",
+      "required_semantics": ["value", "onValueChange", "onValueChangeFinished", "enabled", "valueRange", "steps", "colors"],
+      "states": ["idle", "dragging", "settled", "disabled"],
+      "geometry_contract": ["track_bounds", "thumb_bounds", "step_spacing", "touch_target"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.dropdown-menu-item",
+      "source_components": ["DropdownMenuItem"],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": ["MenuItem"],
+      "target_strategy": "native_menu_item_with_text_icons_enabled_colors_padding_and_click_contract",
+      "required_semantics": ["text", "onClick", "leadingIcon", "trailingIcon", "enabled", "colors", "contentPadding", "interactionSource"],
+      "states": ["default", "pressed", "focused", "disabled"],
+      "geometry_contract": ["item_bounds", "content_padding", "icon_bounds", "text_bounds", "minimum_height"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.floating-action-button",
+      "source_components": ["FloatingActionButton"],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": ["Button"],
+      "target_strategy": "floating_button_with_explicit_shape_size_elevation_colors_icon_and_safe_area_position",
+      "required_semantics": ["onClick", "shape", "containerColor", "contentColor", "elevation", "interactionSource", "content"],
+      "states": ["default", "pressed", "focused", "disabled"],
+      "geometry_contract": ["container_bounds", "icon_bounds", "touch_target", "shadow", "safe_area_offset"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.navigation-bar",
+      "source_components": ["NavigationBar"],
+      "source_family": "Compose Material 3",
+      "target_components": ["Tabs", "Row"],
+      "target_strategy": "bottom_navigation_container_with_preserved_items_safe_area_colors_and_tonal_elevation",
+      "required_semantics": ["containerColor", "contentColor", "tonalElevation", "windowInsets", "content"],
+      "states": ["default", "item_selected"],
+      "geometry_contract": ["bar_bounds", "safe_area_insets", "item_distribution", "minimum_height"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.navigation-bar-item",
+      "source_components": ["NavigationBarItem"],
+      "source_family": "Compose Material 3",
+      "target_components": ["TabContent", "Button"],
+      "target_strategy": "navigation_item_with_explicit_selection_icon_label_indicator_colors_and_touch_contract",
+      "required_semantics": ["selected", "onClick", "icon", "label", "alwaysShowLabel", "enabled", "colors", "interactionSource"],
+      "states": ["unselected", "selected", "pressed", "focused", "disabled"],
+      "geometry_contract": ["item_bounds", "indicator_bounds", "icon_bounds", "label_bounds", "touch_target"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.foundation.horizontal-pager",
+      "source_components": ["HorizontalPager"],
+      "source_family": "Compose Foundation Pager",
+      "target_components": ["Swiper"],
+      "target_strategy": "horizontal_swiper_with_preserved_page_state_size_spacing_padding_keys_and_scroll_contract",
+      "required_semantics": ["state", "contentPadding", "pageSize", "pageSpacing", "verticalAlignment", "flingBehavior", "userScrollEnabled", "reverseLayout", "key", "content"],
+      "states": ["initial", "dragging", "settling", "page_changed", "restored"],
+      "geometry_contract": ["viewport_bounds", "page_bounds", "page_spacing", "content_padding", "scroll_offset"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.snackbar-host",
+      "source_components": ["SnackbarHost"],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": ["PromptAction", "Stack"],
+      "target_strategy": "queued_transient_message_host_with_explicit_duration_action_dismissal_and_safe_area_position",
+      "required_semantics": ["hostState", "snackbar"],
+      "states": ["empty", "shown", "action_invoked", "dismissed", "queued"],
+      "geometry_contract": ["message_bounds", "action_bounds", "safe_area_offset", "queue_transition"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material3.time-input",
+      "source_components": ["TimeInput"],
+      "source_family": "Compose Material 3",
+      "target_components": ["TimePicker", "TextInput"],
+      "target_strategy": "time_entry_with_explicit_hour_minute_period_validation_focus_and_locale_contract",
+      "required_semantics": ["state", "colors"],
+      "states": ["empty", "editing_hour", "editing_minute", "valid", "invalid", "period_changed"],
+      "geometry_contract": ["hour_field_bounds", "minute_field_bounds", "separator_bounds", "period_bounds", "focus_order"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.navigation-drawer",
+      "source_components": ["NavigationDrawer"],
+      "source_family": "Compose Material 2 or Material 3",
+      "target_components": ["SideBarContainer"],
+      "target_strategy": "side_bar_container_with_explicit_drawer_state_gesture_scrim_width_and_back_contract",
+      "required_semantics": ["drawerContent", "drawerState", "gesturesEnabled", "scrimColor", "content"],
+      "states": ["closed", "opening", "open", "closing", "back_pressed"],
+      "geometry_contract": ["drawer_bounds", "content_bounds", "scrim_bounds", "gesture_edge", "safe_area"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.navigation-rail",
+      "source_components": ["NavigationRail"],
+      "source_family": "Compose Material 3",
+      "target_components": ["Tabs", "Column"],
+      "target_strategy": "vertical_navigation_container_with_preserved_header_items_safe_area_colors_and_item_distribution",
+      "required_semantics": ["containerColor", "contentColor", "header", "windowInsets", "content", "ordered_modifier_chain"],
+      "states": ["default", "item_selected"],
+      "geometry_contract": ["rail_bounds", "safe_area_insets", "header_bounds", "item_distribution", "minimum_width"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.navigation-rail-item",
+      "source_components": ["NavigationRailItem"],
+      "source_family": "Compose Material 3",
+      "target_components": ["TabContent", "Button"],
+      "target_strategy": "vertical_navigation_item_with_explicit_selection_icon_label_indicator_colors_and_touch_contract",
+      "required_semantics": ["selected", "onClick", "icon", "label", "alwaysShowLabel", "enabled", "colors", "interactionSource"],
+      "states": ["unselected", "selected", "pressed", "focused", "disabled"],
+      "geometry_contract": ["item_bounds", "indicator_bounds", "icon_bounds", "label_bounds", "touch_target"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.filter-chip",
+      "source_components": ["FilterChip"],
+      "source_family": "Compose Material 3",
+      "target_components": ["Button", "Row"],
+      "target_strategy": "toggle_chip_with_explicit_selection_label_icons_shape_border_elevation_colors_and_click_contract",
+      "required_semantics": ["selected", "onClick", "label", "enabled", "leadingIcon", "trailingIcon", "shape", "colors", "elevation", "border", "interactionSource"],
+      "states": ["unselected", "selected", "pressed", "focused", "disabled"],
+      "geometry_contract": ["container_bounds", "content_padding", "icon_bounds", "label_bounds", "border_width", "touch_target"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material.exposed-dropdown-menu-box",
+      "source_components": ["ExposedDropdownMenuBox"],
+      "source_family": "Compose Material 3",
+      "target_components": ["Stack", "Menu"],
+      "target_strategy": "anchored_menu_container_with_explicit_expansion_callback_focus_width_position_and_dismissal_contract",
+      "required_semantics": ["expanded", "onExpandedChange", "content", "ordered_modifier_chain"],
+      "states": ["collapsed", "opening", "expanded", "dismissed", "focused"],
+      "geometry_contract": ["anchor_bounds", "menu_bounds", "anchor_menu_width", "window_position", "safe_area"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.material3.time-picker",
+      "source_components": ["TimePicker"],
+      "source_family": "Compose Material 3",
+      "target_components": ["TimePicker"],
+      "target_strategy": "native_time_picker_with_explicit_state_layout_mode_color_locale_period_and_selection_contract",
+      "required_semantics": ["state", "colors", "layoutType", "ordered_modifier_chain"],
+      "states": ["initial", "hour_selected", "minute_selected", "period_changed", "restored"],
+      "geometry_contract": ["picker_bounds", "dial_or_input_bounds", "selector_bounds", "period_bounds", "touch_target"],
+      "version_resolution_required": true
+    },
+    {
+      "id": "compose.constraint-layout",
+      "source_components": [
+        "ConstraintLayout"
+      ],
+      "source_import_prefixes": [
+        "androidx.constraintlayout.compose."
+      ],
+      "source_family": "AndroidX Compose ConstraintLayout",
+      "target_components": [
+        "RelativeContainer"
+      ],
+      "target_strategy": "relative_container_with_explicit_reference_ids_edges_bias_chains_and_barriers",
+      "required_semantics": [
+        "constraint_references",
+        "constrainAs",
+        "linkTo",
+        "bias",
+        "chains",
+        "barriers",
+        "guidelines",
+        "ordered_modifier_chain"
+      ],
+      "states": [
+        "default"
+      ],
+      "geometry_contract": [
+        "container_bounds",
+        "reference_ids",
+        "edge_constraints",
+        "bias",
+        "dimension_behavior"
+      ],
+      "version_resolution_required": true
+    }
+  ]
+}

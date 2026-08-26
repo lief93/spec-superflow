@@ -1,0 +1,45 @@
+# .spec-superflow.yaml — lightweight state machine
+# Workflow state. Hashes are rebuildable; execution_base_commit is immutable execution provenance.
+
+# === Core state ===
+state: executing
+workflow: full
+
+# === Hashes (fast staleness detection) ===
+artifacts_hash: sha256:840baadf0360684b4eab050730bd234ea47d334e6463f3b28bed268a2443794a
+contract_hash: sha256:8749b0e845e9823d17cebc3e3da375f38d426e7851edd8211faaee578bb1acbd
+
+# === Execution progress ===
+execution_mode: null
+execution_base_commit: 90c343de0d7834a10e81a947ec1ca196fa7ef33e
+batches_completed: 2
+test_result: null
+
+# === Metadata ===
+capability: android-to-harmony
+change_name: android-to-harmony-execution-plan-dag
+last_transition: 2026-08-26T05:09:17.127Z
+last_transition_from: approved-for-build
+last_transition_to: executing
+
+# === Decision points ===
+dp_0_result: null
+dp_0_decisions: Build a deterministic executable Android-to-Harmony vertical-slice DAG rooted in real routes/pages, with resolved cross-layer dependencies, local blockers, workflow-owned gates/tests/evidence; no AI image recognition; remain scoped to DAG infrastructure; communicate plan and current step before Dev execution.
+dp_0_confirmed: true
+dp_0_timestamp: 2026-08-26T00:08:17Z
+dp_1_result: confirmed: User delegates project-management progression without intermediate confirmations; approved Proposal/Specs support the reusable high-efficiency, high-fidelity complete Android-to-Harmony migration workflow goal.
+dp_1_candidate_identity: sha256:60158002d2d5022e098b4a0e536354d7d35ef7675f25af022544275bfe15d527
+dp_1_timestamp: 2026-08-26T00:39:43Z
+dp_2_result: confirmed: Primary accepts the independently Approved Design/Tasks direction on the user's delegated intermediate-management authority; implementation must follow candidate 6f41537e... with no semantic waiver.
+dp_2_candidate_identity: sha256:6f41537e9499a32b0687c69956aa39a6af7f9b9ec55fb761595ff9659a28d49f
+dp_2_timestamp: 2026-08-26T04:00:32Z
+dp_3_result: approved under the user's standing delegation to Primary: compact SDD contract 8749b0e... locks three dependent batches, exact tasks.md verification, mandatory three-project evidence freeze, no frontend runtime scope, and explicit stop conditions.
+dp_3_timestamp: 2026-08-26T04:05:44Z
+dp_4_result: SDD: 3 dependent batches and 16 ACs span Python and Node seams, identity/tamper contracts, and mandatory fixed-project evidence; execute sequentially through the persistent Dev with Primary managing gates and no routine per-Batch semantic review.
+dp_4_timestamp: 2026-08-26T04:05:45Z
+dp_5_result: null
+dp_5_timestamp: null
+dp_6_result: null
+dp_6_timestamp: null
+dp_7_result: null
+dp_7_timestamp: null

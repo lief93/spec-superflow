@@ -1,0 +1,4 @@
+interface:
+  display_name: "Android Compose to HarmonyOS"
+  short_description: "Migrate Compose apps into verified HarmonyOS ArkTS projects"
+  default_prompt: "Use $migrate-android-compose-to-harmony to migrate this Android Compose repository into a verified HarmonyOS ArkTS project without exposing image contents."

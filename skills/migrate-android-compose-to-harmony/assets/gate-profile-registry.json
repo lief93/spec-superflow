@@ -1,0 +1,125 @@
+{
+  "schema": "android-to-harmony.gate-profile-registry.v1",
+  "profiles": {
+    "stateless-control": {
+      "required_gates": [
+        "mapping_semantics",
+        "synthetic_tests",
+        "sdk_compile"
+      ],
+      "required_tests": [
+        "mapping_regression",
+        "synthetic_regression"
+      ]
+    },
+    "stateful-control-family": {
+      "required_gates": [
+        "mapping_semantics",
+        "synthetic_tests",
+        "sdk_compile",
+        "family_runtime_ui_test"
+      ],
+      "required_tests": [
+        "mapping_regression",
+        "synthetic_regression",
+        "family_runtime_ui_test"
+      ]
+    },
+    "page": {
+      "required_gates": [
+        "exact_closure",
+        "state_matrix",
+        "navigation_callbacks",
+        "sdk_compile",
+        "page_ui_test",
+        "visual_review"
+      ],
+      "required_tests": [
+        "exact_closure_generation",
+        "state_matrix",
+        "page_ui_test"
+      ]
+    },
+    "business": {
+      "required_gates": [
+        "behavior_contract",
+        "state_transition_tests"
+      ],
+      "required_tests": [
+        "behavior_contract_tests",
+        "unit_state_transition_tests"
+      ]
+    },
+    "network": {
+      "required_gates": [
+        "endpoint_contract",
+        "request_response_contract",
+        "auth_error_retry_cache",
+        "production_adapter",
+        "contract_tests"
+      ],
+      "required_tests": [
+        "endpoint_contract_tests",
+        "production_adapter_tests"
+      ]
+    },
+    "storage": {
+      "required_gates": [
+        "schema_contract",
+        "default_values",
+        "migration_semantics",
+        "repository_tests"
+      ],
+      "required_tests": [
+        "schema_migration_tests",
+        "repository_behavior_tests"
+      ]
+    },
+    "platform": {
+      "required_gates": [
+        "capability_mapping",
+        "permission_lifecycle",
+        "adapter_device_evidence"
+      ],
+      "required_tests": [
+        "adapter_integration_tests"
+      ]
+    },
+    "ui-system": {
+      "required_gates": [
+        "resource_mapping",
+        "sdk_compile",
+        "visual_review"
+      ],
+      "required_tests": [
+        "resource_mapping_regression"
+      ]
+    },
+    "project": {
+      "required_gates": [
+        "child_dispositions",
+        "build",
+        "unit_tests",
+        "ui_tests",
+        "device_test",
+        "visual_review",
+        "manual_review"
+      ],
+      "required_tests": [
+        "project_build_regression"
+      ]
+    },
+    "test-support": {
+      "required_gates": [],
+      "required_tests": []
+    },
+    "project-support": {
+      "required_gates": [],
+      "required_tests": []
+    },
+    "unclassified-production": {
+      "required_gates": [],
+      "required_tests": []
+    }
+  }
+}
