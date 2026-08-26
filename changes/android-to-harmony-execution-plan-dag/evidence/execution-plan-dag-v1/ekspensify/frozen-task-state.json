@@ -1,0 +1,259 @@
+{
+  "schema": "android-to-harmony.execution-task-state.v1",
+  "plan_identity": "261315eb1d0fb7dcccdca0167fae824363430342eb2f1da3843ca3073398d2a6",
+  "tasks": {
+    "foundation:accountrequestmodel": {
+      "status": "ready"
+    },
+    "foundation:accountresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:acsummaryresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdataapiresponsekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdataerrorresponsekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatapagingsourcebudgetpagingsourcekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatapagingsourcebudgetreportpagingsourcekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatapagingsourcebudgettransactionpagingsourcekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatapagingsourcetransactionpagingsourcekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatarepositoryaccountrepositorykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatarepositoryauthrepositorykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatarepositorybudgetrepositorykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatarepositorycategoryrepositorykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatarepositoryexportrepositorykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappdatarepositoryprofilerepositorykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuiacountsdatabankmodelkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuidashboardbottomnavbottomnavitemkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuidashboardbudgethelperbudgetlisthelperkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuidashboardprofiledataprofileoptionskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuidashboardtransactionsdatafilterenumskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuidashboardtransactionsdatafilteroptionproviderkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuidashboardtransactionsdatafilteroptionskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuithemecolorkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuithemeextendedcolorskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyappuithemetypekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyapputilsconstantkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyapputilscustomcornershapekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyapputilsdateutilskt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyapputilsfileutilsfilerepositoryimplkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyapputilsfileutilsfilerepositorykt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyapputilsnotificationlistenernotificationlistenerservicekt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainjavacomekspensifyapputilstoastutilscustomtoastmodelkt": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainresrawekspensifylogoanimationjson": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainresrawsendemailanimationjson": {
+      "status": "ready"
+    },
+    "foundation:appsrcmainresxmlfilepathxml": {
+      "status": "ready"
+    },
+    "foundation:attachmentresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:authrequestmodel": {
+      "status": "ready"
+    },
+    "foundation:authresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:baseviewmodel": {
+      "status": "ready"
+    },
+    "foundation:budgetquerymodel": {
+      "status": "ready"
+    },
+    "foundation:budgetreportresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:budgetrequestmodel": {
+      "status": "ready"
+    },
+    "foundation:budgetresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:camera-gallery": {
+      "status": "ready"
+    },
+    "foundation:categoryinsightsresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:categoryresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:customiconmodel": {
+      "status": "ready"
+    },
+    "foundation:ekspensifydatabase": {
+      "status": "ready"
+    },
+    "foundation:exportrequestmodel": {
+      "status": "ready"
+    },
+    "foundation:fileviewmodel": {
+      "status": "ready"
+    },
+    "foundation:http-client": {
+      "status": "ready"
+    },
+    "foundation:insightsquerymodel": {
+      "status": "ready"
+    },
+    "foundation:intropages": {
+      "status": "ready"
+    },
+    "foundation:local-files": {
+      "status": "ready"
+    },
+    "foundation:navigation-compose": {
+      "status": "ready"
+    },
+    "foundation:navigationviewmodel": {
+      "status": "ready"
+    },
+    "foundation:paginationmodel": {
+      "status": "ready"
+    },
+    "foundation:pendingtransactiondao": {
+      "status": "ready"
+    },
+    "foundation:pendingtransactionmodel": {
+      "status": "ready"
+    },
+    "foundation:pendingtransactionrepo": {
+      "status": "ready"
+    },
+    "foundation:preferences": {
+      "status": "ready"
+    },
+    "foundation:resources": {
+      "status": "ready"
+    },
+    "foundation:room-database": {
+      "status": "ready"
+    },
+    "foundation:scheduled-work": {
+      "status": "ready"
+    },
+    "foundation:textfieldstatemodel": {
+      "status": "ready"
+    },
+    "foundation:transactionquerymodel": {
+      "status": "ready"
+    },
+    "foundation:transactionrequestmodel": {
+      "status": "ready"
+    },
+    "foundation:transactionresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:userresponsemodel": {
+      "status": "ready"
+    },
+    "foundation:viewmodel-stateflow": {
+      "status": "ready"
+    },
+    "slice:aboutscreen": {
+      "status": "pending"
+    },
+    "slice:aboutscreenroute": {
+      "status": "pending"
+    },
+    "slice:autotrackingscreen": {
+      "status": "pending"
+    },
+    "slice:budgetdetailsscreen": {
+      "status": "pending"
+    },
+    "slice:budgetscreen": {
+      "status": "pending"
+    },
+    "slice:budgettransactionscreen": {
+      "status": "pending"
+    },
+    "slice:categoriesscreen": {
+      "status": "pending"
+    },
+    "slice:createcategoryscreen": {
+      "status": "pending"
+    },
+    "slice:filterscreen": {
+      "status": "pending"
+    },
+    "slice:homescreen": {
+      "status": "pending"
+    },
+    "slice:introscreen": {
+      "status": "pending"
+    },
+    "slice:otpverificationscreen": {
+      "status": "pending"
+    },
+    "slice:registerscreen": {
+      "status": "pending"
+    },
+    "slice:splashscreen": {
+      "status": "pending"
+    }
+  },
+  "task_state_identity": "1cbe907b7ad4e80b2117fa32148546c036aac7cadb526f24accad0328674adec"
+}

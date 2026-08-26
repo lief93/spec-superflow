@@ -1,0 +1,1 @@
+git -C /private/tmp/ekspensify-ticket03.QHZKO3/source config --get remote.origin.url

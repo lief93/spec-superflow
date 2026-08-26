@@ -1,0 +1,3 @@
+PASS source remote and revision verified
+PASS migration_agent start/status plan identity stable
+PASS immutable plan and frozen task state captured

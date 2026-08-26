@@ -2,10 +2,11 @@
   "schema": "android-to-harmony.execution-plan-evidence-tree.v1",
   "evidence_root": ".",
   "projects": [
-    "banking"
+    "banking",
+    "ekspensify"
   ],
-  "file_count": 63,
-  "tree_sha256": "62392c228c2ced11692aa90f5632aa90d40aa8c5558f191dc284224a8beaaa8e",
+  "file_count": 126,
+  "tree_sha256": "973e62152fcc3b5e99f9b3f0ed1ebf8dae87a1aafbcb0c4b5a956623a7a00304",
   "files": [
     {
       "path": "execution-plan-dag-v1/banking/capability-graph.json",
@@ -300,7 +301,7 @@
     {
       "path": "execution-plan-dag-v1/banking/skill-identity-reference.json",
       "bytes": 400,
-      "sha256": "abb6c48c462607f388158119af8321c4c07cd4bf94706b38ef73f7bf6b4356c0"
+      "sha256": "c0e71fce37cb32225ecdce1ecc5afeaab9c1703efefd62bcba5f99d0abd34fb8"
     },
     {
       "path": "execution-plan-dag-v1/banking/source-identity.json",
@@ -313,14 +314,329 @@
       "sha256": "78f62ccd3461b81f8260893d1ca0bc2002f7f03b3e9f354ca4fb954d7a8e859b"
     },
     {
+      "path": "execution-plan-dag-v1/ekspensify/capability-graph.json",
+      "bytes": 7934386,
+      "sha256": "8ebcb1a1b795541ca8424a63222ef9a6bd3b05bed14f8091909ce969afb5b59b"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/contract/migration-contract.json",
+      "bytes": 3380529,
+      "sha256": "6c4b33120e423e233d84200d1c73ade80a5ba87480c8b83f019ba8bd88234cad"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/contract/migration-contract.json.owner.json",
+      "bytes": 241,
+      "sha256": "56a7d4618c8a03710deec1e9b210a3e042be3e9d917b94090c2234d421bdaf34"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/execution-plan.json",
+      "bytes": 4472669,
+      "sha256": "3d286e5b03258ea3d1f81a46a733435d31e2fb1d78fc2a55ec48c1d855384e31"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/00-checkout.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/00-fetch.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/00-reuse-head.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/00-reuse-remote.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/00-revision-present.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/00-source-final-head.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/00-source-final-remote.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/00-source-head-before.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/00-source-remote-before.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/01-start.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/exit/02-status.exit.json",
+      "bytes": 71,
+      "sha256": "81b413e5fa518ee38e3ba6571f1210f5d7f083fbe35fa85c8583d658031adb4f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/fact-packs/business-fact-pack.json",
+      "bytes": 3177,
+      "sha256": "1684423e6cac7053af9d67256f1aa4bfe5a7ea7ec43125c895b8aa67f1f3ca3c"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/fact-packs/control-fact-pack.json",
+      "bytes": 42166,
+      "sha256": "9c92a8e31f82c9042887eacbf25216078cab58180cd3a674cf8360f4f4a89cc3"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/fact-packs/network-fact-pack.json",
+      "bytes": 4089,
+      "sha256": "9116cd7f36b7dd6faa7c034c5701e27ec142c69cd6e842e699372f853e885c17"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/fact-packs/page-fact-pack.json",
+      "bytes": 15597,
+      "sha256": "ccf0a1009bad60155eb9f43e4847eceba34f6df957de8f34a4d75cf5132b6967"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/fact-packs/platform-fact-pack.json",
+      "bytes": 6704,
+      "sha256": "af1427ad2d2b21cf3074098e7fe4ffb15b5562f48ba928ee4be6cf9636945eda"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/fact-packs/project-fact-pack.json",
+      "bytes": 18816,
+      "sha256": "f101a5456bef3ef222f158a1bf501d1342cbad424013ca4bfb005fd411f29a8c"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/fact-packs/project-support-fact-pack.json",
+      "bytes": 624,
+      "sha256": "b325f38d82939d31ee91bffb362dcded4cc06a8e912281624d54e17a61f908f9"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/fact-packs/storage-fact-pack.json",
+      "bytes": 1269,
+      "sha256": "8bdf30142f3722627ddea507fd26e6727cb71144957b7d3a42b8991b4858e014"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/fact-packs/ui-system-fact-pack.json",
+      "bytes": 1912,
+      "sha256": "549dd8125342b04b812567affe805f196d7eafbce12d0c3d20b45110aa635188"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/frozen-task-state.json",
+      "bytes": 7372,
+      "sha256": "23dbac193e835bf55c441759e0490dc9e27f5b8a12ba9b7eb2910bc1a1edc872"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/gate-report.json",
+      "bytes": 473185,
+      "sha256": "285eee67c7ca9f9a64eeede8e2e4d000bbe60e30f7aab765beed68e9c5c36c59"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-checkout.command.log",
+      "bytes": 113,
+      "sha256": "c4b8c0823716f249235d475f019435e2258bcf1c305e167a3b527bc3d9039568"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-checkout.stderr.txt",
+      "bytes": 316,
+      "sha256": "81ee5ac7cb899ce3f034edb0bd7831bc4f6cf87c0d79dac550771a1a03561551"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-checkout.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-fetch.command.log",
+      "bytes": 108,
+      "sha256": "f8c96c2473adefb419622ec996ed5b50207d9e50310c5813aaf454a3ea698ec0"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-fetch.stderr.txt",
+      "bytes": 134,
+      "sha256": "52ec6048e562e193d74910948a24adb19d834fcae979f4dd327676d0158ee2cb"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-fetch.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-reuse-head.command.log",
+      "bytes": 136,
+      "sha256": "7de56cf52fbb952ca38dd2b029d2ebff4cc6b99122f72c1644f84704d96c0a0d"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-reuse-head.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-reuse-head.stdout.txt",
+      "bytes": 41,
+      "sha256": "53de2aa75beef68ab640bccb3bad2741a53fead489b568669db7ab4a65038ff1"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-reuse-remote.command.log",
+      "bytes": 152,
+      "sha256": "041aa60a63a147b1016ec605186eedb480e734c7aad0945ab94d6f9e1edaae1c"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-reuse-remote.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-reuse-remote.stdout.txt",
+      "bytes": 57,
+      "sha256": "3522458361e564eafb7bbfb84ad6d1db9c08f5fbeb068e0767fcd6dd75ca926f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-revision-present.command.log",
+      "bytes": 118,
+      "sha256": "d87bea094730279b5aad041a2724b827c4325f52cc777add36f4b5ad5b6e079f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-revision-present.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-revision-present.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-final-head.command.log",
+      "bytes": 69,
+      "sha256": "df9df7793f5733dd736582f73943fa0f1a2cf2d1f25862d12fc4a886d3bf399f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-final-head.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-final-head.stdout.txt",
+      "bytes": 41,
+      "sha256": "53de2aa75beef68ab640bccb3bad2741a53fead489b568669db7ab4a65038ff1"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-final-remote.command.log",
+      "bytes": 85,
+      "sha256": "ecd0bc50aad43ae947e04ebf72086627dd23736dd0fd27e45e9b3a4c6e64e388"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-final-remote.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-final-remote.stdout.txt",
+      "bytes": 57,
+      "sha256": "3522458361e564eafb7bbfb84ad6d1db9c08f5fbeb068e0767fcd6dd75ca926f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-head-before.command.log",
+      "bytes": 69,
+      "sha256": "df9df7793f5733dd736582f73943fa0f1a2cf2d1f25862d12fc4a886d3bf399f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-head-before.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-head-before.stdout.txt",
+      "bytes": 41,
+      "sha256": "d70afa05e626df9c820d9ae88baa59223fbf5a719d55d8d9052ca4af86399565"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-remote-before.command.log",
+      "bytes": 85,
+      "sha256": "ecd0bc50aad43ae947e04ebf72086627dd23736dd0fd27e45e9b3a4c6e64e388"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-remote-before.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/00-source-remote-before.stdout.txt",
+      "bytes": 57,
+      "sha256": "3522458361e564eafb7bbfb84ad6d1db9c08f5fbeb068e0767fcd6dd75ca926f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/01-start.command.log",
+      "bytes": 694,
+      "sha256": "efa6cc71b675b79f148eebfdb0abf167e3e7ccc7eb657ef54964af4ed42deeaf"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/01-start.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/01-start.stdout.txt",
+      "bytes": 7476384,
+      "sha256": "191da1f08a62e342044d2f2a037f64f60985d3bfa1a721cb3d33b5bbf7d5ed4d"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/02-status.command.log",
+      "bytes": 365,
+      "sha256": "23b9630c265caa99e3f9f8ad2f31b3d986ad82434d5c0b24cc18359f1d0a0bae"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/02-status.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/logs/02-status.stdout.txt",
+      "bytes": 7494451,
+      "sha256": "a1179a9e7e6820d778a9de340f1033f0898076ae07c0f0a0adc1bfceec1c55c7"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/review-queue.json",
+      "bytes": 370,
+      "sha256": "4ec8b1827fc08b108b3863dc6c0ebf7444a9b33cad6cee5470a5e04b91e8678f"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/skill-identity-reference.json",
+      "bytes": 403,
+      "sha256": "95365621b187a27bd88582d8ace8e6acbc6a52b0ee9d4c85a3b81f2d95af0204"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/source-identity.json",
+      "bytes": 224,
+      "sha256": "b6090811546a6e81a89ce175e448bff900ea7b0fd779fb5bcbc5f8792ac570d2"
+    },
+    {
+      "path": "execution-plan-dag-v1/ekspensify/tests/start-status.test.log",
+      "bytes": 147,
+      "sha256": "78f62ccd3461b81f8260893d1ca0bc2002f7f03b3e9f354ca4fb954d7a8e859b"
+    },
+    {
       "path": "skill-identities/bundled-skill-tree-manifest.json",
-      "bytes": 14335,
-      "sha256": "6f172decd1b71108c3bb54a4cac105d0f6147364de38dd996467b2d32ad737d2"
+      "bytes": 14336,
+      "sha256": "b62dab91ec7a49f5c370d543ae0477c37635f9e4ff095b62966356551ee1fd61"
     },
     {
       "path": "skill-identities/repo-skill-binding.json",
       "bytes": 313,
-      "sha256": "73753cdd49f055b54e1b001983d29193c2b5bc304b07d7a316d3f4044a6f7efd"
+      "sha256": "f9160c5455ae7623dbeeaa279069373062d8922b3d863c1bfeb82c03aecdb042"
     }
   ]
 }

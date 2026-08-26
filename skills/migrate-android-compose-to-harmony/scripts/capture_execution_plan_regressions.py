@@ -16,13 +16,17 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from hash_evidence_tree import PROJECT_REQUIRED_FILES, validate_evidence_layout
+from hash_evidence_tree import PROJECT_REQUIRED_FILES, validate_project_evidence
 
 
 SCRIPTS = Path(__file__).resolve().parent
 MIGRATION_AGENT = SCRIPTS / "migration_agent.py"
 PROJECT_URLS = {
     "banking": "https://github.com/alexandr7035/Banking-App-Mock-Compose.git",
+    "ekspensify": "https://github.com/dilipsuthar264/ekspensify-android.git",
+}
+PROJECT_REVISIONS = {
+    "ekspensify": "0292c62e267a8b9cbc0d9dc580d80c549701661c",
 }
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 PROJECT_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,63}$")
@@ -132,6 +136,9 @@ def validate_arguments(args: argparse.Namespace) -> argparse.Namespace:
         raise CaptureError(f"source URL is not fixed for project {args.project}")
     if not SHA_PATTERN.fullmatch(args.expected_revision):
         raise CaptureError("expected revision must be a full lowercase Git SHA")
+    fixed_revision = PROJECT_REVISIONS.get(args.project)
+    if fixed_revision is not None and args.expected_revision != fixed_revision:
+        raise CaptureError(f"expected revision is not fixed for project {args.project}")
     if not PROJECT_NAME_PATTERN.fullmatch(args.project_name):
         raise CaptureError("project name is invalid")
     if not BUNDLE_NAME_PATTERN.fullmatch(args.bundle_name):
@@ -161,7 +168,14 @@ def verify_repository(
 ) -> None:
     if not repository.is_dir() or repository.is_symlink():
         raise CaptureError(f"Git source is missing or unsafe: {repository}")
-    remote = git_value(recorder, f"{prefix}-remote", repository, "remote", "get-url", "origin")
+    remote = git_value(
+        recorder,
+        f"{prefix}-remote",
+        repository,
+        "config",
+        "--get",
+        "remote.origin.url",
+    )
     if remote != source_url:
         raise CaptureError(f"source remote mismatch: expected {source_url}, got {remote}")
     revision = git_value(recorder, f"{prefix}-head", repository, "rev-parse", "HEAD")
@@ -173,16 +187,18 @@ def verify_repository(
 
 def acquire_source(args: argparse.Namespace, recorder: CommandRecorder) -> bool:
     source_created = False
+    source_existed = args.source_dir.exists()
+    if args.reuse_candidate is not None:
+        verify_repository(
+            recorder,
+            "00-reuse",
+            args.reuse_candidate,
+            args.source_url,
+            args.expected_revision,
+        )
     if not args.source_dir.exists():
         args.source_dir.parent.mkdir(parents=True, exist_ok=True)
         if args.reuse_candidate is not None:
-            verify_repository(
-                recorder,
-                "00-reuse",
-                args.reuse_candidate,
-                args.source_url,
-                args.expected_revision,
-            )
             recorder.run(
                 "00-clone",
                 ["git", "clone", "--no-local", str(args.reuse_candidate), str(args.source_dir)],
@@ -202,21 +218,33 @@ def acquire_source(args: argparse.Namespace, recorder: CommandRecorder) -> bool:
             recorder,
             "00-source-remote-before",
             args.source_dir,
-            "remote",
-            "get-url",
-            "origin",
+            "config",
+            "--get",
+            "remote.origin.url",
         )
         if remote != args.source_url:
             raise CaptureError(
                 f"source remote mismatch: expected {args.source_url}, got {remote}"
             )
 
+    source_head_before = None
+    if source_existed:
+        source_head_before = git_value(
+            recorder,
+            "00-source-head-before",
+            args.source_dir,
+            "rev-parse",
+            "HEAD",
+        )
+
     commit_present = recorder.run(
         "00-revision-present",
         ["git", "-C", str(args.source_dir), "cat-file", "-e", f"{args.expected_revision}^{{commit}}"],
         allow_failure=True,
     )
-    if commit_present.returncode != 0:
+    if commit_present.returncode != 0 or (
+        source_head_before is not None and source_head_before != args.expected_revision
+    ):
         recorder.run(
             "00-fetch",
             ["git", "-C", str(args.source_dir), "fetch", "origin", args.expected_revision],
@@ -365,8 +393,8 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
     for relative in PROJECT_REQUIRED_FILES:
         path = args.evidence_subtree / relative
         if path.is_symlink() or not path.is_file():
-            raise CaptureError(f"frozen Banking evidence is incomplete: {relative}")
-    validate_evidence_layout(args.change_dir / "evidence")
+            raise CaptureError(f"frozen {args.project} evidence is incomplete: {relative}")
+    validate_project_evidence(args.change_dir / "evidence", args.project)
     return {
         "ok": True,
         "project": args.project,

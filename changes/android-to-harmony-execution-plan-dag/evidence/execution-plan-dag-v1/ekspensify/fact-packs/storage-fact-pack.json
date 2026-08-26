@@ -1,0 +1,26 @@
+{
+  "schema": "android-to-harmony.fact-pack.v1",
+  "layer": "storage",
+  "source_revision": "0292c62e267a8b9cbc0d9dc580d80c549701661c",
+  "contract_sha256": "6c4b33120e423e233d84200d1c73ade80a5ba87480c8b83f019ba8bd88234cad",
+  "skill_tree_digest": "67ca0525163cec7b73299868009d305cc8d02df53fa3b93497e6bb5d12deefa9",
+  "candidate_source_files": [
+    "app/src/main/java/com/ekspensify/app/data/repository/ProfileRepository.kt",
+    "app/src/main/java/com/ekspensify/app/room/dao/PendingTransactionDao.kt",
+    "app/src/main/java/com/ekspensify/app/room/database/EkspensifyDatabase.kt",
+    "app/src/main/java/com/ekspensify/app/utils/fileUtils/FileRepository.kt",
+    "app/src/main/java/com/ekspensify/app/utils/fileUtils/FileRepositoryImpl.kt",
+    "app/src/main/java/com/ekspensify/app/utils/fileUtils/FileViewModel.kt"
+  ],
+  "node_ids": [
+    "storage:appsrcmainjavacomekspensifyappdatarepositoryprofilerepositorykt",
+    "storage:appsrcmainjavacomekspensifyapputilsfileutilsfilerepositoryimplkt",
+    "storage:appsrcmainjavacomekspensifyapputilsfileutilsfilerepositorykt",
+    "storage:ekspensifydatabase",
+    "storage:fileviewmodel",
+    "storage:pendingtransactiondao"
+  ],
+  "status": "candidate",
+  "authoritative": false,
+  "project_source_file_count": 224
+}

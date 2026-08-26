@@ -2,7 +2,7 @@
   "schema": "android-to-harmony.skill-tree-manifest.v1",
   "local_root": "skills/migrate-android-compose-to-harmony",
   "file_count": 70,
-  "tree_sha256": "3d407b10ff2ec544e2d385a6bb14df8b387319d0d482456b95d97271af0e373f",
+  "tree_sha256": "67ca0525163cec7b73299868009d305cc8d02df53fa3b93497e6bb5d12deefa9",
   "files": [
     {
       "path": "SKILL.md",
@@ -247,8 +247,8 @@
     {
       "path": "scripts/capture_execution_plan_regressions.py",
       "type": "file",
-      "bytes": 15367,
-      "sha256": "8b8ec7f26edf691812e4075fb29f34ff4b2e27d193e2e66eb6b9c2fc3285a131"
+      "bytes": 16248,
+      "sha256": "82d4d9828e5b240acc5423fdf3eff544f5f680b2d6dba93df2b750655a36747e"
     },
     {
       "path": "scripts/compare_local_screenshots.py",
@@ -331,8 +331,8 @@
     {
       "path": "scripts/hash_evidence_tree.py",
       "type": "file",
-      "bytes": 12465,
-      "sha256": "ada6dd8802934e352472588f33236b2251c74385e72350b45f8bce88f964c30f"
+      "bytes": 12892,
+      "sha256": "348fd24974c86b076ee6eb7e4b1e24fa24cf8ff1153a146dc65b44c4c43ef14f"
     },
     {
       "path": "scripts/hash_skill_tree.py",
@@ -403,8 +403,8 @@
     {
       "path": "scripts/test_orchestrator.py",
       "type": "file",
-      "bytes": 94200,
-      "sha256": "1800b870f43b5ea51e93a729a2cd68caddb4555d7ee60054df5adfe76ae02b71"
+      "bytes": 109279,
+      "sha256": "9904c46edbefae44f0ad06546a6926ec39eede3cb22f67d081c820572471130b"
     },
     {
       "path": "scripts/test_security_hardening.py",
@@ -415,8 +415,8 @@
     {
       "path": "scripts/test_tools.py",
       "type": "file",
-      "bytes": 1300256,
-      "sha256": "45c2d966d71aa4f94e08802662acfb65f0ac45cd31beb81fd1572e7a4d430270"
+      "bytes": 1297169,
+      "sha256": "08576866eec107e827097cca2cceca48b33a9b6c440d7db4a5d980cb9a420a3a"
     },
     {
       "path": "scripts/validate_ai_safe_tree.py",

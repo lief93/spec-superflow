@@ -523,7 +523,395 @@ def assert_capability_artifacts(
     )
 
 
+def create_wrong_head_public_source(
+    root: Path,
+    source_url: str,
+) -> tuple[Path, Path, str, str]:
+    reuse = create_compose_source(root / "reuse")
+    subprocess.run(["git", "init", "-q", str(reuse)], check=True)
+    subprocess.run(
+        ["git", "-C", str(reuse), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(reuse), "config", "user.name", "Test"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(reuse), "add", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(reuse), "commit", "-qm", "fixed revision"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(reuse), "remote", "add", "origin", source_url],
+        check=True,
+    )
+    revision = subprocess.check_output(
+        ["git", "-C", str(reuse), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    source = root / "existing-wrong-head"
+    subprocess.run(
+        ["git", "clone", "-q", "--no-local", str(reuse), str(source)],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(source), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(source), "config", "user.name", "Test"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(source), "commit", "-q", "--allow-empty", "-m", "wrong head"],
+        check=True,
+    )
+    wrong_revision = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    subprocess.run(
+        ["git", "-C", str(source), "remote", "set-url", "origin", source_url],
+        check=True,
+    )
+    return reuse, source, revision, wrong_revision
+
+
 class MigrationAgentTests(unittest.TestCase):
+    def test_capture_execution_plan_regressions_rejects_nonfixed_ekspensify_revision(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = create_compose_source(root)
+            subprocess.run(["git", "init", "-q", str(source)], check=True)
+            subprocess.run(
+                ["git", "-C", str(source), "remote", "add", "origin", "https://example.com/wrong.git"],
+                check=True,
+            )
+            change = root / "change"
+            change.mkdir()
+            subtree = change / "evidence/execution-plan-dag-v1/ekspensify"
+            rejected = run_script(
+                CAPTURE_EXECUTION_PLAN,
+                "--change-dir",
+                str(change),
+                "--project",
+                "ekspensify",
+                "--source-url",
+                "https://github.com/dilipsuthar264/ekspensify-android.git",
+                "--expected-revision",
+                "a" * 40,
+                "--source-dir",
+                str(source),
+                "--project-name",
+                "EkspensifyExecutionPlanDag",
+                "--bundle-name",
+                "com.specsuperflow.ekspensify.executionplandag",
+                "--run-root",
+                str(subtree / "run-root"),
+                "--target-dir",
+                str(subtree / "target"),
+                "--evidence-subtree",
+                str(subtree),
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("expected revision is not fixed for project ekspensify", rejected.stdout)
+            self.assertFalse(subtree.exists())
+
+    def test_capture_execution_plan_regressions_reuses_candidate_and_repairs_wrong_head(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source_url = "https://github.com/alexandr7035/Banking-App-Mock-Compose.git"
+            reuse, source, revision, wrong_revision = create_wrong_head_public_source(
+                root,
+                source_url,
+            )
+            candidate_files_before = {
+                path.relative_to(reuse).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in sorted(reuse.rglob("*"))
+                if path.is_file() and ".git" not in path.relative_to(reuse).parts
+            }
+            candidate_status_before = subprocess.check_output(
+                ["git", "-C", str(reuse), "status", "--porcelain=v1"],
+                text=True,
+            )
+
+            self.assertNotEqual(wrong_revision, revision)
+
+            change = root / "change"
+            evidence = change / "evidence"
+            central = evidence / "skill-identities"
+            central.mkdir(parents=True)
+            manifest = central / "bundled-skill-tree-manifest.json"
+            binding = central / "repo-skill-binding.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "schema": "android-to-harmony.skill-tree-manifest.v1",
+                        "local_root": "skills/migrate-android-compose-to-harmony",
+                        "file_count": 1,
+                        "tree_sha256": "a" * 64,
+                        "files": [],
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            binding.write_text(
+                json.dumps(
+                    {
+                        "schema": "android-to-harmony.repo-skill-binding.v1",
+                        "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
+                        "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                        "bundled_tree_sha256": "a" * 64,
+                        "file_count": 1,
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            subtree = evidence / "execution-plan-dag-v1/banking"
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "GIT_CONFIG_COUNT": "1",
+                    "GIT_CONFIG_KEY_0": f"url.{reuse.as_uri()}.insteadOf",
+                    "GIT_CONFIG_VALUE_0": source_url,
+                }
+            )
+            captured = run_script(
+                CAPTURE_EXECUTION_PLAN,
+                "--change-dir",
+                str(change),
+                "--project",
+                "banking",
+                "--source-url",
+                source_url,
+                "--expected-revision",
+                revision,
+                "--source-dir",
+                str(source),
+                "--reuse-candidate",
+                str(reuse),
+                "--project-name",
+                "BankingReuseExecutionPlanDag",
+                "--bundle-name",
+                "com.specsuperflow.banking.reuseexecutionplandag",
+                "--run-root",
+                str(subtree / "run-root"),
+                "--target-dir",
+                str(subtree / "target"),
+                "--evidence-subtree",
+                str(subtree),
+                environment=environment,
+            )
+            self.assertEqual(captured.returncode, 0, captured.stdout + captured.stderr)
+            self.assertEqual(
+                subprocess.check_output(
+                    ["git", "-C", str(source), "rev-parse", "HEAD"],
+                    text=True,
+                ).strip(),
+                revision,
+            )
+            detached = subprocess.run(
+                ["git", "-C", str(source), "symbolic-ref", "-q", "HEAD"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(detached.returncode, 0)
+            for relative in (
+                "logs/00-reuse-remote.command.log",
+                "logs/00-reuse-head.command.log",
+                "logs/00-source-head-before.command.log",
+                "logs/00-fetch.command.log",
+                "logs/00-checkout.command.log",
+                "logs/00-source-final-remote.command.log",
+                "logs/00-source-final-head.command.log",
+                "exit/00-fetch.exit.json",
+                "exit/00-checkout.exit.json",
+            ):
+                self.assertTrue((subtree / relative).is_file(), relative)
+            self.assertEqual(
+                subprocess.check_output(
+                    ["git", "-C", str(reuse), "rev-parse", "HEAD"],
+                    text=True,
+                ).strip(),
+                revision,
+            )
+            self.assertEqual(
+                subprocess.check_output(
+                    ["git", "-C", str(reuse), "status", "--porcelain=v1"],
+                    text=True,
+                ),
+                candidate_status_before,
+            )
+            candidate_files_after = {
+                path.relative_to(reuse).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in sorted(reuse.rglob("*"))
+                if path.is_file() and ".git" not in path.relative_to(reuse).parts
+            }
+            self.assertEqual(candidate_files_after, candidate_files_before)
+
+    def test_capture_execution_plan_regressions_rejects_wrong_ekspensify_remote_with_evidence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = create_compose_source(root)
+            subprocess.run(["git", "init", "-q", str(source)], check=True)
+            subprocess.run(
+                ["git", "-C", str(source), "config", "user.email", "test@example.com"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(source), "config", "user.name", "Test"],
+                check=True,
+            )
+            subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(source), "commit", "-qm", "fixture"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(source), "remote", "add", "origin", "https://example.com/wrong.git"],
+                check=True,
+            )
+            change = root / "change"
+            change.mkdir()
+            subtree = change / "evidence/execution-plan-dag-v1/ekspensify"
+            rejected = run_script(
+                CAPTURE_EXECUTION_PLAN,
+                "--change-dir",
+                str(change),
+                "--project",
+                "ekspensify",
+                "--source-url",
+                "https://github.com/dilipsuthar264/ekspensify-android.git",
+                "--expected-revision",
+                "0292c62e267a8b9cbc0d9dc580d80c549701661c",
+                "--source-dir",
+                str(source),
+                "--project-name",
+                "EkspensifyExecutionPlanDag",
+                "--bundle-name",
+                "com.specsuperflow.ekspensify.executionplandag",
+                "--run-root",
+                str(subtree / "run-root"),
+                "--target-dir",
+                str(subtree / "target"),
+                "--evidence-subtree",
+                str(subtree),
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("source remote mismatch", rejected.stdout)
+            self.assertEqual(
+                (subtree / "logs/00-source-remote-before.stdout.txt").read_text(
+                    encoding="utf-8"
+                ),
+                "https://example.com/wrong.git\n",
+            )
+            self.assertEqual(
+                json.loads(
+                    (subtree / "exit/00-source-remote-before.exit.json").read_text(
+                        encoding="utf-8"
+                    )
+                )["exit_code"],
+                0,
+            )
+            self.assertTrue(
+                (subtree / "logs/00-source-remote-before.command.log").is_file()
+            )
+            self.assertTrue(
+                (subtree / "logs/00-source-remote-before.stderr.txt").is_file()
+            )
+            self.assertFalse((subtree / "logs/01-start.command.log").exists())
+
+    def test_capture_execution_plan_regressions_rejects_final_head_mismatch_with_evidence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source_url = "https://github.com/alexandr7035/Banking-App-Mock-Compose.git"
+            reuse, source, revision, wrong_revision = create_wrong_head_public_source(
+                root,
+                source_url,
+            )
+            hook = source / ".git/hooks/post-checkout"
+            hook.write_text(
+                "#!/bin/sh\n"
+                f"git update-ref --no-deref HEAD {shlex.quote(wrong_revision)}\n",
+                encoding="utf-8",
+            )
+            hook.chmod(0o755)
+
+            change = root / "change"
+            change.mkdir()
+            subtree = change / "evidence/execution-plan-dag-v1/banking"
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "GIT_CONFIG_COUNT": "1",
+                    "GIT_CONFIG_KEY_0": f"url.{reuse.as_uri()}.insteadOf",
+                    "GIT_CONFIG_VALUE_0": source_url,
+                }
+            )
+            rejected = run_script(
+                CAPTURE_EXECUTION_PLAN,
+                "--change-dir",
+                str(change),
+                "--project",
+                "banking",
+                "--source-url",
+                source_url,
+                "--expected-revision",
+                revision,
+                "--source-dir",
+                str(source),
+                "--reuse-candidate",
+                str(reuse),
+                "--project-name",
+                "BankingMismatchExecutionPlanDag",
+                "--bundle-name",
+                "com.specsuperflow.banking.mismatchexecutionplandag",
+                "--run-root",
+                str(subtree / "run-root"),
+                "--target-dir",
+                str(subtree / "target"),
+                "--evidence-subtree",
+                str(subtree),
+                environment=environment,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("source revision mismatch", rejected.stdout)
+            self.assertEqual(
+                (subtree / "logs/00-source-final-head.stdout.txt").read_text(
+                    encoding="utf-8"
+                ).strip(),
+                wrong_revision,
+            )
+            self.assertEqual(
+                json.loads(
+                    (subtree / "exit/00-source-final-head.exit.json").read_text(
+                        encoding="utf-8"
+                    )
+                )["exit_code"],
+                0,
+            )
+            self.assertTrue(
+                (subtree / "logs/00-source-final-head.command.log").is_file()
+            )
+            self.assertTrue(
+                (subtree / "logs/00-source-final-head.stderr.txt").is_file()
+            )
+            self.assertFalse((subtree / "logs/01-start.command.log").exists())
+
     def test_capture_execution_plan_regressions_freezes_complete_banking_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -14,7 +14,7 @@ from typing import Any
 
 
 SCHEMA = "android-to-harmony.execution-plan-evidence-tree.v1"
-PROJECTS = ("banking",)
+PROJECTS = ("banking", "ekspensify")
 CENTRAL_MANIFEST = "skill-identities/bundled-skill-tree-manifest.json"
 CENTRAL_BINDING = "skill-identities/repo-skill-binding.json"
 PROJECT_REQUIRED_FILES = (
@@ -151,9 +151,27 @@ def validate_skill_identity(evidence_root: Path, project: str) -> None:
         )
 
 
-def validate_evidence_layout(evidence_root: Path) -> None:
+def validate_project_evidence(evidence_root: Path, project: str) -> None:
+    if project not in PROJECTS:
+        raise EvidenceManifestError(f"unsupported evidence project: {project}")
     require_regular_file(evidence_root / CENTRAL_MANIFEST, "central Skill manifest")
     require_regular_file(evidence_root / CENTRAL_BINDING, "central Skill binding")
+    project_root = evidence_root / "execution-plan-dag-v1"
+    if not project_root.is_dir() or project_root.is_symlink():
+        raise EvidenceManifestError("execution-plan-dag-v1 evidence root is missing")
+    subtree = project_root / project
+    for relative in PROJECT_REQUIRED_FILES:
+        require_regular_file(subtree / relative, f"{project} artifact {relative}")
+    fact_packs = subtree / "fact-packs"
+    if fact_packs.is_symlink() or not fact_packs.is_dir():
+        raise EvidenceManifestError(f"{project} fact-pack directory is missing")
+    fact_files = sorted(fact_packs.glob("*-fact-pack.json"))
+    if not fact_files or any(path.is_symlink() for path in fact_files):
+        raise EvidenceManifestError(f"{project} fact-pack family is incomplete")
+    validate_skill_identity(evidence_root, project)
+
+
+def validate_evidence_layout(evidence_root: Path) -> None:
     project_root = evidence_root / "execution-plan-dag-v1"
     if not project_root.is_dir() or project_root.is_symlink():
         raise EvidenceManifestError("execution-plan-dag-v1 evidence root is missing")
@@ -167,16 +185,7 @@ def validate_evidence_layout(evidence_root: Path) -> None:
             f"unexpected project evidence membership: {present_projects}"
         )
     for project in PROJECTS:
-        subtree = project_root / project
-        for relative in PROJECT_REQUIRED_FILES:
-            require_regular_file(subtree / relative, f"{project} artifact {relative}")
-        fact_packs = subtree / "fact-packs"
-        if fact_packs.is_symlink() or not fact_packs.is_dir():
-            raise EvidenceManifestError(f"{project} fact-pack directory is missing")
-        fact_files = sorted(fact_packs.glob("*-fact-pack.json"))
-        if not fact_files or any(path.is_symlink() for path in fact_files):
-            raise EvidenceManifestError(f"{project} fact-pack family is incomplete")
-        validate_skill_identity(evidence_root, project)
+        validate_project_evidence(evidence_root, project)
 
 
 def collect_files(evidence_root: Path, manifest_path: Path) -> list[dict[str, Any]]:

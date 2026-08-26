@@ -98,6 +98,75 @@ def write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def write_execution_plan_evidence_fixture(evidence: Path) -> Path:
+    project_files = (
+        "contract/migration-contract.json",
+        "contract/migration-contract.json.owner.json",
+        "capability-graph.json",
+        "fact-packs/page-fact-pack.json",
+        "review-queue.json",
+        "gate-report.json",
+        "execution-plan.json",
+        "frozen-task-state.json",
+        "logs/01-start.stdout.txt",
+        "logs/01-start.stderr.txt",
+        "logs/01-start.command.log",
+        "logs/02-status.stdout.txt",
+        "logs/02-status.stderr.txt",
+        "logs/02-status.command.log",
+        "exit/01-start.exit.json",
+        "exit/02-status.exit.json",
+        "tests/start-status.test.log",
+        "source-identity.json",
+    )
+    for project in ("banking", "ekspensify"):
+        project_root = evidence / "execution-plan-dag-v1" / project
+        for relative in project_files:
+            path = project_root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(relative + "\n", encoding="utf-8")
+
+    central = evidence / "skill-identities"
+    manifest = central / "bundled-skill-tree-manifest.json"
+    binding = central / "repo-skill-binding.json"
+    write_json(
+        manifest,
+        {
+            "schema": "android-to-harmony.skill-tree-manifest.v1",
+            "local_root": "skills/migrate-android-compose-to-harmony",
+            "file_count": 1,
+            "tree_sha256": "a" * 64,
+            "files": [],
+        },
+    )
+    write_json(
+        binding,
+        {
+            "schema": "android-to-harmony.repo-skill-binding.v1",
+            "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
+            "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+            "bundled_tree_sha256": "a" * 64,
+            "file_count": 1,
+        },
+    )
+    for project in ("banking", "ekspensify"):
+        write_json(
+            evidence
+            / "execution-plan-dag-v1"
+            / project
+            / "skill-identity-reference.json",
+            {
+                "schema": "android-to-harmony.skill-identity-reference.v1",
+                "project": project,
+                "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
+                "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                "binding_path": "skill-identities/repo-skill-binding.json",
+                "binding_sha256": hashlib.sha256(binding.read_bytes()).hexdigest(),
+            },
+        )
+    return evidence / "execution-plan-dag-v1/banking"
+
+
 def gate_registry_fixture() -> dict[str, object]:
     return {
         "schema": "android-to-harmony.gate-profile-registry.v1",
@@ -398,69 +467,11 @@ def capability_contract_fixture(source_root: Path, snapshot_root: Path) -> dict[
 
 
 class MigrationToolTests(unittest.TestCase):
-    def test_banking_evidence_tree_manifest_lists_complete_portable_membership(self) -> None:
+    def test_execution_plan_evidence_tree_manifest_lists_complete_portable_membership(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             evidence = root / "evidence"
-            banking = evidence / "execution-plan-dag-v1/banking"
-            central = evidence / "skill-identities"
-            required_files = {
-                "contract/migration-contract.json": b"contract\n",
-                "contract/migration-contract.json.owner.json": b"owner\n",
-                "capability-graph.json": b"graph\n",
-                "fact-packs/page-fact-pack.json": b"facts\n",
-                "review-queue.json": b"queue\n",
-                "gate-report.json": b"gates\n",
-                "execution-plan.json": b"plan\n",
-                "frozen-task-state.json": b"state\n",
-                "logs/01-start.stdout.txt": b"start stdout\n",
-                "logs/01-start.stderr.txt": b"",
-                "logs/01-start.command.log": b"python migration_agent.py start\n",
-                "logs/02-status.stdout.txt": b"status stdout\n",
-                "logs/02-status.stderr.txt": b"",
-                "logs/02-status.command.log": b"python migration_agent.py status\n",
-                "exit/01-start.exit.json": b"{\"exit_code\": 0}\n",
-                "exit/02-status.exit.json": b"{\"exit_code\": 0}\n",
-                "tests/start-status.test.log": b"PASS\n",
-                "source-identity.json": b"source\n",
-            }
-            for relative, content in required_files.items():
-                path = banking / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(content)
-            manifest = central / "bundled-skill-tree-manifest.json"
-            binding = central / "repo-skill-binding.json"
-            write_json(
-                manifest,
-                {
-                    "schema": "android-to-harmony.skill-tree-manifest.v1",
-                    "local_root": "skills/migrate-android-compose-to-harmony",
-                    "file_count": 1,
-                    "tree_sha256": "a" * 64,
-                    "files": [],
-                },
-            )
-            write_json(
-                binding,
-                {
-                    "schema": "android-to-harmony.repo-skill-binding.v1",
-                    "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
-                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
-                    "bundled_tree_sha256": "a" * 64,
-                    "file_count": 1,
-                },
-            )
-            write_json(
-                banking / "skill-identity-reference.json",
-                {
-                    "schema": "android-to-harmony.skill-identity-reference.v1",
-                    "project": "banking",
-                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
-                    "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
-                    "binding_path": "skill-identities/repo-skill-binding.json",
-                    "binding_sha256": hashlib.sha256(binding.read_bytes()).hexdigest(),
-                },
-            )
+            write_execution_plan_evidence_fixture(evidence)
             output = evidence / "execution-plan-dag-v1/evidence-tree-manifest.json"
 
             generated = run_script(
@@ -480,7 +491,7 @@ class MigrationToolTests(unittest.TestCase):
                 paths,
             )
             self.assertIn("skill-identities/repo-skill-binding.json", paths)
-            self.assertEqual(payload["projects"], ["banking"])
+            self.assertEqual(payload["projects"], ["banking", "ekspensify"])
 
             verified = run_script(
                 HASH_EVIDENCE_TREE,
@@ -494,70 +505,11 @@ class MigrationToolTests(unittest.TestCase):
             )
             self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
 
-    def test_banking_evidence_tree_manifest_rejects_missing_extra_and_tampered_artifacts(self) -> None:
+    def test_execution_plan_evidence_tree_manifest_rejects_missing_extra_and_tampered_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             evidence = root / "evidence"
-            banking = evidence / "execution-plan-dag-v1/banking"
-            central = evidence / "skill-identities"
-            central.mkdir(parents=True)
-            write_json(
-                central / "bundled-skill-tree-manifest.json",
-                {
-                    "schema": "android-to-harmony.skill-tree-manifest.v1",
-                    "local_root": "skills/migrate-android-compose-to-harmony",
-                    "file_count": 1,
-                    "tree_sha256": "a" * 64,
-                    "files": [],
-                },
-            )
-            write_json(
-                central / "repo-skill-binding.json",
-                {
-                    "schema": "android-to-harmony.repo-skill-binding.v1",
-                    "bundled_skill_path": "skills/migrate-android-compose-to-harmony",
-                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
-                    "bundled_tree_sha256": "a" * 64,
-                    "file_count": 1,
-                },
-            )
-            fixture_files = [
-                "contract/migration-contract.json",
-                "contract/migration-contract.json.owner.json",
-                "capability-graph.json",
-                "fact-packs/page-fact-pack.json",
-                "review-queue.json",
-                "gate-report.json",
-                "execution-plan.json",
-                "frozen-task-state.json",
-                "logs/01-start.stdout.txt",
-                "logs/01-start.stderr.txt",
-                "logs/01-start.command.log",
-                "logs/02-status.stdout.txt",
-                "logs/02-status.stderr.txt",
-                "logs/02-status.command.log",
-                "exit/01-start.exit.json",
-                "exit/02-status.exit.json",
-                "tests/start-status.test.log",
-                "source-identity.json",
-            ]
-            for relative in fixture_files:
-                path = banking / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(relative + "\n", encoding="utf-8")
-            manifest_path = central / "bundled-skill-tree-manifest.json"
-            binding_path = central / "repo-skill-binding.json"
-            write_json(
-                banking / "skill-identity-reference.json",
-                {
-                    "schema": "android-to-harmony.skill-identity-reference.v1",
-                    "project": "banking",
-                    "manifest_path": "skill-identities/bundled-skill-tree-manifest.json",
-                    "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
-                    "binding_path": "skill-identities/repo-skill-binding.json",
-                    "binding_sha256": hashlib.sha256(binding_path.read_bytes()).hexdigest(),
-                },
-            )
+            banking = write_execution_plan_evidence_fixture(evidence)
             output = evidence / "execution-plan-dag-v1/evidence-tree-manifest.json"
             generated = run_script(
                 HASH_EVIDENCE_TREE,
