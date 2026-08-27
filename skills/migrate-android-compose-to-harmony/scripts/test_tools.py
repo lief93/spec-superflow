@@ -29629,12 +29629,22 @@ class MigrationToolTests(unittest.TestCase):
             manifest = root / "skill-manifest.json"
             contract_payload = capability_contract_fixture(source, snapshot)
             settings_source = "app/src/main/java/example/ui/SettingsScreen.kt"
-            shared_source = "app/src/main/java/example/domain/SharedSession.kt"
+            shared_source = (
+                "app/src/main/java/example/domain/ProfileSettingsSharedSession.kt"
+            )
             shared_storage_source = (
-                "app/src/main/java/example/ui/SettingsPreferencesState.kt"
+                "app/src/main/java/example/ui/ProfileSettingsPreferencesState.kt"
+            )
+            unrelated_foundation_source = (
+                "app/src/main/java/example/domain/PaymentsSession.kt"
             )
             contract_payload["inventory"]["files_by_layer"]["source"].extend(
-                [settings_source, shared_source, shared_storage_source]
+                [
+                    settings_source,
+                    shared_source,
+                    shared_storage_source,
+                    unrelated_foundation_source,
+                ]
             )
             contract_payload["ui"]["routes"].append(
                 {
@@ -29673,6 +29683,14 @@ class MigrationToolTests(unittest.TestCase):
                     "layer": "source",
                 }
             )
+            contract_payload["business"]["models"].append(
+                {
+                    "source": unrelated_foundation_source,
+                    "kind": "class",
+                    "name": "PaymentsSession",
+                    "layer": "source",
+                }
+            )
             contract_payload["migration_batches"][0]["source_files"].append(
                 shared_storage_source
             )
@@ -29681,7 +29699,7 @@ class MigrationToolTests(unittest.TestCase):
                     "id": "foundation",
                     "goal": "Shared foundation",
                     "status": "pending",
-                    "source_files": [shared_source],
+                    "source_files": [shared_source, unrelated_foundation_source],
                 }
             )
             write_json(contract, contract_payload)
@@ -29750,6 +29768,16 @@ class MigrationToolTests(unittest.TestCase):
             self.assertEqual(
                 {edge["from_node_id"] for edge in downstream_shared_edges},
                 {"page:profilescreen", "page:settingsscreen"},
+            )
+            unrelated_edges = [
+                edge
+                for edge in payload["resolved_edges"]
+                if edge["to_node_id"] == "business:paymentssession"
+            ]
+            self.assertEqual(
+                unrelated_edges,
+                [],
+                "coarse migration-batch membership must not fabricate page dependencies",
             )
             profile_to_business = next(
                 entry

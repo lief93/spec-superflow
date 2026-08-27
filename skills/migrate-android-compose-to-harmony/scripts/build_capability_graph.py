@@ -1344,6 +1344,11 @@ def infer_resolved_edges(
     }
     route_by_source = route_sources(contract)
     page_nodes = [node for node in nodes if node.get("layer") == "page"]
+    page_source_files = {
+        source
+        for page_node in page_nodes
+        for source in node_primary_sources(page_node)
+    }
     source_to_page_ids: dict[str, list[str]] = {}
     for node in page_nodes:
         for source in node_primary_sources(node):
@@ -1402,14 +1407,17 @@ def infer_resolved_edges(
     def source_matches_page(page_key: str, node: dict[str, Any], batches_for_page: list[dict[str, Any]]) -> bool:
         node_sources = node_primary_sources(node)
         if batches_for_page:
-            batch_sources = {
-                path
-                for batch in batches_for_page
-                for path in batch.get("source_files", [])
-                if isinstance(path, str)
-            }
-            if set(node_sources) & batch_sources:
-                return True
+            for batch in batches_for_page:
+                batch_sources = {
+                    path
+                    for path in batch.get("source_files", [])
+                    if isinstance(path, str)
+                }
+                if (
+                    len(batch_sources & page_source_files) == 1
+                    and set(node_sources) & batch_sources
+                ):
+                    return True
         return any(page_key and page_key in semantic_match_key(source) for source in node_sources)
 
     for page_node in sorted(page_nodes, key=lambda item: item["id"]):
@@ -1537,12 +1545,6 @@ def infer_resolved_edges(
                 consumed_by_planner="closure_and_assignment",
             )
 
-    page_source_files = {
-        source
-        for page_node in page_nodes
-        for source in node_primary_sources(page_node)
-    }
-    foundation_sources: set[str] = set()
     foundation_batch_ids_by_source: dict[str, set[str]] = {}
     for batch in batches if isinstance(batches, list) else []:
         if not isinstance(batch, dict):
@@ -1555,7 +1557,6 @@ def infer_resolved_edges(
         if not batch_sources or batch_sources & page_source_files:
             continue
         batch_id = str(batch.get("id", "foundation"))
-        foundation_sources.update(batch_sources)
         for source in batch_sources:
             foundation_batch_ids_by_source.setdefault(source, set()).add(batch_id)
     page_node_ids = {node["id"] for node in page_nodes}
@@ -1584,17 +1585,6 @@ def infer_resolved_edges(
             and node_layer_by_id.get(to_node_id) in foundation_layers
         ):
             page_consumers_by_target.setdefault(to_node_id, set()).add(from_node_id)
-    foundation_node_ids = {
-        node["id"]
-        for node in nodes
-        if node.get("layer") in foundation_layers
-        and set(node_primary_sources(node)) & foundation_sources
-    }
-    foundation_node_ids.update(
-        node_id
-        for node_id, consumers in page_consumers_by_target.items()
-        if len(consumers) >= 2
-    )
     changed = True
     while changed:
         changed = False
@@ -1602,13 +1592,21 @@ def infer_resolved_edges(
             from_node_id = edge.get("from_node_id")
             to_node_id = edge.get("to_node_id")
             if (
-                from_node_id in foundation_node_ids
+                isinstance(from_node_id, str)
+                and page_consumers_by_target.get(from_node_id)
                 and isinstance(to_node_id, str)
                 and node_layer_by_id.get(to_node_id) in foundation_layers
-                and to_node_id not in foundation_node_ids
             ):
-                foundation_node_ids.add(to_node_id)
-                changed = True
+                existing = page_consumers_by_target.setdefault(to_node_id, set())
+                propagated = page_consumers_by_target[from_node_id] - existing
+                if propagated:
+                    existing.update(propagated)
+                    changed = True
+    foundation_node_ids = {
+        node_id
+        for node_id, consumers in page_consumers_by_target.items()
+        if len(consumers) >= 2
+    }
     foundation_nodes = [
         node for node in nodes if node.get("id") in foundation_node_ids
     ]
@@ -1619,6 +1617,8 @@ def infer_resolved_edges(
         if not page_sources:
             continue
         for node in sorted(foundation_nodes, key=lambda item: item["id"]):
+            if page_node["id"] not in page_consumers_by_target.get(node["id"], set()):
+                continue
             node_sources = node_primary_sources(node)
             batch_ids = sorted(
                 {
