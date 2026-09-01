@@ -1,0 +1,24 @@
+{
+  "name": "harmony-quality",
+  "version": "0.1.0",
+  "description": "Deterministic HarmonyOS test and code quality gates with traceable evidence.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "bin/",
+    "src/",
+    "docs/",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "harmony-quality": "./bin/harmony-quality.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
