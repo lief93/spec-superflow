@@ -649,6 +649,11 @@ fact schema, provenance rules, and cross-device viewport requirements. Physical 
 may differ; whole-screen pixel metrics require equivalent logical content aspect, orientation,
 system-bar crop, font scale, locale, theme, state, and scroll position.
 
+Use the v2 component-bound capture assets so runtime system-bar, navigation-area, and cutout Insets
+travel with the exact screenshot. The page generator consumes those Insets automatically. Supply
+`--insets-px` only as an explicit override for a deliberately different content crop; never use a
+fixed device-independent status-bar height.
+
 Collect visual facts in the same deterministic state and emit exactly one
 `ANDROID_VISUAL_FACTS:` or `HARMONY_VISUAL_FACTS:` marker. Convert it with
 `extract_android_visual_facts.py` or `extract_harmony_visual_facts.py`; do not hand-copy JSON.
@@ -664,7 +669,7 @@ python3 "$SKILL_ROOT/scripts/generate_android_page_json.py" \
   --visual-facts "$ANDROID_VISUAL_FACTS" \
   --source-attributes "$SOURCE_ATTRIBUTE_INVENTORY" \
   --density "$ANDROID_DENSITY" --font-scale "$ANDROID_FONT_SCALE" \
-  --orientation portrait --insets-px left,top,right,bottom \
+  --orientation portrait \
   --device-id "$ANDROID_DEVICE_ID" \
   --device-model "$ANDROID_DEVICE_MODEL" \
   --os-version "$ANDROID_OS_VERSION" \
@@ -677,7 +682,7 @@ python3 "$SKILL_ROOT/scripts/generate_harmony_page_json.py" \
   --visual-facts "$HARMONY_VISUAL_FACTS" \
   --source-attributes "$SOURCE_ATTRIBUTE_INVENTORY" \
   --density "$HARMONY_DENSITY" --font-scale "$HARMONY_FONT_SCALE" \
-  --orientation portrait --insets-px left,top,right,bottom \
+  --orientation portrait \
   --device-id "$HARMONY_DEVICE_ID" \
   --device-model "$HARMONY_DEVICE_MODEL" \
   --os-version "$HARMONY_OS_VERSION" \

@@ -2,8 +2,13 @@ package androidtoharmony.visual
 
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.graphics.Rect as AndroidRect
+import android.os.Build
+import android.view.WindowInsets
 import androidx.compose.ui.geometry.Rect
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -11,7 +16,7 @@ import java.io.FileOutputStream
 import kotlin.math.ceil
 import kotlin.math.floor
 
-private const val COMPONENT_BOUNDS_SCHEMA = "android-to-harmony.component-bounds.v1"
+private const val COMPONENT_BOUNDS_SCHEMA = "android-to-harmony.component-bounds.v2"
 private const val MARKER = "ANDROID_COMPONENT_BOUNDS:"
 private val SAFE_TOKEN = Regex("^[A-Za-z0-9._:/#@-]{1,120}$")
 
@@ -38,6 +43,7 @@ fun captureComposeSemanticsComponentBoundsAndScreenshot(
     val screenshot = requireNotNull(uiAutomation.takeScreenshot()) {
         "device screenshot was not captured"
     }
+    val contentInsets = captureContentInsets()
     val components = JSONArray()
 
     descriptors.forEach { descriptor ->
@@ -84,6 +90,14 @@ fun captureComposeSemanticsComponentBoundsAndScreenshot(
             "screenshot_dimensions",
             JSONObject().put("width", screenshot.width).put("height", screenshot.height),
         )
+        .put(
+            "content_insets_px",
+            JSONObject()
+                .put("left", contentInsets.left)
+                .put("top", contentInsets.top)
+                .put("right", contentInsets.right)
+                .put("bottom", contentInsets.bottom),
+        )
         .put("components", components)
     val marker = MARKER + inventory.toString()
     instrumentation.sendStatus(
@@ -91,4 +105,35 @@ fun captureComposeSemanticsComponentBoundsAndScreenshot(
         Bundle().apply { putString("stream", "$marker\n") },
     )
     return marker
+}
+
+private fun captureContentInsets(): AndroidRect {
+    check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        "automatic content insets require Android 6.0 or newer"
+    }
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+    var captured: AndroidRect? = null
+    instrumentation.runOnMainSync {
+        val activity = ActivityLifecycleMonitorRegistry.getInstance()
+            .getActivitiesInStage(Stage.RESUMED)
+            .singleOrNull()
+        val windowInsets = activity?.window?.decorView?.rootWindowInsets
+        if (windowInsets != null) {
+            captured = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val insets = windowInsets.getInsets(
+                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
+                )
+                AndroidRect(insets.left, insets.top, insets.right, insets.bottom)
+            } else {
+                @Suppress("DEPRECATION")
+                AndroidRect(
+                    windowInsets.systemWindowInsetLeft,
+                    windowInsets.systemWindowInsetTop,
+                    windowInsets.systemWindowInsetRight,
+                    windowInsets.systemWindowInsetBottom,
+                )
+            }
+        }
+    }
+    return requireNotNull(captured) { "runtime window insets were not available" }
 }

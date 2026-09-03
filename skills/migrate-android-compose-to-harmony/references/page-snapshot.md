@@ -16,7 +16,7 @@ content viewport. Align all of the following:
 
 - route, business state, scroll position, selected state, and deterministic data;
 - orientation and cropped content aspect ratio;
-- system-bar and cutout policy, expressed through `--insets-px` or explicit comparison crops;
+- system-bar and cutout policy, captured as runtime Insets or deliberately overridden;
 - font scale, locale, theme, and light/dark mode;
 - animation frame or a frozen stable state.
 
@@ -37,7 +37,8 @@ independently comparable when physical dimensions differ.
 
 ## Required inputs
 
-- `--components`: exact `android-to-harmony.component-bounds.v1` captured with the screenshot.
+- `--components`: exact `android-to-harmony.component-bounds.v2` captured with the screenshot.
+  Legacy v1 remains accepted but has no automatic content Insets.
 - `--visual-facts`: `android-to-harmony.component-visual-facts.v1` for resolved runtime/source
   values. Match components through the same stable `semantic_key` used by the bounds capture.
 - `--source-attributes`: optional display-content-free source inspection index.
@@ -45,8 +46,9 @@ independently comparable when physical dimensions differ.
 - `--font-scale`: Android font scale or the equivalent HarmonyOS text scale.
 - `--orientation`: `portrait` or `landscape`; the generator rejects a value inconsistent with the
   PNG dimensions.
-- `--insets-px`: `left,top,right,bottom` system/cutout insets. These produce safe-area and content
-  bounds in both pixels and logical units.
+- `--insets-px`: optional `left,top,right,bottom` override. When omitted, v2 component inventory
+  runtime Insets produce safe-area and content bounds in both pixels and logical units. A legacy v1
+  inventory falls back to zero Insets.
 
 The generator refuses stale screenshots, mismatched component dimensions, duplicate semantic
 keys, unknown style fields, invalid colors or hashes, impossible insets, and cross-platform visual
@@ -206,7 +208,7 @@ python3 "$SKILL_ROOT/scripts/generate_android_page_json.py" \
   --visual-facts "$ANDROID_VISUAL_FACTS" \
   --source-attributes "$SOURCE_ATTRIBUTE_INVENTORY" \
   --density "$ANDROID_DENSITY" --font-scale "$ANDROID_FONT_SCALE" \
-  --orientation portrait --insets-px 0,72,0,96 \
+  --orientation portrait \
   --device-id "$ANDROID_DEVICE_ID" --device-model "$ANDROID_DEVICE_MODEL" \
   --os-version "$ANDROID_OS_VERSION" \
   --output "$NEW_ANDROID_PAGE_JSON"
@@ -218,7 +220,7 @@ python3 "$SKILL_ROOT/scripts/generate_harmony_page_json.py" \
   --visual-facts "$HARMONY_VISUAL_FACTS" \
   --source-attributes "$SOURCE_ATTRIBUTE_INVENTORY" \
   --density "$HARMONY_DENSITY" --font-scale "$HARMONY_FONT_SCALE" \
-  --orientation portrait --insets-px 0,48,0,64 \
+  --orientation portrait \
   --device-id "$HARMONY_DEVICE_ID" --device-model "$HARMONY_DEVICE_MODEL" \
   --os-version "$HARMONY_OS_VERSION" \
   --output "$NEW_HARMONY_PAGE_JSON"

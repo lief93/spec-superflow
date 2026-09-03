@@ -13,6 +13,7 @@ from typing import Any
 
 MARKER = "OHOS_COMPONENT_BOUNDS:"
 COMPONENT_SCHEMA = "android-to-harmony.component-bounds.v1"
+COMPONENT_SCHEMA_V2 = "android-to-harmony.component-bounds.v2"
 COMMAND_SCHEMA = "android-to-harmony.command-result.v1"
 MAX_INPUT_BYTES = 5 * 1024 * 1024
 SAFE_TOKEN = re.compile(r"[A-Za-z0-9._:/#@-]{1,120}")
@@ -39,14 +40,16 @@ def require_token(value: Any, field: str) -> str:
 
 
 def validate_inventory(payload: Any) -> dict[str, Any]:
-    if not isinstance(payload, dict) or set(payload) != {
-        "schema",
-        "screenshot_dimensions",
-        "components",
-    }:
+    if not isinstance(payload, dict):
         raise ExtractionError("component inventory has unsupported root fields")
-    if payload["schema"] != COMPONENT_SCHEMA:
+    schema = payload.get("schema")
+    expected_fields = {"schema", "screenshot_dimensions", "components"}
+    if schema == COMPONENT_SCHEMA_V2:
+        expected_fields.add("content_insets_px")
+    elif schema != COMPONENT_SCHEMA:
         raise ExtractionError("component inventory schema is unsupported")
+    if set(payload) != expected_fields:
+        raise ExtractionError("component inventory has unsupported root fields")
     dimensions = payload["screenshot_dimensions"]
     if not isinstance(dimensions, dict) or set(dimensions) != {"width", "height"}:
         raise ExtractionError("component inventory dimensions are malformed")
@@ -57,6 +60,17 @@ def validate_inventory(payload: Any) -> dict[str, Any]:
         or dimensions["height"] <= 0
     ):
         raise ExtractionError("component inventory dimensions must be positive integers")
+    if schema == COMPONENT_SCHEMA_V2:
+        insets = payload["content_insets_px"]
+        fields = {"left", "top", "right", "bottom"}
+        if (
+            not isinstance(insets, dict)
+            or set(insets) != fields
+            or any(type(insets[field]) is not int or insets[field] < 0 for field in fields)
+            or insets["left"] + insets["right"] >= dimensions["width"]
+            or insets["top"] + insets["bottom"] >= dimensions["height"]
+        ):
+            raise ExtractionError("component inventory content insets are malformed")
     components = payload["components"]
     if not isinstance(components, list) or len(components) > 10000:
         raise ExtractionError("component inventory must contain at most 10000 components")

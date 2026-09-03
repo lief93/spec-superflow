@@ -73,8 +73,9 @@ The optional component files use a strict, platform-neutral schema:
 
 ```json
 {
-  "schema": "android-to-harmony.component-bounds.v1",
+  "schema": "android-to-harmony.component-bounds.v2",
   "screenshot_dimensions": {"width": 1080, "height": 2400},
+  "content_insets_px": {"left": 0, "top": 72, "right": 0, "bottom": 96},
   "components": [
     {
       "id": "android-summary-card",
@@ -175,8 +176,9 @@ ActivityScenario.launch(MainActivity::class.java).use {
 }
 ```
 
-The helper reads only `viewIdResourceName` and screen bounds from `UiAutomation`; it never reads
-node text or content descriptions. It captures the device screenshot and emits exactly one
+The helper reads only `viewIdResourceName`, screen bounds, and the resumed Activity's runtime
+`WindowInsets`; it never reads node text or content descriptions. It combines system bars and
+display cutout Insets, captures the device screenshot, and emits exactly one
 `ANDROID_COMPONENT_BOUNDS:` instrumentation status record. It skips a missing or ambiguous tag
 instead of pairing the wrong component. The screenshot directory must already exist and the file
 must not.
@@ -240,11 +242,15 @@ framework directory. Give each important ArkUI boundary a stable `.id(...)`, the
 explicit IDs plus sanitized source component names to `collectComponentBounds`:
 
 ```ts
-const inventory = await collectComponentBounds(driver, [
-  { id: 'home_auto_tracking', semanticKey: 'AutoTrackingCard' },
-  { id: 'home_balance_summary', semanticKey: 'BalanceDetailsRow' },
-  { id: 'home_breakdown', semanticKey: 'CategoryInsightCard' }
-]);
+const inventory = await collectComponentBounds(
+  driver,
+  [
+    { id: 'home_auto_tracking', semanticKey: 'AutoTrackingCard' },
+    { id: 'home_balance_summary', semanticKey: 'BalanceDetailsRow' },
+    { id: 'home_breakdown', semanticKey: 'CategoryInsightCard' }
+  ],
+  mainWindow
+);
 const captured = await driver.screenCap(
   '/data/storage/el2/base/files/component-bounds.png'
 );
@@ -254,10 +260,12 @@ if (!captured) {
 console.info(`OHOS_COMPONENT_BOUNDS:${JSON.stringify(inventory)}`);
 ```
 
-The exporter queries only runtime ID, component type, display size, and bounds. Missing, destroyed,
-invisible, or wholly off-screen components are skipped; partially visible bounds are clipped to
-the screenshot dimensions. The descriptor's `semanticKey` is the ArkTS source component name used
-in the report. Do not derive it from display content.
+Obtain `mainWindow` from the test-enabled UIAbility/WindowStage rather than constructing dimensions
+on the host. The exporter queries runtime ID, component type, display size, bounds, and
+`Window.getWindowAvoidArea()` for system, navigation-indicator, and cutout regions. Missing,
+destroyed, invisible, or wholly off-screen components are skipped; partially visible bounds are
+clipped to the screenshot dimensions. The descriptor's `semanticKey` is the ArkTS source component
+name used in the report. Do not derive it from display content.
 
 Clear Hilog immediately before the one export test, run the test, and require its ordinary Hypium
 result to pass. Then turn the unique log marker into comparator input without copying the JSON by
@@ -269,7 +277,7 @@ hand:
     --output harmony-components.json
 ```
 
-The extractor accepts exactly one marker, validates the same strict schema as the comparator,
+The extractor accepts exactly one marker, validates the same strict v2 schema as the comparator,
 rejects display-content fields, refuses to overwrite output, and prints the resulting SHA-256.
 Multiple markers fail so stale bounds cannot silently pair with a new screenshot; clear Hilog and
 rerun the one test instead of selecting a record by position.

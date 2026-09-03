@@ -47,6 +47,7 @@ except ImportError:
 REPORT_SCHEMA = "android-to-harmony.local-image-comparison.v1"
 COMMAND_SCHEMA = "android-to-harmony.command-result.v1"
 COMPONENT_SCHEMA = "android-to-harmony.component-bounds.v1"
+COMPONENT_SCHEMA_V2 = "android-to-harmony.component-bounds.v2"
 PAGE_SNAPSHOT_SCHEMA = "android-to-harmony.page-snapshot.v1"
 PAGE_SNAPSHOT_V2_SCHEMA = "android-to-harmony.page-snapshot.v2"
 SOURCE_ATTRIBUTE_SCHEMA = "android-to-harmony.source-attribute-inventory.v1"
@@ -175,8 +176,11 @@ def load_component_inventory(
     if not isinstance(payload, dict):
         raise ComparisonError(f"{side} component inventory root must be an object")
     schema = payload.get("schema")
-    if schema == COMPONENT_SCHEMA:
-        if set(payload) != {"schema", "screenshot_dimensions", "components"}:
+    if schema in {COMPONENT_SCHEMA, COMPONENT_SCHEMA_V2}:
+        expected_fields = {"schema", "screenshot_dimensions", "components"}
+        if schema == COMPONENT_SCHEMA_V2:
+            expected_fields.add("content_insets_px")
+        if set(payload) != expected_fields:
             raise ComparisonError(f"{side} component inventory has unsupported root fields")
         dimensions = payload["screenshot_dimensions"]
         raw_components = payload["components"]
@@ -233,7 +237,7 @@ def load_component_inventory(
     for raw_component in raw_components:
         if not isinstance(raw_component, dict):
             raise ComparisonError(f"{side} component inventory contains a non-object component")
-        if schema == COMPONENT_SCHEMA:
+        if schema in {COMPONENT_SCHEMA, COMPONENT_SCHEMA_V2}:
             if not {"id", "type", bounds_field}.issubset(raw_component) or not set(raw_component).issubset(
                 {"id", "type", "semantic_key", bounds_field}
             ):
@@ -352,6 +356,26 @@ def load_component_inventory(
         "sha256": sha256_file(path),
         "component_count": len(components),
     }
+    if schema == COMPONENT_SCHEMA_V2:
+        raw_insets = payload["content_insets_px"]
+        inset_fields = {"left", "top", "right", "bottom"}
+        if (
+            not isinstance(raw_insets, dict)
+            or set(raw_insets) != inset_fields
+            or any(
+                type(raw_insets[field]) is not int or raw_insets[field] < 0
+                for field in inset_fields
+            )
+            or raw_insets["left"] + raw_insets["right"] >= expected_dimensions[0]
+            or raw_insets["top"] + raw_insets["bottom"] >= expected_dimensions[1]
+        ):
+            raise ComparisonError(f"{side} component inventory content insets are malformed")
+        record["content_bounds_px"] = {
+            "x": raw_insets["left"],
+            "y": raw_insets["top"],
+            "width": expected_dimensions[0] - raw_insets["left"] - raw_insets["right"],
+            "height": expected_dimensions[1] - raw_insets["top"] - raw_insets["bottom"],
+        }
     if schema in {PAGE_SNAPSHOT_SCHEMA, PAGE_SNAPSHOT_V2_SCHEMA}:
         page = payload.get("page")
         if not isinstance(page, dict) or set(page) != {"id", "state"}:
@@ -659,6 +683,11 @@ def select_crop(
         return (
             content["x"], content["y"], content["width"], content["height"]
         ), "page_snapshot_content_bounds"
+    if component_record and isinstance(component_record.get("content_bounds_px"), dict):
+        content = component_record["content_bounds_px"]
+        return (
+            content["x"], content["y"], content["width"], content["height"]
+        ), "component_inventory_content_bounds"
     return (0, 0, width, height), "full_image"
 
 

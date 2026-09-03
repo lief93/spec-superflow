@@ -15,6 +15,7 @@ from typing import Any
 
 PAGE_SCHEMA = "android-to-harmony.page-snapshot.v2"
 COMPONENT_SCHEMA = "android-to-harmony.component-bounds.v1"
+COMPONENT_SCHEMA_V2 = "android-to-harmony.component-bounds.v2"
 SOURCE_ATTRIBUTE_SCHEMA = "android-to-harmony.source-attribute-inventory.v1"
 VISUAL_FACTS_SCHEMA = "android-to-harmony.component-visual-facts.v1"
 COMMAND_SCHEMA = "android-to-harmony.command-result.v1"
@@ -464,11 +465,17 @@ def validate_bounds(bounds: Any, dimensions: tuple[int, int], component_id: str)
     return {"x": x, "y": y, "width": width, "height": height}
 
 
-def validate_components(payload: dict[str, Any]) -> tuple[tuple[int, int], list[dict[str, Any]]]:
-    if set(payload) != {"schema", "screenshot_dimensions", "components"}:
-        raise PageSnapshotError("component inventory has unsupported root fields")
-    if payload["schema"] != COMPONENT_SCHEMA:
+def validate_components(
+    payload: dict[str, Any],
+) -> tuple[tuple[int, int], list[dict[str, Any]], dict[str, int] | None]:
+    schema = payload.get("schema")
+    expected_fields = {"schema", "screenshot_dimensions", "components"}
+    if schema == COMPONENT_SCHEMA_V2:
+        expected_fields.add("content_insets_px")
+    elif schema != COMPONENT_SCHEMA:
         raise PageSnapshotError("component inventory schema is unsupported")
+    if set(payload) != expected_fields:
+        raise PageSnapshotError("component inventory has unsupported root fields")
     dimensions = payload["screenshot_dimensions"]
     if not isinstance(dimensions, dict) or set(dimensions) != {"width", "height"}:
         raise PageSnapshotError("component inventory dimensions are malformed")
@@ -476,6 +483,22 @@ def validate_components(payload: dict[str, Any]) -> tuple[tuple[int, int], list[
     height = dimensions["height"]
     if type(width) is not int or type(height) is not int or width <= 0 or height <= 0:
         raise PageSnapshotError("component inventory dimensions must be positive integers")
+    runtime_insets: dict[str, int] | None = None
+    if schema == COMPONENT_SCHEMA_V2:
+        raw_insets = payload["content_insets_px"]
+        inset_fields = {"left", "top", "right", "bottom"}
+        if (
+            not isinstance(raw_insets, dict)
+            or set(raw_insets) != inset_fields
+            or any(
+                type(raw_insets[field]) is not int or raw_insets[field] < 0
+                for field in inset_fields
+            )
+            or raw_insets["left"] + raw_insets["right"] >= width
+            or raw_insets["top"] + raw_insets["bottom"] >= height
+        ):
+            raise PageSnapshotError("component inventory content insets are malformed")
+        runtime_insets = {field: raw_insets[field] for field in inset_fields}
     raw_components = payload["components"]
     if not isinstance(raw_components, list) or len(raw_components) > 10000:
         raise PageSnapshotError("component inventory must contain at most 10000 components")
@@ -498,7 +521,7 @@ def validate_components(payload: dict[str, Any]) -> tuple[tuple[int, int], list[
         if "semantic_key" in raw:
             item["semantic_key"] = require_token(raw["semantic_key"], "component semantic_key")
         components.append(item)
-    return (width, height), components
+    return (width, height), components, runtime_insets
 
 
 def load_source_attributes(path: Path | None) -> tuple[dict[str, dict[str, Any]], Path | None]:
@@ -567,7 +590,7 @@ def build_snapshot(
     visual_facts_path: Path | None,
     font_scale: float,
     orientation: str,
-    insets_px: dict[str, int],
+    insets_px: dict[str, int] | None,
     device_id: str | None,
     device_model: str | None,
     os_version: str | None,
@@ -575,7 +598,7 @@ def build_snapshot(
     screenshot = resolve_input(screenshot_path, "screenshot")
     screenshot_size = png_dimensions(screenshot)
     component_payload, component_file = load_json(component_path, "component inventory")
-    inventory_size, components = validate_components(component_payload)
+    inventory_size, components, runtime_insets = validate_components(component_payload)
     if screenshot_size != inventory_size:
         raise PageSnapshotError(
             "screenshot dimensions do not match component inventory: "
@@ -590,7 +613,19 @@ def build_snapshot(
     expected_orientation = "landscape" if screenshot_size[0] > screenshot_size[1] else "portrait"
     if orientation != expected_orientation:
         raise PageSnapshotError("orientation does not match screenshot dimensions")
-    if insets_px["left"] + insets_px["right"] >= screenshot_size[0] or insets_px["top"] + insets_px["bottom"] >= screenshot_size[1]:
+    if insets_px is not None:
+        effective_insets = insets_px
+        insets_source = "explicit"
+    elif runtime_insets is not None:
+        effective_insets = runtime_insets
+        insets_source = "component_inventory"
+    else:
+        effective_insets = {"left": 0, "top": 0, "right": 0, "bottom": 0}
+        insets_source = "default_zero"
+    if (
+        effective_insets["left"] + effective_insets["right"] >= screenshot_size[0]
+        or effective_insets["top"] + effective_insets["bottom"] >= screenshot_size[1]
+    ):
         raise PageSnapshotError("insets-px leave no visible content area")
     output_components: list[dict[str, Any]] = []
     mapped_source_keys: set[str] = set()
@@ -662,11 +697,11 @@ def build_snapshot(
         input_hashes["source_attribute_inventory_sha256"] = sha256_file(source_file)
     if visual_file is not None:
         input_hashes["visual_facts_inventory_sha256"] = sha256_file(visual_file)
-    safe_area_dp = {name: round(value / density, 3) for name, value in insets_px.items()}
-    content_x = insets_px["left"]
-    content_y = insets_px["top"]
-    content_width = screenshot_size[0] - insets_px["left"] - insets_px["right"]
-    content_height = screenshot_size[1] - insets_px["top"] - insets_px["bottom"]
+    safe_area_dp = {name: round(value / density, 3) for name, value in effective_insets.items()}
+    content_x = effective_insets["left"]
+    content_y = effective_insets["top"]
+    content_width = screenshot_size[0] - effective_insets["left"] - effective_insets["right"]
+    content_height = screenshot_size[1] - effective_insets["top"] - effective_insets["bottom"]
     return {
         "schema": PAGE_SCHEMA,
         "status": "candidate_requires_review",
@@ -681,7 +716,8 @@ def build_snapshot(
             "orientation": orientation,
             "width_dp": round(screenshot_size[0] / density, 3),
             "height_dp": round(screenshot_size[1] / density, 3),
-            "safe_area_px": insets_px,
+            "insets_source": insets_source,
+            "safe_area_px": effective_insets,
             "safe_area_dp": safe_area_dp,
             "content_bounds_px": {
                 "x": content_x, "y": content_y, "width": content_width, "height": content_height,
@@ -739,7 +775,10 @@ def parser_for_platform(platform: str) -> argparse.ArgumentParser:
     parser.add_argument("--density", required=True, type=float)
     parser.add_argument("--font-scale", type=float, default=1.0)
     parser.add_argument("--orientation", choices=("portrait", "landscape"))
-    parser.add_argument("--insets-px", default="0,0,0,0")
+    parser.add_argument(
+        "--insets-px",
+        help="left,top,right,bottom override; defaults to v2 component inventory runtime insets",
+    )
     parser.add_argument("--device-id")
     parser.add_argument("--device-model")
     parser.add_argument("--os-version")
@@ -763,7 +802,7 @@ def main_for_platform(platform: str) -> int:
             visual_facts_path=args.visual_facts,
             font_scale=args.font_scale,
             orientation=orientation,
-            insets_px=parse_insets(args.insets_px),
+            insets_px=parse_insets(args.insets_px) if args.insets_px is not None else None,
             device_id=args.device_id,
             device_model=args.device_model,
             os_version=args.os_version,

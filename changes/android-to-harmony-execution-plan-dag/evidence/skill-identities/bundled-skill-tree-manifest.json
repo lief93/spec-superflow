@@ -2,13 +2,13 @@
   "schema": "android-to-harmony.skill-tree-manifest.v1",
   "local_root": "skills/migrate-android-compose-to-harmony",
   "file_count": 79,
-  "tree_sha256": "537ed922e2a802a06337f6f05ff62048a8c0b1d5112478d10a9a79ccafda6256",
+  "tree_sha256": "8494e75eb1ddb1e3795782f93622f66f1e60854449f5d4c2a0deb6cea432e737",
   "files": [
     {
       "path": "SKILL.md",
       "type": "file",
-      "bytes": 48532,
-      "sha256": "67893cb84f79fc167ffdbc92e494ae5df391de76fcbef35697bf50c213de3bd0"
+      "bytes": 48804,
+      "sha256": "0937b4571422b8e7da7bb6ffb66e38cdce4be232d450fc95b9a18a00d7e5fea0"
     },
     {
       "path": "agents/openai.yaml",
@@ -19,14 +19,14 @@
     {
       "path": "assets/android-compose-uitest-component-bounds/ComponentBounds.kt",
       "type": "file",
-      "bytes": 4149,
-      "sha256": "ba8462c7d5e63f09695b20e2e81ee4a33c85fd86c5f737b1ea805310b432cc54"
+      "bytes": 5974,
+      "sha256": "6f757973794f7ecfd29a59bb29d3fc187a7ba01ccea2d00433d4f8c089f16ef9"
     },
     {
       "path": "assets/android-compose-uitest-component-bounds/ComposeSemanticsComponentBounds.kt",
       "type": "file",
-      "bytes": 3518,
-      "sha256": "35d680d050d65fb429116190a9e6e7f5ddd2eb8eea36a9c9c6bf1c8a03f9edcf"
+      "bytes": 5415,
+      "sha256": "ecc98745b412030318f37db7475852ca5dca589e9f4f61126e49e701ff2103e4"
     },
     {
       "path": "assets/compose-arkui-primitive-mappings.json",
@@ -175,8 +175,8 @@
     {
       "path": "assets/ohos-uitest-component-bounds/ComponentBounds.ets",
       "type": "file",
-      "bytes": 2586,
-      "sha256": "539366cf3af865cd17d054366336206cc0eabb59b9cc11044807985ef10d7ff7"
+      "bytes": 3882,
+      "sha256": "a70d2e9526c89e067edb478cbee4d4dd0b064d4adf6343f49798cad384c5e5b3"
     },
     {
       "path": "references/capability-graph-and-gates.md",
@@ -193,14 +193,14 @@
     {
       "path": "references/local-image-comparison.md",
       "type": "file",
-      "bytes": 14689,
-      "sha256": "ee851431bd6f8b2b69ee87c8c28b754bc96f9210f519403660eff83597176c3e"
+      "bytes": 15062,
+      "sha256": "53a7319d45b4352f0122a2851a2693e9157a47ad48c9200c223f0e1ff78fd91c"
     },
     {
       "path": "references/page-snapshot.md",
       "type": "file",
-      "bytes": 11281,
-      "sha256": "9d86c8b65ab86164b057dbd91f85c3bef6524fe12c37325ce44db628b602b3c4"
+      "bytes": 11390,
+      "sha256": "2838181b77b016b311b425d5ff1a8472500d87625bc770dbed888a183357b3e8"
     },
     {
       "path": "references/platform-capabilities.md",
@@ -259,8 +259,8 @@
     {
       "path": "scripts/compare_local_screenshots.py",
       "type": "file",
-      "bytes": 75494,
-      "sha256": "3163fe06d50f1fa35486a3e78b003d88a9e387b5cedb6e1c87487174ac00bdf5"
+      "bytes": 76998,
+      "sha256": "717c04846bb0b60bf046201376e99ad6ed8b105ca280cad7c26f602471175317"
     },
     {
       "path": "scripts/convert_android_vector.py",
@@ -289,8 +289,8 @@
     {
       "path": "scripts/extract_android_component_bounds.py",
       "type": "file",
-      "bytes": 6014,
-      "sha256": "c07469323548008fa99c5a66a12c67bc47ccea2a45bee1263ede7b77a10cfafe"
+      "bytes": 6842,
+      "sha256": "7daae167d5d4314a28625c195c0fd434188a490467c7a9b4481fdd671f2cb106"
     },
     {
       "path": "scripts/extract_android_visual_facts.py",
@@ -307,8 +307,8 @@
     {
       "path": "scripts/extract_ohos_component_bounds.py",
       "type": "file",
-      "bytes": 6026,
-      "sha256": "4d21cc5129923a778ae13c89c3b8538af7360dea1b00491c870f2937008bbeb1"
+      "bytes": 6854,
+      "sha256": "07d397674af8f12eb7d0cebd9d9faec94307635c5a53c282b5758d605aa7fa81"
     },
     {
       "path": "scripts/extract_visual_facts.py",
@@ -403,8 +403,8 @@
     {
       "path": "scripts/page_snapshot.py",
       "type": "file",
-      "bytes": 37012,
-      "sha256": "81e597dc7654b6aaa8a0b8c63b2e716a43d6f1f6ac6a63cb7f8f5cfa3788f0ea"
+      "bytes": 38691,
+      "sha256": "1631fc9386f34544f8c2e23372682fa9e601f9b39f28f71472f96a44ae2d31b5"
     },
     {
       "path": "scripts/prepare_safe_snapshot.py",
@@ -421,8 +421,8 @@
     {
       "path": "scripts/test_component_bounds_asset.py",
       "type": "file",
-      "bytes": 3766,
-      "sha256": "9c5b44961404ed13f1eb2b76ac1ad14393788242a407a166bb7ef9c04c71fafc"
+      "bytes": 4102,
+      "sha256": "f213b37b8250c1c48437cd7f5efc8170a4702c4a085237a7b97f2a33b5dcd2a9"
     },
     {
       "path": "scripts/test_evidence_runner.py",
@@ -433,14 +433,14 @@
     {
       "path": "scripts/test_extract_android_component_bounds.py",
       "type": "file",
-      "bytes": 3535,
-      "sha256": "2be3038b789980627f7f5c8780d53a5aea38640ec15ae03afe7b872831a73cb3"
+      "bytes": 4360,
+      "sha256": "7d232a50b18b464959ad5e6b22e4249d9b4484c4e261da24d5867a9d4898fe10"
     },
     {
       "path": "scripts/test_extract_ohos_component_bounds.py",
       "type": "file",
-      "bytes": 3492,
-      "sha256": "b2fd60c91a549301433b832e1bb0e8f2f4182903d389015152833b1f5ee13c9e"
+      "bytes": 4314,
+      "sha256": "fff0f21bfd23e80641f817b22915d8c2007c64725ddb016cb1311a8932da4d5c"
     },
     {
       "path": "scripts/test_extract_visual_facts.py",
@@ -451,8 +451,8 @@
     {
       "path": "scripts/test_generate_page_snapshot.py",
       "type": "file",
-      "bytes": 15011,
-      "sha256": "44ebbf4f43c76e2b02716c83ea6e2be32cead81cce65995f1349b95fca30481b"
+      "bytes": 17048,
+      "sha256": "1a0d551586dcce38f5b9b6e75c190c6008feb513617a118dcff14120fc8648db"
     },
     {
       "path": "scripts/test_orchestrator.py",

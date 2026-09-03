@@ -29,6 +29,22 @@ def inventory() -> dict[str, object]:
 
 
 class ExtractOhosComponentBoundsTests(unittest.TestCase):
+    def test_extracts_v2_runtime_content_insets(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "harmony-components.json"
+            payload = inventory()
+            payload["schema"] = "android-to-harmony.component-bounds.v2"
+            payload["content_insets_px"] = {"left": 0, "top": 48, "right": 0, "bottom": 64}
+            log = "OHOS_COMPONENT_BOUNDS:" + json.dumps(payload) + "\n"
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--output", str(output)],
+                input=log, check=False, capture_output=True, text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8")), payload)
+
     def test_extracts_one_sanitized_hilog_inventory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "harmony-components.json"

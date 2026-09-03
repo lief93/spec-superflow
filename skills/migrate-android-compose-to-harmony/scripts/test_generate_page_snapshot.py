@@ -26,14 +26,22 @@ def write_png(path: Path, width: int, height: int) -> None:
 
 
 class GeneratePageSnapshotTest(unittest.TestCase):
-    def write_capture(self, root: Path, name: str, button_x: int) -> tuple[Path, Path]:
+    def write_capture(
+        self,
+        root: Path,
+        name: str,
+        button_x: int,
+        runtime_insets: dict[str, int] | None = None,
+    ) -> tuple[Path, Path]:
         screenshot = root / f"{name}.png"
         write_png(screenshot, 1080, 2400)
         components = root / f"{name}-components.json"
-        components.write_text(
-            json.dumps(
-                {
-                    "schema": "android-to-harmony.component-bounds.v1",
+        inventory = {
+                    "schema": (
+                        "android-to-harmony.component-bounds.v2"
+                        if runtime_insets is not None
+                        else "android-to-harmony.component-bounds.v1"
+                    ),
                     "screenshot_dimensions": {"width": 1080, "height": 2400},
                     "components": [
                         {
@@ -50,7 +58,10 @@ class GeneratePageSnapshotTest(unittest.TestCase):
                         },
                     ],
                 }
-            )
+        if runtime_insets is not None:
+            inventory["content_insets_px"] = runtime_insets
+        components.write_text(
+            json.dumps(inventory)
             + "\n",
             encoding="utf-8",
         )
@@ -215,6 +226,7 @@ class GeneratePageSnapshotTest(unittest.TestCase):
         output: Path,
         source_attributes: Path | None = None,
         visual_facts: Path | None = None,
+        insets_px: str | None = "0,72,0,96",
     ) -> subprocess.CompletedProcess[str]:
         command = [
             sys.executable,
@@ -233,11 +245,11 @@ class GeneratePageSnapshotTest(unittest.TestCase):
             "1.15",
             "--orientation",
             "portrait",
-            "--insets-px",
-            "0,72,0,96",
             "--output",
             str(output),
         ]
+        if insets_px is not None:
+            command.extend(["--insets-px", insets_px])
         if source_attributes is not None:
             command.extend(["--source-attributes", str(source_attributes)])
         if visual_facts is not None:
@@ -302,6 +314,40 @@ class GeneratePageSnapshotTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("visual facts platform does not match", result.stderr)
             self.assertFalse(output.exists())
+
+    def test_uses_runtime_component_insets_when_cli_override_is_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            screenshot, components = self.write_capture(
+                root,
+                "android",
+                48,
+                runtime_insets={"left": 0, "top": 84, "right": 0, "bottom": 120},
+            )
+            output = root / "android-page.json"
+
+            result = self.run_generator(
+                "android", screenshot, components, output, insets_px=None
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["viewport"]["insets_source"], "component_inventory")
+            self.assertEqual(
+                payload["viewport"]["content_bounds_px"],
+                {"x": 0, "y": 84, "width": 1080, "height": 2196},
+            )
+
+            override_output = root / "android-page-override.json"
+            override_result = self.run_generator(
+                "android", screenshot, components, override_output, insets_px="0,72,0,96"
+            )
+            self.assertEqual(
+                override_result.returncode, 0, override_result.stderr or override_result.stdout
+            )
+            override = json.loads(override_output.read_text(encoding="utf-8"))
+            self.assertEqual(override["viewport"]["insets_source"], "explicit")
+            self.assertEqual(override["viewport"]["content_bounds_px"]["y"], 72)
 
     def test_rejects_a_screenshot_that_does_not_match_component_dimensions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
