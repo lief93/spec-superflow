@@ -21574,6 +21574,7 @@ class MigrationToolTests(unittest.TestCase):
                 import androidx.compose.foundation.text.BasicTextField
                 import androidx.compose.material3.DropdownMenuItem
                 import androidx.compose.material3.FloatingActionButton
+                import androidx.compose.material3.SmallFloatingActionButton
                 import androidx.compose.material3.NavigationBar
                 import androidx.compose.material3.NavigationBarItem
                 import androidx.compose.material3.RadioButton
@@ -21599,6 +21600,7 @@ class MigrationToolTests(unittest.TestCase):
                   Slider(value = 0.5f, onValueChange = {})
                   DropdownMenuItem(text = { Text("Menu") }, onClick = {})
                   FloatingActionButton(onClick = {}) { Text("Add") }
+                  SmallFloatingActionButton(onClick = {}) { Text("Add small") }
                   NavigationBar {
                     NavigationBarItem(
                       selected = true,
@@ -21643,6 +21645,7 @@ class MigrationToolTests(unittest.TestCase):
                 "Slider": "compose.material.slider",
                 "DropdownMenuItem": "compose.material.dropdown-menu-item",
                 "FloatingActionButton": "compose.material.floating-action-button",
+                "SmallFloatingActionButton": "compose.material.floating-action-button",
                 "NavigationBar": "compose.material.navigation-bar",
                 "NavigationBarItem": "compose.material.navigation-bar-item",
                 "HorizontalPager": "compose.foundation.horizontal-pager",

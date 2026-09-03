@@ -88,7 +88,10 @@ FALLBACK_LIST_ITEM_TYPE = "GeneratedFallbackListItem"
 ROOT_PUBLIC_PARAMETER_ALIASES = {
     "enabled": "enabledValue",
 }
-BUTTON_CONTAINER_COMPONENTS = {"Button", "TextButton", "OutlinedButton", "IconButton"}
+BUTTON_CONTAINER_COMPONENTS = {
+    "Button", "TextButton", "OutlinedButton", "IconButton", "FloatingActionButton",
+    "SmallFloatingActionButton",
+}
 STACK_RENDERED_COMPONENTS = {
     "Box",
     "BoxWithConstraints",

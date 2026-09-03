@@ -1,6 +1,6 @@
 ---
 name: migrate-android-compose-to-harmony
-description: Migrate local Android Jetpack Compose or Android Views/XML applications into buildable HarmonyOS Stage projects using ArkTS and ArkUI, with code-only UI reconstruction, image-byte isolation, behavior contracts, platform capability mapping, unit tests, UITest, and device verification evidence. Use when converting, assessing, planning, or validating an Android-to-HarmonyOS migration, especially when source images must not be exposed to an AI model.
+description: Migrate local Android Jetpack Compose or Android Views/XML applications into buildable HarmonyOS Stage projects using ArkTS and ArkUI, with source- and page-fact-driven UI reconstruction, image-byte isolation, behavior contracts, platform capability mapping, unit tests, UITest, and device verification evidence. Use when converting, assessing, planning, or validating an Android-to-HarmonyOS migration, especially when source images must not be exposed to an AI model.
 ---
 
 # Migrate Android UI to HarmonyOS
@@ -562,6 +562,30 @@ Before implementation, derive the state-capture matrix from source branches and 
 default, loading, empty, error, selected, disabled, dialog/sheet, keyboard-open, and meaningful
 scrolled states when they exist. Do not invent captures for states the source cannot reach, and do
 not let one default-state page JSON stand in for a visually different branch.
+
+For a real running page, prefer `generate_real_android_page_json.py` and
+`generate_real_harmony_page_json.py`. Each command captures or consumes the screenshot and runtime
+tree, builds the code-derived source page, and writes a hash-bound v2 `page.json`, `source-page.json`,
+`runtime-tree.json`, and `metrics.json` in one new output directory. Use `--package` on Android and
+`--bundle` on HarmonyOS so system and other-app windows cannot enter the page contract. Android
+capture deletes the remote layout, dumps a fresh layout, takes the screenshot, and then reads that
+layout. HarmonyOS capture deletes both remote artifacts first, dumps layout before taking the
+screenshot, and then receives both fresh files; do not replace either sequence with unchecked
+ad-hoc capture commands.
+
+Runtime nodes may bind to source calls through a unique stable runtime ID. When a platform exposes
+only generated positional node IDs, use an explicit `runtime_component_id` mapping bound to the
+exact `runtime_tree_sha256`. Display text or content descriptions may help a human locate a node,
+but they are not independent identity proof. Every mapping names both the deterministic source
+semantic key and its exact `source_call_id`; duplicate, type-incompatible, stale-tree, or ambiguous
+mappings fail closed.
+
+For a state where a source branch is provably inactive, list its exact semantic key and call ID in
+the page/state-specific runtime map as `inactive_source_branch`. Do not use this to hide an
+unmatched visible component. If a dynamic image choice is resolved from code/state evidence, the
+same map may carry only the allowlisted `style.asset.resource` and `style.asset.sha256` facts with
+relative evidence provenance. Conflicting, duplicate, unbound, or malformed facts fail closed.
+Read [page-snapshot.md](references/page-snapshot.md) for the schemas and capture commands.
 
 Use each state's Android page JSON to drive the ArkUI visual boundary, then reconcile source
 semantics that a rendered frame cannot prove: parent/child ownership, ordered modifiers, dynamic

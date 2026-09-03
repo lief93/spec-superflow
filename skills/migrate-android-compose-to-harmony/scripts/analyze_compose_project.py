@@ -56,6 +56,7 @@ COMPOSE_COMPONENTS = (
     "ExposedDropdownMenuBox",
     "FilterChip",
     "FloatingActionButton",
+    "SmallFloatingActionButton",
     "FlowRow",
     "HorizontalPager",
     "HorizontalDivider",

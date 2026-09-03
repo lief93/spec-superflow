@@ -61,6 +61,8 @@ class ComponentBoundsAssetTests(unittest.TestCase):
         self.assertIn("WindowInsets.Type.displayCutout()", source)
         self.assertIn("content_insets_px", source)
         self.assertIn("uiAutomation.rootInActiveWindow", source)
+        self.assertIn("waitForActiveRoot", source)
+        self.assertIn("waitForContentInsets", source)
         self.assertIn("viewIdResourceName", source)
         self.assertIn("getBoundsInScreen", source)
         self.assertIn("uiAutomation.takeScreenshot()", source)

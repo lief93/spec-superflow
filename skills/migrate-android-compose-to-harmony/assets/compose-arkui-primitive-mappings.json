@@ -1263,7 +1263,7 @@
     },
     {
       "id": "compose.material.floating-action-button",
-      "source_components": ["FloatingActionButton"],
+      "source_components": ["FloatingActionButton", "SmallFloatingActionButton"],
       "source_family": "Compose Material 2 or Material 3",
       "target_components": ["Button"],
       "target_strategy": "floating_button_with_explicit_shape_size_elevation_colors_icon_and_safe_area_position",

@@ -827,6 +827,66 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
             self.assertNotIn("style.asset.width_px", by_path)
             self.assertEqual(by_path["style.asset.width_dp"]["delta"], 0.0)
 
+    def test_v2_page_snapshots_accept_exact_inactive_source_branch_declarations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64)
+            write_page_snapshot_v2(right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64)
+            inactive = [{
+                "source_semantic_key": "HomeScreen_Snackbar_80_9",
+                "source_call_id": "app/src/main/java/example/HomeScreen.kt:80:Snackbar:9",
+                "reason": "inactive_source_branch",
+            }]
+            for page in (left_page, right_page):
+                payload = json.loads(page.read_text(encoding="utf-8"))
+                payload["inactive_source_components"] = inactive
+                page.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page), "--right-components", str(right_page),
+                "--target-size", "64x48", "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["verdict"]["status"], "pass")
+
+    def test_v2_page_snapshot_rejects_malformed_inactive_source_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            output = root / "comparison"
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64)
+            payload = json.loads(left_page.read_text(encoding="utf-8"))
+            payload["inactive_source_components"] = [{
+                "source_semantic_key": "HomeScreen_Snackbar_80_9",
+                "source_call_id": "app/src/main/java/example/HomeScreen.kt:80:Snackbar:9",
+                "reason": "unmatched_component",
+            }]
+            left_page.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page),
+                "--target-size", "64x48", "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("inactive source component is malformed", result.stderr)
+            self.assertFalse(output.exists())
+
     def test_v2_reports_missing_semantic_components_and_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -357,7 +357,8 @@ def normalize_provenance(value: Any, label: str) -> list[dict[str, Any]]:
             raise PageSnapshotError(f"{label}[{index}] is malformed")
         paths = item["paths"]
         if not isinstance(paths, list) or not paths or not all(
-            isinstance(path, str) and re.fullmatch(r"style(?:\.[a-z_]+)+", path) for path in paths
+            isinstance(path, str) and re.fullmatch(r"style(?:\.[a-z_][a-z0-9_]*)+", path)
+            for path in paths
         ):
             raise PageSnapshotError(f"{label}[{index}].paths is malformed")
         origin = optional_enum(

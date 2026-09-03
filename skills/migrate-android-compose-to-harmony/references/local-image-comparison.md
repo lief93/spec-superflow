@@ -1,6 +1,7 @@
 # Local image comparison
 
-Use the comparator only after the code-driven migration has produced the intended route and state.
+Use the comparator only after page-fact-driven visual implementation and source-driven behavior
+implementation have produced the intended route and state.
 It is a local diagnostic loop with a strict automated verdict, not the source of UI semantics or
 the final product-acceptance decision.
 

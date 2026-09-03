@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.platform.app.InstrumentationRegistry
@@ -36,13 +37,11 @@ fun captureComponentBoundsAndScreenshot(
 
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val uiAutomation = instrumentation.uiAutomation
+    val root = waitForActiveRoot()
+    val contentInsets = waitForContentInsets()
     val screenshot = requireNotNull(uiAutomation.takeScreenshot()) {
         "device screenshot was not captured"
     }
-    val root = requireNotNull(uiAutomation.rootInActiveWindow) {
-        "active accessibility window was not available"
-    }
-    val contentInsets = captureContentInsets()
     val components = JSONArray()
 
     descriptors.forEach { descriptor ->
@@ -108,35 +107,48 @@ fun captureComponentBoundsAndScreenshot(
     return marker
 }
 
-private fun captureContentInsets(): Rect {
+private fun waitForActiveRoot(): AccessibilityNodeInfo {
+    val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+    repeat(100) {
+        uiAutomation.rootInActiveWindow?.let { return it }
+        SystemClock.sleep(100)
+    }
+    error("active accessibility window was not available")
+}
+
+private fun waitForContentInsets(): Rect {
     check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         "automatic content insets require Android 6.0 or newer"
     }
     val instrumentation = InstrumentationRegistry.getInstrumentation()
-    var captured: Rect? = null
-    instrumentation.runOnMainSync {
-        val activity = ActivityLifecycleMonitorRegistry.getInstance()
-            .getActivitiesInStage(Stage.RESUMED)
-            .singleOrNull()
-        val windowInsets = activity?.window?.decorView?.rootWindowInsets
-        if (windowInsets != null) {
-            captured = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val insets = windowInsets.getInsets(
-                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
-                )
-                Rect(insets.left, insets.top, insets.right, insets.bottom)
-            } else {
-                @Suppress("DEPRECATION")
-                Rect(
-                    windowInsets.systemWindowInsetLeft,
-                    windowInsets.systemWindowInsetTop,
-                    windowInsets.systemWindowInsetRight,
-                    windowInsets.systemWindowInsetBottom,
-                )
+    repeat(100) {
+        var captured: Rect? = null
+        instrumentation.runOnMainSync {
+            val activity = ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .singleOrNull()
+            val windowInsets = activity?.window?.decorView?.rootWindowInsets
+            if (windowInsets != null) {
+                captured = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val insets = windowInsets.getInsets(
+                        WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
+                    )
+                    Rect(insets.left, insets.top, insets.right, insets.bottom)
+                } else {
+                    @Suppress("DEPRECATION")
+                    Rect(
+                        windowInsets.systemWindowInsetLeft,
+                        windowInsets.systemWindowInsetTop,
+                        windowInsets.systemWindowInsetRight,
+                        windowInsets.systemWindowInsetBottom,
+                    )
+                }
             }
         }
+        captured?.let { return it }
+        SystemClock.sleep(100)
     }
-    return requireNotNull(captured) { "runtime window insets were not available" }
+    error("runtime window insets were not available")
 }
 
 private fun findNodesByTag(

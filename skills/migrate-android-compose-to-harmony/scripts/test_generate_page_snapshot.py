@@ -219,7 +219,11 @@ class GeneratePageSnapshotTest(unittest.TestCase):
                             },
                             "provenance": [
                                 {
-                                    "paths": ["style.surface.background", "style.surface.corner_radius_dp"],
+                                    "paths": [
+                                        "style.surface.background",
+                                        "style.surface.corner_radius_dp",
+                                        "style.asset.sha256",
+                                    ],
                                     "origin": "source_resolved",
                                     "source": "Home.kt:42",
                                 },
@@ -329,6 +333,7 @@ class GeneratePageSnapshotTest(unittest.TestCase):
                 self.assertEqual(button["sibling_index"], 0)
                 self.assertEqual(button["unresolved"][0]["expression"], "MaterialTheme.colorScheme.primary")
                 self.assertEqual(button["provenance"][0]["origin"], "source_resolved")
+                self.assertIn("style.asset.sha256", button["provenance"][0]["paths"])
 
     def test_source_hierarchy_compresses_uncaptured_wrappers_and_controls_sibling_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

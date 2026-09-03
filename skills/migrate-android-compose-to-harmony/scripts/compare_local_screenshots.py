@@ -191,10 +191,26 @@ def load_component_inventory(
             "schema", "status", "authoritative", "platform", "page", "viewport",
             "capture", "input_hashes", "components", "unmapped_source_components", "limitations",
         }
+        allowed_page_fields = set(required_page_fields)
         if schema == PAGE_SNAPSHOT_V2_SCHEMA:
             required_page_fields.add("unmapped_visual_fact_components")
-        if set(payload) != required_page_fields:
+            allowed_page_fields.update({"unmapped_visual_fact_components", "inactive_source_components"})
+        if not required_page_fields.issubset(payload) or not set(payload).issubset(allowed_page_fields):
             raise ComparisonError(f"{side} page snapshot has unsupported root fields")
+        inactive_source_components = payload.get("inactive_source_components", [])
+        if not isinstance(inactive_source_components, list) or len(inactive_source_components) > 10000:
+            raise ComparisonError(f"{side} page snapshot inactive source components are malformed")
+        for inactive in inactive_source_components:
+            if (
+                not isinstance(inactive, dict)
+                or set(inactive) != {"source_semantic_key", "source_call_id", "reason"}
+                or not isinstance(inactive.get("source_semantic_key"), str)
+                or not inactive["source_semantic_key"]
+                or not isinstance(inactive.get("source_call_id"), str)
+                or not inactive["source_call_id"]
+                or inactive.get("reason") != "inactive_source_branch"
+            ):
+                raise ComparisonError(f"{side} page snapshot inactive source component is malformed")
         viewport = payload["viewport"]
         if not isinstance(viewport, dict):
             raise ComparisonError(f"{side} page snapshot viewport is malformed")

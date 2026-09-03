@@ -1,10 +1,12 @@
 # Android and HarmonyOS page snapshots
 
-`generate_android_page_json.py` and `generate_harmony_page_json.py` produce the same
+`generate_android_page_json.py`, `generate_harmony_page_json.py`, and the real-device wrappers
+`generate_real_android_page_json.py` and `generate_real_harmony_page_json.py` produce the same
 `android-to-harmony.page-snapshot.v2` schema. The result is the migration equivalent of a design
 tool's `version_json`: one deterministic route/state, its exact screenshot, logical viewport,
 component hierarchy, geometry, content, visual style, asset identity, state, provenance, and
-unresolved source expressions.
+unresolved source expressions. The real-device wrappers additionally retain the raw runtime tree,
+the code-derived source page, and honest coverage/timing metrics in one new output directory.
 
 ## Device and screenshot rules
 
@@ -54,6 +56,96 @@ The generator refuses stale screenshots, mismatched component dimensions, duplic
 keys, unknown style fields, invalid colors or hashes, impossible insets, and cross-platform visual
 fact inputs. It derives logical asset dimensions from pixel dimensions and capture density when
 they are not supplied. It does not overwrite an existing output.
+
+## Capture real pages and bind runtime nodes to source
+
+Use the real-page wrappers when the Android and Harmony applications are runnable:
+
+```bash
+python3 "$SKILL_ROOT/scripts/generate_real_android_page_json.py" \
+  --contract "$CONTRACT" \
+  --root-source "app/src/main/java/example/HomeScreen.kt" \
+  --root-composable HomeScreen \
+  --page-id home --state-id empty \
+  --package com.example.android \
+  --source-root "$ANDROID_SOURCE" \
+  --runtime-source-map "$ANDROID_RUNTIME_SOURCE_MAP" \
+  --serial "$ANDROID_DEVICE_ID" \
+  --output-dir "$NEW_ANDROID_PAGE_DIR"
+
+python3 "$SKILL_ROOT/scripts/generate_real_harmony_page_json.py" \
+  --contract "$CONTRACT" \
+  --root-source "app/src/main/java/example/HomeScreen.kt" \
+  --root-composable HomeScreen \
+  --page-id home --state-id empty \
+  --source-root "$HARMONY_TARGET" \
+  --runtime-source-map "$HARMONY_RUNTIME_SOURCE_MAP" \
+  --bundle com.example.harmony \
+  --serial "$HARMONY_DEVICE_ID" --hdc "$HDC" \
+  --density 2 \
+  --output-dir "$NEW_HARMONY_PAGE_DIR"
+```
+
+Android package filtering and HarmonyOS bundle filtering exclude system and other-app windows.
+The Android wrapper removes its remote layout, runs `uiautomator dump`, takes the screenshot, and
+then reads the new layout. The HarmonyOS wrapper removes both remote capture files, runs
+`uitest dumpLayout`, runs `uitest screenCap`, and receives both files in that order. These fixed
+sequences prevent stale artifacts from being silently paired with the current page. Each output
+binds the screenshot and runtime tree SHA-256.
+
+A runtime-source map has this strict page/state-specific shape:
+
+```json
+{
+  "schema": "android-to-harmony.runtime-source-map.v1",
+  "platform": "android",
+  "page": {"id": "home", "state": "empty"},
+  "runtime_tree_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "mappings": [
+    {
+      "runtime_component_id": "runtime-0-1-2",
+      "source_semantic_key": "HomeScreen_Icon_42_3",
+      "source_call_id": "app/src/main/java/example/HomeScreen.kt:42:Icon:3"
+    }
+  ],
+  "inactive_source_components": [
+    {
+      "source_semantic_key": "HomeScreen_Snackbar_80_9",
+      "source_call_id": "app/src/main/java/example/HomeScreen.kt:80:Snackbar:9",
+      "reason": "inactive_source_branch"
+    }
+  ],
+  "resolved_source_facts": [
+    {
+      "source_semantic_key": "HomeScreen_Image_50_5",
+      "source_call_id": "app/src/main/java/example/HomeScreen.kt:50:Image:5",
+      "path": "style.asset.sha256",
+      "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "origin": "source_resolved",
+      "source": "app/src/main/res/drawable/empty_state.png"
+    }
+  ]
+}
+```
+
+Prefer a unique stable `runtime_id`; it remains valid across equivalent captures. Use
+`runtime_component_id` only for a capture-bound mapping and require the exact
+`runtime_tree_sha256`, because positional runtime IDs can change when the tree changes. Both forms
+must name one exact deterministic source semantic key and `source_call_id`. Text equality and
+content-description equality are diagnostic clues, not independent source-identity proof.
+
+`inactive_source_components` is allowed only for source calls proven unreachable in this exact
+captured state, such as a closed menu or absent Snackbar branch. It cannot overlap a runtime
+mapping, repeat a semantic key, or name an unknown/mismatched call. `resolved_source_facts` is
+restricted to `style.asset.resource` and `style.asset.sha256`; each value must be bound to an exact
+source call and a repository-relative evidence source. Duplicate paths, invalid hashes, absolute
+or parent-traversing evidence paths, and conflicts with already resolved source/runtime values fail
+closed.
+
+The emitted semantic page compresses uncaptured source wrappers to the nearest captured
+source-semantic ancestor and preserves source preorder for siblings. Bounds containment is only a
+fallback when source hierarchy is missing or ambiguous. This keeps platform wrapper nodes and
+equal-size/rotated layouts from creating false hierarchy differences.
 
 ## Visual facts schema
 
