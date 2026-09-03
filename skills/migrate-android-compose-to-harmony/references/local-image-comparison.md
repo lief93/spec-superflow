@@ -1,15 +1,17 @@
 # Local image comparison
 
 Use the comparator only after the code-driven migration has produced the intended route and state.
-It is a local diagnostic loop, not the source of UI semantics and not an automatic acceptance gate.
+It is a local diagnostic loop with a strict automated verdict, not the source of UI semantics or
+the final product-acceptance decision.
 
 ## Prepare comparable captures
 
 Capture the same route, state, locale, theme, font scale, dynamic data, and scroll position on both
-platforms. Crop status/navigation bars independently when their platform geometry differs. Choose
-one explicit target size when the cropped screenshots do not already match. Scaling makes pixel
-comparison possible but cannot repair a mismatched aspect ratio; inspect
-`normalization.aspect_ratio_delta` before using the metrics.
+platforms. With v2 page snapshots, the comparator automatically uses each side's
+`viewport.content_bounds_px`, so status/navigation bars and cutouts may have different heights.
+Explicit crop arguments override that metadata. Choose one explicit target size when the cropped
+screenshots do not already match. Scaling makes pixel comparison possible but cannot repair a
+mismatched aspect ratio; inspect `normalization.aspect_ratio_delta` before using the metrics.
 
 ## Run
 
@@ -29,9 +31,8 @@ python3 "$SKILL_ROOT/scripts/compare_local_screenshots.py" \
   --left-components android-components.json \
   --right-components harmony-components.json \
   --source-attributes home-source-attributes.json \
-  --left-crop 0,96,1080,2208 \
-  --right-crop 0,116,1320,2604 \
   --target-size 1080x2208 \
+  --min-ssim 0.95 \
   --output-dir comparison-home
 ```
 
@@ -98,11 +99,13 @@ changed pixels overlap these component bounds”; it does not prove the componen
 wrong or name the property to edit. Use the candidate IDs to inspect the corresponding
 Compose/ArkUI hierarchy, modifiers, resource tokens, and state branch.
 
-All three are candidate diagnostics. There is deliberately no threshold or pass/fail field.
-Platform font rasterization, antialiasing, native controls, dynamic content, animation, and an
-unaligned viewport can lower a score without proving a migration defect. Use the report to focus
-source/hierarchy inspection, fix a general semantic translation rule when the evidence supports
-one, then recapture the same state. An authorized human still owns final visual acceptance.
+All three metrics remain candidate diagnostics, but complete v2 page snapshots now produce a
+strict `verdict.status`. The default minimum for each metric is `0.95`; override it explicitly with
+`--min-ssim`. Missing/ambiguous components, hierarchy changes, geometry or style over tolerance,
+one-sided or unresolved style facts, and incompatible logical viewport/orientation/font scale also
+fail the verdict. Raw screenshots or older inventories always fail the complete-v2 check. Platform
+font rasterization, antialiasing, native controls, dynamic content, and animation can lower a score,
+so an authorized human still owns final visual acceptance.
 
 For a faster starting point, read
 `difference_analysis.component_impact_summary`. It aggregates the hotspot candidates by runtime

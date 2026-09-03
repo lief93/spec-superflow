@@ -587,8 +587,10 @@ inputs, amplified and annotated difference images, and a side-by-side image. The
 comparator, input, and image-artifact hashes and records the Pillow version; stdout includes the
 report SHA-256 so the caller can retain an external binding.
 
-Align route, state, scroll position, viewport, system-bar crop, font scale, locale, theme, and
-dynamic data before interpreting `ssim_color`, `ssim_luma`, or `ssim_edges`. These metrics locate
+Align route, state, scroll position, viewport, font scale, locale, theme, and dynamic data before
+interpreting `ssim_color`, `ssim_luma`, or `ssim_edges`. With v2 page snapshots, each side is
+automatically cropped to its recorded content bounds and component geometry is rebased to that
+content origin; explicit crop arguments override the automatic values. These metrics locate
 regressions; `difference_analysis.regions` groups connected changed tiles, while
 `difference_analysis.hotspots` ranks the most severe individual tiles and maps their normalized
 bounds back to both input screenshots. These are location candidates, not source-code fix
@@ -638,8 +640,66 @@ provide `testTagsAsResourceId`, use the adjacent `ComposeSemanticsComponentBound
 asset with a frozen Compose test clock, a bounded readiness loop, and the real Compose-view screen
 offset. Keep the accessibility path as the default for supported versions.
 
-The tool does not compute a pass/fail verdict and does not replace an authorized human visual
-review. Treat every generated PNG as protected image data. For private screenshots, neither the
+Generate one canonical page JSON for each captured Android and HarmonyOS page state. Both commands
+emit `android-to-harmony.page-snapshot.v2`, bind the component inventory to the exact screenshot
+dimensions and SHA-256, convert runtime bounds to px and logical units, record safe-area/content
+bounds, infer parent/child order, and attach matching source attributes plus resolved visual facts
+through `semantic_key`. Read [page-snapshot.md](references/page-snapshot.md) for the complete visual
+fact schema, provenance rules, and cross-device viewport requirements. Physical screenshot sizes
+may differ; whole-screen pixel metrics require equivalent logical content aspect, orientation,
+system-bar crop, font scale, locale, theme, state, and scroll position.
+
+Collect visual facts in the same deterministic state and emit exactly one
+`ANDROID_VISUAL_FACTS:` or `HARMONY_VISUAL_FACTS:` marker. Convert it with
+`extract_android_visual_facts.py` or `extract_harmony_visual_facts.py`; do not hand-copy JSON.
+Runtime-inspectable values use `origin=runtime`; values resolved from exact XML/Compose/ArkTS or
+resource declarations use `origin=source_resolved`; retain state-dependent expressions under
+`unresolved`. Never label an unexposed property as runtime-measured.
+
+```bash
+python3 "$SKILL_ROOT/scripts/generate_android_page_json.py" \
+  --page-id home --state-id default \
+  --screenshot "$ANDROID_SCREENSHOT" \
+  --components "$ANDROID_COMPONENT_BOUNDS" \
+  --visual-facts "$ANDROID_VISUAL_FACTS" \
+  --source-attributes "$SOURCE_ATTRIBUTE_INVENTORY" \
+  --density "$ANDROID_DENSITY" --font-scale "$ANDROID_FONT_SCALE" \
+  --orientation portrait --insets-px left,top,right,bottom \
+  --device-id "$ANDROID_DEVICE_ID" \
+  --device-model "$ANDROID_DEVICE_MODEL" \
+  --os-version "$ANDROID_OS_VERSION" \
+  --output "$NEW_ANDROID_PAGE_JSON"
+
+python3 "$SKILL_ROOT/scripts/generate_harmony_page_json.py" \
+  --page-id home --state-id default \
+  --screenshot "$HARMONY_SCREENSHOT" \
+  --components "$HARMONY_COMPONENT_BOUNDS" \
+  --visual-facts "$HARMONY_VISUAL_FACTS" \
+  --source-attributes "$SOURCE_ATTRIBUTE_INVENTORY" \
+  --density "$HARMONY_DENSITY" --font-scale "$HARMONY_FONT_SCALE" \
+  --orientation portrait --insets-px left,top,right,bottom \
+  --device-id "$HARMONY_DEVICE_ID" \
+  --device-model "$HARMONY_DEVICE_MODEL" \
+  --os-version "$HARMONY_OS_VERSION" \
+  --output "$NEW_HARMONY_PAGE_JSON"
+```
+
+Pass these files to `compare_local_screenshots.py` through `--left-components` and
+`--right-components`. The comparator verifies that each page JSON names the exact screenshot bytes,
+then rejects mismatched page/state pairs and reports explicit missing components, hierarchy and
+sibling-order changes, logical geometry deltas, property-level spacing/surface/typography/asset/
+transform/state/content deltas, unresolved facts, viewport compatibility, and pixel hotspots.
+Generate one pair per route and deterministic UI state; never reuse a default-state JSON for a
+dialog, loading, empty, error, selected, or scrolled screenshot.
+
+The report and command stdout include a final `pass` or `fail`. A pass requires complete v2 page
+snapshots, equivalent component presence and hierarchy, geometry within 1dp, no unresolved or
+one-sided proven style facts, compatible logical viewport/orientation/font scale, and all three
+SSIM metrics at or above `--min-ssim` (default `0.95`). Process exit code zero means comparison
+completed; read `verdict` for the UI result. The color-channel tolerance remains 8. Raw asset pixel
+dimensions are retained as metadata, while cross-density size comparison uses normalized logical
+units. This automated verdict does not replace authorized product acceptance. Treat every generated
+PNG as protected image data. For private screenshots, neither the
 model nor a model-visible image tool may open the inputs or outputs. See
 [local-image-comparison.md](references/local-image-comparison.md) for the workflow and metric
 limits.

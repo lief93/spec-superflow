@@ -13,6 +13,13 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from page_snapshot import (
+    PageSnapshotError,
+    normalize_provenance,
+    normalize_style,
+    normalize_unresolved,
+)
+
 try:
     from PIL import (
         Image,
@@ -40,6 +47,8 @@ except ImportError:
 REPORT_SCHEMA = "android-to-harmony.local-image-comparison.v1"
 COMMAND_SCHEMA = "android-to-harmony.command-result.v1"
 COMPONENT_SCHEMA = "android-to-harmony.component-bounds.v1"
+PAGE_SNAPSHOT_SCHEMA = "android-to-harmony.page-snapshot.v1"
+PAGE_SNAPSHOT_V2_SCHEMA = "android-to-harmony.page-snapshot.v2"
 SOURCE_ATTRIBUTE_SCHEMA = "android-to-harmony.source-attribute-inventory.v1"
 
 
@@ -73,11 +82,23 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="optional sanitized source-attribute inventory for component impact mapping",
     )
-    parser.add_argument("--left-crop", help="x,y,width,height; defaults to the full image")
-    parser.add_argument("--right-crop", help="x,y,width,height; defaults to the full image")
+    parser.add_argument(
+        "--left-crop",
+        help="x,y,width,height; overrides v2 content bounds, otherwise defaults to the full image",
+    )
+    parser.add_argument(
+        "--right-crop",
+        help="x,y,width,height; overrides v2 content bounds, otherwise defaults to the full image",
+    )
     parser.add_argument(
         "--target-size",
         help="widthxheight; defaults to the left crop dimensions",
+    )
+    parser.add_argument(
+        "--min-ssim",
+        type=float,
+        default=0.95,
+        help="minimum color, luma, and edge SSIM required for a pass (default: 0.95)",
     )
     parser.add_argument("--output-dir", required=True, type=Path)
     return parser.parse_args()
@@ -142,6 +163,7 @@ def load_component_inventory(
     requested_path: Path | None,
     side: str,
     expected_dimensions: tuple[int, int],
+    expected_screenshot: Path,
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     if requested_path is None:
         return None, []
@@ -150,15 +172,44 @@ def load_component_inventory(
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ComparisonError(f"{side} component inventory is not valid UTF-8 JSON") from error
-    if not isinstance(payload, dict) or set(payload) != {
-        "schema",
-        "screenshot_dimensions",
-        "components",
-    }:
-        raise ComparisonError(f"{side} component inventory has unsupported root fields")
-    if payload["schema"] != COMPONENT_SCHEMA:
+    if not isinstance(payload, dict):
+        raise ComparisonError(f"{side} component inventory root must be an object")
+    schema = payload.get("schema")
+    if schema == COMPONENT_SCHEMA:
+        if set(payload) != {"schema", "screenshot_dimensions", "components"}:
+            raise ComparisonError(f"{side} component inventory has unsupported root fields")
+        dimensions = payload["screenshot_dimensions"]
+        raw_components = payload["components"]
+        bounds_field = "bounds"
+    elif schema in {PAGE_SNAPSHOT_SCHEMA, PAGE_SNAPSHOT_V2_SCHEMA}:
+        required_page_fields = {
+            "schema", "status", "authoritative", "platform", "page", "viewport",
+            "capture", "input_hashes", "components", "unmapped_source_components", "limitations",
+        }
+        if schema == PAGE_SNAPSHOT_V2_SCHEMA:
+            required_page_fields.add("unmapped_visual_fact_components")
+        if set(payload) != required_page_fields:
+            raise ComparisonError(f"{side} page snapshot has unsupported root fields")
+        viewport = payload["viewport"]
+        if not isinstance(viewport, dict):
+            raise ComparisonError(f"{side} page snapshot viewport is malformed")
+        dimensions = {
+            "width": viewport.get("width_px"),
+            "height": viewport.get("height_px"),
+        }
+        capture = payload["capture"]
+        screenshot_record = capture.get("screenshot") if isinstance(capture, dict) else None
+        if not isinstance(screenshot_record, dict):
+            raise ComparisonError(f"{side} page snapshot screenshot record is malformed")
+        if screenshot_record.get("byte_count") != expected_screenshot.stat().st_size:
+            raise ComparisonError(f"{side} page snapshot screenshot byte count does not match")
+        expected_sha256 = sha256_file(expected_screenshot)
+        if screenshot_record.get("sha256") != expected_sha256:
+            raise ComparisonError(f"{side} page snapshot screenshot SHA-256 does not match")
+        raw_components = payload["components"]
+        bounds_field = "bounds_px"
+    else:
         raise ComparisonError(f"{side} component inventory schema is unsupported")
-    dimensions = payload["screenshot_dimensions"]
     if not isinstance(dimensions, dict) or set(dimensions) != {"width", "height"}:
         raise ComparisonError(f"{side} component inventory dimensions are malformed")
     if (
@@ -167,25 +218,34 @@ def load_component_inventory(
         or (dimensions["width"], dimensions["height"]) != expected_dimensions
     ):
         raise ComparisonError(f"{side} component inventory dimensions do not match the screenshot")
-    raw_components = payload["components"]
     if not isinstance(raw_components, list) or len(raw_components) > 10000:
         raise ComparisonError(f"{side} component inventory must contain at most 10000 components")
+
+    snapshot_density: float | None = None
+    if schema == PAGE_SNAPSHOT_V2_SCHEMA:
+        density = viewport.get("density")
+        if type(density) not in {int, float} or not math.isfinite(float(density)) or density <= 0:
+            raise ComparisonError(f"{side} page snapshot density is malformed")
+        snapshot_density = float(density)
 
     components: list[dict[str, Any]] = []
     component_ids: set[str] = set()
     for raw_component in raw_components:
         if not isinstance(raw_component, dict):
             raise ComparisonError(f"{side} component inventory contains a non-object component")
-        if not {"id", "type", "bounds"}.issubset(raw_component) or not set(raw_component).issubset(
-            {"id", "type", "semantic_key", "bounds"}
-        ):
-            raise ComparisonError(f"{side} component inventory contains unsupported component fields")
+        if schema == COMPONENT_SCHEMA:
+            if not {"id", "type", bounds_field}.issubset(raw_component) or not set(raw_component).issubset(
+                {"id", "type", "semantic_key", bounds_field}
+            ):
+                raise ComparisonError(f"{side} component inventory contains unsupported component fields")
+        elif not {"id", "type", bounds_field}.issubset(raw_component):
+            raise ComparisonError(f"{side} page snapshot contains a malformed component")
         component_id = validate_component_token(raw_component["id"], "id")
         component_type = validate_component_token(raw_component["type"], "type")
         if component_id in component_ids:
             raise ComparisonError(f"{side} component inventory contains a duplicate component id")
         component_ids.add(component_id)
-        bounds = raw_component["bounds"]
+        bounds = raw_component[bounds_field]
         if not isinstance(bounds, dict) or set(bounds) != {"x", "y", "width", "height"}:
             raise ComparisonError(f"{side} component bounds are malformed")
         if any(type(bounds[field]) is not int for field in ("x", "y", "width", "height")):
@@ -202,19 +262,162 @@ def load_component_inventory(
             "component_type": component_type,
             "bounds": bounds,
         }
+        if schema in {PAGE_SNAPSHOT_SCHEMA, PAGE_SNAPSHOT_V2_SCHEMA}:
+            bounds_dp = raw_component.get("bounds_dp")
+            if not isinstance(bounds_dp, dict) or set(bounds_dp) != {"x", "y", "width", "height"}:
+                raise ComparisonError(f"{side} page snapshot component dp bounds are malformed")
+            if any(
+                type(bounds_dp[field]) not in {int, float}
+                or not math.isfinite(float(bounds_dp[field]))
+                for field in ("x", "y", "width", "height")
+            ):
+                raise ComparisonError(f"{side} page snapshot component dp bounds must be finite numbers")
+            if bounds_dp["x"] < 0 or bounds_dp["y"] < 0 or bounds_dp["width"] <= 0 or bounds_dp["height"] <= 0:
+                raise ComparisonError(f"{side} page snapshot component dp bounds must be positive")
+            component["bounds_dp"] = {
+                field: round(float(bounds_dp[field]), 3)
+                for field in ("x", "y", "width", "height")
+            }
+        if schema == PAGE_SNAPSHOT_V2_SCHEMA:
+            try:
+                component["style"] = normalize_style(
+                    raw_component.get("style"),
+                    f"{side} page snapshot component style",
+                )
+            except PageSnapshotError as error:
+                raise ComparisonError(str(error)) from error
+            parent_id = raw_component.get("parent_id")
+            if parent_id is not None:
+                parent_id = validate_component_token(parent_id, "parent_id")
+            children_ids = raw_component.get("children_ids", [])
+            if not isinstance(children_ids, list) or len(children_ids) > 10000:
+                raise ComparisonError(f"{side} page snapshot component children_ids are malformed")
+            normalized_children = [
+                validate_component_token(child_id, "children_ids")
+                for child_id in children_ids
+            ]
+            if len(normalized_children) != len(set(normalized_children)):
+                raise ComparisonError(f"{side} page snapshot component contains duplicate children_ids")
+            sibling_index = raw_component.get("sibling_index", 0)
+            if type(sibling_index) is not int or sibling_index < 0:
+                raise ComparisonError(f"{side} page snapshot component sibling_index is malformed")
+            component.update(
+                {
+                    "parent_id": parent_id,
+                    "children_ids": normalized_children,
+                    "sibling_index": sibling_index,
+                }
+            )
+            asset = component["style"]["asset"]
+            for axis in ("width", "height"):
+                pixel_field = f"{axis}_px"
+                logical_field = f"{axis}_dp"
+                if asset[logical_field] is None and asset[pixel_field] is not None:
+                    asset[logical_field] = round(asset[pixel_field] / snapshot_density, 3)
+            try:
+                component["provenance"] = normalize_provenance(
+                    raw_component.get("provenance"),
+                    f"{side} page snapshot component provenance",
+                )
+                component["unresolved"] = normalize_unresolved(
+                    raw_component.get("unresolved"),
+                    f"{side} page snapshot component unresolved facts",
+                )
+            except PageSnapshotError as error:
+                raise ComparisonError(str(error)) from error
         if "semantic_key" in raw_component:
             component["semantic_key"] = validate_component_token(
                 raw_component["semantic_key"],
                 "semantic_key",
             )
         components.append(component)
+    if schema == PAGE_SNAPSHOT_V2_SCHEMA:
+        by_id = {component["component_id"]: component for component in components}
+        for component in components:
+            parent_id = component["parent_id"]
+            if parent_id is not None and parent_id not in by_id:
+                raise ComparisonError(f"{side} page snapshot parent_id references an unknown component")
+            if any(child_id not in by_id for child_id in component["children_ids"]):
+                raise ComparisonError(f"{side} page snapshot children_ids reference an unknown component")
+            component["parent_semantic_key"] = (
+                by_id[parent_id].get("semantic_key") if parent_id is not None else None
+            )
+            component["children_semantic_keys"] = [
+                by_id[child_id].get("semantic_key") for child_id in component["children_ids"]
+            ]
     record = {
         "side": side,
-        "schema": COMPONENT_SCHEMA,
+        "schema": schema,
         "byte_count": path.stat().st_size,
         "sha256": sha256_file(path),
         "component_count": len(components),
     }
+    if schema in {PAGE_SNAPSHOT_SCHEMA, PAGE_SNAPSHOT_V2_SCHEMA}:
+        page = payload.get("page")
+        if not isinstance(page, dict) or set(page) != {"id", "state"}:
+            raise ComparisonError(f"{side} page snapshot page identity is malformed")
+        record["page"] = {
+            "id": validate_component_token(page["id"], "page.id"),
+            "state": validate_component_token(page["state"], "page.state"),
+        }
+    if schema == PAGE_SNAPSHOT_V2_SCHEMA:
+        content_bounds_dp = viewport.get("content_bounds_dp")
+        if (
+            not isinstance(content_bounds_dp, dict)
+            or set(content_bounds_dp) != {"x", "y", "width", "height"}
+            or any(
+                type(content_bounds_dp[field]) not in {int, float}
+                or not math.isfinite(float(content_bounds_dp[field]))
+                for field in content_bounds_dp
+            )
+            or content_bounds_dp["x"] < 0
+            or content_bounds_dp["y"] < 0
+            or content_bounds_dp["width"] <= 0
+            or content_bounds_dp["height"] <= 0
+        ):
+            raise ComparisonError(f"{side} page snapshot content bounds are malformed")
+        content_bounds_px = viewport.get("content_bounds_px")
+        if (
+            not isinstance(content_bounds_px, dict)
+            or set(content_bounds_px) != {"x", "y", "width", "height"}
+            or any(type(content_bounds_px[field]) is not int for field in content_bounds_px)
+            or content_bounds_px["x"] < 0
+            or content_bounds_px["y"] < 0
+            or content_bounds_px["width"] <= 0
+            or content_bounds_px["height"] <= 0
+            or content_bounds_px["x"] + content_bounds_px["width"] > expected_dimensions[0]
+            or content_bounds_px["y"] + content_bounds_px["height"] > expected_dimensions[1]
+        ):
+            raise ComparisonError(f"{side} page snapshot pixel content bounds are malformed")
+        orientation = viewport.get("orientation")
+        if orientation not in {"portrait", "landscape"}:
+            raise ComparisonError(f"{side} page snapshot orientation is malformed")
+        font_scale = viewport.get("font_scale")
+        if type(font_scale) not in {int, float} or not math.isfinite(float(font_scale)) or font_scale <= 0:
+            raise ComparisonError(f"{side} page snapshot font scale is malformed")
+        record["viewport"] = {
+            "width_dp": viewport.get("width_dp"),
+            "height_dp": viewport.get("height_dp"),
+            "density": snapshot_density,
+            "font_scale": round(float(font_scale), 3),
+            "orientation": orientation,
+            "content_bounds_dp": {
+                field: round(float(content_bounds_dp[field]), 3)
+                for field in ("x", "y", "width", "height")
+            },
+            "content_bounds_px": {
+                field: content_bounds_px[field]
+                for field in ("x", "y", "width", "height")
+            },
+        }
+        for component in components:
+            bounds_dp = component["bounds_dp"]
+            component["comparison_bounds_dp"] = {
+                "x": round(bounds_dp["x"] - float(content_bounds_dp["x"]), 3),
+                "y": round(bounds_dp["y"] - float(content_bounds_dp["y"]), 3),
+                "width": bounds_dp["width"],
+                "height": bounds_dp["height"],
+            }
     return record, components
 
 
@@ -439,6 +642,24 @@ def parse_crop(value: str | None, width: int, height: int, label: str) -> tuple[
     if x + crop_width > width or y + crop_height > height:
         raise ComparisonError(f"{label} crop exceeds screenshot bounds")
     return x, y, crop_width, crop_height
+
+
+def select_crop(
+    value: str | None,
+    width: int,
+    height: int,
+    label: str,
+    component_record: dict[str, Any] | None,
+) -> tuple[tuple[int, int, int, int], str]:
+    if value is not None:
+        return parse_crop(value, width, height, label), "explicit"
+    viewport = component_record.get("viewport") if component_record else None
+    if isinstance(viewport, dict) and isinstance(viewport.get("content_bounds_px"), dict):
+        content = viewport["content_bounds_px"]
+        return (
+            content["x"], content["y"], content["width"], content["height"]
+        ), "page_snapshot_content_bounds"
+    return (0, 0, width, height), "full_image"
 
 
 def parse_target_size(value: str | None, default: tuple[int, int]) -> tuple[int, int]:
@@ -680,6 +901,362 @@ def summarize_component_impacts(analysis: dict[str, Any]) -> None:
             reverse=True,
         )
     analysis["component_impact_summary"] = summary
+
+
+def compare_component_geometry(
+    left_components: list[dict[str, Any]],
+    right_components: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    def unique_by_semantic_key(components: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for component in components:
+            semantic_key = component.get("semantic_key")
+            if semantic_key is not None and "bounds_dp" in component:
+                grouped.setdefault(semantic_key, []).append(component)
+        return {
+            semantic_key: matches[0]
+            for semantic_key, matches in grouped.items()
+            if len(matches) == 1
+        }
+
+    left_by_key = unique_by_semantic_key(left_components)
+    right_by_key = unique_by_semantic_key(right_components)
+    comparisons: list[dict[str, Any]] = []
+    for semantic_key in sorted(set(left_by_key) & set(right_by_key)):
+        left = left_by_key[semantic_key]
+        right = right_by_key[semantic_key]
+        left_bounds = left.get("comparison_bounds_dp", left["bounds_dp"])
+        right_bounds = right.get("comparison_bounds_dp", right["bounds_dp"])
+        delta = {
+            field: round(right_bounds[field] - left_bounds[field], 3)
+            for field in ("x", "y", "width", "height")
+        }
+        max_delta = round(max(abs(value) for value in delta.values()), 3)
+        comparisons.append(
+            {
+                "semantic_key": semantic_key,
+                "left_component_id": left["component_id"],
+                "right_component_id": right["component_id"],
+                "coordinate_space": (
+                    "content_relative_logical_units"
+                    if "comparison_bounds_dp" in left and "comparison_bounds_dp" in right
+                    else "screen_logical_units"
+                ),
+                "left_bounds_dp": left_bounds,
+                "right_bounds_dp": right_bounds,
+                "delta_dp": delta,
+                "max_abs_delta_dp": max_delta,
+                "over_1dp": max_delta > 1.0,
+            }
+        )
+    return comparisons
+
+
+def unique_components_by_semantic_key(
+    components: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for component in components:
+        semantic_key = component.get("semantic_key")
+        if semantic_key is not None:
+            grouped.setdefault(semantic_key, []).append(component)
+    return {
+        semantic_key: matches[0]
+        for semantic_key, matches in grouped.items()
+        if len(matches) == 1
+    }
+
+
+def compare_component_presence(
+    left_components: list[dict[str, Any]],
+    right_components: list[dict[str, Any]],
+) -> dict[str, Any]:
+    def inventory(components: list[dict[str, Any]]) -> tuple[set[str], list[str], list[str]]:
+        grouped: dict[str, int] = {}
+        untagged: list[str] = []
+        for component in components:
+            semantic_key = component.get("semantic_key")
+            if semantic_key is None:
+                untagged.append(component["component_id"])
+            else:
+                grouped[semantic_key] = grouped.get(semantic_key, 0) + 1
+        return set(grouped), sorted(key for key, count in grouped.items() if count > 1), sorted(untagged)
+
+    left_keys, ambiguous_left, untagged_left = inventory(left_components)
+    right_keys, ambiguous_right, untagged_right = inventory(right_components)
+    result = {
+        "missing_in_left": sorted(right_keys - left_keys),
+        "missing_in_right": sorted(left_keys - right_keys),
+        "ambiguous_in_left": ambiguous_left,
+        "ambiguous_in_right": ambiguous_right,
+        "untagged_left_component_ids": untagged_left,
+        "untagged_right_component_ids": untagged_right,
+    }
+    result["status"] = "fail" if any(result.values()) else "pass"
+    return result
+
+
+def compare_component_hierarchy(
+    left_components: list[dict[str, Any]],
+    right_components: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    left_by_key = unique_components_by_semantic_key(left_components)
+    right_by_key = unique_components_by_semantic_key(right_components)
+    comparisons: list[dict[str, Any]] = []
+    for semantic_key in sorted(set(left_by_key) & set(right_by_key)):
+        left = left_by_key[semantic_key]
+        right = right_by_key[semantic_key]
+        if "parent_id" not in left or "parent_id" not in right:
+            continue
+        parent_changed = left["parent_semantic_key"] != right["parent_semantic_key"]
+        sibling_index_changed = left["sibling_index"] != right["sibling_index"]
+        children_order_changed = left["children_semantic_keys"] != right["children_semantic_keys"]
+        comparisons.append(
+            {
+                "semantic_key": semantic_key,
+                "left_component_id": left["component_id"],
+                "right_component_id": right["component_id"],
+                "left_parent_semantic_key": left["parent_semantic_key"],
+                "right_parent_semantic_key": right["parent_semantic_key"],
+                "left_sibling_index": left["sibling_index"],
+                "right_sibling_index": right["sibling_index"],
+                "left_children_semantic_keys": left["children_semantic_keys"],
+                "right_children_semantic_keys": right["children_semantic_keys"],
+                "parent_changed": parent_changed,
+                "sibling_index_changed": sibling_index_changed,
+                "children_order_changed": children_order_changed,
+                "status": "fail" if parent_changed or sibling_index_changed or children_order_changed else "pass",
+            }
+        )
+    return comparisons
+
+
+def flatten_proven_style(value: Any, prefix: str, output: dict[str, Any]) -> None:
+    if value is None:
+        return
+    if isinstance(value, dict):
+        for key in sorted(value):
+            flatten_proven_style(value[key], f"{prefix}.{key}", output)
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            flatten_proven_style(item, f"{prefix}[{index}]", output)
+        return
+    output[prefix] = value
+
+
+def color_channels(value: str) -> tuple[int, ...] | None:
+    if re.fullmatch(r"#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?", value) is None:
+        return None
+    return tuple(int(value[index:index + 2], 16) for index in range(1, len(value), 2))
+
+
+def compare_style_property(path: str, left: Any, right: Any) -> dict[str, Any]:
+    result: dict[str, Any] = {"path": path, "left": left, "right": right}
+    left_color = color_channels(left) if isinstance(left, str) else None
+    right_color = color_channels(right) if isinstance(right, str) else None
+    if left_color is not None and right_color is not None and len(left_color) == len(right_color):
+        delta = max(abs(right_channel - left_channel) for left_channel, right_channel in zip(left_color, right_color))
+        result.update(
+            {
+                "metric": "max_color_channel_delta",
+                "max_channel_delta": delta,
+                "tolerance": 8,
+                "over_tolerance": delta > 8,
+            }
+        )
+        return result
+    if type(left) in {int, float} and type(right) in {int, float}:
+        delta = round(float(right) - float(left), 3)
+        if "_dp" in path:
+            tolerance = 1.0
+            metric = "delta_dp"
+        elif "_sp" in path:
+            tolerance = 1.0
+            metric = "delta_sp"
+        elif path.endswith("rotation_degrees") or path.endswith("angle_degrees"):
+            tolerance = 1.0
+            metric = "delta_degrees"
+        elif path.endswith("alpha") or ".scale_" in path:
+            tolerance = 0.01
+            metric = "numeric_delta"
+        else:
+            tolerance = 0.0
+            metric = "numeric_delta"
+        result.update(
+            {
+                "metric": metric,
+                "delta": delta,
+                "tolerance": tolerance,
+                "over_tolerance": abs(delta) > tolerance,
+            }
+        )
+        return result
+    equal = left == right
+    result.update(
+        {
+            "metric": "exact",
+            "equal": equal,
+            "over_tolerance": not equal,
+        }
+    )
+    return result
+
+
+def compare_component_styles(
+    left_components: list[dict[str, Any]],
+    right_components: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    left_by_key = unique_components_by_semantic_key(left_components)
+    right_by_key = unique_components_by_semantic_key(right_components)
+    comparisons: list[dict[str, Any]] = []
+    for semantic_key in sorted(set(left_by_key) & set(right_by_key)):
+        left_component = left_by_key[semantic_key]
+        right_component = right_by_key[semantic_key]
+        if "style" not in left_component or "style" not in right_component:
+            continue
+        left_style: dict[str, Any] = {}
+        right_style: dict[str, Any] = {}
+        flatten_proven_style(left_component["style"], "style", left_style)
+        flatten_proven_style(right_component["style"], "style", right_style)
+        for raw_pixel_path in (
+            "style.asset.width_px", "style.asset.height_px",
+        ):
+            left_style.pop(raw_pixel_path, None)
+            right_style.pop(raw_pixel_path, None)
+        common_paths = sorted(set(left_style) & set(right_style))
+        property_comparisons = [
+            compare_style_property(path, left_style[path], right_style[path])
+            for path in common_paths
+        ]
+        over_tolerance_count = sum(
+            1 for item in property_comparisons if item["over_tolerance"]
+        )
+        left_only_paths = sorted(set(left_style) - set(right_style))
+        right_only_paths = sorted(set(right_style) - set(left_style))
+        unresolved_count = len(left_component["unresolved"]) + len(right_component["unresolved"])
+        one_side_proven_count = len(left_only_paths) + len(right_only_paths)
+        blocking_issue_count = over_tolerance_count + unresolved_count + one_side_proven_count
+        comparisons.append(
+            {
+                "semantic_key": semantic_key,
+                "left_component_id": left_component["component_id"],
+                "right_component_id": right_component["component_id"],
+                "compared_property_count": len(property_comparisons),
+                "over_tolerance_count": over_tolerance_count,
+                "unresolved_count": unresolved_count,
+                "one_side_proven_count": one_side_proven_count,
+                "blocking_issue_count": blocking_issue_count,
+                "status": "fail" if blocking_issue_count else "pass",
+                "left_only_proven_paths": left_only_paths,
+                "right_only_proven_paths": right_only_paths,
+                "left_unresolved": left_component["unresolved"],
+                "right_unresolved": right_component["unresolved"],
+                "comparisons": property_comparisons,
+            }
+        )
+    return comparisons
+
+
+def viewport_compatibility(
+    left_dimensions: tuple[int, int],
+    right_dimensions: tuple[int, int],
+    left_crop: tuple[int, int, int, int],
+    right_crop: tuple[int, int, int, int],
+    left_record: dict[str, Any] | None,
+    right_record: dict[str, Any] | None,
+) -> dict[str, Any]:
+    aspect_delta = abs(left_crop[2] / left_crop[3] - right_crop[2] / right_crop[3])
+    left_viewport = left_record.get("viewport") if left_record else None
+    right_viewport = right_record.get("viewport") if right_record else None
+    same_logical_size: bool | None = None
+    same_orientation: bool | None = None
+    same_font_scale: bool | None = None
+    logical_content_delta_dp: dict[str, float] | None = None
+    if isinstance(left_viewport, dict) and isinstance(right_viewport, dict):
+        left_content = left_viewport["content_bounds_dp"]
+        right_content = right_viewport["content_bounds_dp"]
+        logical_content_delta_dp = {
+            field: round(right_content[field] - left_content[field], 3)
+            for field in ("x", "y", "width", "height")
+        }
+        same_logical_size = all(
+            abs(logical_content_delta_dp[field]) <= 0.001
+            for field in ("width", "height")
+        )
+        same_orientation = left_viewport["orientation"] == right_viewport["orientation"]
+        same_font_scale = abs(left_viewport["font_scale"] - right_viewport["font_scale"]) <= 0.001
+    pixel_compatible = (
+        aspect_delta <= 0.001
+        and same_logical_size is True
+        and same_orientation is True
+        and same_font_scale is True
+    )
+    return {
+        "same_pixel_size": left_dimensions == right_dimensions,
+        "same_logical_content_size": same_logical_size,
+        "same_orientation": same_orientation,
+        "same_font_scale": same_font_scale,
+        "logical_content_delta_dp": logical_content_delta_dp,
+        "cropped_aspect_ratio_delta": round(aspect_delta, 8),
+        "pixel_comparison_compatible": pixel_compatible,
+        "geometry_comparison_mode": "content_relative_platform_logical_units",
+        "requirement": (
+            "Physical pixel dimensions may differ. Pixel metrics require aligned content aspect ratio, "
+            "orientation, system-bar crop, font scale, locale, theme, and deterministic state."
+        ),
+    }
+
+
+def build_verdict(
+    left_record: dict[str, Any] | None,
+    right_record: dict[str, Any] | None,
+    presence: dict[str, Any],
+    hierarchy: list[dict[str, Any]],
+    geometry: list[dict[str, Any]],
+    styles: list[dict[str, Any]],
+    viewport: dict[str, Any],
+    metrics: dict[str, float],
+    minimum_ssim: float,
+) -> dict[str, Any]:
+    complete_v2 = (
+        left_record is not None
+        and right_record is not None
+        and left_record.get("schema") == PAGE_SNAPSHOT_V2_SCHEMA
+        and right_record.get("schema") == PAGE_SNAPSHOT_V2_SCHEMA
+    )
+    hierarchy_passed = all(item["status"] == "pass" for item in hierarchy)
+    geometry_passed = all(not item["over_1dp"] for item in geometry)
+    styles_passed = all(item["status"] == "pass" for item in styles)
+    pixels_passed = (
+        viewport["pixel_comparison_compatible"]
+        and all(value >= minimum_ssim for value in metrics.values())
+    )
+    checks = {
+        "complete_v2_page_snapshots": complete_v2,
+        "component_presence": presence["status"] == "pass",
+        "component_hierarchy": hierarchy_passed,
+        "component_geometry": geometry_passed,
+        "component_styles": styles_passed,
+        "viewport_compatible": viewport["pixel_comparison_compatible"],
+        "pixel_similarity": pixels_passed,
+    }
+    labels = {
+        "complete_v2_page_snapshots": "complete v2 page snapshots are required",
+        "component_presence": "component presence is not equivalent",
+        "component_hierarchy": "component hierarchy or sibling order differs",
+        "component_geometry": "component geometry exceeds 1dp tolerance",
+        "component_styles": "component styles differ or contain unresolved facts",
+        "viewport_compatible": "logical viewport, orientation, or font scale is incompatible",
+        "pixel_similarity": f"one or more SSIM metrics are below {minimum_ssim}",
+    }
+    failure_reasons = [labels[name] for name, passed in checks.items() if not passed]
+    return {
+        "status": "fail" if failure_reasons else "pass",
+        "minimum_ssim": minimum_ssim,
+        "checks": checks,
+        "failure_reasons": failure_reasons,
+    }
 
 
 def attribute_group_signal_scores(metrics: dict[str, float]) -> dict[str, float]:
@@ -934,6 +1511,8 @@ def validate_label(value: str, name: str) -> str:
 
 def compare(args: argparse.Namespace) -> dict[str, Any]:
     require_pillow()
+    if not math.isfinite(args.min_ssim) or not 0.0 <= args.min_ssim <= 1.0:
+        raise ComparisonError("min-ssim must be between 0 and 1")
     left = resolve_input(args.left, "left")
     right = resolve_input(args.right, "right")
     left_label = validate_label(args.left_label, "left")
@@ -950,12 +1529,28 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
         args.left_components,
         "left",
         left_dimensions,
+        left,
     )
     right_component_record, right_components = load_component_inventory(
         args.right_components,
         "right",
         right_dimensions,
+        right,
     )
+    if (
+        left_component_record is not None
+        and right_component_record is not None
+        and "page" in left_component_record
+        and "page" in right_component_record
+        and left_component_record["page"] != right_component_record["page"]
+    ):
+        left_image.close()
+        right_image.close()
+        raise ComparisonError(
+            "page/state mismatch: "
+            f"{left_component_record['page']['id']}/{left_component_record['page']['state']} != "
+            f"{right_component_record['page']['id']}/{right_component_record['page']['state']}"
+        )
     component_inventory_records = [
         record
         for record in (left_component_record, right_component_record)
@@ -964,8 +1559,12 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
     source_attribute_record, source_attribute_components = (
         load_source_attribute_inventory(args.source_attributes)
     )
-    left_crop = parse_crop(args.left_crop, *left_dimensions, "left")
-    right_crop = parse_crop(args.right_crop, *right_dimensions, "right")
+    left_crop, left_crop_source = select_crop(
+        args.left_crop, *left_dimensions, "left", left_component_record
+    )
+    right_crop, right_crop_source = select_crop(
+        args.right_crop, *right_dimensions, "right", right_component_record
+    )
     target = parse_target_size(args.target_size, left_crop[2:])
     output.mkdir(parents=True, mode=0o700)
     normalized_left_image = None
@@ -1009,6 +1608,20 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             right_components,
         )
         summarize_component_impacts(difference_analysis)
+        component_presence = compare_component_presence(left_components, right_components)
+        component_hierarchy = compare_component_hierarchy(left_components, right_components)
+        component_geometry = compare_component_geometry(
+            left_components,
+            right_components,
+        )
+        component_styles = compare_component_styles(
+            left_components,
+            right_components,
+        )
+        difference_analysis["component_presence"] = component_presence
+        difference_analysis["component_hierarchy_deltas"] = component_hierarchy
+        difference_analysis["component_geometry_deltas"] = component_geometry
+        difference_analysis["component_style_deltas"] = component_styles
         attach_source_attribute_candidates(
             difference_analysis,
             source_attribute_components,
@@ -1019,6 +1632,25 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
         side_by_side_image.paste(left_rgb, (0, 0))
         side_by_side_image.paste(right_rgb, (target[0], 0))
         save_png(side_by_side_image, side_by_side)
+        viewport = viewport_compatibility(
+            left_dimensions,
+            right_dimensions,
+            left_crop,
+            right_crop,
+            left_component_record,
+            right_component_record,
+        )
+        verdict = build_verdict(
+            left_component_record,
+            right_component_record,
+            component_presence,
+            component_hierarchy,
+            component_geometry,
+            component_styles,
+            viewport,
+            metrics,
+            args.min_ssim,
+        )
         report = {
             "schema": REPORT_SCHEMA,
             "quality": "diagnostic_candidate",
@@ -1033,6 +1665,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
                         "x": left_crop[0], "y": left_crop[1],
                         "width": left_crop[2], "height": left_crop[3],
                     },
+                    "crop_source": left_crop_source,
                 },
                 {
                     "label": right_label,
@@ -1043,6 +1676,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
                         "x": right_crop[0], "y": right_crop[1],
                         "width": right_crop[2], "height": right_crop[3],
                     },
+                    "crop_source": right_crop_source,
                 },
             ],
             "normalization": {
@@ -1054,6 +1688,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
                     8,
                 ),
             },
+            "viewport_compatibility": viewport,
             "comparator": {
                 "name": Path(__file__).name,
                 "sha256": sha256_file(Path(__file__).resolve()),
@@ -1061,6 +1696,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             "component_inventories": component_inventory_records,
             "source_attribute_inventory": source_attribute_record,
             "metrics": metrics,
+            "verdict": verdict,
             "difference_analysis": difference_analysis,
             "artifacts": [
                 artifact_record(normalized_left, "normalized_left"),
@@ -1071,8 +1707,9 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             ],
             "tools": [{"name": "Pillow", "version": PILLOW_VERSION}],
             "limitations": [
-                "No pass or fail verdict is computed.",
+                "A pass is a strict automated gate over complete v2 snapshots; it is not a product acceptance decision.",
                 "Metrics are meaningful only when route, state, viewport, crop, and font scale are aligned.",
+                "Different physical screenshot sizes are supported, but pixel metrics are not comparable when normalized content aspect ratios or orientation differ.",
                 "Dynamic themes and platform rendering can lower pixel similarity without a semantic defect.",
                 "Source attribute ordering is a metric-weighted inspection candidate, not a proven property-level diagnosis or suggested fix.",
                 "Image artifacts contain protected pixels and must remain local unless explicitly authorized.",
@@ -1099,6 +1736,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
         "report_sha256": sha256_file(report_path),
         "artifact_count": len(report["artifacts"]),
         "metrics": metrics,
+        "verdict": report["verdict"]["status"],
     }
 
 

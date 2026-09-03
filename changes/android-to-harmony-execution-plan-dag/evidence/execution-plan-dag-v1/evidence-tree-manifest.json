@@ -292,7 +292,7 @@
     "binding_path": "skill-identities/repo-skill-binding.json"
   },
   "file_count": 190,
-  "tree_sha256": "b02973a30771f8f16989593c45dd27780816b7988cbec4d1ece4d0a83b04997a",
+  "tree_sha256": "47e41eecb1932849a8876d82a4a3c79ae896ceceefa34a795a51b5e37ebf912f",
   "files": [
     {
       "path": "execution-plan-dag-v1/banking/capability-graph.json",
@@ -587,7 +587,7 @@
     {
       "path": "execution-plan-dag-v1/banking/skill-identity-reference.json",
       "bytes": 400,
-      "sha256": "0f27e048ba142698e99800a2409eac3bdda4eaca18bda67300c635f6ed55ab08"
+      "sha256": "7167827bae9441811efb56cfae45d46f3b46b50238925ab9989c05d653f7c01d"
     },
     {
       "path": "execution-plan-dag-v1/banking/source-identity.json",
@@ -907,7 +907,7 @@
     {
       "path": "execution-plan-dag-v1/buckwheat/skill-identity-reference.json",
       "bytes": 402,
-      "sha256": "8764d717520c009eb1018374ea0f54052692ebf6c341fb7308d7b04a0f979053"
+      "sha256": "4b15817d46f1da21f5f0d259a60acc1e43beecdf9fb250deae29fc2530fe9dae"
     },
     {
       "path": "execution-plan-dag-v1/buckwheat/source-identity.json",
@@ -1222,7 +1222,7 @@
     {
       "path": "execution-plan-dag-v1/ekspensify/skill-identity-reference.json",
       "bytes": 403,
-      "sha256": "8ffdec259b067bf63f20621fafefc5cfa8a5c3e48752912008c0bf25c7630f76"
+      "sha256": "cc1265757fb9e3333a40bafaa9e14764d8411d3bf05b0e66b31d77657b9cf2e1"
     },
     {
       "path": "execution-plan-dag-v1/ekspensify/source-identity.json",
@@ -1236,13 +1236,13 @@
     },
     {
       "path": "skill-identities/bundled-skill-tree-manifest.json",
-      "bytes": 14336,
-      "sha256": "cc27df875a204ae71f4d267c23764b8f7471ff03e87152b550e3eba38527317d"
+      "bytes": 16056,
+      "sha256": "46cde628d30898eb86f6fb08af2ca6cac083f0f13b2090444167e31b12965093"
     },
     {
       "path": "skill-identities/repo-skill-binding.json",
       "bytes": 313,
-      "sha256": "7a6fa628fc9a7eed157497ced7fde9f76b1a4da9583d38be17759a237b32739e"
+      "sha256": "41732dc939f4c7c92d23e596b12aa2c552333669b35d43423e87f4feead7df89"
     }
   ]
 }

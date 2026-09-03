@@ -43,6 +43,28 @@ def write_checkerboard(path: Path, width: int, height: int, inverted: bool) -> N
     path.write_bytes(f"P6\n{width} {height}\n255\n".encode("ascii") + pixels)
 
 
+def write_solid_ppm(path: Path, width: int, height: int, color: tuple[int, int, int] = (80, 90, 100)) -> None:
+    path.write_bytes(
+        f"P6\n{width} {height}\n255\n".encode("ascii")
+        + bytes(color) * width * height
+    )
+
+
+def write_inset_ppm(
+    path: Path,
+    width: int,
+    height: int,
+    top: int,
+    bottom: int,
+    bar_color: tuple[int, int, int],
+) -> None:
+    pixels = bytearray()
+    for y in range(height):
+        color = bar_color if y < top or y >= height - bottom else (80, 90, 100)
+        pixels.extend(bytes(color) * width)
+    path.write_bytes(f"P6\n{width} {height}\n255\n".encode("ascii") + pixels)
+
+
 def write_component_inventory(path: Path, side: str) -> None:
     path.write_text(
         json.dumps(
@@ -62,6 +84,202 @@ def write_component_inventory(path: Path, side: str) -> None:
                         "bounds": {"x": 0, "y": 40, "width": 64, "height": 8},
                     },
                 ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_page_snapshot(path: Path, side: str, screenshot: Path) -> None:
+    component_x = 16 if side == "android" else 18
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "android-to-harmony.page-snapshot.v1",
+                "status": "candidate_requires_review",
+                "authoritative": False,
+                "platform": side,
+                "page": {"id": "home", "state": "default"},
+                "viewport": {
+                    "width_px": 64,
+                    "height_px": 48,
+                    "density": 1,
+                    "width_dp": 64,
+                    "height_dp": 48,
+                },
+                "capture": {
+                    "screenshot": {
+                        "file": screenshot.name,
+                        "byte_count": screenshot.stat().st_size,
+                        "sha256": sha256_file(screenshot),
+                    }
+                },
+                "input_hashes": {"component_inventory_sha256": "a" * 64},
+                "components": [
+                    {
+                        "id": f"{side}-summary-card",
+                        "type": "Card",
+                        "semantic_key": "summary-card",
+                        "bounds_px": {"x": component_x, "y": 8, "width": 32, "height": 32},
+                        "bounds_dp": {"x": component_x, "y": 8, "width": 32, "height": 32},
+                        "parent_id": None,
+                        "parent_mapping": "smallest-containing-runtime-component",
+                    }
+                ],
+                "unmapped_source_components": [],
+                "limitations": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_page_snapshot_v2(
+    path: Path,
+    side: str,
+    screenshot: Path,
+    density: float,
+    radius_dp: float,
+    font_size_sp: float,
+    background: str,
+    asset_sha256: str,
+    page_id: str = "home",
+    state_id: str = "default",
+    font_scale: float = 1,
+    logical_content_size: tuple[float, float] = (64, 48),
+    unresolved: list[dict[str, str]] | None = None,
+    content_insets_px: tuple[int, int, int, int] = (0, 0, 0, 0),
+) -> None:
+    width, height = (192, 144) if side == "android" else (128, 96)
+    bounds = (
+        {"x": 48, "y": 24, "width": 96, "height": 96}
+        if side == "android"
+        else {"x": 32, "y": 16, "width": 64, "height": 64}
+    )
+    empty_style = {
+        "layout": {
+            "padding_dp": {"left": 4, "top": 4, "right": 4, "bottom": 4},
+            "margin_dp": None,
+            "layout_direction": "ltr",
+            "z_index": 0,
+        },
+        "surface": {
+            "background": {"type": "solid", "color": background},
+            "corner_radius_dp": {
+                "top_left": radius_dp,
+                "top_right": radius_dp,
+                "bottom_right": radius_dp,
+                "bottom_left": radius_dp,
+            },
+            "border": None,
+            "shadows": [],
+            "alpha": 1,
+            "clip": True,
+        },
+        "typography": {
+            "font_size_sp": font_size_sp,
+            "font_weight": 500,
+            "font_style": "normal",
+            "font_family": None,
+            "letter_spacing_sp": 0,
+            "line_height_sp": 20,
+            "text_align": "center",
+            "max_lines": 1,
+            "overflow": "ellipsis",
+            "color": "#FFFFFFFF",
+        },
+        "asset": {
+            "resource": "app.media.icon",
+            "sha256": asset_sha256,
+            "width_px": 72 if side == "android" else 48,
+            "height_px": 72 if side == "android" else 48,
+            "width_dp": 24,
+            "height_dp": 24,
+            "content_scale": "fit",
+            "tint": "#FFFFFFFF",
+        },
+        "transform": {
+            "translation_x_dp": 0,
+            "translation_y_dp": 0,
+            "scale_x": 1,
+            "scale_y": 1,
+            "rotation_degrees": 0,
+        },
+        "state": {
+            "visible": True,
+            "enabled": True,
+            "selected": False,
+            "checked": False,
+            "clickable": True,
+        },
+    }
+    inset_left, inset_top, inset_right, inset_bottom = content_insets_px
+    content_width = width - inset_left - inset_right
+    content_height = height - inset_top - inset_bottom
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "android-to-harmony.page-snapshot.v2",
+                "status": "candidate_requires_review",
+                "authoritative": False,
+                "platform": side,
+                "page": {"id": page_id, "state": state_id},
+                "viewport": {
+                    "width_px": width,
+                    "height_px": height,
+                    "density": density,
+                    "font_scale": font_scale,
+                    "orientation": "landscape",
+                    "width_dp": 64,
+                    "height_dp": 48,
+                    "safe_area_px": {
+                        "left": inset_left, "top": inset_top,
+                        "right": inset_right, "bottom": inset_bottom,
+                    },
+                    "safe_area_dp": {
+                        "left": inset_left / density, "top": inset_top / density,
+                        "right": inset_right / density, "bottom": inset_bottom / density,
+                    },
+                    "content_bounds_px": {
+                        "x": inset_left, "y": inset_top,
+                        "width": content_width, "height": content_height,
+                    },
+                    "content_bounds_dp": {
+                        "x": inset_left / density,
+                        "y": inset_top / density,
+                        "width": logical_content_size[0],
+                        "height": logical_content_size[1],
+                    },
+                },
+                "capture": {
+                    "screenshot": {
+                        "file": screenshot.name,
+                        "byte_count": screenshot.stat().st_size,
+                        "sha256": sha256_file(screenshot),
+                    }
+                },
+                "input_hashes": {"component_inventory_sha256": "a" * 64},
+                "components": [
+                    {
+                        "id": f"{side}-summary-card",
+                        "type": "Card",
+                        "semantic_key": "summary-card",
+                        "bounds_px": bounds,
+                        "bounds_dp": {"x": 16, "y": 8, "width": 32, "height": 32},
+                        "parent_id": None,
+                        "parent_mapping": "smallest-containing-runtime-component",
+                        "children_ids": [],
+                        "sibling_index": 0,
+                        "style": empty_style,
+                        "provenance": [],
+                        "unresolved": unresolved or [],
+                    }
+                ],
+                "unmapped_source_components": [],
+                "unmapped_visual_fact_components": [],
+                "limitations": [],
             }
         )
         + "\n",
@@ -176,7 +394,8 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
             self.assertTrue((output / "side-by-side.png").is_file())
             self.assertNotIn(str(left), json.dumps(report))
             self.assertNotIn(str(right), json.dumps(report))
-            self.assertNotIn("passed", report)
+            self.assertEqual(command_result["verdict"], "fail")
+            self.assertEqual(report["verdict"]["status"], "fail")
 
     def test_changed_pixels_lower_metrics_without_computing_a_verdict(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -226,6 +445,8 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
             self.assertEqual(command_result["report_sha256"], sha256_file(report_path))
             self.assertEqual(report["inputs"][0]["crop"], {"x": 10, "y": 8, "width": 40, "height": 30})
             self.assertEqual(report["inputs"][1]["crop"], {"x": 20, "y": 15, "width": 60, "height": 45})
+            self.assertEqual(report["inputs"][0]["crop_source"], "explicit")
+            self.assertEqual(report["inputs"][1]["crop_source"], "explicit")
             self.assertEqual(report["normalization"]["width"], 32)
             self.assertEqual(report["normalization"]["height"], 24)
             self.assertEqual(report["comparator"]["sha256"], sha256_file(SCRIPT))
@@ -510,6 +731,350 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
             self.assertNotIn(str(source_attributes), serialized)
             self.assertNotIn("expression", serialized)
             self.assertNotIn("suggested_fix", serialized)
+
+    def test_page_snapshots_map_hotspots_and_are_bound_to_the_exact_screenshots(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_ppm(left, 64, 48)
+            write_ppm(right, 64, 48, changed=True)
+            write_page_snapshot(left_page, "android", left)
+            write_page_snapshot(right_page, "harmony", right)
+
+            result = self.run_compare(
+                "--left", str(left),
+                "--right", str(right),
+                "--left-components", str(left_page),
+                "--right-components", str(right_page),
+                "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            records = {item["side"]: item for item in report["component_inventories"]}
+            self.assertEqual(records["left"]["schema"], "android-to-harmony.page-snapshot.v1")
+            self.assertEqual(records["right"]["schema"], "android-to-harmony.page-snapshot.v1")
+            hotspot = next(
+                item
+                for item in report["difference_analysis"]["hotspots"]
+                if item["semantic_pair_candidates"]
+            )
+            self.assertEqual(hotspot["semantic_pair_candidates"][0]["semantic_key"], "summary-card")
+            geometry = report["difference_analysis"]["component_geometry_deltas"][0]
+            self.assertEqual(geometry["semantic_key"], "summary-card")
+            self.assertEqual(geometry["delta_dp"]["x"], 2.0)
+            self.assertEqual(geometry["max_abs_delta_dp"], 2.0)
+            self.assertTrue(geometry["over_1dp"])
+
+    def test_v2_page_snapshots_compare_style_and_allow_equal_logical_viewports(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_ppm(left, 192, 144)
+            write_ppm(right, 128, 96)
+            write_page_snapshot_v2(
+                left_page, "android", left, 3, 12, 16, "#FF3366FF", "a" * 64
+            )
+            write_page_snapshot_v2(
+                right_page, "harmony", right, 2, 15, 18, "#FF3377FF", "b" * 64
+            )
+
+            result = self.run_compare(
+                "--left", str(left),
+                "--right", str(right),
+                "--left-components", str(left_page),
+                "--right-components", str(right_page),
+                "--target-size", "64x48",
+                "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            viewport = report["viewport_compatibility"]
+            self.assertFalse(viewport["same_pixel_size"])
+            self.assertTrue(viewport["same_logical_content_size"])
+            self.assertTrue(viewport["pixel_comparison_compatible"])
+            style = report["difference_analysis"]["component_style_deltas"][0]
+            by_path = {item["path"]: item for item in style["comparisons"]}
+            radius = by_path["style.surface.corner_radius_dp.top_left"]
+            self.assertEqual(radius["delta"], 3.0)
+            self.assertTrue(radius["over_tolerance"])
+            font_size = by_path["style.typography.font_size_sp"]
+            self.assertEqual(font_size["delta"], 2.0)
+            self.assertTrue(font_size["over_tolerance"])
+            color = by_path["style.surface.background.color"]
+            self.assertEqual(color["max_channel_delta"], 17)
+            self.assertTrue(color["over_tolerance"])
+            asset = by_path["style.asset.sha256"]
+            self.assertFalse(asset["equal"])
+            self.assertTrue(asset["over_tolerance"])
+            self.assertNotIn("style.asset.width_px", by_path)
+            self.assertEqual(by_path["style.asset.width_dp"]["delta"], 0.0)
+
+    def test_v2_reports_missing_semantic_components_and_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64)
+            write_page_snapshot_v2(right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64)
+            payload = json.loads(right_page.read_text(encoding="utf-8"))
+            payload["components"] = []
+            right_page.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page), "--right-components", str(right_page),
+                "--target-size", "64x48", "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            command = json.loads(result.stdout)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["difference_analysis"]["component_presence"]["missing_in_right"], ["summary-card"])
+            self.assertEqual(report["verdict"]["status"], "fail")
+            self.assertEqual(command["verdict"], "fail")
+
+    def test_v2_hierarchy_and_sibling_order_changes_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64)
+            write_page_snapshot_v2(right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64)
+            for page, prefix in ((left_page, "android"), (right_page, "harmony")):
+                payload = json.loads(page.read_text(encoding="utf-8"))
+                card = payload["components"][0]
+                root_component = {
+                    **card,
+                    "id": f"{prefix}-root",
+                    "semantic_key": "root",
+                    "bounds_px": {"x": 0, "y": 0, "width": 192 if prefix == "android" else 128, "height": 144 if prefix == "android" else 96},
+                    "bounds_dp": {"x": 0, "y": 0, "width": 64, "height": 48},
+                    "parent_id": None,
+                    "children_ids": [f"{prefix}-summary-card"] if prefix == "android" else [],
+                    "sibling_index": 0,
+                }
+                card["parent_id"] = root_component["id"] if prefix == "android" else None
+                card["sibling_index"] = 0 if prefix == "android" else 1
+                payload["components"] = [root_component, card]
+                page.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page), "--right-components", str(right_page),
+                "--target-size", "64x48", "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            hierarchy = next(
+                item for item in report["difference_analysis"]["component_hierarchy_deltas"]
+                if item["semantic_key"] == "summary-card"
+            )
+            self.assertTrue(hierarchy["parent_changed"])
+            self.assertTrue(hierarchy["sibling_index_changed"])
+            root_hierarchy = next(
+                item for item in report["difference_analysis"]["component_hierarchy_deltas"]
+                if item["semantic_key"] == "root"
+            )
+            self.assertTrue(root_hierarchy["children_order_changed"])
+            self.assertEqual(report["verdict"]["status"], "fail")
+
+    def test_v2_rejects_different_page_or_state_before_comparison(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64)
+            write_page_snapshot_v2(
+                right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64,
+                page_id="settings", state_id="error",
+            )
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page), "--right-components", str(right_page),
+                "--target-size", "64x48", "--output-dir", str(output),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("page/state mismatch", result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_v2_logical_viewport_or_font_scale_mismatch_disables_pixels_and_fails(self) -> None:
+        for case, logical_size, font_scale in (
+            ("logical-size", (60, 48), 1.0),
+            ("font-scale", (64, 48), 1.3),
+        ):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                left = root / "android.ppm"
+                right = root / "harmony.ppm"
+                left_page = root / "android-page.json"
+                right_page = root / "harmony-page.json"
+                output = root / "comparison"
+                write_solid_ppm(left, 192, 144)
+                write_solid_ppm(right, 128, 96)
+                write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64)
+                write_page_snapshot_v2(
+                    right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64,
+                    logical_content_size=logical_size, font_scale=font_scale,
+                )
+                result = self.run_compare(
+                    "--left", str(left), "--right", str(right),
+                    "--left-components", str(left_page), "--right-components", str(right_page),
+                    "--target-size", "64x48", "--output-dir", str(output),
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+                self.assertFalse(report["viewport_compatibility"]["pixel_comparison_compatible"])
+                self.assertEqual(report["verdict"]["status"], "fail")
+
+    def test_v2_unresolved_facts_are_blocking_even_without_numeric_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            unresolved = [{
+                "path": "style.surface.background.dynamic_theme",
+                "expression": "theme.primary",
+                "reason": "runtime theme was not resolved",
+            }]
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64, unresolved=unresolved)
+            write_page_snapshot_v2(right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64)
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page), "--right-components", str(right_page),
+                "--target-size", "64x48", "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            style = report["difference_analysis"]["component_style_deltas"][0]
+            self.assertEqual(style["over_tolerance_count"], 0)
+            self.assertEqual(style["unresolved_count"], 1)
+            self.assertEqual(style["blocking_issue_count"], 1)
+            self.assertEqual(style["status"], "fail")
+            self.assertEqual(report["verdict"]["status"], "fail")
+
+    def test_v2_identical_complete_inputs_emit_pass_verdict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64)
+            write_page_snapshot_v2(right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64)
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page), "--right-components", str(right_page),
+                "--target-size", "64x48", "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads(result.stdout)["verdict"], "pass")
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["verdict"]["status"], "pass")
+
+    def test_v2_automatically_crops_system_bars_and_compares_content_relative_geometry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_inset_ppm(left, 192, 144, 12, 12, (255, 0, 0))
+            write_inset_ppm(right, 128, 96, 12, 4, (0, 0, 255))
+            write_page_snapshot_v2(
+                left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64,
+                logical_content_size=(64, 40), content_insets_px=(0, 12, 0, 12),
+            )
+            write_page_snapshot_v2(
+                right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64,
+                logical_content_size=(64, 40), content_insets_px=(0, 12, 0, 4),
+            )
+            right_payload = json.loads(right_page.read_text(encoding="utf-8"))
+            right_component = right_payload["components"][0]
+            right_component["bounds_px"]["y"] = 20
+            right_component["bounds_dp"]["y"] = 10
+            right_page.write_text(json.dumps(right_payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page), "--right-components", str(right_page),
+                "--target-size", "64x40", "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["inputs"][0]["crop_source"], "page_snapshot_content_bounds")
+            self.assertEqual(report["inputs"][0]["crop"], {"x": 0, "y": 12, "width": 192, "height": 120})
+            self.assertEqual(report["inputs"][1]["crop"], {"x": 0, "y": 12, "width": 128, "height": 80})
+            self.assertTrue(report["viewport_compatibility"]["pixel_comparison_compatible"])
+            self.assertEqual(report["metrics"]["ssim_color"], 1.0)
+            geometry = report["difference_analysis"]["component_geometry_deltas"][0]
+            self.assertEqual(geometry["coordinate_space"], "content_relative_logical_units")
+            self.assertEqual(geometry["max_abs_delta_dp"], 0.0)
+            self.assertEqual(report["verdict"]["status"], "pass")
+
+    def test_page_snapshot_rejects_a_stale_screenshot_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            output = root / "comparison"
+            write_ppm(left, 64, 48)
+            write_ppm(right, 64, 48)
+            write_page_snapshot(left_page, "android", left)
+            write_ppm(left, 64, 48, changed=True)
+
+            result = self.run_compare(
+                "--left", str(left),
+                "--right", str(right),
+                "--left-components", str(left_page),
+                "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("screenshot SHA-256 does not match", result.stderr)
+            self.assertFalse(output.exists())
 
     def test_source_attribute_inventory_rejects_expression_field(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
