@@ -15,6 +15,7 @@ from typing import Any
 
 from generate_arkui_page import (
     canonical_sha256,
+    named_arguments,
     require_contract_ui,
     require_safe_relative_source,
 )
@@ -96,6 +97,7 @@ def attribute_groups(component: str, origin: str, name: str) -> list[str]:
     assets = {
         "painter", "imageVector", "bitmap", "contentScale", "colorFilter", "filterQuality",
     }
+    transforms = {"offset", "absoluteOffset", "rotate", "scale", "graphicsLayer"}
     state = {
         "state", "value", "checked", "selected", "enabled", "expanded", "isError",
         "visible", "progress", "items", "list", "data",
@@ -116,6 +118,8 @@ def attribute_groups(component: str, origin: str, name: str) -> list[str]:
         groups.add("surface")
     if name in assets:
         groups.add("asset")
+    if name in transforms:
+        groups.add("transform")
     if name in state or name.lower().endswith("state"):
         groups.add("state")
     if name in behavior or name.startswith("on") or name.endswith("Press"):
@@ -206,7 +210,7 @@ def call_attributes(call: dict[str, Any]) -> list[dict[str, Any]]:
     return attributes
 
 
-def semantic_keys(reached: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
+def composable_semantic_keys(reached: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
     counts: dict[str, int] = {}
     for _, name in reached:
         counts[name] = counts.get(name, 0) + 1
@@ -218,6 +222,210 @@ def semantic_keys(reached: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
             suffix = hashlib.sha256(f"{source}#{name}".encode("utf-8")).hexdigest()[:8]
             result[(source, name)] = f"{name}_{suffix}"
     return result
+
+
+def call_semantic_key(
+    composable_key: str,
+    call: dict[str, Any],
+) -> str:
+    call_id = call.get("call_id")
+    component = call.get("component")
+    line = call.get("line")
+    if (
+        not isinstance(call_id, str)
+        or not call_id
+        or not isinstance(component, str)
+        or IDENTIFIER_PATTERN.fullmatch(component) is None
+        or type(line) is not int
+        or line <= 0
+    ):
+        raise SourceAttributeError("semantic call identity is malformed")
+    ordinal = call_id.rsplit(":", 1)[-1]
+    if not ordinal.isdigit():
+        raise SourceAttributeError("semantic call ordinal is malformed")
+    readable = f"{composable_key}_{component}_{line}_{ordinal}"
+    if len(readable) <= 120:
+        return readable
+    suffix = hashlib.sha256(call_id.encode("utf-8")).hexdigest()[:12]
+    prefix_length = 120 - len(suffix) - 1
+    return f"{readable[:prefix_length]}_{suffix}"
+
+
+def static_dp_value(expression: str) -> float | None:
+    match = re.fullmatch(
+        r"\s*\(?\s*(-?[0-9]+(?:\.[0-9]+)?)\s*\)?\.dp\s*",
+        expression,
+    )
+    return float(match.group(1)) if match is not None else None
+
+
+def static_number_value(expression: str) -> float | None:
+    match = re.fullmatch(
+        r"\s*\(?\s*(-?[0-9]+(?:\.[0-9]+)?)\s*\)?(?:[fF])?\s*",
+        expression,
+    )
+    return float(match.group(1)) if match is not None else None
+
+
+def resolved_visual_geometry(call: dict[str, Any]) -> dict[str, Any] | None:
+    """Retain only compile-time numeric geometry; never retain display content."""
+    modifiers = call.get("ordered_modifier_chain")
+    if not isinstance(modifiers, list):
+        raise SourceAttributeError("Modifier inventory is malformed")
+    layout: dict[str, float] = {}
+    transform: dict[str, float] = {}
+    transform_seen = False
+    for modifier in modifiers:
+        if not isinstance(modifier, dict):
+            raise SourceAttributeError("Modifier inventory is malformed")
+        name = modifier.get("name")
+        arguments = modifier.get("arguments")
+        if not isinstance(name, str) or not isinstance(arguments, str):
+            raise SourceAttributeError("Modifier inventory is malformed")
+        positional, named = named_arguments(arguments)
+        if name in {"width", "requiredWidth", "height", "requiredHeight"} and len(positional) == 1 and not named:
+            value = static_dp_value(positional[0])
+            if value is not None:
+                layout["width_dp" if "Width" in name or name == "width" else "height_dp"] = value
+        elif name in {"size", "requiredSize"}:
+            if len(positional) == 1 and not named:
+                value = static_dp_value(positional[0])
+                if value is not None:
+                    layout.update({"width_dp": value, "height_dp": value})
+            elif not positional and set(named) <= {"width", "height"}:
+                for axis in ("width", "height"):
+                    value = static_dp_value(named[axis]) if axis in named else None
+                    if value is not None:
+                        layout[f"{axis}_dp"] = value
+        elif name in {"offset", "absoluteOffset"}:
+            x_source = named.get("x") or (positional[0] if positional else None)
+            y_source = named.get("y") or (positional[1] if len(positional) > 1 else None)
+            x = static_dp_value(x_source) if x_source is not None else 0.0
+            y = static_dp_value(y_source) if y_source is not None else 0.0
+            if x is not None and y is not None:
+                transform["translation_x_dp"] = x
+                transform["translation_y_dp"] = y
+                transform_seen = True
+        elif name == "rotate" and len(positional) == 1 and not named:
+            angle = static_number_value(positional[0])
+            if angle is not None:
+                transform["rotation_degrees"] = angle
+                transform_seen = True
+    if transform_seen:
+        transform.setdefault("translation_x_dp", 0.0)
+        transform.setdefault("translation_y_dp", 0.0)
+        transform.setdefault("scale_x", 1.0)
+        transform.setdefault("scale_y", 1.0)
+        transform.setdefault("rotation_degrees", 0.0)
+    if not layout and not transform:
+        return None
+    return {"layout": layout, "transform": transform}
+
+
+def resolved_definition_targets(call: dict[str, Any]) -> list[tuple[str, str]]:
+    custom = call.get("custom_composable")
+    raw_definitions = custom.get("definitions") if isinstance(custom, dict) else None
+    if custom is None or raw_definitions is None:
+        return []
+    if not isinstance(raw_definitions, list):
+        raise SourceAttributeError("project component definition inventory is malformed")
+    targets: list[tuple[str, str]] = []
+    for definition in raw_definitions:
+        if (
+            not isinstance(definition, dict)
+            or not isinstance(definition.get("source"), str)
+            or not isinstance(definition.get("composable"), str)
+        ):
+            raise SourceAttributeError("project component definition inventory is malformed")
+        targets.append((definition["source"], definition["composable"]))
+    return targets
+
+
+def source_hierarchy(
+    selected_calls: list[dict[str, Any]],
+    keys: dict[tuple[str, str], str],
+    root: tuple[str, str],
+) -> dict[str, dict[str, Any]]:
+    call_by_id = {call["call_id"]: call for call in selected_calls}
+    key_by_id = {
+        call_id: call_semantic_key(keys[(call["source"], call["composable"])], call)
+        for call_id, call in call_by_id.items()
+    }
+    calls_by_definition: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    invocations_by_definition: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for call in selected_calls:
+        definition_key = (call["source"], call["composable"])
+        calls_by_definition.setdefault(definition_key, []).append(call)
+        for target in resolved_definition_targets(call):
+            if target in keys:
+                invocations_by_definition.setdefault(target, []).append(call)
+    for calls in calls_by_definition.values():
+        calls.sort(key=lambda item: (item["line"], item["call_id"]))
+
+    parent_by_key: dict[str, str | None] = {}
+    mapping_by_key: dict[str, str] = {}
+    children_by_id: dict[str | None, list[dict[str, Any]]] = {}
+    roots_by_definition: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for definition_key, calls in calls_by_definition.items():
+        ids = {call["call_id"] for call in calls}
+        for call in calls:
+            parent_id = call.get("parent_call_id")
+            if isinstance(parent_id, str) and parent_id in ids:
+                parent_by_key[key_by_id[call["call_id"]]] = key_by_id[parent_id]
+                mapping_by_key[key_by_id[call["call_id"]]] = "resolved_static_call_graph"
+                children_by_id.setdefault(parent_id, []).append(call)
+            else:
+                roots_by_definition.setdefault(definition_key, []).append(call)
+                invocations = invocations_by_definition.get(definition_key, [])
+                parent_by_key[key_by_id[call["call_id"]]] = (
+                    key_by_id[invocations[0]["call_id"]]
+                    if definition_key != root and len(invocations) == 1
+                    else None
+                )
+                mapping_by_key[key_by_id[call["call_id"]]] = (
+                    "ambiguous_runtime_fallback"
+                    if definition_key != root and len(invocations) != 1
+                    else "resolved_static_call_graph"
+                )
+    for calls in children_by_id.values():
+        calls.sort(key=lambda item: (item["line"], item["call_id"]))
+
+    order: dict[str, int] = {}
+    active_definitions: set[tuple[str, str]] = set()
+
+    def visit_call(call: dict[str, Any]) -> None:
+        semantic_key = key_by_id[call["call_id"]]
+        if semantic_key in order:
+            return
+        order[semantic_key] = len(order)
+        for target in resolved_definition_targets(call):
+            if target in keys and len(invocations_by_definition.get(target, [])) == 1:
+                visit_definition(target)
+        for child in children_by_id.get(call["call_id"], []):
+            visit_call(child)
+
+    def visit_definition(definition_key: tuple[str, str]) -> None:
+        if definition_key in active_definitions:
+            return
+        active_definitions.add(definition_key)
+        for call in roots_by_definition.get(definition_key, []):
+            visit_call(call)
+        active_definitions.remove(definition_key)
+
+    visit_definition(root)
+    for call in sorted(
+        selected_calls,
+        key=lambda item: (item["source"], item["composable"], item["line"], item["call_id"]),
+    ):
+        visit_call(call)
+    return {
+        semantic_key: {
+            "parent_semantic_key": parent_by_key.get(semantic_key),
+            "preorder_index": order[semantic_key],
+            "mapping": mapping_by_key[semantic_key],
+        }
+        for semantic_key in order
+    }
 
 
 def write_new_file(path: Path, payload: bytes) -> None:
@@ -260,34 +468,40 @@ def generate(
         raise SourceAttributeError("selected closure reached definitions are malformed")
     reached = [(item["source"], item["composable"]) for item in reached_items]
     reached_set = set(reached)
-    keys = semantic_keys(reached)
+    keys = composable_semantic_keys(reached)
     selected_calls = [
         call
         for call in all_calls
         if (call.get("source"), call.get("composable")) in reached_set
     ]
-    calls_by_definition: dict[tuple[str, str], list[dict[str, Any]]] = {
-        key: [] for key in reached
-    }
-    for call in selected_calls:
-        calls_by_definition[(call["source"], call["composable"])].append(call)
+    hierarchy = source_hierarchy(
+        selected_calls,
+        keys,
+        (root_source, root_composable),
+    )
     components: list[dict[str, Any]] = []
-    for key in sorted(reached):
-        attributes = [
-            attribute
-            for call in sorted(
-                calls_by_definition[key], key=lambda item: (item["line"], item["call_id"])
-            )
-            for attribute in call_attributes(call)
-        ]
-        components.append(
-            {
-                "semantic_key": keys[key],
-                "source": key[0],
-                "composable": key[1],
-                "attributes": attributes,
-            }
-        )
+    for call in sorted(
+        selected_calls,
+        key=lambda item: (
+            item["source"], item["composable"], item["line"], item["call_id"]
+        ),
+    ):
+        key = (call["source"], call["composable"])
+        attributes = call_attributes(call)
+        if not attributes:
+            attributes = [sanitized_attribute(call, "call_site", "component", {})]
+        semantic_key = call_semantic_key(keys[key], call)
+        component = {
+            "semantic_key": semantic_key,
+            "source": key[0],
+            "composable": key[1],
+            "source_hierarchy": hierarchy[semantic_key],
+            "attributes": attributes,
+        }
+        geometry = resolved_visual_geometry(call)
+        if geometry is not None:
+            component["resolved_visual_geometry"] = geometry
+        components.append(component)
     semantic_input = {
         "root": {"source": root_source, "composable": root_composable},
         "closure": closure,
@@ -305,6 +519,9 @@ def generate(
         "limitations": [
             "Only structural attribute names, locations, units, and resource keys are retained; source values and display content are excluded.",
             "Static call and component resolution remains candidate-only and requires source reconciliation.",
+            "Each semantic key identifies one exact source call so a runtime component can drive one ArkUI call without an ambiguous composable-wide mapping.",
+            "Source hierarchy expands uniquely invoked project composables and supplies a stable preorder; ambiguous repeated invocations remain runtime-mapped.",
+            "Only compile-time numeric dp sizes, offsets, scales, and rotations are retained as source-resolved visual geometry; display values remain excluded.",
             "A mapped visual hotspot ranks attributes to inspect; it does not identify a proven defect or prescribe a fix.",
         ],
     }

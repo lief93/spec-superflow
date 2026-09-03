@@ -28,6 +28,7 @@ STYLE_SECTIONS: dict[str, tuple[str, ...]] = {
     "layout": (
         "padding_dp", "margin_dp", "layout_direction", "z_index", "alignment",
         "horizontal_arrangement", "vertical_arrangement", "aspect_ratio",
+        "width_dp", "height_dp",
     ),
     "surface": ("background", "corner_radius_dp", "border", "shadows", "alpha", "clip"),
     "typography": (
@@ -544,11 +545,59 @@ def load_source_attributes(path: Path | None) -> tuple[dict[str, dict[str, Any]]
             raise PageSnapshotError("source attribute component location is malformed")
         if not isinstance(attributes, list):
             raise PageSnapshotError("source attribute component attributes are malformed")
-        result[semantic_key] = {
+        source_component: dict[str, Any] = {
             "source": source,
             "composable": composable,
             "attributes": attributes,
         }
+        hierarchy = component.get("source_hierarchy")
+        if hierarchy is not None:
+            if not isinstance(hierarchy, dict) or set(hierarchy) != {
+                "parent_semantic_key", "preorder_index", "mapping"
+            }:
+                raise PageSnapshotError("source attribute component hierarchy is malformed")
+            parent_semantic_key = hierarchy["parent_semantic_key"]
+            if parent_semantic_key is not None:
+                parent_semantic_key = require_token(
+                    parent_semantic_key, "source parent semantic_key"
+                )
+            preorder_index = hierarchy["preorder_index"]
+            if type(preorder_index) is not int or preorder_index < 0:
+                raise PageSnapshotError("source hierarchy preorder_index is malformed")
+            mapping = hierarchy["mapping"]
+            if mapping not in {
+                "resolved_static_call_graph", "ambiguous_runtime_fallback"
+            }:
+                raise PageSnapshotError("source hierarchy mapping is unsupported")
+            source_component["source_hierarchy"] = {
+                "parent_semantic_key": parent_semantic_key,
+                "preorder_index": preorder_index,
+                "mapping": mapping,
+            }
+        geometry = component.get("resolved_visual_geometry")
+        if geometry is not None:
+            if not isinstance(geometry, dict) or set(geometry) != {"layout", "transform"}:
+                raise PageSnapshotError("source resolved visual geometry is malformed")
+            layout = geometry["layout"]
+            transform = geometry["transform"]
+            if (
+                not isinstance(layout, dict)
+                or not set(layout).issubset({"width_dp", "height_dp"})
+                or not isinstance(transform, dict)
+                or not set(transform).issubset(STYLE_SECTIONS["transform"])
+            ):
+                raise PageSnapshotError("source resolved visual geometry is malformed")
+            source_component["resolved_visual_geometry"] = {
+                "layout": {
+                    field: finite_number(value, f"source geometry layout.{field}", 0.001)
+                    for field, value in layout.items()
+                },
+                "transform": {
+                    field: finite_number(value, f"source geometry transform.{field}")
+                    for field, value in transform.items()
+                },
+            }
+        result[semantic_key] = source_component
     return result, resolved
 
 
@@ -573,6 +622,78 @@ def infer_parent(component: dict[str, Any], components: list[dict[str, Any]]) ->
         if area > child_area and contains(bounds, child_bounds):
             candidates.append((area, candidate["id"]))
     return min(candidates)[1] if candidates else None
+
+
+def source_parent_id(
+    component: dict[str, Any],
+    source_components: dict[str, dict[str, Any]],
+    runtime_ids_by_semantic_key: dict[str, list[str]],
+) -> tuple[bool, str | None]:
+    semantic_key = component.get("semantic_key")
+    source = source_components.get(semantic_key) if isinstance(semantic_key, str) else None
+    hierarchy = source.get("source_hierarchy") if isinstance(source, dict) else None
+    if not isinstance(hierarchy, dict) or hierarchy.get("mapping") != "resolved_static_call_graph":
+        return False, None
+    parent_semantic_key = hierarchy.get("parent_semantic_key")
+    visited: set[str] = set()
+    while parent_semantic_key is not None:
+        if parent_semantic_key in visited:
+            return False, None
+        visited.add(parent_semantic_key)
+        runtime_ids = runtime_ids_by_semantic_key.get(parent_semantic_key, [])
+        if len(runtime_ids) == 1:
+            return True, runtime_ids[0]
+        if len(runtime_ids) > 1:
+            return False, None
+        parent_source = source_components.get(parent_semantic_key)
+        parent_hierarchy = (
+            parent_source.get("source_hierarchy")
+            if isinstance(parent_source, dict)
+            else None
+        )
+        if (
+            not isinstance(parent_hierarchy, dict)
+            or parent_hierarchy.get("mapping") != "resolved_static_call_graph"
+        ):
+            return False, None
+        parent_semantic_key = parent_hierarchy.get("parent_semantic_key")
+    return True, None
+
+
+def apply_source_resolved_visual_geometry(
+    item: dict[str, Any],
+    source: dict[str, Any],
+) -> None:
+    geometry = source.get("resolved_visual_geometry")
+    if not isinstance(geometry, dict):
+        return
+    proven_paths: list[str] = []
+    for section in ("layout", "transform"):
+        values = geometry.get(section)
+        if not isinstance(values, dict):
+            continue
+        for field, value in values.items():
+            target = item["style"][section]
+            path = f"style.{section}.{field}"
+            if target.get(field) is None:
+                target[field] = value
+                proven_paths.append(path)
+            elif abs(float(target[field]) - float(value)) > 0.001:
+                item["unresolved"].append(
+                    {
+                        "path": path,
+                        "expression": f"runtime={target[field]},source={value}",
+                        "reason": "runtime and source-resolved visual geometry disagree",
+                    }
+                )
+    if proven_paths:
+        item["provenance"].append(
+            {
+                "paths": sorted(proven_paths),
+                "origin": "source_resolved",
+                "source": "source-attribute-inventory",
+            }
+        )
 
 
 def dp_bounds(bounds: dict[str, int], density: float) -> dict[str, float]:
@@ -629,16 +750,46 @@ def build_snapshot(
         raise PageSnapshotError("insets-px leave no visible content area")
     output_components: list[dict[str, Any]] = []
     mapped_source_keys: set[str] = set()
-    parent_by_id = {component["id"]: infer_parent(component, components) for component in components}
     order_by_id = {component["id"]: index for index, component in enumerate(components)}
+    component_by_id = {component["id"]: component for component in components}
+    runtime_ids_by_semantic_key: dict[str, list[str]] = {}
+    for component in components:
+        semantic_key = component.get("semantic_key")
+        if isinstance(semantic_key, str):
+            runtime_ids_by_semantic_key.setdefault(semantic_key, []).append(component["id"])
+    parent_mapping_by_id: dict[str, str] = {}
+    parent_by_id: dict[str, str | None] = {}
+    for component in components:
+        source_mapped, source_parent = source_parent_id(
+            component, source_components, runtime_ids_by_semantic_key
+        )
+        if source_mapped:
+            parent_by_id[component["id"]] = source_parent
+            parent_mapping_by_id[component["id"]] = "source-semantic-ancestor"
+        else:
+            parent_by_id[component["id"]] = infer_parent(component, components)
+            parent_mapping_by_id[component["id"]] = "smallest-containing-runtime-component"
     root_ids = [component["id"] for component in components if parent_by_id[component["id"]] is None]
     children_by_parent: dict[str, list[str]] = {}
     for component in components:
         parent_id = parent_by_id[component["id"]]
         if parent_id is not None:
             children_by_parent.setdefault(parent_id, []).append(component["id"])
+    def component_order(component_id: str) -> tuple[int, int]:
+        component = component_by_id[component_id]
+        semantic_key = component.get("semantic_key")
+        source = source_components.get(semantic_key) if isinstance(semantic_key, str) else None
+        hierarchy = source.get("source_hierarchy") if isinstance(source, dict) else None
+        if (
+            parent_mapping_by_id[component_id] == "source-semantic-ancestor"
+            and isinstance(hierarchy, dict)
+        ):
+            return 0, hierarchy["preorder_index"]
+        return 1, order_by_id[component_id]
+
+    root_ids.sort(key=component_order)
     for sibling_ids in children_by_parent.values():
-        sibling_ids.sort(key=order_by_id.__getitem__)
+        sibling_ids.sort(key=component_order)
     for component_index, component in enumerate(components):
         parent_id = parent_by_id[component["id"]]
         siblings = children_by_parent.get(parent_id, []) if parent_id is not None else root_ids
@@ -648,7 +799,7 @@ def build_snapshot(
             "bounds_px": component["bounds"],
             "bounds_dp": dp_bounds(component["bounds"], density),
             "parent_id": parent_id,
-            "parent_mapping": "smallest-containing-runtime-component",
+            "parent_mapping": parent_mapping_by_id[component["id"]],
             "children_ids": children_by_parent.get(component["id"], []),
             "sibling_index": siblings.index(component["id"]) if component["id"] in siblings else component_index,
             "style": empty_style(),
@@ -671,6 +822,8 @@ def build_snapshot(
                     logical_field = f"{axis}_dp"
                     if asset[logical_field] is None and asset[pixel_field] is not None:
                         asset[logical_field] = round(asset[pixel_field] / density, 3)
+            if source is not None:
+                apply_source_resolved_visual_geometry(item, source)
         output_components.append(item)
     capture: dict[str, Any] = {
         "screenshot": {
@@ -735,7 +888,7 @@ def build_snapshot(
             component.get("semantic_key") for component in components if component.get("semantic_key")
         }),
         "limitations": [
-            "Runtime parent_id is the smallest containing captured component and remains a candidate until source hierarchy confirms it.",
+            "Source-resolved call hierarchy is preferred and compresses uncaptured wrappers to the nearest captured ancestor; ambiguous call sites fall back to runtime containment.",
             "Null style fields and unresolved expressions mean the value was not proven; values are never invented.",
             "Canvas, WebView, video, maps, and custom shaders still require local pixel comparison even when their container style is known.",
         ],

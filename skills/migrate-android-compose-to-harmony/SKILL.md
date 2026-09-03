@@ -318,11 +318,23 @@ page candidate:
 python3 "$SKILL_ROOT/scripts/generate_arkui_page.py" \
   --contract "$CONTRACT" --target "$TARGET" --module entry \
   --root-source "app/src/main/java/example/HomeScreen.kt" \
-  --root-composable "HomeScreen"
+  --root-composable "HomeScreen" \
+  --android-page-json "$ANDROID_PAGE_JSON"
 ```
 
 The root identity is the source-relative path plus composable name; a name alone is deliberately
-insufficient. The generator consumes `transitive_closures`, reached definitions, semantic calls,
+insufficient. Generate `ANDROID_PAGE_JSON` from the exact Android route/state capture before
+high-fidelity page generation. The generator accepts only a v2 Android page snapshot, binds its
+hash, page/state, viewport, screenshot identity, and applied property paths into the generation
+manifest, and maps runtime components to exact source `call_id` values through the embedded source
+attribute inventory. Proven Android geometry, content, typography, spacing, surface, and transform
+facts override static visual defaults where a compile-safe ArkUI emitter exists. Missing or
+ambiguous call mappings, unresolved Android visual facts, unproved values, and proven properties
+without a safe emitter remain explicit generation blockers rather than being guessed.
+
+Without `--android-page-json`, the command retains its legacy code-only candidate behavior for
+diagnostic and compatibility runs; do not use that legacy mode as pixel-fidelity evidence. The
+generator also consumes `transitive_closures`, reached definitions, semantic calls,
 invocation arguments, parent call IDs, and ordered Modifier chains. It emits a separate ArkUI
 builder for every reached project component, uses generated theme resource names only when their
 hash-checked theme manifest is current, and writes a hash-bound manifest under
@@ -457,17 +469,24 @@ them to the existing `PATH`; never replace the existing `PATH`.
 If the registry is unavailable, retain the lockfile and use an approved local package cache. Do not
 vendor dependencies from an unrelated project into source control.
 
-## Implement code-first parity
+## Implement page-fact-driven visual parity
 
 Migrate one complete dependency chain at a time:
 
-1. Translate models and pure business rules.
-2. Introduce interfaces around network, storage, clock, permissions, and device APIs.
-3. Port state transitions before building the screen.
-4. Recreate the Compose or Android Views/XML hierarchy with native ArkUI components and resources.
-5. Wire navigation and lifecycle behavior.
-6. Copy referenced opaque assets locally only after matching resource keys to manifest paths.
-7. Add unit, demand-related UITest, and device scenarios for the slice.
+1. Use Android source to enumerate the route's deterministic visible states and business transitions.
+2. Capture one Android page JSON and screenshot for every applicable route/state.
+3. Generate the initial ArkUI hierarchy and visual properties from proven page JSON facts.
+4. Use Android source to implement callbacks, state, navigation, scrolling, lifecycle, and responsive intent.
+5. Copy referenced opaque assets locally only after matching resource keys to manifest paths.
+6. Generate the matching Harmony page JSON and compare the structured page facts.
+7. Compare the paired screenshots for the final pixel-fidelity verdict.
+8. Add unit, demand-related UITest, and device scenarios for the slice.
+
+For visual implementation, Android page JSON is the primary rendered-state contract: component
+hierarchy, geometry, padding/margin, typography, surfaces, assets, transforms, and visible state.
+Android source remains authoritative for behavior and layout intent that a single rendered frame
+cannot express. The screenshot is the final pixel-level acceptance input, not a substitute for
+either the structured page facts or the source behavior contract.
 
 Copy an approved image or font asset without exposing its bytes:
 
@@ -539,30 +558,24 @@ Form card because Form supports fewer ArkUI components than a normal page; on th
 inside `List` rows. Verify launcher placement and action routing on a device before marking the
 slice verified.
 
-Transcribe source semantics before using screenshots: component nesting, parent/child call
-identity, ordered modifiers, named layout arguments, unit-bearing dimensions, typography, colors,
-resources, state branches, navigation, and semantic roles. Translate `dp` to `vp` and `sp` to
-`fp`; a Web/RichText physical-pixel boundary must use an explicit scale conversion and must not map
-`16.sp` to `16px`. Keep nested padding layers additive. Do not add spinner, fallback icon, button,
-animation, or decoration absent from the corresponding source branch. Record only visual
-properties that code cannot establish as `human_visual_check_required`.
+Before implementation, derive the state-capture matrix from source branches and interactions:
+default, loading, empty, error, selected, disabled, dialog/sheet, keyboard-open, and meaningful
+scrolled states when they exist. Do not invent captures for states the source cannot reach, and do
+not let one default-state page JSON stand in for a visually different branch.
 
-For high-fidelity UI work, treat screenshots as a diagnostic after code-first
-transcription, not as the primary implementation source. Before changing a page,
-write or inspect the source semantic checklist for that exact screen: route,
-state branch, root alignment, nested layout hierarchy, text literals, annotated
-spans, resource keys, image/vector placements, component style arguments,
-validation messages, and user actions. If local comparison reports a mismatch,
-trace it back to that checklist, the source attribute inventory, or a concrete
-Compose/Material primitive mapping before editing. Do not redesign a screen from
-the business intent when the source component closure is available. Keep
-project-private component mappings local to the target until at least two
-unrelated public projects prove the remaining rule is general.
+Use each state's Android page JSON to drive the ArkUI visual boundary, then reconcile source
+semantics that a rendered frame cannot prove: parent/child ownership, ordered modifiers, dynamic
+conditions, layout constraints, callbacks, navigation, and semantic roles. Translate `dp` to `vp`
+and `sp` to `fp`; a Web/RichText physical-pixel boundary must use an explicit scale conversion and
+must not map `16.sp` to `16px`. Keep nested padding layers additive. Do not add spinner, fallback
+icon, button, animation, or decoration absent from the captured state and corresponding source
+branch. Keep project-private component mappings local to the target until at least two unrelated
+public projects prove the remaining rule is general.
 
 ## Diagnose screenshot differences locally
 
-After code-first transcription, compare authorized Android and HarmonyOS screenshots with the
-local-only diagnostic tool:
+After page-JSON-driven implementation and structured Android/Harmony page comparison, compare the
+authorized screenshots with the local-only diagnostic tool:
 
 ```bash
 python3 "$SKILL_ROOT/scripts/compare_local_screenshots.py" \
@@ -612,11 +625,18 @@ python3 "$SKILL_ROOT/scripts/generate_source_attribute_inventory.py" \
 ```
 
 The inventory is deliberately display-content-free: it retains only safe source-relative
-locations, call lines, component/attribute names, Modifier indices, units, and resource keys.
-When its `semantic_key` matches the component-bound inventories, the comparator adds exact source
-attribute candidates and a metric-weighted attribute-group inspection order to the component
-impact summary. This narrows where to inspect; it is not a proven diagnosis, a suggested fix, or
-permission to change the highest-ranked property without source reconciliation.
+locations, call lines, component/attribute names, Modifier indices, units, and resource keys. It
+also expands uniquely invoked project composables into a source-semantic parent/preorder graph and
+retains only allowlisted compile-time numeric layout sizes, offsets, scales, and rotations. Page
+snapshots use that graph before runtime containment, compressing uncaptured wrapper calls to the
+nearest captured source ancestor; repeated or ambiguous invocation sites stay on the runtime
+fallback instead of being guessed.
+Each deterministic `semantic_key` identifies one exact semantic `call_id`, not a composable-wide
+group, so page JSON can drive one ArkUI call without ambiguous source ownership. When that key
+matches the component-bound inventories, the comparator adds exact source attribute candidates and
+a metric-weighted attribute-group inspection order to the component impact summary. This narrows
+where to inspect; it is not a proven diagnosis, a suggested fix, or permission to change the
+highest-ranked property without source reconciliation.
 
 For HarmonyOS, copy
 `assets/ohos-uitest-component-bounds/ComponentBounds.ets` into the target's `src/ohosTest`, add
@@ -648,6 +668,13 @@ through `semantic_key`. Read [page-snapshot.md](references/page-snapshot.md) for
 fact schema, provenance rules, and cross-device viewport requirements. Physical screenshot sizes
 may differ; whole-screen pixel metrics require equivalent logical content aspect, orientation,
 system-bar crop, font scale, locale, theme, state, and scroll position.
+
+For a component with a proven non-identity rotation or scale, platform runtime APIs may expose
+different clipped/transformed AABBs. In that case the strict comparator uses the proven
+pre-transform layout size plus translation/scale/rotation contract and retains both runtime AABBs
+as diagnostics. This mode is unavailable unless both sides carry the complete transform
+provenance and at least one proven pre-transform layout dimension; an unproved transform continues
+to use ordinary runtime geometry and can fail the 1dp gate.
 
 Use the v2 component-bound capture assets so runtime system-bar, navigation-area, and cutout Insets
 travel with the exact screenshot. The page generator consumes those Insets automatically. Supply

@@ -388,6 +388,14 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
             self.assertEqual(report["metrics"]["ssim_color"], 1.0)
             self.assertEqual(report["metrics"]["ssim_luma"], 1.0)
             self.assertEqual(report["metrics"]["ssim_edges"], 1.0)
+            self.assertEqual(
+                report["edge_comparison"],
+                {
+                    "detector": "Pillow FIND_EDGES",
+                    "tolerance": "gaussian",
+                    "radius_px": 1.0,
+                },
+            )
             self.assertTrue((output / "normalized-left.png").is_file())
             self.assertTrue((output / "normalized-right.png").is_file())
             self.assertTrue((output / "difference.png").is_file())
@@ -1052,6 +1060,112 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
             self.assertEqual(geometry["coordinate_space"], "content_relative_logical_units")
             self.assertEqual(geometry["max_abs_delta_dp"], 0.0)
             self.assertEqual(report["verdict"]["status"], "pass")
+
+    def test_v2_uses_proven_pre_transform_contract_instead_of_platform_runtime_aabb(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64)
+            write_page_snapshot_v2(right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64)
+            proven_paths = [
+                "style.layout.height_dp",
+                "style.transform.translation_x_dp",
+                "style.transform.translation_y_dp",
+                "style.transform.scale_x",
+                "style.transform.scale_y",
+                "style.transform.rotation_degrees",
+            ]
+            for page in (left_page, right_page):
+                payload = json.loads(page.read_text(encoding="utf-8"))
+                component = payload["components"][0]
+                component["style"]["layout"]["height_dp"] = 40
+                component["style"]["transform"] = {
+                    "translation_x_dp": 12,
+                    "translation_y_dp": 0,
+                    "scale_x": 1,
+                    "scale_y": 1,
+                    "rotation_degrees": -45,
+                }
+                component["provenance"] = [
+                    {
+                        "paths": proven_paths,
+                        "origin": "source_resolved",
+                        "source": "source-attribute-inventory",
+                    }
+                ]
+                page.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            right_payload = json.loads(right_page.read_text(encoding="utf-8"))
+            right_component = right_payload["components"][0]
+            right_component["bounds_px"] = {"x": 32, "y": 40, "width": 64, "height": 16}
+            right_component["bounds_dp"] = {"x": 16, "y": 20, "width": 32, "height": 8}
+            right_page.write_text(json.dumps(right_payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page), "--right-components", str(right_page),
+                "--target-size", "64x48", "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            geometry = report["difference_analysis"]["component_geometry_deltas"][0]
+            self.assertEqual(
+                geometry["coordinate_space"],
+                "source_resolved_pre_transform_layout_and_transform",
+            )
+            self.assertEqual(
+                geometry["runtime_bounds_diagnostic"]["delta_dp"]["height"], -24.0
+            )
+            self.assertFalse(geometry["over_1dp"])
+            self.assertEqual(report["verdict"]["status"], "pass")
+
+    def test_v2_does_not_exempt_transformed_runtime_aabb_without_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64)
+            write_page_snapshot_v2(right_page, "harmony", right, 2, 12, 16, "#FFFFFFFF", "a" * 64)
+            for page in (left_page, right_page):
+                payload = json.loads(page.read_text(encoding="utf-8"))
+                component = payload["components"][0]
+                component["style"]["layout"]["height_dp"] = 40
+                component["style"]["transform"] = {
+                    "translation_x_dp": 12,
+                    "translation_y_dp": 0,
+                    "scale_x": 1,
+                    "scale_y": 1,
+                    "rotation_degrees": -45,
+                }
+                page.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            right_payload = json.loads(right_page.read_text(encoding="utf-8"))
+            right_payload["components"][0]["bounds_dp"]["height"] = 8
+            right_payload["components"][0]["bounds_px"]["height"] = 16
+            right_page.write_text(json.dumps(right_payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left), "--right", str(right),
+                "--left-components", str(left_page), "--right-components", str(right_page),
+                "--target-size", "64x48", "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            geometry = report["difference_analysis"]["component_geometry_deltas"][0]
+            self.assertEqual(geometry["coordinate_space"], "content_relative_logical_units")
+            self.assertTrue(geometry["over_1dp"])
+            self.assertEqual(report["verdict"]["status"], "fail")
 
     def test_page_snapshot_rejects_a_stale_screenshot_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

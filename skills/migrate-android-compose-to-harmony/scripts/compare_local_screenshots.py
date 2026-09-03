@@ -51,6 +51,7 @@ COMPONENT_SCHEMA_V2 = "android-to-harmony.component-bounds.v2"
 PAGE_SNAPSHOT_SCHEMA = "android-to-harmony.page-snapshot.v1"
 PAGE_SNAPSHOT_V2_SCHEMA = "android-to-harmony.page-snapshot.v2"
 SOURCE_ATTRIBUTE_SCHEMA = "android-to-harmony.source-attribute-inventory.v1"
+EDGE_TOLERANCE_RADIUS_PX = 1.0
 
 
 class ComparisonError(RuntimeError):
@@ -515,9 +516,11 @@ def load_source_attribute_inventory(
         "geometry",
         "state",
         "surface",
+        "transform",
         "typography",
     }
     allowed_origins = {
+        "call_site",
         "invocation_argument",
         "modifier",
         "positional_argument",
@@ -535,12 +538,18 @@ def load_source_attribute_inventory(
         "dimension_resources",
     }
     for raw_component in raw_components:
-        if not isinstance(raw_component, dict) or set(raw_component) != {
+        required_component_fields = {
             "semantic_key",
             "source",
             "composable",
             "attributes",
-        }:
+        }
+        optional_component_fields = {"source_hierarchy", "resolved_visual_geometry"}
+        if (
+            not isinstance(raw_component, dict)
+            or not required_component_fields.issubset(raw_component)
+            or not set(raw_component).issubset(required_component_fields | optional_component_fields)
+        ):
             raise ComparisonError("source attribute inventory contains unsupported component fields")
         semantic_key = validate_component_token(raw_component["semantic_key"], "semantic_key")
         if semantic_key in components:
@@ -617,12 +626,50 @@ def load_source_attribute_inventory(
                 attribute["modifier_index"] = modifier_index
             attributes.append(attribute)
         attribute_count += len(attributes)
-        components[semantic_key] = {
+        component_record: dict[str, Any] = {
             "semantic_key": semantic_key,
             "source": source,
             "composable": composable,
             "attributes": attributes,
         }
+        hierarchy = raw_component.get("source_hierarchy")
+        if hierarchy is not None:
+            if not isinstance(hierarchy, dict) or set(hierarchy) != {
+                "parent_semantic_key", "preorder_index", "mapping"
+            }:
+                raise ComparisonError("source attribute hierarchy is malformed")
+            parent = hierarchy["parent_semantic_key"]
+            if parent is not None:
+                parent = validate_component_token(parent, "parent_semantic_key")
+            preorder = hierarchy["preorder_index"]
+            if type(preorder) is not int or preorder < 0:
+                raise ComparisonError("source attribute hierarchy preorder is malformed")
+            mapping = hierarchy["mapping"]
+            if mapping not in {"resolved_static_call_graph", "ambiguous_runtime_fallback"}:
+                raise ComparisonError("source attribute hierarchy mapping is unsupported")
+            component_record["source_hierarchy"] = {
+                "parent_semantic_key": parent,
+                "preorder_index": preorder,
+                "mapping": mapping,
+            }
+        geometry = raw_component.get("resolved_visual_geometry")
+        if geometry is not None:
+            if not isinstance(geometry, dict) or set(geometry) != {"layout", "transform"}:
+                raise ComparisonError("source resolved visual geometry is malformed")
+            layout = geometry["layout"]
+            transform = geometry["transform"]
+            if (
+                not isinstance(layout, dict)
+                or not set(layout).issubset({"width_dp", "height_dp"})
+                or not isinstance(transform, dict)
+                or not set(transform).issubset({
+                    "translation_x_dp", "translation_y_dp", "scale_x", "scale_y", "rotation_degrees"
+                })
+                or any(type(value) not in {int, float} or not math.isfinite(float(value)) for value in [*layout.values(), *transform.values()])
+            ):
+                raise ComparisonError("source resolved visual geometry is malformed")
+            component_record["resolved_visual_geometry"] = geometry
+        components[semantic_key] = component_record
     record = {
         "schema": SOURCE_ATTRIBUTE_SCHEMA,
         "byte_count": path.stat().st_size,
@@ -950,10 +997,100 @@ def compare_component_geometry(
 
     left_by_key = unique_by_semantic_key(left_components)
     right_by_key = unique_by_semantic_key(right_components)
+
+    def proven_paths(component: dict[str, Any]) -> set[str]:
+        result: set[str] = set()
+        for item in component.get("provenance", []):
+            paths = item.get("paths") if isinstance(item, dict) else None
+            if isinstance(paths, list):
+                result.update(path for path in paths if isinstance(path, str))
+        return result
+
+    def transformed_layout_contract(component: dict[str, Any]) -> dict[str, float] | None:
+        style = component.get("style")
+        if not isinstance(style, dict):
+            return None
+        layout = style.get("layout")
+        transform = style.get("transform")
+        if not isinstance(layout, dict) or not isinstance(transform, dict):
+            return None
+        transform_fields = (
+            "translation_x_dp", "translation_y_dp", "scale_x", "scale_y", "rotation_degrees"
+        )
+        if any(type(transform.get(field)) not in {int, float} for field in transform_fields):
+            return None
+        if (
+            abs(float(transform["rotation_degrees"])) <= 0.001
+            and abs(float(transform["scale_x"]) - 1.0) <= 0.001
+            and abs(float(transform["scale_y"]) - 1.0) <= 0.001
+        ):
+            return None
+        layout_fields = {
+            field: float(layout[field])
+            for field in ("width_dp", "height_dp")
+            if type(layout.get(field)) in {int, float}
+        }
+        if not layout_fields:
+            return None
+        values = {
+            **{f"layout.{field}": value for field, value in layout_fields.items()},
+            **{f"transform.{field}": float(transform[field]) for field in transform_fields},
+        }
+        required_provenance = {f"style.{path}" for path in values}
+        if not required_provenance.issubset(proven_paths(component)):
+            return None
+        return values
+
     comparisons: list[dict[str, Any]] = []
     for semantic_key in sorted(set(left_by_key) & set(right_by_key)):
         left = left_by_key[semantic_key]
         right = right_by_key[semantic_key]
+        left_contract = transformed_layout_contract(left)
+        right_contract = transformed_layout_contract(right)
+        if left_contract is not None and right_contract is not None:
+            contract_paths = sorted(set(left_contract) | set(right_contract))
+            contract_comparisons = [
+                compare_style_property(
+                    f"style.{path}",
+                    left_contract.get(path),
+                    right_contract.get(path),
+                )
+                for path in contract_paths
+            ]
+            contract_failed = (
+                set(left_contract) != set(right_contract)
+                or any(item["over_tolerance"] for item in contract_comparisons)
+            )
+            raw_left = left.get("comparison_bounds_dp", left["bounds_dp"])
+            raw_right = right.get("comparison_bounds_dp", right["bounds_dp"])
+            raw_delta = {
+                field: round(raw_right[field] - raw_left[field], 3)
+                for field in ("x", "y", "width", "height")
+            }
+            numeric_contract_deltas = [
+                abs(float(item.get("delta", 0.0)))
+                for item in contract_comparisons
+                if item.get("metric") != "exact"
+            ]
+            comparisons.append(
+                {
+                    "semantic_key": semantic_key,
+                    "left_component_id": left["component_id"],
+                    "right_component_id": right["component_id"],
+                    "coordinate_space": "source_resolved_pre_transform_layout_and_transform",
+                    "left_geometry_contract": left_contract,
+                    "right_geometry_contract": right_contract,
+                    "contract_comparisons": contract_comparisons,
+                    "runtime_bounds_diagnostic": {
+                        "left_bounds_dp": raw_left,
+                        "right_bounds_dp": raw_right,
+                        "delta_dp": raw_delta,
+                    },
+                    "max_abs_delta_dp": round(max(numeric_contract_deltas, default=0.0), 3),
+                    "over_1dp": contract_failed,
+                }
+            )
+            continue
         left_bounds = left.get("comparison_bounds_dp", left["bounds_dp"])
         right_bounds = right.get("comparison_bounds_dp", right["bounds_dp"])
         delta = {
@@ -1302,6 +1439,7 @@ def attribute_group_signal_scores(metrics: dict[str, float]) -> dict[str, float]
         "geometry": round(edge_loss, 6),
         "state": round(broad_loss, 6),
         "surface": round(max(color_loss, edge_loss), 6),
+        "transform": round(edge_loss, 6),
         "typography": round(max(luma_loss, edge_loss), 6),
     }
 
@@ -1613,8 +1751,12 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
         right_rgb = normalized_right_image.convert("RGB")
         left_luma = normalized_left_image.convert("L")
         right_luma = normalized_right_image.convert("L")
-        left_edges = left_luma.filter(ImageFilter.FIND_EDGES)
-        right_edges = right_luma.filter(ImageFilter.FIND_EDGES)
+        left_edges = left_luma.filter(ImageFilter.FIND_EDGES).filter(
+            ImageFilter.GaussianBlur(EDGE_TOLERANCE_RADIUS_PX)
+        )
+        right_edges = right_luma.filter(ImageFilter.FIND_EDGES).filter(
+            ImageFilter.GaussianBlur(EDGE_TOLERANCE_RADIUS_PX)
+        )
         raw_difference = ImageChops.difference(left_rgb, right_rgb)
         metrics = {
             "ssim_color": image_ssim(left_rgb, right_rgb),
@@ -1725,6 +1867,11 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             "component_inventories": component_inventory_records,
             "source_attribute_inventory": source_attribute_record,
             "metrics": metrics,
+            "edge_comparison": {
+                "detector": "Pillow FIND_EDGES",
+                "tolerance": "gaussian",
+                "radius_px": EDGE_TOLERANCE_RADIUS_PX,
+            },
             "verdict": verdict,
             "difference_analysis": difference_analysis,
             "artifacts": [
@@ -1740,6 +1887,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
                 "Metrics are meaningful only when route, state, viewport, crop, and font scale are aligned.",
                 "Different physical screenshot sizes are supported, but pixel metrics are not comparable when normalized content aspect ratios or orientation differ.",
                 "Dynamic themes and platform rendering can lower pixel similarity without a semantic defect.",
+                "Edge SSIM uses a one-pixel Gaussian tolerance so subpixel font rasterization is not treated as a layout edge displacement.",
                 "Source attribute ordering is a metric-weighted inspection candidate, not a proven property-level diagnosis or suggested fix.",
                 "Image artifacts contain protected pixels and must remain local unless explicitly authorized.",
             ],

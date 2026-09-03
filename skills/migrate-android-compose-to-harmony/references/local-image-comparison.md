@@ -129,10 +129,13 @@ python3 "$SKILL_ROOT/scripts/generate_source_attribute_inventory.py" \
 ```
 
 The inventory retains source-relative file, composable, call line, primitive component, attribute
-name, Modifier index, dp/sp dimensions, resource keys, and broad attribute groups. It deliberately
-excludes argument values, expressions, and display text. A composable name becomes its
-`semantic_key` when unique inside the closure; duplicate names gain a deterministic source-derived
-hash suffix. Use those exact keys in both platforms' component-bound descriptors.
+name, Modifier index, dp/sp dimensions, resource keys, broad attribute groups, unambiguous source
+parent/preorder, and allowlisted compile-time numeric layout/transform facts. It deliberately
+excludes arbitrary expressions and display text. Each semantic `call_id` becomes one
+deterministic `semantic_key` containing its owning composable, component type, source line, and call
+ordinal. This call-level identity lets one runtime component map to exactly one source call when
+page JSON drives ArkUI generation. Use those exact keys in both platforms' component-bound
+descriptors; do not shorten them back to a composable-wide key.
 
 When `--source-attributes` is supplied, every matching item in
 `difference_analysis.component_impact_summary` gains `source_attribute_candidates`. Each candidate
@@ -146,6 +149,12 @@ being guessed.
 The comparator validates and hashes the inventory, rejects unknown fields such as raw source
 values, and never records its host path. Retain its SHA with the comparison report so a later source
 change cannot be mistaken for the analyzed revision.
+
+Source hierarchy takes precedence over bounds containment when it is unambiguous and skips
+uncaptured Compose wrappers while walking to the nearest captured ancestor. For proven rotated or
+scaled components, the comparator compares the pre-transform layout/transform contract and keeps
+the platform runtime AABBs as diagnostics. It does not grant that exception to partial or
+unproven transform data.
 
 ## Export Android Compose component bounds
 

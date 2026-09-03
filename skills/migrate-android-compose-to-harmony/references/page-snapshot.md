@@ -75,7 +75,9 @@ Every visual-fact component contains a stable semantic key and these sections:
           "alignment": "center",
           "horizontal_arrangement": null,
           "vertical_arrangement": null,
-          "aspect_ratio": null
+          "aspect_ratio": null,
+          "width_dp": 120,
+          "height_dp": 48
         },
         "surface": {
           "background": {
@@ -229,6 +231,45 @@ python3 "$SKILL_ROOT/scripts/generate_harmony_page_json.py" \
 Create one pair for every route and visible state. A default page JSON cannot stand in for loading,
 empty, error, dialog, selected, keyboard-open, or scrolled states.
 
+## Use the Android page as generation input
+
+After generating the Android page JSON for one deterministic route/state, pass it to the ArkUI
+page generator together with the code-derived migration contract:
+
+```bash
+python3 "$SKILL_ROOT/scripts/generate_arkui_page.py" \
+  --contract "$CONTRACT" --target "$TARGET" --module entry \
+  --root-source "app/src/main/java/example/HomeScreen.kt" \
+  --root-composable "HomeScreen" \
+  --android-page-json "$ANDROID_PAGE_JSON"
+```
+
+The generator binds the Android page JSON and its screenshot identity into the ArkUI generation
+manifest. It uses exact source `call_id` mappings from each runtime component's attached source
+attributes. Only values with resolved runtime, source, pixel-sampled, or manually verified
+provenance may drive code. Applied fact paths are listed under
+`android_page_input.applied_paths`; ambiguous mappings, unresolved facts, and proven properties
+without a safe ArkUI emitter remain in the ordinary `unresolved` list.
+
+Generate the source-attribute inventory at call granularity. Each captured runtime component must
+use the exact deterministic semantic key for one source call; a composable-wide key that aggregates
+multiple `call_id` values cannot drive generation. When a proven page fact replaces the same static
+modifier or typography property, the page value is emitted once rather than appended as a duplicate
+modifier.
+
+The source-attribute inventory also records a source-semantic parent and preorder for every call.
+It expands a project composable across a uniquely resolved invocation, then page generation
+compresses uncaptured intermediate calls to the nearest captured source ancestor. Runtime
+smallest-containing-bounds inference remains only for missing or ambiguous source hierarchy. This
+keeps rotated children, equal-size wrappers, and platform-native container nodes from creating
+false parent or sibling differences.
+
+The page snapshot supplies the rendered visual target for that state. The Compose contract still
+owns callbacks, state transitions, scrolling behavior, and responsive layout intent. A runtime
+width or position must not be treated as proof that the source intended an absolute coordinate
+across every viewport. Generate and compare separate state captures whenever the rendered tree or
+style changes.
+
 ## Comparison output
 
 Pass the v2 page files as `--left-components` and `--right-components` to
@@ -248,6 +289,13 @@ The comparator rejects different page/state identities before creating output. I
 `pixel_comparison_compatible=false` when logical content bounds, orientation, font scale, or crop
 aspect are incompatible. Physical asset pixels are retained but asset dimensions are compared in
 logical `dp/vp` units, so equivalent `72px @3x` and `48px @2x` resources do not fail.
+
+Ordinary components use runtime logical bounds and retain the 1dp tolerance. If both page
+snapshots prove a non-identity rotation or scale, all transform fields, and at least one
+pre-transform layout dimension, geometry comparison switches only that component to
+`source_resolved_pre_transform_layout_and_transform`. The pre-transform contract is compared with
+the same dp/degree/scale tolerances, while platform-specific clipped runtime AABBs remain in
+`runtime_bounds_diagnostic`. Missing provenance or a partial transform cannot activate this mode.
 
 Both `comparison.json.verdict.status` and command stdout `verdict` are `pass` or `fail`. A strict
 pass requires complete v2 snapshots, equivalent component presence and hierarchy, geometry within

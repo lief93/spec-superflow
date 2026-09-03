@@ -80,9 +80,36 @@ class GeneratePageSnapshotTest(unittest.TestCase):
                     "semantic_input_sha256": "2" * 64,
                     "components": [
                         {
+                            "semantic_key": "HomeScreen",
+                            "source": "Home.kt",
+                            "composable": "HomeScreen",
+                            "source_hierarchy": {
+                                "parent_semantic_key": None,
+                                "preorder_index": 0,
+                                "mapping": "resolved_static_call_graph",
+                            },
+                            "attributes": [
+                                {
+                                    "call_id": "home-root",
+                                    "line": 40,
+                                    "component": "Column",
+                                    "origin": "call_site",
+                                    "name": "component",
+                                    "groups": ["geometry"],
+                                    "dimensions": [],
+                                    "dimension_resources": [],
+                                }
+                            ],
+                        },
+                        {
                             "semantic_key": "PrimaryButton",
                             "source": "Home.kt",
                             "composable": "PrimaryButton",
+                            "source_hierarchy": {
+                                "parent_semantic_key": "HomeScreen",
+                                "preorder_index": 1,
+                                "mapping": "resolved_static_call_graph",
+                            },
                             "attributes": [
                                 {
                                     "call_id": "home-button",
@@ -286,6 +313,7 @@ class GeneratePageSnapshotTest(unittest.TestCase):
                 self.assertEqual(payload["capture"]["screenshot"]["sha256"].__len__(), 64)
                 button = next(item for item in payload["components"] if item["semantic_key"] == "PrimaryButton")
                 self.assertEqual(button["parent_id"], f"{platform}-root")
+                self.assertEqual(button["parent_mapping"], "source-semantic-ancestor")
                 self.assertEqual(button["bounds_dp"]["x"], button_x / 3)
                 self.assertEqual(button["source"]["source"], "Home.kt")
                 self.assertEqual(button["source"]["attributes"][0]["name"], "padding")
@@ -301,6 +329,102 @@ class GeneratePageSnapshotTest(unittest.TestCase):
                 self.assertEqual(button["sibling_index"], 0)
                 self.assertEqual(button["unresolved"][0]["expression"], "MaterialTheme.colorScheme.primary")
                 self.assertEqual(button["provenance"][0]["origin"], "source_resolved")
+
+    def test_source_hierarchy_compresses_uncaptured_wrappers_and_controls_sibling_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            screenshot = root / "android.png"
+            components = root / "android-components.json"
+            source_attributes = root / "source-attributes.json"
+            output = root / "android-page.json"
+            write_png(screenshot, 1080, 2400)
+            components.write_text(
+                json.dumps(
+                    {
+                        "schema": "android-to-harmony.component-bounds.v1",
+                        "screenshot_dimensions": {"width": 1080, "height": 2400},
+                        "components": [
+                            {
+                                "id": "peer",
+                                "type": "Text",
+                                "semantic_key": "Peer",
+                                "bounds": {"x": 10, "y": 10, "width": 80, "height": 40},
+                            },
+                            {
+                                "id": "root",
+                                "type": "Column",
+                                "semantic_key": "Root",
+                                "bounds": {"x": 0, "y": 0, "width": 1080, "height": 2400},
+                            },
+                            {
+                                "id": "rotated-child",
+                                "type": "Image",
+                                "semantic_key": "RotatedChild",
+                                "bounds": {"x": 900, "y": 100, "width": 180, "height": 500},
+                            },
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            def source_component(key: str, parent: str | None, order: int) -> dict[str, object]:
+                return {
+                    "semantic_key": key,
+                    "source": "Home.kt",
+                    "composable": "HomeScreen",
+                    "source_hierarchy": {
+                        "parent_semantic_key": parent,
+                        "preorder_index": order,
+                        "mapping": "resolved_static_call_graph",
+                    },
+                    "attributes": [
+                        {
+                            "call_id": f"home-{key}",
+                            "line": order + 1,
+                            "component": "Box",
+                            "origin": "call_site",
+                            "name": "component",
+                            "groups": ["geometry"],
+                            "dimensions": [],
+                            "dimension_resources": [],
+                        }
+                    ],
+                }
+            source_attributes.write_text(
+                json.dumps(
+                    {
+                        "schema": "android-to-harmony.source-attribute-inventory.v1",
+                        "status": "candidate_requires_review",
+                        "authoritative": False,
+                        "root": {"source": "Home.kt", "composable": "HomeScreen"},
+                        "contract_sha256": "1" * 64,
+                        "semantic_input_sha256": "2" * 64,
+                        "components": [
+                            source_component("Root", None, 0),
+                            source_component("MissingWrapper", "Root", 1),
+                            source_component("RotatedChild", "MissingWrapper", 2),
+                            source_component("Peer", "Root", 3),
+                        ],
+                        "limitations": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = self.run_generator(
+                "android", screenshot, components, output, source_attributes=source_attributes
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            by_key = {item["semantic_key"]: item for item in payload["components"]}
+            self.assertEqual(by_key["RotatedChild"]["parent_id"], "root")
+            self.assertEqual(by_key["RotatedChild"]["parent_mapping"], "source-semantic-ancestor")
+            self.assertEqual(by_key["RotatedChild"]["sibling_index"], 0)
+            self.assertEqual(by_key["Peer"]["sibling_index"], 1)
+            self.assertEqual(by_key["Root"]["children_ids"], ["rotated-child", "peer"])
 
     def test_visual_facts_platform_must_match_generator(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

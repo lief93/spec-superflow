@@ -1739,6 +1739,765 @@ class MigrationToolTests(unittest.TestCase):
             self.assertNotEqual(forced.returncode, 0)
             self.assertIn("changed after generation", forced.stdout)
 
+    def test_page_driven_project_wrappers_preserve_root_content_alignment(self) -> None:
+        from generate_arkui_page import Renderer
+
+        renderer = object.__new__(Renderer)
+        renderer.calls_by_definition = {
+            ("Buttons.kt", "PrimaryButton"): [
+                {
+                    "call_id": "button",
+                    "component": "Button",
+                    "parent_call_id": None,
+                    "ordered_modifier_chain": [],
+                }
+            ],
+            ("Labels.kt", "CenteredLabel"): [
+                {
+                    "call_id": "box",
+                    "component": "Box",
+                    "parent_call_id": None,
+                    "ordered_modifier_chain": [],
+                    "semantic_arguments": {
+                        "contentAlignment": {"expression": "Alignment.Center"}
+                    },
+                }
+            ],
+            ("Fields.kt", "DecoratedField"): [
+                {
+                    "call_id": "field-wrapper",
+                    "component": "FieldWrapper",
+                    "parent_call_id": None,
+                    "ordered_modifier_chain": [],
+                    "custom_composable": {
+                        "definitions": [
+                            {"source": "Fields.kt", "composable": "FieldWrapper"}
+                        ]
+                    },
+                }
+            ],
+            ("Fields.kt", "FieldWrapper"): [
+                {
+                    "call_id": "column",
+                    "component": "Column",
+                    "parent_call_id": None,
+                    "ordered_modifier_chain": [],
+                }
+            ],
+            ("Cover.kt", "Cover"): [
+                {
+                    "call_id": "row",
+                    "component": "Row",
+                    "parent_call_id": None,
+                    "ordered_modifier_chain": [
+                        {
+                            "name": "wrapContentHeight",
+                            "arguments": "unbounded = true, align = Alignment.Top",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        self.assertEqual(
+            renderer.project_component_content_alignment(("Buttons.kt", "PrimaryButton")),
+            "Alignment.Center",
+        )
+        self.assertEqual(
+            renderer.project_component_content_alignment(("Labels.kt", "CenteredLabel")),
+            "Alignment.Center",
+        )
+        self.assertEqual(
+            renderer.project_component_content_alignment(("Fields.kt", "DecoratedField")),
+            "Alignment.TopStart",
+        )
+        self.assertEqual(
+            renderer.project_component_content_alignment(("Cover.kt", "Cover")),
+            "Alignment.TopStart",
+        )
+
+    def test_arkui_page_generator_uses_proven_android_page_visual_facts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "android"
+            snapshot = root / "snapshot"
+            contract = root / "contract.json"
+            page_json = root / "login-default.android-page.json"
+            screen = source / "app/src/main/java/example/LoginScreen.kt"
+            font = source / "app/src/main/res/font/brand_semibold.ttf"
+            logo = source / "app/src/main/res/drawable/logo.png"
+            screen.parent.mkdir(parents=True)
+            font.parent.mkdir(parents=True)
+            logo.parent.mkdir(parents=True)
+            font.write_bytes(b"verified-font-fixture")
+            logo.write_bytes(b"opaque-image-fixture")
+            screen.write_text(
+                """
+                package example
+
+                import androidx.compose.foundation.layout.fillMaxWidth
+                import androidx.compose.foundation.layout.height
+                import androidx.compose.foundation.layout.Column
+                import androidx.compose.foundation.layout.Row
+                import androidx.compose.foundation.layout.Spacer
+                import androidx.compose.foundation.layout.offset
+                import androidx.compose.foundation.layout.padding
+                import androidx.compose.foundation.layout.wrapContentHeight
+                import androidx.compose.foundation.layout.weight
+                import androidx.compose.foundation.Image
+                import androidx.compose.foundation.text.BasicTextField
+                import androidx.compose.material.Text
+                import androidx.compose.runtime.Composable
+                import androidx.compose.ui.Alignment
+                import androidx.compose.ui.Modifier
+                import androidx.compose.ui.draw.rotate
+                import androidx.compose.ui.res.painterResource
+                import androidx.compose.ui.text.font.Font
+                import androidx.compose.ui.text.font.FontFamily
+                import androidx.compose.ui.text.font.FontWeight
+                import androidx.compose.ui.unit.dp
+
+                val brandFontFamily = FontFamily(
+                  Font(R.font.brand_semibold, FontWeight.SemiBold)
+                )
+
+                data class UiField(val value: String = "")
+
+                @Composable
+                fun CapturedField(uiField: UiField = UiField()) {
+                  BasicTextField(value = uiField.value, onValueChange = {})
+                }
+
+                @Composable
+                fun LoginScreen() {
+                  Column {
+                    Text(
+                      text = "Sign in",
+                      modifier = Modifier.fillMaxWidth().height(48.dp).weight(1f)
+                    )
+                    CapturedField(uiField = UiField())
+                    Cover(Modifier.fillMaxWidth().height(122.dp))
+                  }
+                }
+
+                @Composable
+                fun Cover(modifier: Modifier) {
+                  Row(
+                    modifier = modifier.then(
+                      Modifier
+                        .wrapContentHeight(unbounded = true, align = Alignment.Top)
+                        .padding(bottom = 16.dp)
+                        .fillMaxWidth()
+                    ),
+                    verticalAlignment = Alignment.Bottom,
+                  ) {
+                    Image(
+                      painter = painterResource(R.drawable.logo),
+                      contentDescription = null,
+                      modifier = Modifier.height(110.dp).offset(x = (-56).dp)
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Image(
+                      painter = painterResource(R.drawable.logo),
+                      contentDescription = null,
+                      modifier = Modifier.height(160.dp).rotate(-45f)
+                    )
+                  }
+                }
+                """,
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_script(PREPARE, "--source", str(source), "--snapshot", str(snapshot)).returncode,
+                0,
+            )
+            self.assertEqual(
+                run_script(ANALYZE, "--snapshot", str(snapshot), "--output", str(contract)).returncode,
+                0,
+            )
+
+            def initialize_target(name: str) -> Path:
+                target_path = root / name
+                initialized = run_script(
+                    INITIALIZE,
+                    "--output",
+                    str(target_path),
+                    "--project-name",
+                    name,
+                    "--bundle-name",
+                    f"com.example.{name.lower()}",
+                    "--contract",
+                    str(contract),
+                )
+                self.assertEqual(initialized.returncode, 0, initialized.stdout + initialized.stderr)
+                return target_path
+
+            target = initialize_target("HarmonyFixture")
+            copied_font = run_script(
+                COPY_ASSET,
+                "--manifest",
+                str(snapshot / ".android-to-harmony-safe.json"),
+                "--asset-path",
+                "app/src/main/res/font/brand_semibold.ttf",
+                "--target",
+                str(target),
+                "--destination",
+                str(target / "entry/src/main/resources/rawfile/fonts/brand_semibold.ttf"),
+            )
+            self.assertEqual(copied_font.returncode, 0, copied_font.stdout + copied_font.stderr)
+            copied_logo = run_script(
+                COPY_ASSET,
+                "--manifest",
+                str(snapshot / ".android-to-harmony-safe.json"),
+                "--asset-path",
+                "app/src/main/res/drawable/logo.png",
+                "--target",
+                str(target),
+                "--destination",
+                str(target / "entry/src/main/resources/base/media/logo.png"),
+            )
+            self.assertEqual(copied_logo.returncode, 0, copied_logo.stdout + copied_logo.stderr)
+            contract_payload = json.loads(contract.read_text(encoding="utf-8"))
+            column_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "LoginScreen"
+                and call["component"] == "Column"
+            )
+            text_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "LoginScreen"
+                and call["component"] == "Text"
+            )
+            captured_field_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "LoginScreen"
+                and call["component"] == "CapturedField"
+            )
+            cover_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "LoginScreen"
+                and call["component"] == "Cover"
+            )
+            left_image_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "Cover"
+                and call["component"] == "Image"
+                and any(
+                    modifier.get("name") == "height" and "110" in modifier.get("arguments", "")
+                    for modifier in call["ordered_modifier_chain"]
+                )
+            )
+            image_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "Cover"
+                and call["component"] == "Image"
+                and any(modifier.get("name") == "rotate" for modifier in call["ordered_modifier_chain"])
+            )
+            page_payload = {
+                    "schema": "android-to-harmony.page-snapshot.v2",
+                    "status": "candidate_requires_review",
+                    "authoritative": False,
+                    "platform": "android",
+                    "page": {"id": "login", "state": "default"},
+                    "viewport": {
+                        "width_px": 1080,
+                        "height_px": 2400,
+                        "density": 3,
+                        "font_scale": 1,
+                        "orientation": "portrait",
+                        "width_dp": 360,
+                        "height_dp": 800,
+                        "insets_source": "component_inventory",
+                        "safe_area_px": {"left": 0, "top": 72, "right": 0, "bottom": 96},
+                        "safe_area_dp": {"left": 0, "top": 24, "right": 0, "bottom": 32},
+                        "content_bounds_px": {"x": 0, "y": 72, "width": 1080, "height": 2232},
+                        "content_bounds_dp": {"x": 0, "y": 24, "width": 360, "height": 744},
+                    },
+                    "capture": {
+                        "screenshot": {
+                            "file": "login-default.png",
+                            "byte_count": 1234,
+                            "sha256": "a" * 64,
+                        }
+                    },
+                    "input_hashes": {"component_inventory_sha256": "b" * 64},
+                    "components": [
+                        {
+                            "id": "login-root",
+                            "type": "Column",
+                            "semantic_key": "LoginRoot",
+                            "bounds_px": {"x": 0, "y": 72, "width": 1080, "height": 2232},
+                            "bounds_dp": {"x": 0, "y": 24, "width": 360, "height": 744},
+                            "parent_id": None,
+                            "parent_mapping": "smallest-containing-runtime-component",
+                            "children_ids": [
+                                "login-title",
+                                "login-email",
+                                "login-cover",
+                                "login-left-logo",
+                                "login-logo",
+                            ],
+                            "sibling_index": 0,
+                            "source": {
+                                "source": "app/src/main/java/example/LoginScreen.kt",
+                                "composable": "LoginScreen",
+                                "attributes": [
+                                    {
+                                        "call_id": column_call["call_id"],
+                                        "line": column_call["line"],
+                                        "component": "Column",
+                                        "origin": "component",
+                                        "name": "Column",
+                                        "groups": ["layout"],
+                                        "dimensions": [],
+                                        "dimension_resources": [],
+                                    }
+                                ],
+                            },
+                            "style": {},
+                            "provenance": [],
+                            "unresolved": [],
+                        },
+                        {
+                            "id": "login-title",
+                            "type": "Text",
+                            "semantic_key": "LoginTitle",
+                            "bounds_px": {"x": 90, "y": 300, "width": 360, "height": 96},
+                            "bounds_dp": {"x": 30, "y": 100, "width": 120, "height": 32},
+                            "parent_id": "login-root",
+                            "parent_mapping": "smallest-containing-runtime-component",
+                            "children_ids": [],
+                            "sibling_index": 0,
+                            "source": {
+                                "source": "app/src/main/java/example/LoginScreen.kt",
+                                "composable": "LoginScreen",
+                                "attributes": [
+                                    {
+                                        "call_id": text_call["call_id"],
+                                        "line": text_call["line"],
+                                        "component": "Text",
+                                        "origin": "semantic_argument",
+                                        "name": "text",
+                                        "groups": ["content"],
+                                        "dimensions": [],
+                                        "dimension_resources": [],
+                                    }
+                                ],
+                            },
+                            "style": {
+                                "typography": {
+                                    "font_size_sp": 23,
+                                    "font_weight": 600,
+                                    "font_family": "Brand",
+                                    "line_height_sp": 29,
+                                    "color": "#FF112233",
+                                },
+                                "content": {"text": "Sign in"},
+                            },
+                            "provenance": [
+                                {
+                                    "paths": [
+                                        "style.typography.font_size_sp",
+                                        "style.typography.font_weight",
+                                        "style.typography.font_family",
+                                        "style.typography.line_height_sp",
+                                        "style.typography.color",
+                                        "style.content.text",
+                                    ],
+                                    "origin": "runtime",
+                                    "source": "Android instrumentation",
+                                }
+                            ],
+                            "unresolved": [],
+                        },
+                        {
+                            "id": "login-email",
+                            "type": "CapturedField",
+                            "semantic_key": "LoginEmail",
+                            "bounds_px": {"x": 90, "y": 420, "width": 900, "height": 144},
+                            "bounds_dp": {"x": 30, "y": 140, "width": 300, "height": 48},
+                            "parent_id": "login-root",
+                            "parent_mapping": "smallest-containing-runtime-component",
+                            "children_ids": [],
+                            "sibling_index": 1,
+                            "source": {
+                                "source": "app/src/main/java/example/LoginScreen.kt",
+                                "composable": "LoginScreen",
+                                "attributes": [
+                                    {
+                                        "call_id": captured_field_call["call_id"],
+                                        "line": captured_field_call["line"],
+                                        "component": "CapturedField",
+                                        "origin": "semantic_argument",
+                                        "name": "uiField",
+                                        "groups": ["content"],
+                                        "dimensions": [],
+                                        "dimension_resources": [],
+                                    }
+                                ],
+                            },
+                            "style": {"content": {"text": "example@mail.com"}},
+                            "provenance": [
+                                {
+                                    "paths": ["style.content.text"],
+                                    "origin": "runtime",
+                                    "source": "Android instrumentation",
+                                }
+                            ],
+                            "unresolved": [],
+                        },
+                        {
+                            "id": "login-cover",
+                            "type": "Cover",
+                            "semantic_key": "LoginCover",
+                            "bounds_px": {"x": 0, "y": 600, "width": 1080, "height": 366},
+                            "bounds_dp": {"x": 0, "y": 200, "width": 360, "height": 122},
+                            "parent_id": "login-root",
+                            "parent_mapping": "smallest-containing-runtime-component",
+                            "children_ids": [],
+                            "sibling_index": 2,
+                            "source": {
+                                "source": "app/src/main/java/example/LoginScreen.kt",
+                                "composable": "LoginScreen",
+                                "attributes": [
+                                    {
+                                        "call_id": cover_call["call_id"],
+                                        "line": cover_call["line"],
+                                        "component": "Cover",
+                                        "origin": "component",
+                                        "name": "Cover",
+                                        "groups": ["layout"],
+                                        "dimensions": [],
+                                        "dimension_resources": [],
+                                    }
+                                ],
+                            },
+                            "style": {},
+                            "provenance": [],
+                            "unresolved": [],
+                        },
+                        {
+                            "id": "login-left-logo",
+                            "type": "Image",
+                            "semantic_key": "LoginLeftLogo",
+                            "bounds_px": {"x": 0, "y": 750, "width": 228, "height": 330},
+                            "bounds_dp": {"x": 0, "y": 250, "width": 76, "height": 110},
+                            "parent_id": "login-root",
+                            "parent_mapping": "smallest-containing-runtime-component",
+                            "children_ids": [],
+                            "sibling_index": 3,
+                            "source": {
+                                "source": "app/src/main/java/example/LoginScreen.kt",
+                                "composable": "Cover",
+                                "attributes": [
+                                    {
+                                        "call_id": left_image_call["call_id"],
+                                        "line": left_image_call["line"],
+                                        "component": "Image",
+                                        "origin": "modifier",
+                                        "name": "height",
+                                        "groups": ["geometry"],
+                                        "dimensions": [{"value": "110", "unit": "dp"}],
+                                        "dimension_resources": [],
+                                    }
+                                ],
+                            },
+                            "style": {},
+                            "provenance": [],
+                            "unresolved": [],
+                        },
+                        {
+                            "id": "login-logo",
+                            "type": "Image",
+                            "semantic_key": "LoginLogo",
+                            "bounds_px": {"x": 510, "y": 510, "width": 570, "height": 750},
+                            "bounds_dp": {"x": 170, "y": 170, "width": 190, "height": 250},
+                            "parent_id": "login-root",
+                            "parent_mapping": "smallest-containing-runtime-component",
+                            "children_ids": [],
+                            "sibling_index": 4,
+                            "source": {
+                                "source": "app/src/main/java/example/LoginScreen.kt",
+                                "composable": "LoginScreen",
+                                "attributes": [
+                                    {
+                                        "call_id": image_call["call_id"],
+                                        "line": image_call["line"],
+                                        "component": "Image",
+                                        "origin": "modifier",
+                                        "name": "height",
+                                        "groups": ["geometry", "transform"],
+                                        "dimensions": [{"value": "160", "unit": "dp"}],
+                                        "dimension_resources": [],
+                                    }
+                                ],
+                            },
+                            "style": {},
+                            "provenance": [],
+                            "unresolved": [],
+                        },
+                    ],
+                    "unmapped_source_components": [],
+                    "unmapped_visual_fact_components": [],
+                    "limitations": [],
+                }
+            write_json(page_json, page_payload)
+
+            generated = run_script(
+                GENERATE_ARKUI_PAGE,
+                "--contract",
+                str(contract),
+                "--target",
+                str(target),
+                "--root-source",
+                "app/src/main/java/example/LoginScreen.kt",
+                "--root-composable",
+                "LoginScreen",
+                "--android-page-json",
+                str(page_json),
+            )
+            self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
+            result = json.loads(generated.stdout)
+            self.assertTrue(result["generation_complete"])
+            output = target / result["output"]
+            generated_source = output.read_text(encoding="utf-8")
+            title_start = generated_source.index("Text('Sign in')")
+            title_end = generated_source.index("Stack() {", title_start)
+            title_source = generated_source[title_start:title_end]
+            self.assertIn(".width(120)", title_source)
+            self.assertIn(".height(32)", title_source)
+            self.assertIn(".fontSize(23)", title_source)
+            self.assertIn(".fontWeight(600)", title_source)
+            self.assertIn(".fontFamily('Brand600')", title_source)
+            self.assertIn(".lineHeight(29)", title_source)
+            self.assertIn(".fontColor('#FF112233')", title_source)
+            self.assertIn(".translate({ y: -1 })", title_source)
+            self.assertIn(".id('LoginTitle')", title_source)
+            self.assertEqual(title_source.count(".width("), 1)
+            self.assertEqual(title_source.count(".height("), 1)
+            self.assertEqual(title_source.count(".fontSize("), 1)
+            self.assertEqual(title_source.count(".fontWeight("), 1)
+            self.assertEqual(title_source.count(".fontFamily("), 1)
+            self.assertEqual(title_source.count(".fontColor("), 1)
+            self.assertNotIn(".layoutWeight(", title_source)
+            self.assertNotIn(".width('100%')", title_source)
+            self.assertIn(".alignItems(HorizontalAlign.Start)", generated_source)
+            self.assertRegex(
+                generated_source,
+                r"private Cover_[0-9a-f]+\(\) \{\s+Row\(\) \{[\s\S]*?\}\s+\.height\(176\)",
+            )
+            self.assertRegex(
+                generated_source,
+                r"Stack\(\) \{\s+this\.Cover_[0-9a-f]+\(.*?\)\s+\}\s+\.alignContent\(Alignment\.TopStart\)",
+            )
+            self.assertRegex(
+                generated_source,
+                r"this\.CapturedField_[0-9a-f]+\(\{ value: 'example@mail\.com' \}\)",
+            )
+            self.assertRegex(
+                generated_source,
+                r"Stack\(\) \{\s+this\.CapturedField_[0-9a-f]+\(\{ value: 'example@mail\.com' \}\)\s+\}\s+\.alignContent\(Alignment\.TopStart\)",
+            )
+            logo_start = generated_source.index("Image($r('app.media.logo'))")
+            logo_source = generated_source[logo_start:logo_start + 280]
+            self.assertIn(".height(160)", logo_source)
+            self.assertIn(".rotate({ angle: -45 })", logo_source)
+            self.assertNotIn(".width(190)", logo_source)
+            self.assertNotIn(".height(250)", logo_source)
+            self.assertIn(
+                "fontManager.registerFont({ familyName: 'Brand600', familySrc: $rawfile('fonts/brand_semibold.ttf') })",
+                generated_source,
+            )
+            manifest = json.loads((target / result["manifest"]).read_text(encoding="utf-8"))
+            self.assertEqual(
+                manifest["android_page_input"]["page"],
+                {"id": "login", "state": "default"},
+            )
+            self.assertEqual(
+                manifest["android_page_input"]["sha256"],
+                hashlib.sha256(page_json.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                set(manifest["android_page_input"]["applied_paths"][text_call["call_id"]]),
+                {
+                    "bounds_dp.width",
+                    "bounds_dp.height",
+                    "style.content.text",
+                    "style.typography.font_size_sp",
+                    "style.typography.font_weight",
+                    "style.typography.font_family",
+                    "style.typography.line_height_sp",
+                    "style.typography.color",
+                },
+            )
+            self.assertEqual(
+                manifest["android_page_input"]["applied_paths"][captured_field_call["call_id"]],
+                [
+                    "bounds_dp.height",
+                    "bounds_dp.width",
+                    "style.content.text",
+                ],
+            )
+
+            unsupported_platform = json.loads(json.dumps(page_payload))
+            unsupported_platform["platform"] = "harmony"
+            unsupported_platform_json = root / "login-harmony-page.json"
+            write_json(unsupported_platform_json, unsupported_platform)
+            rejected_platform = run_script(
+                GENERATE_ARKUI_PAGE,
+                "--contract",
+                str(contract),
+                "--target",
+                str(target),
+                "--root-source",
+                "app/src/main/java/example/LoginScreen.kt",
+                "--root-composable",
+                "LoginScreen",
+                "--android-page-json",
+                str(unsupported_platform_json),
+            )
+            self.assertNotEqual(rejected_platform.returncode, 0)
+            self.assertIn("platform must be android", rejected_platform.stdout)
+
+            ambiguous_mapping = json.loads(json.dumps(page_payload))
+            duplicate_component = json.loads(json.dumps(ambiguous_mapping["components"][0]))
+            duplicate_component["id"] = "login-title-duplicate"
+            ambiguous_mapping["components"].append(duplicate_component)
+            ambiguous_mapping_json = root / "login-ambiguous-page.json"
+            write_json(ambiguous_mapping_json, ambiguous_mapping)
+            rejected_mapping = run_script(
+                GENERATE_ARKUI_PAGE,
+                "--contract",
+                str(contract),
+                "--target",
+                str(target),
+                "--root-source",
+                "app/src/main/java/example/LoginScreen.kt",
+                "--root-composable",
+                "LoginScreen",
+                "--android-page-json",
+                str(ambiguous_mapping_json),
+            )
+            self.assertNotEqual(rejected_mapping.returncode, 0)
+            self.assertIn("multiple runtime components to one source call", rejected_mapping.stdout)
+
+            mismatched_component = json.loads(json.dumps(page_payload))
+            mismatched_component["components"][1]["type"] = "Image"
+            mismatched_component["components"][1]["style"]["content"]["text"] = "Wrong page text"
+            mismatched_component_json = root / "login-mismatched-component-page.json"
+            write_json(mismatched_component_json, mismatched_component)
+            mismatched_target = initialize_target("MismatchedFixture")
+            mismatched_result = run_script(
+                GENERATE_ARKUI_PAGE,
+                "--contract",
+                str(contract),
+                "--target",
+                str(mismatched_target),
+                "--root-source",
+                "app/src/main/java/example/LoginScreen.kt",
+                "--root-composable",
+                "LoginScreen",
+                "--android-page-json",
+                str(mismatched_component_json),
+            )
+            self.assertEqual(
+                mismatched_result.returncode,
+                0,
+                mismatched_result.stdout + mismatched_result.stderr,
+            )
+            mismatched_summary = json.loads(mismatched_result.stdout)
+            self.assertFalse(mismatched_summary["generation_complete"])
+            mismatched_manifest = json.loads(
+                (mismatched_target / mismatched_summary["manifest"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(mismatched_manifest["android_page_input"]["mapped_call_count"], 5)
+            self.assertNotIn(
+                text_call["call_id"],
+                mismatched_manifest["android_page_input"]["applied_paths"],
+            )
+            self.assertIn(
+                captured_field_call["call_id"],
+                mismatched_manifest["android_page_input"]["applied_paths"],
+            )
+            self.assertTrue(
+                any(
+                    item["kind"] == "android_page_mapping"
+                    and item["reason"]
+                    == "Android runtime component type does not match the selected source call"
+                    for item in mismatched_manifest["unresolved"]
+                )
+            )
+            mismatched_source = (
+                mismatched_target / mismatched_summary["output"]
+            ).read_text(encoding="utf-8")
+            self.assertIn("Text('Sign in')", mismatched_source)
+            self.assertNotIn("Wrong page text", mismatched_source)
+
+            unresolved_page = json.loads(json.dumps(page_payload))
+            unresolved_component = unresolved_page["components"][1]
+            unresolved_component["provenance"] = []
+            unresolved_component["unresolved"] = [
+                {
+                    "path": "style.surface.background.dynamic_theme",
+                    "expression": "MaterialTheme.colorScheme.primary",
+                    "reason": "theme value is state dependent",
+                }
+            ]
+            unresolved_page_json = root / "login-unresolved-page.json"
+            write_json(unresolved_page_json, unresolved_page)
+            unresolved_target = initialize_target("UnresolvedFixture")
+            unresolved_result = run_script(
+                GENERATE_ARKUI_PAGE,
+                "--contract",
+                str(contract),
+                "--target",
+                str(unresolved_target),
+                "--root-source",
+                "app/src/main/java/example/LoginScreen.kt",
+                "--root-composable",
+                "LoginScreen",
+                "--android-page-json",
+                str(unresolved_page_json),
+            )
+            self.assertEqual(
+                unresolved_result.returncode,
+                0,
+                unresolved_result.stdout + unresolved_result.stderr,
+            )
+            unresolved_summary = json.loads(unresolved_result.stdout)
+            self.assertFalse(unresolved_summary["generation_complete"])
+            unresolved_manifest = json.loads(
+                (unresolved_target / unresolved_summary["manifest"]).read_text(encoding="utf-8")
+            )
+            page_fact = next(
+                item
+                for item in unresolved_manifest["unresolved"]
+                if item["kind"] == "android_page_visual_fact"
+                and item.get("path") == "style.surface.background.dynamic_theme"
+            )
+            self.assertEqual(page_fact["expression"], "MaterialTheme.colorScheme.primary")
+            self.assertEqual(page_fact["page_reason"], "theme value is state dependent")
+            self.assertTrue(
+                any(
+                    item["kind"] == "android_page_visual_fact"
+                    and item.get("path") == "style.typography.font_size_sp"
+                    and item["reason"] == "Android page visual value is not bound to resolved provenance"
+                    for item in unresolved_manifest["unresolved"]
+                )
+            )
+
     def test_arkui_page_generator_reports_unresolved_asset_without_placeholder(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -2886,6 +3645,10 @@ class MigrationToolTests(unittest.TestCase):
             self.assertIn(".backgroundColor('#00000000')", generated_source)
             self.assertIn(".fontColor($r('app.color.compose_theme_primary'))", generated_source)
             self.assertIn(".padding({ left: 12, right: 12, top: 8, bottom: 8 })", generated_source)
+            self.assertIn(".fontSize(14)", generated_source)
+            self.assertIn(".lineHeight(20)", generated_source)
+            self.assertIn(".fontWeight(500)", generated_source)
+            self.assertIn(".maxLines(1)", generated_source)
 
     def test_arkui_page_generator_maps_default_icon_button_style(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2895,19 +3658,26 @@ class MigrationToolTests(unittest.TestCase):
             target = root / "HarmonyFixture"
             contract = root / "contract.json"
             screen = source / "app/src/main/java/example/DefaultIconButton.kt"
+            icon = source / "app/src/main/res/drawable/ic_close.png"
             screen.parent.mkdir(parents=True)
+            icon.parent.mkdir(parents=True)
+            icon.write_bytes(b"opaque-icon-fixture")
             screen.write_text(
                 """
                 package example
 
+                import androidx.compose.material3.Icon
                 import androidx.compose.material3.IconButton
-                import androidx.compose.material3.Text
                 import androidx.compose.runtime.Composable
+                import androidx.compose.ui.res.painterResource
 
                 @Composable
                 fun DefaultIconButtonHost() {
                   IconButton(onClick = {}) {
-                    Text("×")
+                    Icon(
+                      painter = painterResource(R.drawable.ic_close),
+                      contentDescription = null
+                    )
                   }
                 }
                 """,
@@ -2935,6 +3705,18 @@ class MigrationToolTests(unittest.TestCase):
                 ).returncode,
                 0,
             )
+            copied_icon = run_script(
+                COPY_ASSET,
+                "--manifest",
+                str(snapshot / ".android-to-harmony-safe.json"),
+                "--asset-path",
+                "app/src/main/res/drawable/ic_close.png",
+                "--target",
+                str(target),
+                "--destination",
+                str(target / "entry/src/main/resources/base/media/ic_close.png"),
+            )
+            self.assertEqual(copied_icon.returncode, 0, copied_icon.stdout + copied_icon.stderr)
             generated = run_script(
                 GENERATE_ARKUI_PAGE,
                 "--contract",
@@ -2961,6 +3743,9 @@ class MigrationToolTests(unittest.TestCase):
             generated_source = (target / result["output"]).read_text(encoding="utf-8")
             self.assertIn(".backgroundColor('#00000000')", generated_source)
             self.assertIn(".borderRadius('50%')", generated_source)
+            self.assertIn(".width(48)", generated_source)
+            self.assertIn(".height(48)", generated_source)
+            self.assertIn(".fillColor('#FF49454F')", generated_source)
 
     def test_arkui_page_generator_maps_default_circular_progress_style(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -5280,7 +6065,11 @@ class MigrationToolTests(unittest.TestCase):
             generated_source = (target / result["output"]).read_text(encoding="utf-8")
             self.assertIn("Image($r('app.media.logo'))", generated_source)
             self.assertIn("Image($r('app.media.logo_alt'))", generated_source)
-            self.assertIn(".fillColor('#FFFFFFFF')", generated_source)
+            self.assertIn("import drawing from '@ohos.graphics.drawing';", generated_source)
+            self.assertIn(
+                ".colorFilter(drawing.ColorFilter.createBlendModeColorFilter(0xFFFFFFFF, drawing.BlendMode.SRC_IN))",
+                generated_source,
+            )
 
     def test_arkui_page_generator_maps_nullable_color_filter_parameter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -5390,6 +6179,7 @@ class MigrationToolTests(unittest.TestCase):
                 r"this\.DrawableStartText_[A-Za-z0-9]+\('Expense', '#FFFFFFFF', true, \$r\('app.media.ic_income'\)\)",
             )
             self.assertIn("if (colorFilter) {", generated_source)
+            self.assertIn(".renderMode(ImageRenderMode.Template)", generated_source)
             self.assertIn(".fillColor(color)", generated_source)
 
     def test_arkui_page_generator_uses_conditional_materialized_painter_resource(self) -> None:
@@ -8132,8 +8922,10 @@ class MigrationToolTests(unittest.TestCase):
                 import androidx.compose.runtime.Composable
                 import androidx.compose.runtime.remember
                 import androidx.compose.ui.graphics.Color
+                import androidx.compose.ui.text.TextStyle
                 import androidx.compose.ui.text.input.VisualTransformation
                 import androidx.compose.ui.unit.dp
+                import androidx.compose.ui.unit.sp
 
                 @OptIn(ExperimentalMaterial3Api::class)
                 @Composable
@@ -8149,6 +8941,7 @@ class MigrationToolTests(unittest.TestCase):
                     value = value,
                     onValueChange = onValueChange,
                     interactionSource = interactionSource,
+                    textStyle = TextStyle(lineHeight = 20.sp),
                   ) { innerTextField ->
                     OutlinedTextFieldDefaults.DecorationBox(
                       value = value,
@@ -8159,8 +8952,9 @@ class MigrationToolTests(unittest.TestCase):
                       interactionSource = interactionSource,
                       contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
                       colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
+                        focusedContainerColor = Color(0xFFF7F7F7),
+                        unfocusedContainerColor = Color(0xFFF7F7F7),
+                        unfocusedIndicatorColor = Color(0xFFF7F7F7),
                         errorContainerColor = Color.Transparent,
                       ),
                       isError = error != null,
@@ -8222,6 +9016,11 @@ class MigrationToolTests(unittest.TestCase):
             )
             generated_source = (target / result["output"]).read_text(encoding="utf-8")
             self.assertIn("TextInput({ text: value })", generated_source)
+            self.assertIn(".padding({ left: 16, right: 16, top: 14, bottom: 14 })", generated_source)
+            self.assertIn(".backgroundColor('#FFF7F7F7')", generated_source)
+            self.assertIn(".border({ width: 0 })", generated_source)
+            self.assertIn(".height(52)", generated_source)
+            self.assertIn(".showPasswordIcon(false)", generated_source)
             self.assertIn("Text(error)", generated_source)
 
     def test_arkui_page_generator_emits_text_input_placeholder_from_text_slot(self) -> None:
@@ -15448,7 +16247,14 @@ class MigrationToolTests(unittest.TestCase):
                 manifest["unresolved"],
             )
             generated_source = (target / result["output"]).read_text(encoding="utf-8")
-            self.assertIn("state.form.expirationDate.error", generated_source)
+            self.assertIn(
+                "this.resolveResourceStr(state.form.expirationDate.error)",
+                generated_source,
+            )
+            self.assertIn(
+                "private resolveResourceStr(value: ResourceStr | null | undefined): string",
+                generated_source,
+            )
             self.assertNotIn("state.form.expirationDate.error?.asString", generated_source)
 
     def test_arkui_page_generator_preserves_explicit_null_resource_string_instead_of_default_label(self) -> None:
@@ -19046,7 +19852,10 @@ class MigrationToolTests(unittest.TestCase):
                 manifest["unresolved"],
             )
             generated_source = (target / result["output"]).read_text(encoding="utf-8")
-            self.assertIn("Text(base + divider + action)", generated_source)
+            self.assertIn("Text() {", generated_source)
+            self.assertIn("Span(base + divider)", generated_source)
+            self.assertIn("Span(action)", generated_source)
+            self.assertNotIn("Text(base + divider + action)", generated_source)
 
     def test_arkui_page_generator_guards_nullable_callback_passed_to_required_callback(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -19594,11 +20403,14 @@ class MigrationToolTests(unittest.TestCase):
 
                 import androidx.compose.foundation.background
                 import androidx.compose.foundation.layout.Column
+                import androidx.compose.foundation.layout.height
+                import androidx.compose.foundation.layout.offset
                 import androidx.compose.foundation.layout.padding
                 import androidx.compose.material.Text
                 import androidx.compose.runtime.Composable
                 import androidx.compose.ui.Modifier
                 import androidx.compose.ui.graphics.Color
+                import androidx.compose.ui.draw.rotate
                 import androidx.compose.ui.unit.dp
                 import androidx.compose.ui.unit.sp
 
@@ -19610,6 +20422,7 @@ class MigrationToolTests(unittest.TestCase):
                       .background(Color.White)
                   ) {
                     Text(
+                      modifier = Modifier.height(32.dp).offset(x = 8.dp).rotate(-45F),
                       text = "private account balance",
                       fontSize = 18.sp,
                       color = Color.Black
@@ -19640,17 +20453,59 @@ class MigrationToolTests(unittest.TestCase):
             )
             self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
             result = json.loads(generated.stdout)
-            self.assertEqual(result["component_count"], 1)
+            self.assertEqual(result["component_count"], 2)
             self.assertEqual(result["output_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
             inventory = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(
                 inventory["schema"],
                 "android-to-harmony.source-attribute-inventory.v1",
             )
-            component = inventory["components"][0]
-            self.assertEqual(component["semantic_key"], "SummaryCard")
-            self.assertEqual(component["source"], "app/src/main/java/example/Summary.kt")
-            attributes = component["attributes"]
+            self.assertEqual(
+                [component["semantic_key"] for component in inventory["components"]],
+                ["SummaryCard_Column_19_1", "SummaryCard_Text_24_2"],
+            )
+            self.assertEqual(
+                inventory["components"][0]["source_hierarchy"],
+                {
+                    "parent_semantic_key": None,
+                    "preorder_index": 0,
+                    "mapping": "resolved_static_call_graph",
+                },
+            )
+            self.assertEqual(
+                inventory["components"][1]["source_hierarchy"],
+                {
+                    "parent_semantic_key": "SummaryCard_Column_19_1",
+                    "preorder_index": 1,
+                    "mapping": "resolved_static_call_graph",
+                },
+            )
+            self.assertEqual(
+                inventory["components"][1]["resolved_visual_geometry"],
+                {
+                    "layout": {"height_dp": 32.0},
+                    "transform": {
+                        "translation_x_dp": 8.0,
+                        "translation_y_dp": 0.0,
+                        "scale_x": 1.0,
+                        "scale_y": 1.0,
+                        "rotation_degrees": -45.0,
+                    },
+                },
+            )
+            self.assertTrue(
+                all(
+                    component["source"] == "app/src/main/java/example/Summary.kt"
+                    and component["composable"] == "SummaryCard"
+                    and len({item["call_id"] for item in component["attributes"]}) == 1
+                    for component in inventory["components"]
+                )
+            )
+            attributes = [
+                attribute
+                for component in inventory["components"]
+                for attribute in component["attributes"]
+            ]
             self.assertTrue(
                 any(
                     item["origin"] == "modifier"
@@ -19672,6 +20527,88 @@ class MigrationToolTests(unittest.TestCase):
             self.assertNotIn("private account balance", serialized)
             self.assertNotIn("Color.White", serialized)
             self.assertNotIn("expression", serialized)
+
+    def test_source_attribute_inventory_expands_unique_project_component_hierarchy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "android"
+            snapshot = root / "snapshot"
+            contract = root / "contract.json"
+            output = root / "source-attributes.json"
+            screen = source / "app/src/main/java/example/Hierarchy.kt"
+            screen.parent.mkdir(parents=True)
+            screen.write_text(
+                """
+                package example
+
+                import androidx.compose.foundation.layout.Box
+                import androidx.compose.foundation.layout.Column
+                import androidx.compose.material.Text
+                import androidx.compose.runtime.Composable
+
+                @Composable
+                fun RootScreen() {
+                  Column {
+                    ChildCard()
+                    Text("private root text")
+                  }
+                }
+
+                @Composable
+                fun ChildCard() {
+                  Box {
+                    Text("private child text")
+                  }
+                }
+                """,
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_script(PREPARE, "--source", str(source), "--snapshot", str(snapshot)).returncode,
+                0,
+            )
+            self.assertEqual(
+                run_script(ANALYZE, "--snapshot", str(snapshot), "--output", str(contract)).returncode,
+                0,
+            )
+            generated = run_script(
+                GENERATE_SOURCE_ATTRIBUTES,
+                "--contract", str(contract),
+                "--root-source", "app/src/main/java/example/Hierarchy.kt",
+                "--root-composable", "RootScreen",
+                "--output", str(output),
+            )
+            self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
+            inventory = json.loads(output.read_text(encoding="utf-8"))
+            by_owner_and_component = {
+                (item["composable"], item["attributes"][0]["component"]): item
+                for item in inventory["components"]
+            }
+            root_column = by_owner_and_component[("RootScreen", "Column")]
+            invocation = by_owner_and_component[("RootScreen", "ChildCard")]
+            child_box = by_owner_and_component[("ChildCard", "Box")]
+            child_text = by_owner_and_component[("ChildCard", "Text")]
+            root_text = by_owner_and_component[("RootScreen", "Text")]
+            self.assertIsNone(root_column["source_hierarchy"]["parent_semantic_key"])
+            self.assertEqual(
+                invocation["source_hierarchy"]["parent_semantic_key"],
+                root_column["semantic_key"],
+            )
+            self.assertEqual(
+                child_box["source_hierarchy"]["parent_semantic_key"],
+                invocation["semantic_key"],
+            )
+            self.assertEqual(
+                child_text["source_hierarchy"]["parent_semantic_key"],
+                child_box["semantic_key"],
+            )
+            self.assertLess(
+                child_text["source_hierarchy"]["preorder_index"],
+                root_text["source_hierarchy"]["preorder_index"],
+            )
+            serialized = json.dumps(inventory)
+            self.assertNotIn("private root text", serialized)
+            self.assertNotIn("private child text", serialized)
 
 
     def test_vector_conversion_resolves_known_android_platform_color(self) -> None:
