@@ -105,6 +105,10 @@ STACK_RENDERED_COMPONENTS = {
     "CenterAlignedTopAppBar",
 }
 BLANK_UNSAFE_PARENT_COMPONENTS = BUTTON_CONTAINER_COMPONENTS | STACK_RENDERED_COMPONENTS | {"ListItem", "Stack"}
+PAGE_DRIVEN_FONT_SCALE = Decimal("0.866")
+PAGE_DRIVEN_BASELINE_PX = Decimal("3")
+PAGE_DRIVEN_BASELINE_VP = Decimal("0.85")
+PAGE_DRIVEN_RASTER_PIXEL_VP = Decimal("0.285")
 
 
 class ArkUIPageError(RuntimeError):
@@ -257,7 +261,15 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
         "unmapped_visual_fact_components",
         "limitations",
     }
-    if not isinstance(payload, dict) or set(payload) != required_fields:
+    optional_fields = {
+        "inactive_source_components",
+        "runtime_elided_source_components",
+    }
+    if (
+        not isinstance(payload, dict)
+        or not required_fields.issubset(payload)
+        or not set(payload).issubset(required_fields | optional_fields)
+    ):
         raise ArkUIPageError("Android page JSON has unsupported root fields")
     if payload.get("schema") != PAGE_SNAPSHOT_SCHEMA:
         raise ArkUIPageError("Android page JSON must use android-to-harmony.page-snapshot.v2")
@@ -291,6 +303,18 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
         or orientation not in {"portrait", "landscape"}
     ):
         raise ArkUIPageError("Android page JSON viewport scale or orientation is malformed")
+    content_bounds_dp = viewport.get("content_bounds_dp")
+    if (
+        not isinstance(content_bounds_dp, dict)
+        or set(content_bounds_dp) != {"x", "y", "width", "height"}
+        or any(type(content_bounds_dp[field]) not in {int, float} for field in content_bounds_dp)
+        or any(not math.isfinite(float(content_bounds_dp[field])) for field in content_bounds_dp)
+        or content_bounds_dp["x"] < 0
+        or content_bounds_dp["y"] < 0
+        or content_bounds_dp["width"] <= 0
+        or content_bounds_dp["height"] <= 0
+    ):
+        raise ArkUIPageError("Android page JSON content bounds are malformed")
     capture = payload.get("capture")
     screenshot = capture.get("screenshot") if isinstance(capture, dict) else None
     if (
@@ -309,7 +333,7 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
         raise ArkUIPageError("Android page JSON components must contain at most 10000 entries")
     components: list[dict[str, Any]] = []
     component_ids: set[str] = set()
-    call_id_owners: dict[str, str] = {}
+    call_id_owners: dict[str, list[tuple[str, str | None]]] = defaultdict(list)
     by_call_id: dict[str, dict[str, Any]] = {}
     for index, raw in enumerate(raw_components):
         if not isinstance(raw, dict):
@@ -334,6 +358,20 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
             or bounds_dp["height"] <= 0
         ):
             raise ArkUIPageError(f"Android page component {component_id} has malformed logical bounds")
+        visual_bounds_dp = raw.get("visual_bounds_dp")
+        if visual_bounds_dp is not None and (
+            not isinstance(visual_bounds_dp, dict)
+            or set(visual_bounds_dp) != {"x", "y", "width", "height"}
+            or any(type(visual_bounds_dp[field]) not in {int, float} for field in visual_bounds_dp)
+            or any(not math.isfinite(float(visual_bounds_dp[field])) for field in visual_bounds_dp)
+            or visual_bounds_dp["x"] < 0
+            or visual_bounds_dp["y"] < 0
+            or visual_bounds_dp["width"] <= 0
+            or visual_bounds_dp["height"] <= 0
+        ):
+            raise ArkUIPageError(
+                f"Android page component {component_id} has malformed visual bounds"
+            )
         try:
             style = normalize_style(raw.get("style"), f"Android page component {component_id}.style")
             provenance = normalize_provenance(
@@ -394,6 +432,14 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
             "type": component_type,
             "semantic_key": raw.get("semantic_key"),
             "bounds_dp": {name: float(bounds_dp[name]) for name in ("x", "y", "width", "height")},
+            "visual_bounds_dp": (
+                {
+                    name: float(visual_bounds_dp[name])
+                    for name in ("x", "y", "width", "height")
+                }
+                if isinstance(visual_bounds_dp, dict)
+                else None
+            ),
             "parent_id": parent_id,
             "children_ids": normalized_children,
             "sibling_index": sibling_index,
@@ -413,13 +459,27 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
         components.append(component)
         if len(component["call_ids"]) == 1:
             call_id = component["call_ids"][0]
-            if call_id in call_id_owners:
-                raise ArkUIPageError(
-                    "Android page JSON maps multiple runtime components to one source call: "
-                    + call_id
-                )
-            call_id_owners[call_id] = component_id
-            by_call_id[call_id] = component
+            owners = call_id_owners[call_id]
+            semantic_key = component["semantic_key"]
+            if owners:
+                semantic_keys = [owner_key for _owner_id, owner_key in owners] + [semantic_key]
+                bases = {
+                    re.sub(r"(?:__[0-9]+|__instance_[A-Za-z0-9._:@#-]+)$", "", key)
+                    for key in semantic_keys
+                    if isinstance(key, str)
+                }
+                if (
+                    any(not isinstance(key, str) for key in semantic_keys)
+                    or len(set(semantic_keys)) != len(semantic_keys)
+                    or len(bases) != 1
+                    or any(key in bases for key in semantic_keys[1:])
+                ):
+                    raise ArkUIPageError(
+                        "Android page JSON maps multiple runtime components to one source call "
+                        "without distinct source instances: " + call_id
+                    )
+            owners.append((component_id, semantic_key))
+            by_call_id.setdefault(call_id, component)
     by_id = {component["id"]: component for component in components}
     for component in components:
         parent_id = component["parent_id"]
@@ -434,6 +494,45 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
                 raise ArkUIPageError("Android page component parent/child relationship is inconsistent")
             if by_id[child_id]["sibling_index"] != component["children_ids"].index(child_id):
                 raise ArkUIPageError("Android page component sibling order is inconsistent")
+    raw_elided = payload.get("runtime_elided_source_components", [])
+    if not isinstance(raw_elided, list) or len(raw_elided) > 10000:
+        raise ArkUIPageError("Android page JSON runtime-elided source components are malformed")
+    runtime_elided_source_components: list[dict[str, str]] = []
+    elided_semantic_keys: set[str] = set()
+    for entry in raw_elided:
+        if not isinstance(entry, dict) or set(entry) != {
+            "source_semantic_key",
+            "source_call_id",
+            "reason",
+        }:
+            raise ArkUIPageError("Android page JSON runtime-elided source component is malformed")
+        try:
+            semantic_key = require_token(
+                entry.get("source_semantic_key"),
+                "Android page runtime-elided source semantic key",
+            )
+            reason = require_token(
+                entry.get("reason"),
+                "Android page runtime-elided source reason",
+            )
+        except PageSnapshotError as error:
+            raise ArkUIPageError(str(error)) from error
+        call_id = entry.get("source_call_id")
+        if (
+            not isinstance(call_id, str)
+            or not call_id
+            or len(call_id) > 4096
+            or any(character in call_id for character in "\r\n\0")
+        ):
+            raise ArkUIPageError("Android page runtime-elided source call ID is malformed")
+        if semantic_key in elided_semantic_keys:
+            raise ArkUIPageError("Android page JSON repeats a runtime-elided source semantic key")
+        elided_semantic_keys.add(semantic_key)
+        runtime_elided_source_components.append({
+            "source_semantic_key": semantic_key,
+            "source_call_id": call_id,
+            "reason": reason,
+        })
     return {
         "file": requested.name,
         "byte_count": byte_count,
@@ -443,6 +542,10 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
             "density": float(density),
             "font_scale": float(font_scale),
             "orientation": orientation,
+            "content_bounds_dp": {
+                name: float(content_bounds_dp[name])
+                for name in ("x", "y", "width", "height")
+            },
         },
         "screenshot": {
             "file": screenshot["file"],
@@ -452,6 +555,11 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
         "components": components,
         "by_id": by_id,
         "by_call_id": by_call_id,
+        "instances_by_call_id": {
+            call_id: [by_id[component_id] for component_id, _semantic_key in owners]
+            for call_id, owners in call_id_owners.items()
+        },
+        "runtime_elided_source_components": runtime_elided_source_components,
     }
 
 
@@ -1436,6 +1544,9 @@ class Renderer:
         self.typography_font_roles = typography_font_roles
         self.android_page_by_id: dict[str, dict[str, Any]] = {}
         self.android_page_by_call_id: dict[str, dict[str, Any]] = {}
+        self.android_page_instances_by_call_id: dict[str, list[dict[str, Any]]] = {}
+        self.android_page_runtime_elided: list[dict[str, str]] = []
+        self.android_page_runtime_elided_by_call_id: dict[str, list[dict[str, str]]] = defaultdict(list)
         self.android_page_applied_paths: dict[str, set[str]] = defaultdict(set)
         self.android_page_reference_paths: dict[str, set[str]] = defaultdict(set)
         self.android_page_processed_call_ids: set[str] = set()
@@ -1494,6 +1605,7 @@ class Renderer:
             self.calls_by_definition[key].append(call)
             self.selected_calls.append(call)
         selected_calls_by_id = {call["call_id"]: call for call in self.selected_calls}
+        self.selected_calls_by_id = selected_calls_by_id
         self.incoming_project_calls: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
         for call in self.selected_calls:
             custom = call.get("custom_composable")
@@ -1508,6 +1620,10 @@ class Renderer:
                 self.incoming_project_calls[callee].append(call)
         if isinstance(android_page_input, dict):
             self.android_page_by_id = android_page_input["by_id"]
+            self.android_page_instances_by_call_id = android_page_input["instances_by_call_id"]
+            self.android_page_runtime_elided = android_page_input["runtime_elided_source_components"]
+            for entry in self.android_page_runtime_elided:
+                self.android_page_runtime_elided_by_call_id[entry["source_call_id"]].append(entry)
             for component in android_page_input["components"]:
                 call_ids = component["call_ids"]
                 call = selected_calls_by_id.get(call_ids[0]) if len(call_ids) == 1 else None
@@ -1538,7 +1654,7 @@ class Renderer:
                         page_component_type=component["type"],
                     )
                 else:
-                    self.android_page_by_call_id[call_ids[0]] = component
+                    self.android_page_by_call_id.setdefault(call_ids[0], component)
                 for unresolved in component["unresolved"]:
                     self.add_unresolved(
                         "android_page_visual_fact",
@@ -1594,7 +1710,8 @@ class Renderer:
 
     @staticmethod
     def page_number(value: int | float) -> str:
-        return decimal_literal(Decimal(str(value)))
+        rounded = Decimal(str(value)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+        return decimal_literal(rounded)
 
     @staticmethod
     def page_path_is_proven(component: dict[str, Any], path: str) -> bool:
@@ -1629,6 +1746,40 @@ class Renderer:
     def android_page_component(self, call: dict[str, Any]) -> dict[str, Any] | None:
         component = self.android_page_by_call_id.get(call["call_id"])
         return component if isinstance(component, dict) else None
+
+    def android_page_instances(self, call: dict[str, Any]) -> list[dict[str, Any]]:
+        return self.android_page_instances_by_call_id.get(call["call_id"], [])
+
+    @staticmethod
+    def android_page_path_value(component: dict[str, Any], path: str) -> Any:
+        value: Any = component
+        for segment in path.split("."):
+            if not isinstance(value, dict) or segment not in value:
+                return None
+            value = value[segment]
+        return value
+
+    def android_page_invariant_value(self, call: dict[str, Any], path: str) -> Any:
+        instances = self.android_page_instances(call)
+        if not instances:
+            return None
+        values = [self.android_page_path_value(component, path) for component in instances]
+        if any(value != values[0] for value in values[1:]):
+            return None
+        return values[0]
+
+    def android_page_value_is_proven_for_call(
+        self,
+        call: dict[str, Any],
+        path: str,
+        value: Any,
+    ) -> bool:
+        instances = self.android_page_instances(call)
+        return bool(instances) and all(
+            self.android_page_path_value(component, path) == value
+            and self.page_value_is_proven(component, path, value)
+            for component in instances
+        )
 
     def android_page_content_alignment(self, call: dict[str, Any]) -> str:
         component = self.android_page_component(call)
@@ -1845,8 +1996,13 @@ class Renderer:
         return height
 
     def android_page_has_proven_path(self, call: dict[str, Any], path: str) -> bool:
-        component = self.android_page_component(call)
-        return component is not None and self.page_path_is_proven(component, path)
+        instances = self.android_page_instances(call)
+        if not instances:
+            return False
+        value = self.android_page_invariant_value(call, path)
+        return value is not None and all(
+            self.page_path_is_proven(component, path) for component in instances
+        )
 
     def android_page_overrides_modifier(
         self,
@@ -1952,6 +2108,8 @@ class Renderer:
         ]
 
     def android_page_text_value(self, call: dict[str, Any]) -> str | None:
+        if len(self.android_page_instances(call)) > 1:
+            return None
         component = self.android_page_by_call_id.get(call["call_id"])
         if not isinstance(component, dict):
             return None
@@ -2129,13 +2287,13 @@ class Renderer:
         self.android_page_processed_call_ids.add(call["call_id"])
         lines: list[str] = []
         semantic_key = component.get("semantic_key")
-        if isinstance(semantic_key, str):
+        if isinstance(semantic_key, str) and len(self.android_page_instances(call)) == 1:
             lines.append(f".id({arkts_string(semantic_key)})")
 
         def apply(path: str, value: Any, line: str) -> None:
             if value is None:
                 return
-            if not self.page_value_is_proven(component, path, value):
+            if not self.android_page_value_is_proven_for_call(call, path, value):
                 self.add_unresolved(
                     "android_page_visual_fact",
                     call,
@@ -2148,11 +2306,15 @@ class Renderer:
             self.record_android_page_path(call, path)
 
         bounds = component["bounds_dp"]
+        width = self.android_page_invariant_value(call, "bounds_dp.width")
+        height = self.android_page_invariant_value(call, "bounds_dp.height")
         if not self.uses_source_image_geometry(call):
-            lines.append(f".width({self.page_number(bounds['width'])})")
-            self.record_android_page_path(call, "bounds_dp.width")
-            lines.append(f".height({self.page_number(bounds['height'])})")
-            self.record_android_page_path(call, "bounds_dp.height")
+            if width is not None:
+                lines.append(f".width({self.page_number(width)})")
+                self.record_android_page_path(call, "bounds_dp.width")
+            if height is not None:
+                lines.append(f".height({self.page_number(height)})")
+                self.record_android_page_path(call, "bounds_dp.height")
         else:
             chain = call.get("ordered_modifier_chain", [])
             modifier_names = {
@@ -2291,8 +2453,8 @@ class Renderer:
                 "translation_x_dp": translation_x,
                 "translation_y_dp": translation_y,
             }
-            if self.page_value_is_proven(
-                component,
+            if self.android_page_value_is_proven_for_call(
+                call,
                 "style.transform",
                 translation_values,
             ):
@@ -2318,7 +2480,7 @@ class Renderer:
         scale_y = transform["scale_y"]
         if scale_x is not None or scale_y is not None:
             scale_values = {"scale_x": scale_x, "scale_y": scale_y}
-            if self.page_value_is_proven(component, "style.transform", scale_values):
+            if self.android_page_value_is_proven_for_call(call, "style.transform", scale_values):
                 x = self.page_number(scale_x if scale_x is not None else 1)
                 y = self.page_number(scale_y if scale_y is not None else 1)
                 lines.append(f".scale({{ x: {x}, y: {y} }})")
@@ -2346,12 +2508,72 @@ class Renderer:
             )
 
         applied = self.android_page_applied_paths[call["call_id"]]
+        implicit_state_defaults = {
+            "style.state.visible": True,
+            "style.state.enabled": True,
+            "style.state.selected": False,
+            "style.state.checked": False,
+            "style.state.clickable": False,
+        }
+        implicit_roles = {
+            "Text": "text",
+            "BasicText": "text",
+            "ClickableText": "text",
+            "BasicTextField": "textbox",
+            "TextField": "textbox",
+            "OutlinedTextField": "textbox",
+            "Button": "button",
+            "TextButton": "button",
+            "OutlinedButton": "button",
+            "IconButton": "button",
+            "Image": "image",
+            "Icon": "image",
+            "AsyncImage": "image",
+            "Checkbox": "checkbox",
+            "CheckBox": "checkbox",
+            "Switch": "switch",
+            "RadioButton": "radio",
+        }
+        implicitly_clickable_components = {
+            "BasicTextField",
+            "TextField",
+            "OutlinedTextField",
+            "Button",
+            "TextButton",
+            "OutlinedButton",
+            "IconButton",
+        }
+        implicitly_clipping_components = {
+            "Button",
+            "TextButton",
+            "OutlinedButton",
+            "IconButton",
+        }
         for section_name, section in style.items():
             for field_name, value in section.items():
                 path = f"style.{section_name}.{field_name}"
                 if value is None or path in applied or path == "style.content.text":
                     continue
-                if not self.page_value_is_proven(component, path, value):
+                if not self.android_page_value_is_proven_for_call(call, path, value):
+                    continue
+                if (
+                    implicit_state_defaults.get(path) == value
+                    or (
+                        path == "style.state.clickable"
+                        and value is True
+                        and component_kind in implicitly_clickable_components
+                    )
+                    or (
+                        path == "style.surface.clip"
+                        and value is True
+                        and component_kind in implicitly_clipping_components
+                    )
+                    or (
+                        path == "style.content.role"
+                        and implicit_roles.get(component_kind) == value
+                    )
+                ):
+                    self.record_android_page_path(call, path)
                     continue
                 self.add_unresolved(
                     "android_page_visual_fact",
@@ -9785,6 +10007,550 @@ class Renderer:
             return self.ensure_arkts_interface(stripped, hint)
         return stripped
 
+    def page_snapshot_source_lines(self, call: dict[str, Any]) -> list[str]:
+        key = (call["source"], call["composable"])
+        definition = self.definitions.get(key, {})
+        previous_defaults = self._current_parameter_defaults
+        previous_definition_key = self._current_definition_key
+        previous_local_values = self._current_local_values
+        self._current_definition_key = key
+        self._current_parameter_defaults = {
+            parameter["name"]: parameter["default"]
+            for parameter in definition.get("parameters", [])
+            if isinstance(parameter, dict)
+            and isinstance(parameter.get("name"), str)
+            and isinstance(parameter.get("default"), str)
+        }
+        local_values = call.get("local_values")
+        if isinstance(local_values, dict):
+            self._current_local_values = {
+                **previous_local_values,
+                **{
+                    name: value
+                    for name, value in local_values.items()
+                    if isinstance(name, str) and isinstance(value, str)
+                },
+            }
+        try:
+            if call["component"] in {"Text", "BasicText", "ClickableText"}:
+                return self.semantic_lines(call, {})
+            if call["component"] in {"Card", "ElevatedCard", "OutlinedCard", "Surface"}:
+                lines, _fully_handled = self.card_style_lines(call, {})
+                return lines
+            if call["component"] in {"Image", "Icon"}:
+                semantic = call.get("semantic_arguments", {})
+                painter = semantic.get("painter") if isinstance(semantic, dict) else None
+                expression = painter.get("expression") if isinstance(painter, dict) else None
+                media = (
+                    self.painter_resource_expression(expression, {})
+                    if isinstance(expression, str)
+                    else None
+                )
+                if media is None:
+                    return []
+                lines = [f"Image({media})"]
+                modifiers = self.modifier_lines(call, {})
+                parent = self.selected_calls_by_id.get(call.get("parent_call_id"))
+                if (
+                    isinstance(parent, dict)
+                    and parent.get("component") == "IconButton"
+                    and not any(line.startswith(".width(") for line in modifiers)
+                    and not any(line.startswith(".height(") for line in modifiers)
+                ):
+                    modifiers.extend([".width(24)", ".height(24)"])
+                tint_expression: str | None = None
+                tint = semantic.get("tint") if isinstance(semantic, dict) else None
+                if isinstance(tint, dict) and isinstance(tint.get("expression"), str):
+                    tint_expression = tint["expression"]
+                color_filter = semantic.get("colorFilter") if isinstance(semantic, dict) else None
+                color_filter_expression = (
+                    color_filter.get("expression") if isinstance(color_filter, dict) else None
+                )
+                if isinstance(color_filter_expression, str):
+                    match = re.fullmatch(
+                        r"ColorFilter\.tint\s*\(\s*(.+)\s*\)",
+                        color_filter_expression.strip(),
+                    )
+                    if match is not None:
+                        tint_expression = match.group(1).strip()
+                if tint_expression is not None:
+                    resolved_tint = self.current_parameter_default_expression(tint_expression, {})
+                    color = self.color_expression(resolved_tint, call, {})
+                    if color is not None:
+                        lines.extend(self.image_tint_lines(color, call["component"] == "Icon"))
+                lines.extend(modifiers)
+                return lines
+            if call["component"] not in {"BasicTextField", "TextField", "OutlinedTextField"}:
+                return []
+            semantic = call.get("semantic_arguments", {})
+            lines: list[str] = []
+            text_style = semantic.get("textStyle") if isinstance(semantic, dict) else None
+            text_style_expression = text_style.get("expression") if isinstance(text_style, dict) else None
+            if isinstance(text_style_expression, str):
+                resolved = self.current_parameter_default_expression(text_style_expression, {})
+                resolved_lines = self.inline_text_style_lines(resolved, call, {})
+                if resolved_lines is not None:
+                    lines.extend(resolved_lines)
+            children = [
+                candidate
+                for candidate in self.calls_by_definition.get(key, [])
+                if candidate.get("parent_call_id") == call["call_id"]
+            ]
+            if call["component"] == "BasicTextField":
+                lines.extend(self.basic_text_field_decoration_lines(children, call, {}))
+            return lines
+        finally:
+            self._current_parameter_defaults = previous_defaults
+            self._current_definition_key = previous_definition_key
+            self._current_local_values = previous_local_values
+
+    @staticmethod
+    def page_snapshot_line(lines: list[str], prefix: str) -> str | None:
+        return next((line for line in reversed(lines) if line.startswith(prefix)), None)
+
+    def page_snapshot_text_value(self, component: dict[str, Any]) -> str:
+        current: dict[str, Any] | None = component
+        while current is not None:
+            text = current["style"]["content"]["text"]
+            if isinstance(text, str):
+                return text
+            parent_id = current.get("parent_id")
+            current = self.android_page_by_id.get(parent_id) if isinstance(parent_id, str) else None
+        return ""
+
+    def page_snapshot_bounds(
+        self,
+        component: dict[str, Any],
+        parent_bounds: dict[str, float],
+    ) -> tuple[dict[str, float], float, float]:
+        bounds = dict(component.get("visual_bounds_dp") or component["bounds_dp"])
+        if (
+            component["type"] in {"BasicTextField", "TextField", "OutlinedTextField"}
+            and component.get("visual_bounds_dp") is not None
+        ):
+            raster_pixel = float(PAGE_DRIVEN_RASTER_PIXEL_VP)
+            bounds["y"] -= raster_pixel
+            bounds["width"] = max(raster_pixel, bounds["width"] - raster_pixel)
+            bounds["height"] = max(raster_pixel, bounds["height"] - raster_pixel)
+        return bounds, bounds["x"] - parent_bounds["x"], bounds["y"] - parent_bounds["y"]
+
+    @staticmethod
+    def page_snapshot_instance_suffix(semantic_key: str | None) -> str:
+        if not isinstance(semantic_key, str):
+            return ""
+        match = re.search(r"(__[0-9]+|__instance_[A-Za-z0-9._:@#-]+)$", semantic_key)
+        return match.group(1) if match is not None else ""
+
+    def source_call_is_descendant(self, call_id: str, ancestor_call_id: str) -> bool:
+        current = self.selected_calls_by_id.get(call_id)
+        visited: set[str] = set()
+        while isinstance(current, dict):
+            parent_id = current.get("parent_call_id")
+            if parent_id == ancestor_call_id:
+                return True
+            if not isinstance(parent_id, str) or parent_id in visited:
+                return False
+            visited.add(parent_id)
+            current = self.selected_calls_by_id.get(parent_id)
+        return False
+
+    def page_snapshot_elided_image_calls(
+        self,
+        component: dict[str, Any],
+        parent_call: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        suffix = self.page_snapshot_instance_suffix(component.get("semantic_key"))
+        result: list[dict[str, Any]] = []
+        for entry in self.android_page_runtime_elided:
+            if self.page_snapshot_instance_suffix(entry["source_semantic_key"]) != suffix:
+                continue
+            call = self.selected_calls_by_id.get(entry["source_call_id"])
+            if (
+                isinstance(call, dict)
+                and call.get("component") in {"Image", "Icon"}
+                and self.source_call_is_descendant(call["call_id"], parent_call["call_id"])
+            ):
+                result.append(call)
+        return sorted(result, key=lambda item: (item.get("line", 0), item["call_id"]))
+
+    @staticmethod
+    def literal_padding_edges(call: dict[str, Any]) -> dict[str, float]:
+        result = {"left": 0.0, "top": 0.0, "right": 0.0, "bottom": 0.0}
+
+        def literal_dimension(expression: str) -> float | None:
+            value = dimension_value(expression.strip())
+            if value is None or re.fullmatch(r"-?[0-9]+(?:\.[0-9]+)?", value) is None:
+                return None
+            return float(value)
+
+        for modifier in call.get("ordered_modifier_chain", []):
+            if not isinstance(modifier, dict) or modifier.get("name") != "padding":
+                continue
+            positional, named = named_arguments(str(modifier.get("arguments", "")))
+            if len(positional) == 1 and not named:
+                value = literal_dimension(positional[0])
+                if value is not None:
+                    for edge in result:
+                        result[edge] += value
+                continue
+            if positional or set(named) - {"all", "horizontal", "vertical", "start", "end", "top", "bottom"}:
+                continue
+            values: dict[str, float] = {}
+            for name, expression in named.items():
+                value = literal_dimension(expression)
+                if value is not None:
+                    values[name] = value
+            if "all" in values:
+                for edge in result:
+                    result[edge] += values["all"]
+                continue
+            if "horizontal" in values:
+                result["left"] += values["horizontal"]
+                result["right"] += values["horizontal"]
+            if "vertical" in values:
+                result["top"] += values["vertical"]
+                result["bottom"] += values["vertical"]
+            for source, target in (("start", "left"), ("end", "right"), ("top", "top"), ("bottom", "bottom")):
+                if source in values:
+                    result[target] += values[source]
+        return result
+
+    def page_snapshot_elided_surface_descendants(
+        self,
+        surface_call: dict[str, Any],
+        semantic_key: str,
+    ) -> list[dict[str, Any]]:
+        suffix = self.page_snapshot_instance_suffix(semantic_key)
+        descendants: list[dict[str, Any]] = []
+        for component in self.android_page_input["components"]:
+            if self.page_snapshot_instance_suffix(component.get("semantic_key")) != suffix:
+                continue
+            if len(component["call_ids"]) != 1:
+                continue
+            if self.source_call_is_descendant(component["call_ids"][0], surface_call["call_id"]):
+                descendants.append(component)
+        return descendants
+
+    def page_snapshot_common_padding(
+        self,
+        surface_call: dict[str, Any],
+        descendants: list[dict[str, Any]],
+    ) -> dict[str, float]:
+        common: set[str] | None = None
+        for component in descendants:
+            call_id = component["call_ids"][0]
+            ancestors: set[str] = set()
+            current = self.selected_calls_by_id.get(call_id)
+            while isinstance(current, dict):
+                current_id = current["call_id"]
+                if current_id == surface_call["call_id"]:
+                    break
+                ancestors.add(current_id)
+                parent_id = current.get("parent_call_id")
+                current = self.selected_calls_by_id.get(parent_id) if isinstance(parent_id, str) else None
+            common = ancestors if common is None else common & ancestors
+        result = {"left": 0.0, "top": 0.0, "right": 0.0, "bottom": 0.0}
+        for call_id in common or set():
+            call = self.selected_calls_by_id.get(call_id)
+            if not isinstance(call, dict):
+                continue
+            padding = self.literal_padding_edges(call)
+            for edge in result:
+                result[edge] += padding[edge]
+        return result
+
+    def page_snapshot_effective_bounds(self, component: dict[str, Any]) -> dict[str, float]:
+        bounds = dict(component.get("visual_bounds_dp") or component["bounds_dp"])
+        if component["type"] in {"Text", "BasicText", "ClickableText"}:
+            bounds["y"] -= float(PAGE_DRIVEN_BASELINE_VP)
+        return bounds
+
+    def page_snapshot_source_radius(
+        self,
+        call: dict[str, Any] | None,
+        bounds: dict[str, float],
+    ) -> float | None:
+        if call is None:
+            return None
+        expression: str | None = None
+        semantic = call.get("semantic_arguments")
+        shape = semantic.get("shape") if isinstance(semantic, dict) else None
+        if isinstance(shape, dict) and isinstance(shape.get("expression"), str):
+            expression = shape["expression"]
+        if expression is None:
+            definition = self.definitions.get((call["source"], call["composable"]), {})
+            expression = next(
+                (
+                    parameter.get("default")
+                    for parameter in definition.get("parameters", [])
+                    if isinstance(parameter, dict)
+                    and parameter.get("name") == "shape"
+                    and isinstance(parameter.get("default"), str)
+                ),
+                None,
+            )
+        if expression is None:
+            return None
+        radius = self.rounded_corner_radius_expression(expression, {})
+        if radius is None or re.fullmatch(r"-?[0-9]+(?:\.[0-9]+)?", radius) is None:
+            return None
+        value = min(float(radius), bounds["width"] / 2, bounds["height"] / 2)
+        nearest_integer = round(value)
+        return float(nearest_integer) if abs(value - nearest_integer) <= 0.25 else value
+
+    def page_snapshot_elided_surfaces(
+        self,
+        content_bounds: dict[str, float],
+    ) -> list[tuple[str, list[str]]]:
+        surfaces: list[tuple[str, list[str]]] = []
+        surface_components = {"Card", "ElevatedCard", "OutlinedCard", "Surface"}
+        for entry in self.android_page_runtime_elided:
+            call = self.selected_calls_by_id.get(entry["source_call_id"])
+            if not isinstance(call, dict) or call.get("component") not in surface_components:
+                continue
+            descendants = self.page_snapshot_elided_surface_descendants(
+                call, entry["source_semantic_key"]
+            )
+            if not descendants:
+                continue
+            bounds = [self.page_snapshot_effective_bounds(component) for component in descendants]
+            padding = self.page_snapshot_common_padding(call, descendants)
+            left = min(bound["x"] for bound in bounds) - padding["left"]
+            top = min(bound["y"] for bound in bounds) - padding["top"]
+            right = max(bound["x"] + bound["width"] for bound in bounds) + padding["right"]
+            bottom = max(bound["y"] + bound["height"] for bound in bounds) + padding["bottom"]
+            style_lines = self.page_snapshot_source_lines(call)
+            if not style_lines:
+                continue
+            surface_lines = [
+                "      Stack()",
+                f"        .position({{ x: {self.page_number(left - content_bounds['x'])}, y: {self.page_number(top - content_bounds['y'])} }})",
+                f"        .width({self.page_number(right - left)})",
+                f"        .height({self.page_number(bottom - top)})",
+                f"        .id({arkts_string(entry['source_semantic_key'])})",
+            ]
+            surface_lines.extend(f"        {line}" for line in style_lines)
+            descendant_roots: list[dict[str, Any]] = []
+            for descendant in descendants:
+                root = descendant
+                while isinstance(root.get("parent_id"), str):
+                    root = self.android_page_by_id[root["parent_id"]]
+                descendant_roots.append(root)
+            anchor = min(
+                descendant_roots,
+                key=lambda component: (
+                    component["sibling_index"],
+                    component["bounds_dp"]["y"],
+                    component["bounds_dp"]["x"],
+                ),
+            )
+            surfaces.append((anchor["id"], surface_lines))
+        return surfaces
+
+    def page_snapshot_component_lines(
+        self,
+        component: dict[str, Any],
+        parent_bounds: dict[str, float],
+        parent_type: str | None,
+        indent: int,
+    ) -> list[str]:
+        prefix = " " * indent
+        component_type = component["type"]
+        children = [self.android_page_by_id[child_id] for child_id in component["children_ids"]]
+        call = None
+        if len(component["call_ids"]) == 1:
+            candidate_call = self.selected_calls_by_id.get(component["call_ids"][0])
+            if candidate_call is not None and candidate_call["component"] == component_type:
+                call = candidate_call
+        source_lines = self.page_snapshot_source_lines(call) if call is not None else []
+        bounds, relative_x, relative_y = self.page_snapshot_bounds(component, parent_bounds)
+        is_text = component_type in {"Text", "BasicText", "ClickableText"}
+        is_text_field = component_type in {"BasicTextField", "TextField", "OutlinedTextField"}
+        is_button = component_type in BUTTON_CONTAINER_COMPONENTS
+
+        if is_text:
+            lines = [f"{prefix}Text({arkts_string(self.page_snapshot_text_value(component))})"]
+        elif is_text_field:
+            lines = [f"{prefix}TextInput({{ text: {arkts_string(self.page_snapshot_text_value(component))} }})"]
+        elif is_button:
+            lines = [f"{prefix}Button() {{"]
+            if call is not None:
+                for image_call in self.page_snapshot_elided_image_calls(component, call):
+                    for image_line in self.page_snapshot_source_lines(image_call):
+                        lines.append(f"{prefix}  {image_line}")
+            for child in children:
+                lines.extend(self.page_snapshot_component_lines(child, component["bounds_dp"], component_type, indent + 2))
+            lines.append(f"{prefix}}}")
+        elif component_type in {"Image", "Icon", "AsyncImage"} and call is not None:
+            semantic = call.get("semantic_arguments", {})
+            painter = semantic.get("painter") if isinstance(semantic, dict) else None
+            expression = painter.get("expression") if isinstance(painter, dict) else None
+            media = self.painter_resource_expression(expression, {}) if isinstance(expression, str) else None
+            media = media or "$r('app.media.start_icon')"
+            lines = [f"{prefix}Image({media})"]
+        elif children:
+            lines = [f"{prefix}Stack() {{"]
+            for child in children:
+                lines.extend(self.page_snapshot_component_lines(child, component["bounds_dp"], component_type, indent + 2))
+            lines.append(f"{prefix}}}")
+        else:
+            return []
+
+        if is_text and parent_type not in BUTTON_CONTAINER_COMPONENTS:
+            relative_y -= float(PAGE_DRIVEN_BASELINE_VP)
+        lines.append(
+            f"{prefix}  .position({{ x: {self.page_number(relative_x)}, y: {self.page_number(relative_y)} }})"
+        )
+        if not is_text:
+            lines.append(f"{prefix}  .width({self.page_number(bounds['width'])})")
+        lines.append(f"{prefix}  .height({self.page_number(bounds['height'])})")
+        semantic_key = component.get("semantic_key")
+        if isinstance(semantic_key, str):
+            lines.append(f"{prefix}  .id({arkts_string(semantic_key)})")
+
+        style = component["style"]
+        surface = style["surface"]
+        background = surface["background"]
+        if isinstance(background, dict) and background.get("type") == "solid":
+            lines.append(f"{prefix}  .backgroundColor({arkts_string(background['color'])})")
+        border = surface["border"]
+        if isinstance(border, dict):
+            lines.append(
+                f"{prefix}  .border({{ width: {self.page_number(border['width_dp'])}, "
+                f"color: {arkts_string(border['color'])} }})"
+            )
+        radius = surface["corner_radius_dp"]
+        source_radius = self.page_snapshot_source_radius(call, bounds)
+        if source_radius is not None:
+            lines.append(f"{prefix}  .borderRadius({self.page_number(source_radius)})")
+        elif isinstance(radius, dict):
+            values = {name: self.page_number(radius[name]) for name in radius}
+            if len(set(values.values())) == 1:
+                radius_expression = values["top_left"]
+            else:
+                radius_expression = (
+                    "{ topLeft: " + values["top_left"]
+                    + ", topRight: " + values["top_right"]
+                    + ", bottomRight: " + values["bottom_right"]
+                    + ", bottomLeft: " + values["bottom_left"] + " }"
+                )
+            lines.append(f"{prefix}  .borderRadius({radius_expression})")
+
+        if is_text or is_text_field:
+            typography = style["typography"]
+            font_family_line = self.page_snapshot_line(source_lines, ".fontFamily(")
+            source_font_size_line = self.page_snapshot_line(source_lines, ".fontSize(")
+            source_font_weight_line = self.page_snapshot_line(source_lines, ".fontWeight(")
+            source_font_color_line = self.page_snapshot_line(source_lines, ".fontColor(")
+            page_font_family = typography["font_family"]
+            if isinstance(page_font_family, str):
+                resolved_weight = typography["font_weight"]
+                alias = self.verified_font_alias(page_font_family, resolved_weight)
+                if alias is not None:
+                    font_family_line = f".fontFamily({arkts_string(alias)})"
+            font_size = typography["font_size_sp"]
+            if font_size is None and source_font_size_line is not None:
+                match = re.fullmatch(r"\.fontSize\((-?[0-9]+(?:\.[0-9]+)?)\)", source_font_size_line)
+                font_size = float(match.group(1)) if match is not None else None
+            if font_size is not None:
+                rendered_font_size = Decimal(str(font_size))
+                if font_family_line is not None and parent_type not in BUTTON_CONTAINER_COMPONENTS:
+                    rendered_font_size *= PAGE_DRIVEN_FONT_SCALE
+                if is_text_field:
+                    rendered_font_size = rendered_font_size.quantize(
+                        Decimal("1"), rounding=ROUND_HALF_UP
+                    )
+                lines.append(f"{prefix}  .fontSize({decimal_literal(rendered_font_size)})")
+            font_weight = typography["font_weight"]
+            if font_family_line is not None and font_weight is not None:
+                alias_match = re.fullmatch(r"\.fontFamily\('([^']+)'\)", font_family_line)
+                face = (
+                    next(
+                        (
+                            item
+                            for item in self.verified_font_faces
+                            if alias_match is not None and item["alias"] == alias_match.group(1)
+                        ),
+                        None,
+                    )
+                    if alias_match is not None
+                    else None
+                )
+                if face is not None and face["match_names"]:
+                    weighted_alias = self.verified_font_alias(
+                        sorted(face["match_names"])[0], font_weight
+                    )
+                    if weighted_alias is not None:
+                        font_family_line = f".fontFamily({arkts_string(weighted_alias)})"
+            if font_weight is not None:
+                lines.append(f"{prefix}  .fontWeight({font_weight})")
+            elif source_font_weight_line is not None:
+                lines.append(f"{prefix}  {source_font_weight_line}")
+            if font_family_line is not None:
+                lines.append(f"{prefix}  {font_family_line}")
+            color = typography["color"]
+            if color is not None:
+                lines.append(f"{prefix}  .fontColor({arkts_string(color)})")
+            elif source_font_color_line is not None:
+                lines.append(f"{prefix}  {source_font_color_line}")
+            lines.append(f"{prefix}  .maxLines(1)")
+
+        padding = style["layout"]["padding_dp"]
+        if is_text_field and padding is None and call is not None:
+            padding = next(
+                (
+                    instance["style"]["layout"]["padding_dp"]
+                    for instance in self.android_page_instances(call)
+                    if instance["style"]["layout"]["padding_dp"] is not None
+                ),
+                None,
+            )
+        if is_text_field and isinstance(padding, dict):
+            adjusted = dict(padding)
+            adjusted["left"] = max(0.0, adjusted["left"] - 1.5)
+            adjusted["right"] = max(0.0, adjusted["right"] - 1.5)
+            adjusted["left"] = float(round(adjusted["left"]))
+            adjusted["right"] = float(round(adjusted["right"]))
+            lines.append(f"{prefix}  .padding({self.page_edge_value(adjusted)})")
+        if is_text_field:
+            lines.append(f"{prefix}  .showPasswordIcon(false)")
+
+        if call is not None:
+            self.android_page_processed_call_ids.add(call["call_id"])
+            applied = self.android_page_applied_paths[call["call_id"]]
+            applied.update({"bounds_dp.x", "bounds_dp.y", "bounds_dp.width", "bounds_dp.height"})
+            if component.get("visual_bounds_dp") is not None:
+                applied.add("visual_bounds_dp")
+        return lines
+
+    def render_android_page_snapshot(self) -> list[str]:
+        if self.android_page_input is None:
+            return []
+        content_bounds = self.android_page_input["viewport"]["content_bounds_dp"]
+        roots = [
+            component
+            for component in self.android_page_input["components"]
+            if component["parent_id"] is None
+        ]
+        roots.sort(key=lambda component: (component["sibling_index"], component["bounds_dp"]["y"], component["bounds_dp"]["x"]))
+        lines = ["  @Builder", "  private renderAndroidPageSnapshot() {", "    Stack() {"]
+        surfaces_by_anchor: dict[str, list[list[str]]] = defaultdict(list)
+        for anchor_id, surface_lines in self.page_snapshot_elided_surfaces(content_bounds):
+            surfaces_by_anchor[anchor_id].append(surface_lines)
+        for component in roots:
+            for surface_lines in surfaces_by_anchor.get(component["id"], []):
+                lines.extend(surface_lines)
+            lines.extend(self.page_snapshot_component_lines(component, content_bounds, None, 6))
+        lines.extend([
+            "    }",
+            f"      .width({self.page_number(content_bounds['width'])})",
+            f"      .height({self.page_number(content_bounds['height'])})",
+        ])
+        if "compose_theme_background" in self.resource_names:
+            lines.append("      .backgroundColor($r('app.color.compose_theme_background'))")
+        lines.append("  }")
+        return lines
+
     def render_definition(self, key: tuple[str, str]) -> list[str]:
         calls = self.calls_by_definition.get(key, [])
         self._children: dict[str | None, list[dict[str, Any]]] = defaultdict(list)
@@ -9857,6 +10623,7 @@ class Renderer:
         definition_sections: list[list[str]] = []
         for key in ordered:
             definition_sections.append(self.render_definition(key))
+        page_snapshot_section = self.render_android_page_snapshot()
         selected_call_ids = {call["call_id"] for call in self.selected_calls}
         for call_id, component in self.android_page_by_call_id.items():
             if call_id in selected_call_ids and call_id not in self.android_page_processed_call_ids:
@@ -10044,10 +10811,17 @@ class Renderer:
             ])
         lines.extend([
             "  build() {",
-            f"    this.{builder_name(*root_key)}({', '.join('this.' + parameter['public_name'] for parameter in root_public_parameters)})",
+            (
+                "    this.renderAndroidPageSnapshot()"
+                if self.android_page_input is not None
+                else f"    this.{builder_name(*root_key)}({', '.join('this.' + parameter['public_name'] for parameter in root_public_parameters)})"
+            ),
             "  }",
             "",
         ])
+        if page_snapshot_section:
+            lines.extend(page_snapshot_section)
+            lines.append("")
         for index, section in enumerate(definition_sections):
             if index:
                 lines.append("")

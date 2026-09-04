@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import importlib.util
 import tempfile
@@ -413,6 +414,62 @@ class RealPagePipelineTest(unittest.TestCase):
                 {"type": "solid", "color": "#FFFEF7FF"},
             )
 
+    @unittest.skipUnless(importlib.util.find_spec("PIL"), "Pillow is not installed")
+    def test_text_field_pixel_facts_separate_semantic_and_visible_surface_bounds(self) -> None:
+        from PIL import Image, ImageDraw
+
+        with tempfile.TemporaryDirectory() as temporary:
+            screenshot = Path(temporary) / "text-field.png"
+            image = Image.new("RGB", (120, 100), (255, 255, 255))
+            draw = ImageDraw.Draw(image)
+            draw.rounded_rectangle(
+                (10, 12, 109, 71),
+                radius=4,
+                fill=(255, 255, 255),
+                outline=(207, 207, 211),
+                width=2,
+            )
+            draw.rectangle((24, 34, 66, 45), fill=(51, 51, 51))
+            image.save(screenshot)
+            components = [{
+                "id": "runtime-field",
+                "type": "TextField",
+                "bounds_px": {"x": 0, "y": 0, "width": 120, "height": 100},
+                "style": {
+                    "layout": {},
+                    "surface": {"background": None, "border": None, "corner_radius_dp": None},
+                    "typography": {},
+                    "asset": {},
+                    "transform": {},
+                    "state": {"clickable": True},
+                    "content": {},
+                },
+            }]
+
+            result = apply_screenshot_visual_facts(screenshot, components, 2.0, 1.0)
+
+            self.assertEqual(result["sampled_component_count"], 1)
+            self.assertEqual(
+                components[0]["visual_bounds_px"],
+                {"x": 10, "y": 12, "width": 100, "height": 60},
+            )
+            self.assertEqual(
+                components[0]["visual_bounds_dp"],
+                {"x": 5.0, "y": 6.0, "width": 50.0, "height": 30.0},
+            )
+            self.assertEqual(
+                components[0]["style"]["surface"]["border"],
+                {"width_dp": 1.0, "color": "#FFCFCFD3", "style": "solid"},
+            )
+            self.assertEqual(
+                components[0]["style"]["surface"]["background"],
+                {"type": "solid", "color": "#FFFFFFFF"},
+            )
+            self.assertEqual(
+                components[0]["style"]["layout"]["padding_dp"],
+                {"left": 7.0, "right": 7.0, "top": 0.0, "bottom": 0.0},
+            )
+
     def test_device_insets_uses_visible_status_and_navigation_bar_frames(self) -> None:
         import generate_real_android_page_json as command
 
@@ -420,11 +477,13 @@ class RealPagePipelineTest(unittest.TestCase):
         command.run = lambda _arguments: """
           InsetsSource type=ITYPE_STATUS_BAR frame=[0,0][1080,72] visible=true
           InsetsSource type=ITYPE_NAVIGATION_BAR frame=[0,2304][1080,2400] visible=true
+          InsetsSource type=TYPE_TOP_BAR frame=[0,0][1080,63] visible=true
+          InsetsSource type=TYPE_SIDE_BAR_1 frame=[0,2274][1080,2400] visible=true
         """
         try:
             self.assertEqual(
                 device_insets("adb", "device", (1080, 2400)),
-                {"left": 0, "top": 72, "right": 0, "bottom": 96},
+                {"left": 0, "top": 72, "right": 0, "bottom": 126},
             )
         finally:
             command.run = original
@@ -491,6 +550,43 @@ class RealPagePipelineTest(unittest.TestCase):
             any(item["path"] == "style.content.content_description" for item in image["unresolved"])
         )
 
+    def test_source_page_spec_resolves_inline_text_style_properties(self) -> None:
+        contract = fixture_contract()
+        title_call = contract["ui"]["semantic_translation_candidates"]["calls"][1]
+        title_call["semantic_arguments"]["style"] = {
+            "expression": (
+                "TextStyle(fontSize = 12.sp, lineHeight = 18.sp, "
+                "fontWeight = FontWeight.SemiBold, color = Color(0xFF808289))"
+            ),
+            "dimensions": [
+                {"value": "12", "unit": "sp"},
+                {"value": "18", "unit": "sp"},
+            ],
+            "dimension_resources": [],
+        }
+
+        payload = build_source_page_spec(
+            contract, ROOT_SOURCE, "LoginScreen", "login", "default", "a" * 64
+        )
+
+        title = next(item for item in payload["components"] if item["source"]["line"] == 12)
+        self.assertEqual(
+            title["style"]["typography"],
+            {
+                "font_size_sp": 12.0,
+                "font_weight": 600,
+                "font_style": None,
+                "font_family": None,
+                "letter_spacing_sp": None,
+                "line_height_sp": 18.0,
+                "text_align": None,
+                "max_lines": None,
+                "overflow": None,
+                "color": "#FF808289",
+                "decoration": None,
+            },
+        )
+
     def test_empty_non_clickable_button_wrapper_is_not_a_semantic_control(self) -> None:
         component = parse_uiautomator_xml(
             b'''<hierarchy rotation="0"><node index="0" text="" resource-id="" class="android.widget.Button" package="example" content-desc="" clickable="false" enabled="true" checked="false" selected="false" bounds="[0,0][100,100]" /></hierarchy>''',
@@ -499,6 +595,19 @@ class RealPagePipelineTest(unittest.TestCase):
         )[0]
 
         self.assertFalse(semantic_runtime_component(component))
+
+    def test_uiautomator_parser_preserves_control_role_before_clickability(self) -> None:
+        components = parse_uiautomator_xml(
+            b'''<hierarchy rotation="0">
+              <node index="0" text="value" resource-id="" class="android.widget.EditText" package="example" content-desc="" clickable="true" enabled="true" checked="false" selected="false" bounds="[0,0][100,40]" />
+              <node index="1" text="" resource-id="" class="android.widget.CheckBox" package="example" content-desc="" clickable="true" enabled="true" checked="true" selected="false" bounds="[0,40][40,80]" />
+            </hierarchy>''',
+            (100, 100),
+            "example",
+        )
+
+        self.assertEqual(components[0]["style"]["content"]["role"], "textbox")
+        self.assertEqual(components[1]["style"]["content"]["role"], "checkbox")
 
     def test_uiautomator_parser_preserves_runtime_parent_and_sibling_order(self) -> None:
         components = parse_uiautomator_xml(UI_XML.encode("utf-8"), (1080, 2400), "example")
@@ -529,6 +638,18 @@ class RealPagePipelineTest(unittest.TestCase):
         self.assertEqual(sign_in["parent_id"], button["id"])
         self.assertEqual(button["children_ids"], [sign_in["id"]])
         self.assertEqual(sign_in["sibling_index"], 0)
+
+    def test_harmony_parser_preserves_text_input_role_before_clickability(self) -> None:
+        components = parse_harmony_layout_json(
+            json.dumps({
+                "attributes": {"bounds": "[0,0][100,40]", "type": "TextInput", "visible": "true", "clickable": "true"},
+                "children": [],
+            }).encode("utf-8"),
+            (100, 40),
+        )
+
+        self.assertEqual(components[0]["type"], "TextField")
+        self.assertEqual(components[0]["style"]["content"]["role"], "textbox")
 
     def test_harmony_parser_filters_other_bundles_and_system_windows(self) -> None:
         layout = json.loads(json.dumps(HARMONY_LAYOUT))
@@ -688,6 +809,102 @@ class RealPagePipelineTest(unittest.TestCase):
         self.assertEqual(
             {component["source_mapping"]["method"] for component in mapped},
             {"explicit_runtime_source_map"},
+        )
+
+    def test_runtime_source_map_expands_repeated_dynamic_source_instances(self) -> None:
+        source = build_source_page_spec(
+            fixture_contract(), ROOT_SOURCE, "LoginScreen", "login", "populated", "a" * 64
+        )
+        title = copy.deepcopy(next(
+            component
+            for component in source["components"]
+            if component["semantic_key"] == "LoginScreen_Text_12_2"
+        ))
+        title["parent_id"] = None
+        title["children_ids"] = []
+        title["unresolved"] = []
+        title["style"]["typography"]["color"] = "#FF000000"
+        source["components"] = [title]
+        source["coverage"] = {
+            "source_call_count": 1,
+            "emitted_call_count": 1,
+            "emitted_call_ratio": 1.0,
+        }
+        runtime = parse_harmony_layout_json(json.dumps({
+            "attributes": {
+                "bounds": "[0,0][1080,2400]",
+                "type": "root",
+                "visible": "true",
+                "enabled": "true",
+            },
+            "children": [
+                {
+                    "attributes": {
+                        "bounds": "[48,200][1032,320]",
+                        "type": "Text",
+                        "id": "task_title_1",
+                        "key": "task_title_1",
+                        "text": "Prepare the release",
+                        "visible": "true",
+                        "enabled": "true",
+                    },
+                    "children": [],
+                },
+                {
+                    "attributes": {
+                        "bounds": "[48,320][1032,440]",
+                        "type": "Text",
+                        "id": "task_title_2",
+                        "key": "task_title_2",
+                        "text": "Review pull requests",
+                        "visible": "true",
+                        "enabled": "true",
+                    },
+                    "children": [],
+                },
+            ],
+        }).encode("utf-8"), (1080, 2400))
+        mapping = {
+            "schema": "android-to-harmony.runtime-source-map.v1",
+            "platform": "harmony",
+            "page": {"id": "login", "state": "populated"},
+            "mappings": [
+                {
+                    "runtime_id": f"task_title_{index}",
+                    "source_semantic_key": "LoginScreen_Text_12_2",
+                    "source_call_id": f"{ROOT_SOURCE}:12:Text:2",
+                    "source_instance_key": f"item-{index}",
+                }
+                for index in (1, 2)
+            ],
+        }
+
+        snapshot, metrics = build_runtime_page_snapshot(
+            source_spec=source,
+            runtime_components=runtime,
+            screenshot_path=Path("screen.png"),
+            screenshot_sha256="d" * 64,
+            screenshot_byte_count=4321,
+            dimensions=(1080, 2400),
+            density=3.0,
+            font_scale=1.0,
+            insets_px={"left": 0, "top": 72, "right": 0, "bottom": 96},
+            device={},
+            timings_ms={},
+            platform="harmony",
+            runtime_source_map=mapping,
+        )
+
+        self.assertEqual(metrics["checks"]["explicit_runtime_source_map_matches"], 2)
+        self.assertEqual(metrics["source"]["primitive_visible_candidate_count"], 2)
+        self.assertEqual(metrics["source"]["primitive_mapping_ratio"], 1.0)
+        self.assertEqual(metrics["source"]["proven_primitive_mapping_ratio"], 1.0)
+        self.assertEqual(
+            [component["semantic_key"] for component in snapshot["components"]],
+            [
+                "LoginScreen_Text_12_2__instance_item-1",
+                "LoginScreen_Text_12_2__instance_item-2",
+            ],
         )
 
     def test_runtime_source_map_rejects_ambiguous_runtime_ids_and_text_only_is_not_proof(self) -> None:
@@ -1056,6 +1273,98 @@ class RealPagePipelineTest(unittest.TestCase):
         )
         self.assertEqual(metrics["source"]["inactive_primitive_count"], 1)
         self.assertEqual(metrics["runtime"]["semantic_component_count"], 5)
+
+    def test_runtime_source_map_records_nonsemantic_layout_elision(self) -> None:
+        source = build_source_page_spec(
+            fixture_contract(), ROOT_SOURCE, "LoginScreen", "login", "default", "a" * 64
+        )
+        runtime = parse_harmony_layout_json(
+            json.dumps(HARMONY_LAYOUT).encode("utf-8"), (1080, 2400)
+        )
+        mapping = {
+            "schema": "android-to-harmony.runtime-source-map.v1",
+            "platform": "harmony",
+            "page": {"id": "login", "state": "default"},
+            "mappings": [],
+            "runtime_elided_source_components": [{
+                "source_semantic_key": "LoginScreen_Column_10_1",
+                "source_call_id": f"{ROOT_SOURCE}:10:Column:1",
+                "reason": "runtime_nonsemantic_layout_elision",
+            }],
+        }
+
+        snapshot, metrics = build_runtime_page_snapshot(
+            source_spec=source,
+            runtime_components=runtime,
+            screenshot_path=Path("screen.png"),
+            screenshot_sha256="6" * 64,
+            screenshot_byte_count=1,
+            dimensions=(1080, 2400),
+            density=3.0,
+            font_scale=1.0,
+            insets_px={"left": 0, "top": 72, "right": 0, "bottom": 96},
+            device={},
+            timings_ms={},
+            platform="harmony",
+            runtime_source_map=mapping,
+        )
+
+        self.assertNotIn("LoginScreen_Column_10_1", snapshot["unmapped_source_components"])
+        self.assertEqual(snapshot["runtime_elided_source_components"], mapping[
+            "runtime_elided_source_components"
+        ])
+        self.assertEqual(metrics["source"]["runtime_elided_primitive_count"], 1)
+        self.assertEqual(metrics["source"]["primitive_mapping_ratio"], 1.0)
+
+    def test_runtime_source_map_records_semantic_descendant_flattened_into_mapped_parent(self) -> None:
+        source = build_source_page_spec(
+            fixture_contract(), ROOT_SOURCE, "LoginScreen", "login", "default", "a" * 64
+        )
+        runtime = parse_uiautomator_xml(UI_XML.encode("utf-8"), (1080, 2400), "example")
+        button_runtime = next(
+            item
+            for item in runtime
+            if item["type"] == "Button" and item["style"]["state"]["clickable"] is True
+        )
+        button_runtime["runtime_id"] = "submit-button"
+        mapping = {
+            "schema": "android-to-harmony.runtime-source-map.v1",
+            "platform": "android",
+            "page": {"id": "login", "state": "default"},
+            "mappings": [{
+                "runtime_id": "submit-button",
+                "source_semantic_key": "LoginScreen_Button_16_4",
+                "source_call_id": f"{ROOT_SOURCE}:16:Button:4",
+            }],
+            "runtime_elided_source_components": [{
+                "source_semantic_key": "LoginScreen_Text_17_5",
+                "source_call_id": f"{ROOT_SOURCE}:17:Text:5",
+                "reason": "runtime_flattened_semantic_descendant",
+            }],
+        }
+
+        snapshot, metrics = build_runtime_page_snapshot(
+            source_spec=source,
+            runtime_components=runtime,
+            screenshot_path=Path("screen.png"),
+            screenshot_sha256="6" * 64,
+            screenshot_byte_count=1,
+            dimensions=(1080, 2400),
+            density=3.0,
+            font_scale=1.0,
+            insets_px={"left": 0, "top": 72, "right": 0, "bottom": 96},
+            device={},
+            timings_ms={},
+            platform="android",
+            runtime_source_map=mapping,
+        )
+
+        self.assertEqual(
+            snapshot["runtime_elided_source_components"],
+            mapping["runtime_elided_source_components"],
+        )
+        self.assertNotIn("LoginScreen_Text_17_5", snapshot["unmapped_source_components"])
+        self.assertEqual(metrics["checks"]["explicit_runtime_source_map_matches"], 1)
 
     def test_runtime_source_map_rejects_mapping_an_inactive_source_branch(self) -> None:
         source = build_source_page_spec(

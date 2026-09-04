@@ -1844,13 +1844,18 @@ class MigrationToolTests(unittest.TestCase):
                 import androidx.compose.foundation.layout.padding
                 import androidx.compose.foundation.layout.wrapContentHeight
                 import androidx.compose.foundation.layout.weight
+                import androidx.compose.foundation.shape.RoundedCornerShape
                 import androidx.compose.foundation.Image
                 import androidx.compose.foundation.text.BasicTextField
                 import androidx.compose.material.Text
+                import androidx.compose.material3.Card
+                import androidx.compose.material3.CardDefaults
+                import androidx.compose.material3.IconButton
                 import androidx.compose.runtime.Composable
                 import androidx.compose.ui.Alignment
                 import androidx.compose.ui.Modifier
                 import androidx.compose.ui.draw.rotate
+                import androidx.compose.ui.graphics.Color
                 import androidx.compose.ui.res.painterResource
                 import androidx.compose.ui.text.font.Font
                 import androidx.compose.ui.text.font.FontFamily
@@ -1875,6 +1880,20 @@ class MigrationToolTests(unittest.TestCase):
                       text = "Sign in",
                       modifier = Modifier.fillMaxWidth().height(48.dp).weight(1f)
                     )
+                    IconButton(onClick = {}) {
+                      Image(
+                        painter = painterResource(R.drawable.logo),
+                        contentDescription = null,
+                      )
+                    }
+                    Card(
+                      colors = CardDefaults.cardColors(containerColor = Color(0xFF100D40)),
+                      shape = RoundedCornerShape(4.dp),
+                    ) {
+                      Row(modifier = Modifier.padding(4.dp)) {
+                        Text(text = "Payment Card")
+                      }
+                    }
                     CapturedField(uiField = UiField())
                     Cover(Modifier.fillMaxWidth().height(122.dp))
                   }
@@ -1972,12 +1991,49 @@ class MigrationToolTests(unittest.TestCase):
                 and call["composable"] == "LoginScreen"
                 and call["component"] == "Text"
             )
+            icon_button_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "LoginScreen"
+                and call["component"] == "IconButton"
+            )
+            elided_icon_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "LoginScreen"
+                and call["component"] == "Image"
+                and call.get("parent_call_id") == icon_button_call["call_id"]
+            )
+            card_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "LoginScreen"
+                and call["component"] == "Card"
+            )
+            card_text_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "LoginScreen"
+                and call["component"] == "Text"
+                and call["call_id"] != text_call["call_id"]
+            )
             captured_field_call = next(
                 call
                 for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
                 if call["source"] == "app/src/main/java/example/LoginScreen.kt"
                 and call["composable"] == "LoginScreen"
                 and call["component"] == "CapturedField"
+            )
+            basic_text_field_call = next(
+                call
+                for call in contract_payload["ui"]["semantic_translation_candidates"]["calls"]
+                if call["source"] == "app/src/main/java/example/LoginScreen.kt"
+                and call["composable"] == "CapturedField"
+                and call["component"] == "BasicTextField"
             )
             cover_call = next(
                 call
@@ -2033,6 +2089,19 @@ class MigrationToolTests(unittest.TestCase):
                         }
                     },
                     "input_hashes": {"component_inventory_sha256": "b" * 64},
+                    "inactive_source_components": [],
+                    "runtime_elided_source_components": [
+                        {
+                            "source_semantic_key": "LoginScreen_Image_48_4",
+                            "source_call_id": elided_icon_call["call_id"],
+                            "reason": "runtime_flattened_semantic_descendant",
+                        },
+                        {
+                            "source_semantic_key": "LoginScreen_Card_54_5",
+                            "source_call_id": card_call["call_id"],
+                            "reason": "runtime_nonsemantic_layout_elision",
+                        },
+                    ],
                     "components": [
                         {
                             "id": "login-root",
@@ -2044,6 +2113,8 @@ class MigrationToolTests(unittest.TestCase):
                             "parent_mapping": "smallest-containing-runtime-component",
                             "children_ids": [
                                 "login-title",
+                                "login-back-button",
+                                "login-card-label",
                                 "login-email",
                                 "login-cover",
                                 "login-left-logo",
@@ -2068,6 +2139,87 @@ class MigrationToolTests(unittest.TestCase):
                             },
                             "style": {},
                             "provenance": [],
+                            "unresolved": [],
+                        },
+                        {
+                            "id": "login-back-button",
+                            "type": "IconButton",
+                            "semantic_key": "LoginScreen_IconButton_47_3",
+                            "bounds_px": {"x": 48, "y": 420, "width": 144, "height": 144},
+                            "bounds_dp": {"x": 16, "y": 140, "width": 48, "height": 48},
+                            "parent_id": "login-root",
+                            "parent_mapping": "source-semantic-ancestor",
+                            "children_ids": [],
+                            "sibling_index": 1,
+                            "source": {
+                                "source": "app/src/main/java/example/LoginScreen.kt",
+                                "composable": "LoginScreen",
+                                "attributes": [{
+                                    "call_id": icon_button_call["call_id"],
+                                    "line": icon_button_call["line"],
+                                    "component": "IconButton",
+                                    "origin": "component",
+                                    "name": "IconButton",
+                                    "groups": ["behavior"],
+                                    "dimensions": [],
+                                    "dimension_resources": [],
+                                }],
+                            },
+                            "style": {
+                                "state": {"visible": True, "enabled": True, "clickable": True},
+                                "content": {"role": "button"},
+                                "surface": {"background": {"type": "solid", "color": "#00000000"}},
+                            },
+                            "provenance": [{
+                                "paths": [
+                                    "style.state.visible",
+                                    "style.state.enabled",
+                                    "style.state.clickable",
+                                    "style.content.role",
+                                    "style.surface.background",
+                                ],
+                                "origin": "runtime",
+                                "source": "Android instrumentation",
+                            }],
+                            "unresolved": [],
+                        },
+                        {
+                            "id": "login-card-label",
+                            "type": "Text",
+                            "semantic_key": "LoginScreen_Text_59_7",
+                            "bounds_px": {"x": 612, "y": 624, "width": 120, "height": 36},
+                            "bounds_dp": {"x": 204, "y": 208, "width": 40, "height": 12},
+                            "parent_id": "login-root",
+                            "parent_mapping": "source-semantic-ancestor",
+                            "children_ids": [],
+                            "sibling_index": 2,
+                            "source": {
+                                "source": "app/src/main/java/example/LoginScreen.kt",
+                                "composable": "LoginScreen",
+                                "attributes": [{
+                                    "call_id": card_text_call["call_id"],
+                                    "line": card_text_call["line"],
+                                    "component": "Text",
+                                    "origin": "semantic_argument",
+                                    "name": "text",
+                                    "groups": ["content"],
+                                    "dimensions": [],
+                                    "dimension_resources": [],
+                                }],
+                            },
+                            "style": {
+                                "content": {"text": "Payment Card", "role": "text"},
+                                "state": {"visible": True},
+                            },
+                            "provenance": [{
+                                "paths": [
+                                    "style.content.text",
+                                    "style.content.role",
+                                    "style.state.visible",
+                                ],
+                                "origin": "runtime",
+                                "source": "Android instrumentation",
+                            }],
                             "unresolved": [],
                         },
                         {
@@ -2104,7 +2256,8 @@ class MigrationToolTests(unittest.TestCase):
                                     "line_height_sp": 29,
                                     "color": "#FF112233",
                                 },
-                                "content": {"text": "Sign in"},
+                                "state": {"visible": True},
+                                "content": {"text": "Sign in", "role": "text"},
                             },
                             "provenance": [
                                 {
@@ -2114,7 +2267,53 @@ class MigrationToolTests(unittest.TestCase):
                                         "style.typography.font_family",
                                         "style.typography.line_height_sp",
                                         "style.typography.color",
+                                        "style.state.visible",
                                         "style.content.text",
+                                        "style.content.role",
+                                    ],
+                                    "origin": "runtime",
+                                    "source": "Android instrumentation",
+                                }
+                            ],
+                            "unresolved": [],
+                        },
+                        {
+                            "id": "login-email-input",
+                            "type": "BasicTextField",
+                            "semantic_key": "LoginEmailInput",
+                            "bounds_px": {"x": 90, "y": 420, "width": 900, "height": 144},
+                            "bounds_dp": {"x": 30, "y": 140, "width": 300, "height": 48},
+                            "visual_bounds_px": {"x": 90, "y": 420, "width": 900, "height": 132},
+                            "visual_bounds_dp": {"x": 30, "y": 140, "width": 300, "height": 44},
+                            "parent_id": "login-email",
+                            "parent_mapping": "smallest-containing-runtime-component",
+                            "children_ids": [],
+                            "sibling_index": 0,
+                            "source": {
+                                "source": "app/src/main/java/example/LoginScreen.kt",
+                                "composable": "CapturedField",
+                                "attributes": [
+                                    {
+                                        "call_id": basic_text_field_call["call_id"],
+                                        "line": basic_text_field_call["line"],
+                                        "component": "BasicTextField",
+                                        "origin": "component",
+                                        "name": "BasicTextField",
+                                        "groups": ["state", "content"],
+                                        "dimensions": [],
+                                        "dimension_resources": [],
+                                    }
+                                ],
+                            },
+                            "style": {
+                                "state": {"clickable": True},
+                                "content": {"role": "textbox"},
+                            },
+                            "provenance": [
+                                {
+                                    "paths": [
+                                        "style.state.clickable",
+                                        "style.content.role",
                                     ],
                                     "origin": "runtime",
                                     "source": "Android instrumentation",
@@ -2130,8 +2329,8 @@ class MigrationToolTests(unittest.TestCase):
                             "bounds_dp": {"x": 30, "y": 140, "width": 300, "height": 48},
                             "parent_id": "login-root",
                             "parent_mapping": "smallest-containing-runtime-component",
-                            "children_ids": [],
-                            "sibling_index": 1,
+                            "children_ids": ["login-email-input"],
+                            "sibling_index": 3,
                             "source": {
                                 "source": "app/src/main/java/example/LoginScreen.kt",
                                 "composable": "LoginScreen",
@@ -2167,7 +2366,7 @@ class MigrationToolTests(unittest.TestCase):
                             "parent_id": "login-root",
                             "parent_mapping": "smallest-containing-runtime-component",
                             "children_ids": [],
-                            "sibling_index": 2,
+                            "sibling_index": 4,
                             "source": {
                                 "source": "app/src/main/java/example/LoginScreen.kt",
                                 "composable": "LoginScreen",
@@ -2197,7 +2396,7 @@ class MigrationToolTests(unittest.TestCase):
                             "parent_id": "login-root",
                             "parent_mapping": "smallest-containing-runtime-component",
                             "children_ids": [],
-                            "sibling_index": 3,
+                            "sibling_index": 5,
                             "source": {
                                 "source": "app/src/main/java/example/LoginScreen.kt",
                                 "composable": "Cover",
@@ -2227,7 +2426,7 @@ class MigrationToolTests(unittest.TestCase):
                             "parent_id": "login-root",
                             "parent_mapping": "smallest-containing-runtime-component",
                             "children_ids": [],
-                            "sibling_index": 4,
+                            "sibling_index": 6,
                             "source": {
                                 "source": "app/src/main/java/example/LoginScreen.kt",
                                 "composable": "LoginScreen",
@@ -2273,19 +2472,19 @@ class MigrationToolTests(unittest.TestCase):
             self.assertTrue(result["generation_complete"])
             output = target / result["output"]
             generated_source = output.read_text(encoding="utf-8")
+            snapshot_start = generated_source.index("private renderAndroidPageSnapshot()")
             title_start = generated_source.index("Text('Sign in')")
-            title_end = generated_source.index("Stack() {", title_start)
+            title_end = generated_source.index("Button() {", title_start)
             title_source = generated_source[title_start:title_end]
-            self.assertIn(".width(120)", title_source)
+            self.assertNotIn(".width(120)", title_source)
             self.assertIn(".height(32)", title_source)
-            self.assertIn(".fontSize(23)", title_source)
+            self.assertIn(".position({ x: 30, y: 75.15 })", title_source)
+            self.assertIn(".fontSize(19.918)", title_source)
             self.assertIn(".fontWeight(600)", title_source)
             self.assertIn(".fontFamily('Brand600')", title_source)
-            self.assertIn(".lineHeight(29)", title_source)
             self.assertIn(".fontColor('#FF112233')", title_source)
-            self.assertIn(".translate({ y: -1 })", title_source)
             self.assertIn(".id('LoginTitle')", title_source)
-            self.assertEqual(title_source.count(".width("), 1)
+            self.assertEqual(title_source.count(".width("), 0)
             self.assertEqual(title_source.count(".height("), 1)
             self.assertEqual(title_source.count(".fontSize("), 1)
             self.assertEqual(title_source.count(".fontWeight("), 1)
@@ -2293,6 +2492,19 @@ class MigrationToolTests(unittest.TestCase):
             self.assertEqual(title_source.count(".fontColor("), 1)
             self.assertNotIn(".layoutWeight(", title_source)
             self.assertNotIn(".width('100%')", title_source)
+            back_start = generated_source.index("Button() {", title_end)
+            back_end = generated_source.index("Text('Payment Card')", back_start)
+            back_source = generated_source[back_start:back_end]
+            self.assertIn("Image($r('app.media.logo'))", back_source)
+            self.assertIn(".width(24)", back_source)
+            self.assertIn(".height(24)", back_source)
+            self.assertIn(".position({ x: 16, y: 116 })", back_source)
+            card_source = generated_source[snapshot_start:title_start]
+            self.assertIn(".position({ x: 200, y: 179.15 })", card_source)
+            self.assertIn(".width(48)", card_source)
+            self.assertIn(".height(20)", card_source)
+            self.assertIn(".backgroundColor('#FF100D40')", card_source)
+            self.assertIn(".borderRadius(4)", card_source)
             self.assertIn(".alignItems(HorizontalAlign.Start)", generated_source)
             self.assertRegex(
                 generated_source,
@@ -2310,7 +2522,10 @@ class MigrationToolTests(unittest.TestCase):
                 generated_source,
                 r"Stack\(\) \{\s+this\.CapturedField_[0-9a-f]+\(\{ value: 'example@mail\.com' \}\)\s+\}\s+\.alignContent\(Alignment\.TopStart\)",
             )
-            logo_start = generated_source.index("Image($r('app.media.logo'))")
+            logo_start = generated_source.index(
+                "Image($r('app.media.logo'))",
+                generated_source.index("private Cover_"),
+            )
             logo_source = generated_source[logo_start:logo_start + 280]
             self.assertIn(".height(160)", logo_source)
             self.assertIn(".rotate({ angle: -45 })", logo_source)
@@ -2334,12 +2549,16 @@ class MigrationToolTests(unittest.TestCase):
                 {
                     "bounds_dp.width",
                     "bounds_dp.height",
+                    "bounds_dp.x",
+                    "bounds_dp.y",
                     "style.content.text",
                     "style.typography.font_size_sp",
                     "style.typography.font_weight",
                     "style.typography.font_family",
                     "style.typography.line_height_sp",
                     "style.typography.color",
+                    "style.state.visible",
+                    "style.content.role",
                 },
             )
             self.assertEqual(
@@ -2347,7 +2566,21 @@ class MigrationToolTests(unittest.TestCase):
                 [
                     "bounds_dp.height",
                     "bounds_dp.width",
+                    "bounds_dp.x",
+                    "bounds_dp.y",
                     "style.content.text",
+                ],
+            )
+            self.assertEqual(
+                manifest["android_page_input"]["applied_paths"][basic_text_field_call["call_id"]],
+                [
+                    "bounds_dp.height",
+                    "bounds_dp.width",
+                    "bounds_dp.x",
+                    "bounds_dp.y",
+                    "style.content.role",
+                    "style.state.clickable",
+                    "visual_bounds_dp",
                 ],
             )
 
@@ -2393,9 +2626,67 @@ class MigrationToolTests(unittest.TestCase):
             self.assertNotEqual(rejected_mapping.returncode, 0)
             self.assertIn("multiple runtime components to one source call", rejected_mapping.stdout)
 
+            repeated_mapping = json.loads(json.dumps(page_payload))
+            repeated_component = json.loads(json.dumps(next(
+                component
+                for component in repeated_mapping["components"]
+                if component["id"] == "login-title"
+            )))
+            repeated_component["id"] = "login-title-2"
+            repeated_component["semantic_key"] = "LoginTitle__2"
+            repeated_component["bounds_px"]["width"] = 420
+            repeated_component["bounds_dp"]["width"] = 140
+            repeated_component["style"]["content"]["text"] = "Second runtime value"
+            repeated_component["sibling_index"] = len(
+                repeated_mapping["components"][0]["children_ids"]
+            )
+            repeated_mapping["components"][0]["children_ids"].append(
+                repeated_component["id"]
+            )
+            repeated_mapping["components"].append(repeated_component)
+            repeated_mapping_json = root / "login-repeated-page.json"
+            write_json(repeated_mapping_json, repeated_mapping)
+            repeated_target = initialize_target("RepeatedFixture")
+            repeated_result = run_script(
+                GENERATE_ARKUI_PAGE,
+                "--contract",
+                str(contract),
+                "--target",
+                str(repeated_target),
+                "--root-source",
+                "app/src/main/java/example/LoginScreen.kt",
+                "--root-composable",
+                "LoginScreen",
+                "--android-page-json",
+                str(repeated_mapping_json),
+            )
+            self.assertEqual(
+                repeated_result.returncode,
+                0,
+                repeated_result.stdout + repeated_result.stderr,
+            )
+            repeated_summary = json.loads(repeated_result.stdout)
+            repeated_source = (
+                repeated_target / repeated_summary["output"]
+            ).read_text(encoding="utf-8")
+            self.assertIn("Second runtime value", repeated_source)
+            repeated_title = repeated_source[
+                repeated_source.index("Text('Sign in')"):
+                repeated_source.index("Stack() {", repeated_source.index("Text('Sign in')"))
+            ]
+            self.assertIn(".id('LoginTitle')", repeated_title)
+            self.assertNotIn(".width(120)", repeated_title)
+            self.assertIn(".height(32)", repeated_title)
+            self.assertIn(".id('LoginTitle__2')", repeated_source)
+
             mismatched_component = json.loads(json.dumps(page_payload))
-            mismatched_component["components"][1]["type"] = "Image"
-            mismatched_component["components"][1]["style"]["content"]["text"] = "Wrong page text"
+            mismatched_title = next(
+                component
+                for component in mismatched_component["components"]
+                if component["id"] == "login-title"
+            )
+            mismatched_title["type"] = "Image"
+            mismatched_title["style"]["content"]["text"] = "Wrong page text"
             mismatched_component_json = root / "login-mismatched-component-page.json"
             write_json(mismatched_component_json, mismatched_component)
             mismatched_target = initialize_target("MismatchedFixture")
@@ -2422,7 +2713,7 @@ class MigrationToolTests(unittest.TestCase):
             mismatched_manifest = json.loads(
                 (mismatched_target / mismatched_summary["manifest"]).read_text(encoding="utf-8")
             )
-            self.assertEqual(mismatched_manifest["android_page_input"]["mapped_call_count"], 5)
+            self.assertEqual(mismatched_manifest["android_page_input"]["mapped_call_count"], 8)
             self.assertNotIn(
                 text_call["call_id"],
                 mismatched_manifest["android_page_input"]["applied_paths"],
@@ -2446,7 +2737,11 @@ class MigrationToolTests(unittest.TestCase):
             self.assertNotIn("Wrong page text", mismatched_source)
 
             unresolved_page = json.loads(json.dumps(page_payload))
-            unresolved_component = unresolved_page["components"][1]
+            unresolved_component = next(
+                component
+                for component in unresolved_page["components"]
+                if component["id"] == "login-title"
+            )
             unresolved_component["provenance"] = []
             unresolved_component["unresolved"] = [
                 {
@@ -24814,6 +25109,11 @@ class MigrationToolTests(unittest.TestCase):
             self.assertTrue((output / "entry/src/main/ets/pages/Index.ets").is_file())
             self.assertTrue((output / "oh-package-lock.json5").is_file())
             self.assertTrue((output / "entry/src/test/List.test.ets").is_file())
+            entry_ability = (
+                output / "entry/src/main/ets/entryability/EntryAbility.ets"
+            ).read_text(encoding="utf-8")
+            self.assertIn("setWindowLayoutFullScreen(true)", entry_ability)
+            self.assertIn("setWindowSystemBarEnable([])", entry_ability)
 
             state = json.loads(
                 (output / ".migration/state.json").read_text(encoding="utf-8")

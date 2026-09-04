@@ -285,6 +285,32 @@ def static_style_for_call(
                 style["typography"]["color"] = match.group(1).replace("0x", "#").upper()
                 provenance_paths.append("style.typography.color")
         style_expression = semantic_expression(call, "style")
+        if style_expression is not None:
+            typography_patterns = {
+                "font_size_sp": r"\bfontSize\s*=\s*([0-9]+(?:\.[0-9]+)?)\.sp\b",
+                "line_height_sp": r"\blineHeight\s*=\s*([0-9]+(?:\.[0-9]+)?)\.sp\b",
+            }
+            for field, pattern in typography_patterns.items():
+                match = re.search(pattern, style_expression)
+                if match is not None:
+                    style["typography"][field] = number(match.group(1))
+                    provenance_paths.append(f"style.typography.{field}")
+            weight_match = re.search(
+                r"\bfontWeight\s*=\s*FontWeight(?:\(\s*([1-9][0-9]{2})\s*\)|\.(Normal|Medium|SemiBold|Bold))",
+                style_expression,
+            )
+            if weight_match is not None:
+                named_weights = {"Normal": 400, "Medium": 500, "SemiBold": 600, "Bold": 700}
+                style["typography"]["font_weight"] = (
+                    int(weight_match.group(1))
+                    if weight_match.group(1) is not None
+                    else named_weights[weight_match.group(2)]
+                )
+                provenance_paths.append("style.typography.font_weight")
+            color_match = HEX_COLOR_PATTERN.search(style_expression)
+            if color_match is not None:
+                style["typography"]["color"] = color_match.group(1).replace("0x", "#").upper()
+                provenance_paths.append("style.typography.color")
         style_name = style_expression.rsplit(".", 1)[-1] if style_expression else None
         if style_name in MATERIAL3_TYPOGRAPHY:
             font_size, line_height, font_weight = MATERIAL3_TYPOGRAPHY[style_name]
@@ -704,8 +730,11 @@ def parse_uiautomator_xml(
                     "text": text or None,
                     "content_description": description or None,
                     "role": (
-                        "button" if clickable or kind in {"Button", "ImageButton"}
-                        else "textbox" if kind == "TextField"
+                        "textbox" if kind == "TextField"
+                        else "checkbox" if kind == "CheckBox"
+                        else "switch" if kind == "Switch"
+                        else "radio" if kind == "RadioButton"
+                        else "button" if clickable or kind in {"Button", "ImageButton"}
                         else "image" if kind == "Image"
                         else "text" if kind == "Text"
                         else None
@@ -786,8 +815,11 @@ def parse_harmony_layout_json(
                         "placeholder": hint or None,
                         "content_description": description or None,
                         "role": (
-                            "button" if clickable or normalized_kind == "Button"
-                            else "textbox" if normalized_kind == "TextField"
+                            "textbox" if normalized_kind == "TextField"
+                            else "checkbox" if normalized_kind in {"Checkbox", "CheckBox"}
+                            else "switch" if normalized_kind == "Switch"
+                            else "radio" if normalized_kind == "RadioButton"
+                            else "button" if clickable or normalized_kind == "Button"
                             else "image" if normalized_kind == "Image"
                             else "text" if normalized_kind == "Text"
                             else None
@@ -861,6 +893,122 @@ def color_distance(left: tuple[int, int, int], right: tuple[int, int, int]) -> i
     return max(abs(left[index] - right[index]) for index in range(3))
 
 
+def detect_text_field_surface(
+    crop: Any,
+    dominant: tuple[int, int, int],
+    density: float,
+) -> dict[str, Any] | None:
+    pixels = crop.load()
+    row_counts = [
+        sum(color_distance(pixels[x, y], dominant) >= 8 for x in range(crop.width))
+        for y in range(crop.height)
+    ]
+    horizontal_threshold = max(4, round(crop.width * 0.45))
+    horizontal_edges = [
+        index for index, count in enumerate(row_counts) if count >= horizontal_threshold
+    ]
+    if len(horizontal_edges) < 2:
+        return None
+    top = horizontal_edges[0]
+    bottom = horizontal_edges[-1]
+    surface_height = bottom - top + 1
+    if surface_height < 8:
+        return None
+    column_counts = [
+        sum(color_distance(pixels[x, y], dominant) >= 8 for y in range(top, bottom + 1))
+        for x in range(crop.width)
+    ]
+    vertical_threshold = max(4, round(surface_height * 0.45))
+    vertical_edges = [
+        index for index, count in enumerate(column_counts) if count >= vertical_threshold
+    ]
+    if len(vertical_edges) < 2:
+        return None
+    left = vertical_edges[0]
+    right = vertical_edges[-1]
+    surface_width = right - left + 1
+    if surface_width < crop.width * 0.5:
+        return None
+
+    edge_pixels = []
+    for x in range(left, right + 1):
+        edge_pixels.extend((pixels[x, top], pixels[x, bottom]))
+    for y in range(top, bottom + 1):
+        edge_pixels.extend((pixels[left, y], pixels[right, y]))
+    border_colors = Counter(
+        color for color in edge_pixels if color_distance(color, dominant) >= 8
+    )
+    if not border_colors:
+        return None
+    border_color, _count = border_colors.most_common(1)[0]
+
+    border_width_px = 1
+    while border_width_px < min(8, surface_height // 2):
+        sample_y = top + border_width_px
+        matching = sum(
+            color_distance(pixels[x, sample_y], border_color) <= 3
+            for x in range(left, right + 1)
+        )
+        if matching < surface_width * 0.45:
+            break
+        border_width_px += 1
+
+    inner_left = min(right, left + border_width_px + 1)
+    inner_top = min(bottom, top + border_width_px + 1)
+    inner_right = max(inner_left + 1, right - border_width_px)
+    inner_bottom = max(inner_top + 1, bottom - border_width_px)
+    inner = crop.crop((inner_left, inner_top, inner_right, inner_bottom))
+    inner_data = inner.get_flattened_data() if hasattr(inner, "get_flattened_data") else inner.getdata()
+    background, _background_count = Counter(inner_data).most_common(1)[0]
+
+    foreground_points = [
+        (x, y)
+        for y in range(top + border_width_px, bottom - border_width_px + 1)
+        for x in range(left + border_width_px, right - border_width_px + 1)
+        if color_distance(pixels[x, y], background) >= 32
+        and color_distance(pixels[x, y], border_color) >= 16
+    ]
+    content_padding_dp = None
+    if len(foreground_points) >= 5:
+        content_left = min(x for x, _y in foreground_points)
+        horizontal = round((content_left - left) / density, 3)
+        if horizontal >= 0:
+            content_padding_dp = {
+                "left": horizontal,
+                "right": horizontal,
+                "top": 0.0,
+                "bottom": 0.0,
+            }
+
+    top_edge_x = [
+        x for x in range(left, right + 1)
+        if color_distance(pixels[x, top], border_color) <= 3
+    ]
+    radius_px = min(top_edge_x) - left if top_edge_x else 0
+    radius_dp = round(radius_px / density, 3)
+    return {
+        "bounds_px": {
+            "x": left,
+            "y": top,
+            "width": surface_width,
+            "height": surface_height,
+        },
+        "background": "#FF" + "".join(f"{channel:02X}" for channel in background),
+        "border": {
+            "width_dp": round(border_width_px / density, 3),
+            "color": "#FF" + "".join(f"{channel:02X}" for channel in border_color),
+            "style": "solid",
+        },
+        "corner_radius_dp": {
+            "top_left": radius_dp,
+            "top_right": radius_dp,
+            "bottom_right": radius_dp,
+            "bottom_left": radius_dp,
+        },
+        "content_padding_dp": content_padding_dp,
+    }
+
+
 def apply_screenshot_visual_facts(
     screenshot_path: Path,
     runtime_components: list[dict[str, Any]],
@@ -876,7 +1024,7 @@ def apply_screenshot_visual_facts(
     for component in runtime_components:
         component_type = component["type"]
         if component_type not in {
-            "Text", "Button", "View", "FrameLayout", "LinearLayout", "RelativeLayout",
+            "Text", "TextField", "Button", "View", "FrameLayout", "LinearLayout", "RelativeLayout",
             "ConstraintLayout", "root", "Stack", "Column", "Row", "Flex", "Grid",
             "List", "Scroll", "Scroller", "Refresh", "RelativeContainer", "Surface",
             "Card", "Box",
@@ -914,6 +1062,36 @@ def apply_screenshot_visual_facts(
             if foreground is not None:
                 component["style"]["typography"]["color"] = "#FF" + "".join(f"{channel:02X}" for channel in foreground)
                 pixel_paths.append("style.typography.color")
+        elif component_type == "TextField":
+            surface = detect_text_field_surface(crop, dominant, density)
+            if surface is not None:
+                local_bounds = surface["bounds_px"]
+                visual_bounds_px = {
+                    "x": bounds["x"] + local_bounds["x"],
+                    "y": bounds["y"] + local_bounds["y"],
+                    "width": local_bounds["width"],
+                    "height": local_bounds["height"],
+                }
+                component["visual_bounds_px"] = visual_bounds_px
+                component["visual_bounds_dp"] = {
+                    name: round(value / density, 3)
+                    for name, value in visual_bounds_px.items()
+                }
+                component["style"]["surface"]["background"] = {
+                    "type": "solid",
+                    "color": surface["background"],
+                }
+                component["style"]["surface"]["border"] = surface["border"]
+                component["style"]["surface"]["corner_radius_dp"] = surface["corner_radius_dp"]
+                if surface["content_padding_dp"] is not None:
+                    component["style"]["layout"]["padding_dp"] = surface["content_padding_dp"]
+                pixel_paths.extend((
+                    "style.surface.background",
+                    "style.surface.border",
+                    "style.surface.corner_radius_dp",
+                ))
+                if surface["content_padding_dp"] is not None:
+                    pixel_paths.append("style.layout.padding_dp")
         elif (
             component_type == "Button" or component["style"]["state"].get("clickable") is True
         ) and dominant_count > bounds["width"] * bounds["height"] * 0.25:
@@ -1038,6 +1216,169 @@ def runtime_semantic_key(component: dict[str, Any]) -> str | None:
     return resource_id.rsplit("/", 1)[-1]
 
 
+def expand_runtime_source_instances(
+    source_components: list[dict[str, Any]],
+    payload: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Expand one statically declared component definition into proven runtime instances."""
+    if payload is None or not isinstance(payload, dict):
+        return source_components, payload
+    mappings = payload.get("mappings")
+    if not isinstance(mappings, list):
+        return source_components, payload
+
+    source_by_semantic_key = {
+        item["semantic_key"]: item
+        for item in source_components
+        if isinstance(item.get("semantic_key"), str)
+        and isinstance(item.get("source"), dict)
+    }
+    definition_instances: dict[tuple[str, str], list[str]] = defaultdict(list)
+    mapping_definitions: list[tuple[dict[str, Any], tuple[str, str] | None, str | None]] = []
+    for mapping in mappings:
+        if not isinstance(mapping, dict):
+            mapping_definitions.append((mapping, None, None))
+            continue
+        instance_key = mapping.get("source_instance_key")
+        if instance_key is not None and (
+            not isinstance(instance_key, str)
+            or re.fullmatch(r"[A-Za-z0-9._:@#-]{1,80}", instance_key) is None
+        ):
+            raise RealPageError("runtime source map source_instance_key is malformed")
+        semantic_key = mapping.get("source_semantic_key")
+        source = source_by_semantic_key.get(semantic_key) if isinstance(semantic_key, str) else None
+        definition = None
+        if source is not None:
+            definition = (
+                str(source["source"].get("source", "")),
+                str(source["source"].get("composable", "")),
+            )
+            if instance_key is not None and instance_key not in definition_instances[definition]:
+                definition_instances[definition].append(instance_key)
+        mapping_definitions.append((mapping, definition, instance_key))
+    if not definition_instances:
+        return source_components, payload
+
+    for _mapping, definition, instance_key in mapping_definitions:
+        if definition in definition_instances and instance_key is None:
+            raise RealPageError(
+                "runtime source map must provide source_instance_key for every mapping from an instanced definition"
+            )
+
+    components_by_definition: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for component in source_components:
+        source = component.get("source")
+        if not isinstance(source, dict):
+            continue
+        definition = (str(source.get("source", "")), str(source.get("composable", "")))
+        components_by_definition[definition].append(component)
+
+    clone_keys: dict[tuple[str, str, str], dict[str, tuple[str, str]]] = {}
+    expanded_components: list[dict[str, Any]] = []
+    emitted_definitions: set[tuple[str, str]] = set()
+    for component in source_components:
+        source = component.get("source")
+        definition = (
+            str(source.get("source", "")), str(source.get("composable", ""))
+        ) if isinstance(source, dict) else ("", "")
+        instances = definition_instances.get(definition)
+        if not instances:
+            expanded_components.append(component)
+            continue
+        if definition in emitted_definitions:
+            continue
+        emitted_definitions.add(definition)
+        definition_components = components_by_definition[definition]
+        for instance_key in instances:
+            ids = {
+                item["id"]: source_component_id(
+                    f"runtime-instance:{instance_key}", str(item["source"]["call_id"])
+                )
+                for item in definition_components
+            }
+            semantic_keys = {
+                item["semantic_key"]: f"{item['semantic_key']}__instance_{instance_key}"
+                for item in definition_components
+            }
+            if any(len(value) > 120 for value in semantic_keys.values()):
+                raise RealPageError("runtime source map expanded semantic key exceeds 120 characters")
+            clone_keys[(definition[0], definition[1], instance_key)] = {
+                base: (ids[item["id"]], semantic_keys[base])
+                for base, item in (
+                    (candidate["semantic_key"], candidate) for candidate in definition_components
+                )
+            }
+            for item in definition_components:
+                clone = copy.deepcopy(item)
+                clone["id"] = ids[item["id"]]
+                clone["semantic_key"] = semantic_keys[item["semantic_key"]]
+                parent_id = item.get("parent_id")
+                clone["parent_id"] = ids.get(parent_id, parent_id)
+                clone["children_ids"] = [ids.get(child_id, child_id) for child_id in item["children_ids"]]
+                expanded_components.append(clone)
+
+    replacement_children: dict[str, list[str]] = defaultdict(list)
+    for definition, instances in definition_instances.items():
+        for item in components_by_definition[definition]:
+            replacement_children[item["id"]] = [
+                clone_keys[(definition[0], definition[1], instance_key)][item["semantic_key"]][0]
+                for instance_key in instances
+            ]
+    for component in expanded_components:
+        children: list[str] = []
+        for child_id in component["children_ids"]:
+            children.extend(replacement_children.get(child_id, [child_id]))
+        component["children_ids"] = children
+
+    normalized_payload = copy.deepcopy(payload)
+    normalized_mappings: list[Any] = []
+    for mapping, definition, instance_key in mapping_definitions:
+        normalized = copy.deepcopy(mapping)
+        if isinstance(normalized, dict) and instance_key is not None and definition is not None:
+            base_semantic_key = normalized["source_semantic_key"]
+            clone = clone_keys[(definition[0], definition[1], instance_key)].get(base_semantic_key)
+            if clone is None:
+                raise RealPageError(
+                    f"runtime source map cannot expand source_semantic_key: {base_semantic_key}"
+                )
+            normalized["source_semantic_key"] = clone[1]
+            normalized.pop("source_instance_key", None)
+        normalized_mappings.append(normalized)
+    normalized_payload["mappings"] = normalized_mappings
+
+    for field in (
+        "inactive_source_components",
+        "runtime_elided_source_components",
+        "resolved_source_facts",
+    ):
+        entries = normalized_payload.get(field)
+        if not isinstance(entries, list):
+            continue
+        expanded_entries: list[Any] = []
+        for entry in entries:
+            semantic_key = entry.get("source_semantic_key") if isinstance(entry, dict) else None
+            source = source_by_semantic_key.get(semantic_key) if isinstance(semantic_key, str) else None
+            if source is None:
+                expanded_entries.append(entry)
+                continue
+            definition = (
+                str(source["source"].get("source", "")),
+                str(source["source"].get("composable", "")),
+            )
+            instances = definition_instances.get(definition)
+            if not instances:
+                expanded_entries.append(entry)
+                continue
+            for instance_key in instances:
+                clone = copy.deepcopy(entry)
+                clone["source_semantic_key"] = clone_keys[
+                    (definition[0], definition[1], instance_key)
+                ][semantic_key][1]
+                expanded_entries.append(clone)
+        normalized_payload[field] = expanded_entries
+    return expanded_components, normalized_payload
+
+
 def resolve_runtime_source_map(
     payload: dict[str, Any] | None,
     platform: str,
@@ -1045,13 +1386,20 @@ def resolve_runtime_source_map(
     source_components: list[dict[str, Any]],
     runtime_components: list[dict[str, Any]],
     runtime_tree_sha256: str | None,
-) -> tuple[dict[str, str], set[str], list[dict[str, str]], dict[str, list[dict[str, Any]]]]:
+) -> tuple[
+    dict[str, str],
+    set[str],
+    list[dict[str, str]],
+    set[str],
+    list[dict[str, str]],
+    dict[str, list[dict[str, Any]]],
+]:
     if payload is None:
-        return {}, set(), [], {}
+        return {}, set(), [], set(), [], {}
     if not {"schema", "platform", "page", "mappings"}.issubset(payload) or not set(payload).issubset(
         {
             "schema", "platform", "page", "runtime_tree_sha256", "mappings",
-            "inactive_source_components", "resolved_source_facts",
+            "inactive_source_components", "runtime_elided_source_components", "resolved_source_facts",
         }
     ):
         raise RealPageError("runtime source map contains unsupported or missing fields")
@@ -1111,6 +1459,80 @@ def resolve_runtime_source_map(
         inactive_source_ids.add(source["id"])
         used_inactive_keys.add(semantic_key)
         normalized_inactive_entries.append({
+            "source_semantic_key": semantic_key,
+            "source_call_id": call_id,
+            "reason": reason,
+        })
+    elided_entries = payload.get("runtime_elided_source_components", [])
+    if not isinstance(elided_entries, list) or len(elided_entries) > 10000:
+        raise RealPageError("runtime source map runtime_elided_source_components must be a bounded list")
+    elided_source_ids: set[str] = set()
+    normalized_elided_entries: list[dict[str, str]] = []
+    used_elided_keys: set[str] = set()
+    for entry in elided_entries:
+        if not isinstance(entry, dict) or set(entry) != {
+            "source_semantic_key", "source_call_id", "reason"
+        }:
+            raise RealPageError("runtime-elided source entry fields are invalid")
+        semantic_key = entry.get("source_semantic_key")
+        call_id = entry.get("source_call_id")
+        reason = entry.get("reason")
+        if (
+            not isinstance(semantic_key, str)
+            or not semantic_key
+            or not isinstance(call_id, str)
+            or not call_id
+            or reason not in {
+                "runtime_nonsemantic_layout_elision",
+                "runtime_flattened_semantic_descendant",
+            }
+        ):
+            raise RealPageError("runtime-elided source entry values are invalid")
+        if semantic_key in used_elided_keys:
+            raise RealPageError(f"runtime source map repeats runtime-elided source_semantic_key: {semantic_key}")
+        source = source_by_semantic_key.get(semantic_key)
+        if source is None:
+            raise RealPageError(f"runtime source map references unknown runtime-elided source_semantic_key: {semantic_key}")
+        if source["source"]["call_id"] != call_id:
+            raise RealPageError(
+                f"runtime source map runtime-elided source_call_id does not match source_semantic_key: {semantic_key}"
+            )
+        is_semantic = semantic_source_component(source)
+        is_clickable = source["style"]["state"].get("clickable") is True
+        if reason == "runtime_nonsemantic_layout_elision" and (is_semantic or is_clickable):
+            raise RealPageError(
+                f"runtime source map cannot nonsemantically elide a semantic or clickable source component: {semantic_key}"
+            )
+        if reason == "runtime_flattened_semantic_descendant":
+            if not is_semantic or is_clickable:
+                raise RealPageError(
+                    f"runtime source map can flatten only a non-clickable semantic descendant: {semantic_key}"
+                )
+            mapped_semantic_keys = {
+                mapping.get("source_semantic_key")
+                for mapping in payload["mappings"]
+                if isinstance(mapping, dict)
+            }
+            source_by_id = {item["id"]: item for item in source_components}
+            parent_id = source.get("parent_id")
+            has_mapped_ancestor = False
+            while isinstance(parent_id, str) and parent_id in source_by_id:
+                parent = source_by_id[parent_id]
+                if parent.get("semantic_key") in mapped_semantic_keys:
+                    has_mapped_ancestor = True
+                    break
+                parent_id = parent.get("parent_id")
+            if not has_mapped_ancestor:
+                raise RealPageError(
+                    f"runtime source map flattened semantic component has no explicitly mapped ancestor: {semantic_key}"
+                )
+        if source["id"] in inactive_source_ids:
+            raise RealPageError(
+                f"runtime source map cannot mark a source component both inactive and runtime-elided: {semantic_key}"
+            )
+        elided_source_ids.add(source["id"])
+        used_elided_keys.add(semantic_key)
+        normalized_elided_entries.append({
             "source_semantic_key": semantic_key,
             "source_call_id": call_id,
             "reason": reason,
@@ -1237,6 +1659,10 @@ def resolve_runtime_source_map(
             raise RealPageError(
                 f"runtime source map maps an inactive source component: {source_semantic_key}"
             )
+        if source["id"] in elided_source_ids:
+            raise RealPageError(
+                f"runtime source map maps a runtime-elided source component: {source_semantic_key}"
+            )
         if not source_runtime_type_compatible(source["type"], runtime):
             raise RealPageError(
                 f"runtime source map type mismatch for {selector_field} {runtime_selector} and source_call_id {source_call_id}"
@@ -1245,7 +1671,14 @@ def resolve_runtime_source_map(
         used_runtime_selectors.add(selector)
         used_runtime_component_ids.add(runtime["id"])
         used_source_semantic_keys.add(source_semantic_key)
-    return source_to_runtime, inactive_source_ids, normalized_inactive_entries, dict(resolved_source_facts)
+    return (
+        source_to_runtime,
+        inactive_source_ids,
+        normalized_inactive_entries,
+        elided_source_ids,
+        normalized_elided_entries,
+        dict(resolved_source_facts),
+    )
 
 
 def semantic_runtime_component(component: dict[str, Any]) -> bool:
@@ -1267,7 +1700,9 @@ def match_source_to_runtime(
     source_components: list[dict[str, Any]],
     runtime_components: list[dict[str, Any]],
     explicit_source_to_runtime: dict[str, str] | None = None,
+    excluded_source_ids: set[str] | None = None,
 ) -> tuple[dict[str, str], dict[str, int], set[str], dict[str, str]]:
+    excluded_source_ids = excluded_source_ids or set()
     source_by_id = {item["id"]: item for item in source_components}
     runtime_by_id = {item["id"]: item for item in runtime_components}
     source_to_runtime = dict(explicit_source_to_runtime or {})
@@ -1291,7 +1726,7 @@ def match_source_to_runtime(
     for runtime in runtime_components:
         runtime_key = runtime_semantic_key(runtime)
         source = source_by_semantic_key.get(runtime_key) if isinstance(runtime_key, str) else None
-        if source is None or source["id"] in source_to_runtime:
+        if source is None or source["id"] in source_to_runtime or source["id"] in excluded_source_ids:
             continue
         source_to_runtime[source["id"]] = runtime["id"]
         used_runtime.add(runtime["id"])
@@ -1313,7 +1748,11 @@ def match_source_to_runtime(
 
     for field, counter in (("text", "exact_text_matches"), ("content_description", "exact_content_description_matches")):
         for source in source_components:
-            if source["id"] in source_to_runtime or source["source"]["custom_component"]:
+            if (
+                source["id"] in source_to_runtime
+                or source["id"] in excluded_source_ids
+                or source["source"]["custom_component"]
+            ):
                 continue
             runtime_id = choose_unique(source, field)
             if runtime_id is not None:
@@ -1357,6 +1796,7 @@ def match_source_to_runtime(
             source_by_id[item]
             for item in source_preorder[source_parent_id]
             if item not in source_to_runtime
+            and item not in excluded_source_ids
             and nearest_mapped_ancestor(item, source_by_id, mapped_source_ids) == source_parent_id
             and not source_by_id[item]["source"]["custom_component"]
             and semantic_source_component(source_by_id[item])
@@ -1394,6 +1834,7 @@ def match_source_to_runtime(
         source
         for source in source_components
         if source["id"] not in source_to_runtime
+        and source["id"] not in excluded_source_ids
         and not source["source"]["custom_component"]
         and source["type"] in {"TextField", "OutlinedTextField", "BasicTextField"}
     ]
@@ -1416,7 +1857,12 @@ def match_source_to_runtime(
     for source in source_components:
         source_id = source["id"]
         definition = (source["source"]["source"], source["source"]["composable"])
-        if source_id in source_to_runtime or source["source"]["custom_component"] or definition not in active_definitions:
+        if (
+            source_id in source_to_runtime
+            or source_id in excluded_source_ids
+            or source["source"]["custom_component"]
+            or definition not in active_definitions
+        ):
             continue
         candidates = [
             runtime
@@ -1430,6 +1876,7 @@ def match_source_to_runtime(
             and not item["source"]["custom_component"]
             and item["type"] == source["type"]
             and item["id"] not in source_to_runtime
+            and item["id"] not in excluded_source_ids
         ]
         if len(candidates) == len(remaining_same_type) == 1:
             source_to_runtime[source_id] = candidates[0]["id"]
@@ -1450,7 +1897,11 @@ def match_source_to_runtime(
         changed = False
         for source in sorted(source_components, key=lambda item: source_depth(item["id"]), reverse=True):
             source_id = source["id"]
-            if source_id in source_to_runtime or source["source"]["custom_component"]:
+            if (
+                source_id in source_to_runtime
+                or source_id in excluded_source_ids
+                or source["source"]["custom_component"]
+            ):
                 continue
             mapped_descendants = [
                 source_to_runtime[item]
@@ -1546,12 +1997,16 @@ def build_runtime_page_snapshot(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if platform not in {"android", "harmony"}:
         raise RealPageError("platform must be android or harmony")
-    source_components = source_spec["components"]
+    source_components, runtime_source_map = expand_runtime_source_instances(
+        source_spec["components"], runtime_source_map
+    )
     source_by_id = {item["id"]: item for item in source_components}
     (
         explicit_source_to_runtime,
         inactive_source_ids,
         inactive_source_entries,
+        elided_source_ids,
+        elided_source_entries,
         resolved_source_facts,
     ) = resolve_runtime_source_map(
         runtime_source_map,
@@ -1562,7 +2017,10 @@ def build_runtime_page_snapshot(
         runtime_tree_sha256,
     )
     source_to_runtime, checks, active_definitions, mapping_methods = match_source_to_runtime(
-        source_components, runtime_components, explicit_source_to_runtime
+        source_components,
+        runtime_components,
+        explicit_source_to_runtime,
+        inactive_source_ids | elided_source_ids,
     )
     runtime_to_source = {runtime_id: source_id for source_id, runtime_id in source_to_runtime.items()}
     mapped_source_ids = set(source_to_runtime)
@@ -1598,6 +2056,14 @@ def build_runtime_page_snapshot(
             pixel_provenance_paths = [
                 path for path in pixel_provenance_paths if not path.startswith("style.surface.background")
             ]
+        if source["type"] in {"Checkbox", "CheckBox", "Switch", "RadioButton"}:
+            runtime_style["surface"]["background"] = None
+            runtime_style["surface"]["corner_radius_dp"] = None
+            pixel_provenance_paths = [
+                path
+                for path in pixel_provenance_paths
+                if path not in {"style.surface.background", "style.surface.corner_radius_dp"}
+            ]
         merged_style = merge_style(source["style"], runtime_style)
         component_source_facts = resolved_source_facts.get(source["id"], [])
         for fact in component_source_facts:
@@ -1632,6 +2098,9 @@ def build_runtime_page_snapshot(
             "provenance": copy.deepcopy(source["provenance"]),
             "unresolved": source_unresolved,
         }
+        if isinstance(runtime.get("visual_bounds_px"), dict):
+            item["visual_bounds_px"] = copy.deepcopy(runtime["visual_bounds_px"])
+            item["visual_bounds_dp"] = copy.deepcopy(runtime["visual_bounds_dp"])
         runtime_paths = [
             "style.state.visible",
             "style.state.enabled",
@@ -1679,11 +2148,19 @@ def build_runtime_page_snapshot(
         and item["type"] not in {"Surface", "Spacer"}
         and (item["source"]["source"], item["source"]["composable"]) in active_definitions
         and item["id"] not in inactive_source_ids
+        and item["id"] not in elided_source_ids
     ]
     inactive_primitive = [
         item
         for item in source_components
         if item["id"] in inactive_source_ids
+        and not item["source"]["custom_component"]
+        and item["type"] not in {"Surface", "Spacer"}
+    ]
+    elided_primitive = [
+        item
+        for item in source_components
+        if item["id"] in elided_source_ids
         and not item["source"]["custom_component"]
         and item["type"] not in {"Surface", "Spacer"}
     ]
@@ -1763,6 +2240,7 @@ def build_runtime_page_snapshot(
         },
         "components": output_components,
         "inactive_source_components": inactive_source_entries,
+        "runtime_elided_source_components": elided_source_entries,
         "unmapped_source_components": unmatched,
         "unmapped_visual_fact_components": [],
         "limitations": [
@@ -1810,6 +2288,7 @@ def build_runtime_page_snapshot(
             "emitted_call_ratio": source_spec["coverage"]["emitted_call_ratio"],
             "primitive_visible_candidate_count": len(primitive_candidates),
             "inactive_primitive_count": len(inactive_primitive),
+            "runtime_elided_primitive_count": len(elided_primitive),
             "primitive_mapped_count": len(mapped_primitive),
             "primitive_mapping_ratio": ratio,
             "proven_primitive_mapping_count": len(proven_mapped_primitive),

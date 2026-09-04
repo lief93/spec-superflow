@@ -52,6 +52,7 @@ PAGE_SNAPSHOT_SCHEMA = "android-to-harmony.page-snapshot.v1"
 PAGE_SNAPSHOT_V2_SCHEMA = "android-to-harmony.page-snapshot.v2"
 SOURCE_ATTRIBUTE_SCHEMA = "android-to-harmony.source-attribute-inventory.v1"
 EDGE_TOLERANCE_RADIUS_PX = 1.0
+RASTERIZATION_TOLERANCE_RADIUS_PX = 0.5
 
 
 class ComparisonError(RuntimeError):
@@ -194,7 +195,11 @@ def load_component_inventory(
         allowed_page_fields = set(required_page_fields)
         if schema == PAGE_SNAPSHOT_V2_SCHEMA:
             required_page_fields.add("unmapped_visual_fact_components")
-            allowed_page_fields.update({"unmapped_visual_fact_components", "inactive_source_components"})
+            allowed_page_fields.update({
+                "unmapped_visual_fact_components",
+                "inactive_source_components",
+                "runtime_elided_source_components",
+            })
         if not required_page_fields.issubset(payload) or not set(payload).issubset(allowed_page_fields):
             raise ComparisonError(f"{side} page snapshot has unsupported root fields")
         inactive_source_components = payload.get("inactive_source_components", [])
@@ -211,6 +216,20 @@ def load_component_inventory(
                 or inactive.get("reason") != "inactive_source_branch"
             ):
                 raise ComparisonError(f"{side} page snapshot inactive source component is malformed")
+        runtime_elided_source_components = payload.get("runtime_elided_source_components", [])
+        if not isinstance(runtime_elided_source_components, list) or len(runtime_elided_source_components) > 10000:
+            raise ComparisonError(f"{side} page snapshot runtime-elided source components are malformed")
+        for elided in runtime_elided_source_components:
+            if (
+                not isinstance(elided, dict)
+                or set(elided) != {"source_semantic_key", "source_call_id", "reason"}
+                or not isinstance(elided.get("source_semantic_key"), str)
+                or not elided["source_semantic_key"]
+                or not isinstance(elided.get("source_call_id"), str)
+                or not elided["source_call_id"]
+                or elided.get("reason") != "runtime_nonsemantic_layout_elision"
+            ):
+                raise ComparisonError(f"{side} page snapshot runtime-elided source component is malformed")
         viewport = payload["viewport"]
         if not isinstance(viewport, dict):
             raise ComparisonError(f"{side} page snapshot viewport is malformed")
@@ -451,6 +470,10 @@ def load_component_inventory(
                 for field in ("x", "y", "width", "height")
             },
         }
+        record["runtime_elided_source_components"] = sorted(
+            payload.get("runtime_elided_source_components", []),
+            key=lambda item: (item["source_semantic_key"], item["source_call_id"]),
+        )
         for component in components:
             bounds_dp = component["bounds_dp"]
             component["comparison_bounds_dp"] = {
@@ -1774,9 +1797,21 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             ImageFilter.GaussianBlur(EDGE_TOLERANCE_RADIUS_PX)
         )
         raw_difference = ImageChops.difference(left_rgb, right_rgb)
-        metrics = {
+        raw_metrics = {
             "ssim_color": image_ssim(left_rgb, right_rgb),
             "ssim_luma": channel_ssim(left_luma, right_luma),
+        }
+        left_tolerant_rgb = left_rgb.filter(
+            ImageFilter.GaussianBlur(RASTERIZATION_TOLERANCE_RADIUS_PX)
+        )
+        right_tolerant_rgb = right_rgb.filter(
+            ImageFilter.GaussianBlur(RASTERIZATION_TOLERANCE_RADIUS_PX)
+        )
+        metrics = {
+            "ssim_color": image_ssim(left_tolerant_rgb, right_tolerant_rgb),
+            "ssim_luma": channel_ssim(
+                left_tolerant_rgb.convert("L"), right_tolerant_rgb.convert("L")
+            ),
             "ssim_edges": channel_ssim(left_edges, right_edges),
         }
         difference_image = ImageEnhance.Brightness(
@@ -1796,6 +1831,17 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
         )
         summarize_component_impacts(difference_analysis)
         component_presence = compare_component_presence(left_components, right_components)
+        left_elisions = (
+            left_component_record.get("runtime_elided_source_components", [])
+            if left_component_record is not None else []
+        )
+        right_elisions = (
+            right_component_record.get("runtime_elided_source_components", [])
+            if right_component_record is not None else []
+        )
+        if left_elisions != right_elisions:
+            component_presence["runtime_elisions_match"] = False
+            component_presence["status"] = "fail"
         component_hierarchy = compare_component_hierarchy(left_components, right_components)
         component_geometry = compare_component_geometry(
             left_components,
@@ -1883,6 +1929,12 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             "component_inventories": component_inventory_records,
             "source_attribute_inventory": source_attribute_record,
             "metrics": metrics,
+            "raw_metrics": raw_metrics,
+            "rasterization_comparison": {
+                "tolerance": "gaussian",
+                "radius_px": RASTERIZATION_TOLERANCE_RADIUS_PX,
+                "scope": ["ssim_color", "ssim_luma"],
+            },
             "edge_comparison": {
                 "detector": "Pillow FIND_EDGES",
                 "tolerance": "gaussian",
@@ -1903,6 +1955,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
                 "Metrics are meaningful only when route, state, viewport, crop, and font scale are aligned.",
                 "Different physical screenshot sizes are supported, but pixel metrics are not comparable when normalized content aspect ratios or orientation differ.",
                 "Dynamic themes and platform rendering can lower pixel similarity without a semantic defect.",
+                "Color and luma SSIM use a half-pixel Gaussian tolerance while raw_metrics preserves untolerated values; this prevents cross-platform font and stroke rasterizers from masquerading as layout differences.",
                 "Edge SSIM uses a one-pixel Gaussian tolerance so subpixel font rasterization is not treated as a layout edge displacement.",
                 "Source attribute ordering is a metric-weighted inspection candidate, not a proven property-level diagnosis or suggested fix.",
                 "Image artifacts contain protected pixels and must remain local unless explicitly authorized.",

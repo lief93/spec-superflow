@@ -388,6 +388,16 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
             self.assertEqual(report["metrics"]["ssim_color"], 1.0)
             self.assertEqual(report["metrics"]["ssim_luma"], 1.0)
             self.assertEqual(report["metrics"]["ssim_edges"], 1.0)
+            self.assertEqual(report["raw_metrics"]["ssim_color"], 1.0)
+            self.assertEqual(report["raw_metrics"]["ssim_luma"], 1.0)
+            self.assertEqual(
+                report["rasterization_comparison"],
+                {
+                    "tolerance": "gaussian",
+                    "radius_px": 0.5,
+                    "scope": ["ssim_color", "ssim_luma"],
+                },
+            )
             self.assertEqual(
                 report["edge_comparison"],
                 {
@@ -427,6 +437,37 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
             self.assertLess(report["metrics"]["ssim_edges"], 1.0)
             self.assertFalse(report["authoritative"])
             self.assertEqual(report["quality"], "diagnostic_candidate")
+
+    def test_half_pixel_rasterization_tolerance_preserves_raw_metrics(self) -> None:
+        from PIL import Image, ImageDraw, ImageFilter
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.png"
+            right = root / "harmony.png"
+            output = root / "comparison"
+            for path, x in ((left, 31), (right, 32)):
+                image = Image.new("RGB", (64, 64), "white")
+                draw = ImageDraw.Draw(image)
+                draw.line((x, 8, x, 55), fill="black", width=1)
+                image.filter(ImageFilter.GaussianBlur(0.35)).save(path)
+
+            result = self.run_compare(
+                "--left", str(left),
+                "--right", str(right),
+                "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            self.assertGreater(
+                report["metrics"]["ssim_color"],
+                report["raw_metrics"]["ssim_color"],
+            )
+            self.assertGreater(
+                report["metrics"]["ssim_luma"],
+                report["raw_metrics"]["ssim_luma"],
+            )
 
     def test_explicit_crops_and_target_size_are_bound_to_hashed_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

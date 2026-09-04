@@ -7,6 +7,9 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
+    const mainWindow = windowStage.getMainWindowSync();
+    mainWindow.setWindowLayoutFullScreen(true).catch(() => {});
+    mainWindow.setWindowSystemBarEnable([]).catch(() => {});
     windowStage.loadContent('pages/Index', (error) => {
       if (error.code) {
         hilog.error(

@@ -82,13 +82,13 @@ def device_insets(adb: str, serial: str, dimensions: tuple[int, int]) -> dict[st
     output = str(run(adb_command(adb, serial, "shell", "dumpsys", "window")))
     result = {"left": 0, "top": 0, "right": 0, "bottom": 0}
     for kind, left, top, right, bottom in re.findall(
-        r"InsetsSource type=ITYPE_(STATUS_BAR|NAVIGATION_BAR) frame=\[(\d+),(\d+)\]\[(\d+),(\d+)\] visible=true",
+        r"InsetsSource type=(?:ITYPE_|TYPE_)(STATUS_BAR|NAVIGATION_BAR|TOP_BAR|SIDE_BAR_1) frame=\[(\d+),(\d+)\]\[(\d+),(\d+)\] visible=true",
         output,
     ):
         x1, y1, x2, y2 = map(int, (left, top, right, bottom))
-        if kind == "STATUS_BAR" and y1 == 0 and x1 == 0 and x2 == dimensions[0]:
+        if kind in {"STATUS_BAR", "TOP_BAR"} and y1 == 0 and x1 == 0 and x2 == dimensions[0]:
             result["top"] = max(result["top"], y2)
-        elif kind == "NAVIGATION_BAR" and y2 == dimensions[1] and x1 == 0 and x2 == dimensions[0]:
+        elif kind in {"NAVIGATION_BAR", "SIDE_BAR_1"} and y2 == dimensions[1] and x1 == 0 and x2 == dimensions[0]:
             result["bottom"] = max(result["bottom"], dimensions[1] - y1)
         elif kind == "NAVIGATION_BAR" and x1 == 0 and y1 == 0 and y2 == dimensions[1]:
             result["left"] = max(result["left"], x2)
