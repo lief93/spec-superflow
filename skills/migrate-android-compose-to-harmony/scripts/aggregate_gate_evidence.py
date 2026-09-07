@@ -70,7 +70,9 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def artifact_satisfies_gate(gate: str, artifact_type: str) -> bool:
-    if gate in {"mapping_semantics", "capability_mapping", "exact_closure", "state_matrix", "navigation_callbacks", "resource_mapping", "behavior_contract", "endpoint_contract", "request_response_contract", "auth_error_retry_cache", "schema_contract", "default_values", "migration_semantics", "child_dispositions"}:
+    if gate == "behavior_contract":
+        return artifact_type == "behavior_contract_validation"
+    if gate in {"mapping_semantics", "capability_mapping", "exact_closure", "state_matrix", "navigation_callbacks", "resource_mapping", "endpoint_contract", "request_response_contract", "auth_error_retry_cache", "schema_contract", "default_values", "migration_semantics", "child_dispositions"}:
         return artifact_type in {
             "mapping_review",
             "contract_tests",

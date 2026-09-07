@@ -207,6 +207,15 @@ hashes as opaque identifiers.
 
 ## Define executable slices
 
+Default business implementation policy is **source-first semantic transcription**: implement what
+the Android source actually does, including defects, not what its business names suggest it ought
+to do. Before implementing business logic, read
+[semantic-transcription.md](references/semantic-transcription.md). AI reads the complete scoped
+source and writes the Harmony implementation; behavior JSON constrains and traces that work, but
+is not an executable substitute for source. `migration_agent.py start` prepares the workflow and
+scaffold; it does not automatically translate business methods. No second user entry or new
+transpiler is required. Explicitly requested business changes remain separate from parity work.
+
 Inspect `CONTRACT` and relevant text files in `SNAPSHOT`. Build a route-to-data dependency chain for
 each feature:
 
@@ -214,16 +223,71 @@ each feature:
 entry route → screen → actions → state holder → use case/repository → model/platform API
 ```
 
+For every user-visible page or connected flow, create a `behavior-source-inventory.v1` and a
+`behavior-contract.v2` before implementing the slice. The broad migration contract is a candidate
+file/capability inventory; it does not prove that all actions, states, failures, effects, or
+lifecycle behavior were collected. Read [behavior-contract-v2.md](references/behavior-contract-v2.md)
+for the collection rules, schemas, source and target validation phases, and scenario-results
+format. Use `scan_android_behavior_symbols.py` only as a configured drift check; source/test
+reconciliation remains required for semantic completeness.
+Use the internal `collect_behavior_rules.py` catalog/scaffold/selected commands described in
+that reference to collect the six rule families. Embed the reviewed `collection` in the
+behavior contract; every family needs an applicability decision with source proof. Pending
+scaffolds cannot pass. Both normal validation phases require the approved safe snapshot and
+verify ownership, bindings, source spans/hashes and test references before reporting coverage.
+Generate an independent source census with `audit_behavior_source.py census` before filling
+business facts, using a fixed page/flow/application scope. Both normal gates regenerate it:
+jointly deleting inventory and facts cannot remove source obligations. Retain complete callable
+bodies, separate decisions/operations, and local dependencies, including properties/accessors,
+generic helpers and aliases. Keep entry files complete; unfold reached dependency definitions
+without pulling in unrelated sibling UI. Bind the inventory as well as the contract to source review.
+Reconcile DI, background work,
+mappers and persistence with the same independent reviewer; unresolved or unread dependencies
+cannot be certified. The source-review file is that review's output, never an implementer's
+self-authored approval. See the reference's source-closure procedure and limitations.
+
+Validate source collection before implementation:
+
+```bash
+python3 "$SKILL_ROOT/scripts/validate_behavior_contract_v2.py" \
+  --phase source --contract "$BEHAVIOR_CONTRACT" \
+  --inventory "$BEHAVIOR_INVENTORY" --snapshot "$SNAPSHOT" \
+  --source-scope "$BEHAVIOR_SOURCE_SCOPE" --source-review "$BEHAVIOR_SOURCE_REVIEW" \
+  --output "$RUN_ROOT/behavior-contract-source-validation.json"
+```
+
+After implementation, validate exact target symbols and every runtime acceptance scenario:
+
+```bash
+python3 "$SKILL_ROOT/scripts/validate_behavior_contract_v2.py" \
+  --phase target --contract "$BEHAVIOR_CONTRACT" \
+  --inventory "$BEHAVIOR_INVENTORY" --snapshot "$SNAPSHOT" \
+  --source-scope "$BEHAVIOR_SOURCE_SCOPE" --source-review "$BEHAVIOR_SOURCE_REVIEW" \
+  --target "$TARGET" \
+  --scenario-results "$BEHAVIOR_RESULTS" \
+  --output "$RUN_ROOT/behavior-contract-validation.json"
+```
+
+The capability graph's `behavior_contract` gate accepts only a passing target-phase artifact with
+`artifact_type: behavior_contract_validation`. Plain unit tests satisfy state-transition testing,
+not source inventory completeness or runtime scenario parity. Keep source inventory coverage,
+target action implementation, and target scenario results as separate percentages.
+`collection_valid`, `source_complete`, and `runtime_complete` are separate claims. Only
+current signed device execution of every reviewed `target_test` can satisfy runtime completeness;
+an evidence filename, a source-review pass, or another test's report cannot. A page/flow pass
+never sets `application_complete`.
+
 For each slice, write a machine-readable ledger under `TARGET/.migration/slices/` containing:
 
 - included source modules, routes, files, states, and actions;
 - observable behavior to preserve;
 - tests to port or add;
-- intentional security/platform changes;
+- security/platform adaptations, their observable differences, decisions and verification;
 - exclusions and unsupported capabilities.
 
-Keep source behavior and proposed improvements separate. Preserve behavior by default; record a
-source bug or security exception instead of silently changing it.
+Keep source behavior and proposed improvements separate. Preserve source bugs by default. Required
+security/platform departures must be explicit and cannot be claimed equivalent while unresolved;
+follow [platform-capabilities.md](references/platform-capabilities.md) without weakening privacy.
 
 When backlog generation emits `unassigned_source_files`, keep them visible and reconcile them
 before closure. A file is complete only when exactly one final slice ledger or supported
@@ -993,7 +1057,7 @@ Do not describe the application as fully migrated until:
 
 - every source route/module is `verified`, `intentionally excluded`, or `unsupported`;
 - the HarmonyOS application builds;
-- pure behavior contracts pass;
+- `behavior-contract.v2` source coverage, target action mapping, and runtime scenarios pass;
 - demand-related UITest flows execute on a device;
 - demand-related manual device scenarios pass;
 - resource keys resolve and opaque asset hashes match local copies;

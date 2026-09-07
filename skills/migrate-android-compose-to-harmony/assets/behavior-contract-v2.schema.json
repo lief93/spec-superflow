@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "android-to-harmony.behavior-contract.v2",
+  "title": "Android to Harmony frontend behavior contract v2",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "identity",
+    "scope",
+    "screens",
+    "states",
+    "actions",
+    "navigation",
+    "domain",
+    "data_flows",
+    "async_states",
+    "platform_effects",
+    "lifecycle",
+    "observables",
+    "scenarios",
+    "traceability",
+    "unresolved",
+    "collection",
+    "source_closure"
+  ],
+  "properties": {
+    "collection": { "$ref": "behavior-collection-v1.schema.json" },
+    "source_closure": { "$ref": "behavior-source-closure-v1.schema.json" },
+    "schema_version": { "const": "behavior-contract.v2" },
+    "identity": {
+      "type": "object",
+      "required": ["contract_id", "source_revision"],
+      "properties": {
+        "contract_id": { "type": "string", "minLength": 1 },
+        "source_revision": { "type": "string", "minLength": 1 }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["included_scopes", "excluded"],
+      "properties": {
+        "included_scopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "excluded": { "type": "array" }
+      }
+    },
+    "screens": { "type": "array", "minItems": 1 },
+    "states": { "type": "array", "minItems": 1 },
+    "actions": { "type": "array", "minItems": 1 },
+    "navigation": { "type": "array" },
+    "domain": { "type": "object" },
+    "data_flows": { "type": "array" },
+    "async_states": { "type": "array" },
+    "platform_effects": {
+      "type": "object",
+      "required": ["items", "none_reason"]
+    },
+    "lifecycle": { "type": "array" },
+    "observables": { "type": "array", "minItems": 1 },
+    "scenarios": { "type": "array", "minItems": 1 },
+    "traceability": {
+      "type": "object",
+      "required": ["source_inventory", "target_implementation"]
+    },
+    "unresolved": { "type": "array" }
+  }
+}

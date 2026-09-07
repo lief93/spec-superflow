@@ -46,7 +46,7 @@
         "state_transition_tests"
       ],
       "required_tests": [
-        "behavior_contract_tests",
+        "behavior_contract_v2_validation",
         "unit_state_transition_tests"
       ]
     },

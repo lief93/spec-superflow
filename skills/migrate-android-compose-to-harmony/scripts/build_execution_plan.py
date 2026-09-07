@@ -279,7 +279,15 @@ def score_node_for_page(
 
 
 def topological_sort(task_packets: list[dict[str, Any]]) -> list[str]:
-    task_ids = {task["id"] for task in task_packets}
+    task_id_list = [task["id"] for task in task_packets]
+    task_ids = set(task_id_list)
+    if len(task_ids) != len(task_id_list):
+        duplicates = sorted(
+            task_id for task_id in task_ids if task_id_list.count(task_id) > 1
+        )
+        raise PlannerError(
+            "execution plan task IDs must be unique: " + ", ".join(duplicates)
+        )
     dependency_map: dict[str, list[str]] = {}
     for task in task_packets:
         dependencies = task.get("dependent_task_ids", [])
@@ -313,6 +321,33 @@ def topological_sort(task_packets: list[dict[str, Any]]) -> list[str]:
 
 def foundation_task_id(node_id: str) -> str:
     return "foundation:" + node_id.split(":", 1)[-1].lower().replace("/", "-").replace("_", "-")
+
+
+def allocate_foundation_task_ids(node_ids: list[str]) -> dict[str, str]:
+    grouped: dict[str, list[str]] = {}
+    for node_id in sorted(set(node_ids)):
+        grouped.setdefault(foundation_task_id(node_id), []).append(node_id)
+    allocated: dict[str, str] = {}
+    for base_id, owners in sorted(grouped.items()):
+        if len(owners) == 1:
+            allocated[owners[0]] = base_id
+            continue
+        for node_id in owners:
+            layer, separator, remainder = node_id.partition(":")
+            if not separator:
+                raise PlannerError(
+                    f"foundation node identity must include its layer: {node_id!r}"
+                )
+            allocated[node_id] = (
+                "foundation:"
+                + layer.lower().replace("/", "-").replace("_", "-")
+                + ":"
+                + remainder.lower().replace("/", "-").replace("_", "-")
+            )
+    allocated_ids = list(allocated.values())
+    if len(set(allocated_ids)) != len(allocated_ids):
+        raise PlannerError("foundation task identity collision after full-node allocation")
+    return allocated
 
 
 def consumer_task_id_for_page(page_id: str, contract: dict[str, Any], nodes_by_id: dict[str, dict[str, Any]]) -> str:
@@ -629,12 +664,35 @@ def build_batch1_execution_plan(
         for node_id in task["primary_owner_node_ids"]
         if nodes_by_id[node_id].get("layer") in PRODUCTION_LAYERS
     }
+    standalone_foundation_nodes = sorted(
+        (
+            candidate
+            for candidate in nodes
+            if candidate.get("layer") in {
+                "ui_system",
+                "business",
+                "network",
+                "storage",
+                "platform",
+            }
+            and candidate["id"] not in assigned_production_node_ids
+            and candidate["id"] not in shared_foundation_consumers
+            and production_source_files(candidate)
+            and isinstance(candidate.get("unresolved"), list)
+            and not candidate["unresolved"]
+        ),
+        key=lambda item: (str(item.get("layer")), item["id"]),
+    )
+    foundation_task_ids = allocate_foundation_task_ids(
+        list(shared_foundation_consumers)
+        + [node["id"] for node in standalone_foundation_nodes]
+    )
     for node_id, consumer_task_ids in sorted(shared_foundation_consumers.items()):
         foundation_node = nodes_by_id.get(node_id)
         if foundation_node is None:
             continue
         foundation_task = {
-            "id": foundation_task_id(node_id),
+            "id": foundation_task_ids[node_id],
             "kind": "shared_foundation",
             "route": None,
             "page_node_ids": [],
@@ -711,17 +769,8 @@ def build_batch1_execution_plan(
             }
             consumer_task["prerequisite_edges"].append(prerequisite_edge)
             prerequisite_edges.append(prerequisite_edge)
-    for node in sorted(
-        (
-            candidate
-            for candidate in nodes
-            if candidate.get("layer") in {"ui_system", "platform"}
-            and candidate["id"] not in assigned_production_node_ids
-            and production_source_files(candidate)
-        ),
-        key=lambda item: (str(item.get("layer")), item["id"]),
-    ):
-        task_id = foundation_task_id(node["id"])
+    for node in standalone_foundation_nodes:
+        task_id = foundation_task_ids[node["id"]]
         standalone_foundation = {
             "id": task_id,
             "kind": "shared_foundation",
@@ -729,9 +778,9 @@ def build_batch1_execution_plan(
             "page_node_ids": [],
             "control_node_ids": [],
             "ui_system_node_ids": [node["id"]] if node.get("layer") == "ui_system" else [],
-            "business_node_ids": [],
-            "network_node_ids": [],
-            "storage_node_ids": [],
+            "business_node_ids": [node["id"]] if node.get("layer") == "business" else [],
+            "network_node_ids": [node["id"]] if node.get("layer") == "network" else [],
+            "storage_node_ids": [node["id"]] if node.get("layer") == "storage" else [],
             "platform_node_ids": [node["id"]] if node.get("layer") == "platform" else [],
             "unclassified_node_ids": [],
             "related_test_support_node_ids": [],

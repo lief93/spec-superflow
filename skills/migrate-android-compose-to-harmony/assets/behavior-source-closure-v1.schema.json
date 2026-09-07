@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "android-to-harmony.behavior-source-closure.v1",
+  "type": "object",
+  "required": ["schema_version", "census_sha256", "inventory_sha256", "bindings"],
+  "properties": {
+    "schema_version": {"const": "behavior-source-closure.v1"},
+    "census_sha256": {"$ref": "#/$defs/hash"},
+    "inventory_sha256": {"$ref": "#/$defs/hash"},
+    "bindings": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["obligation_id", "record_ids", "scenario_ids"],
+        "properties": {
+          "obligation_id": {"$ref": "#/$defs/hash"},
+          "record_ids": {"$ref": "#/$defs/ids"},
+          "scenario_ids": {"$ref": "#/$defs/ids"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "ids": {"type": "array", "minItems": 1, "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}},
+    "scope": {
+      "type": "object", "required": ["schema_version", "id", "kind", "source_revision", "entry_paths"],
+      "properties": {
+        "schema_version": {"const": "behavior-source-scope.v1"},
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["page", "flow", "application"]},
+        "source_revision": {"type": "string", "minLength": 1},
+        "entry_paths": {"$ref": "#/$defs/ids"}
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": ["schema_version", "verdict", "reviewer", "scope_sha256", "census_sha256",
+                   "contract_sha256", "unresolved", "expectations", "dependency_edges", "external_dependencies"],
+      "properties": {
+        "schema_version": {"const": "behavior-source-review.v1"},
+        "verdict": {"enum": ["pass", "fail", "pending"]},
+        "reviewer": {"type": "string", "minLength": 1},
+        "scope_sha256": {"$ref": "#/$defs/hash"},
+        "census_sha256": {"$ref": "#/$defs/hash"},
+        "contract_sha256": {"$ref": "#/$defs/hash"},
+        "unresolved": {"type": "array"},
+        "dependency_edges": {"type": "array"},
+        "external_dependencies": {"type": "array"},
+        "expectations": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "required": ["id", "summary", "obligation_ids", "record_ids", "scenario_ids"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "summary": {"type": "string", "minLength": 1},
+              "obligation_ids": {"$ref": "#/$defs/ids"},
+              "record_ids": {"$ref": "#/$defs/ids"},
+              "scenario_ids": {"$ref": "#/$defs/ids"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

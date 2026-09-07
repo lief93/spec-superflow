@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "android-to-harmony.behavior-source-inventory.v1",
+  "title": "Android frontend behavior source inventory v1",
+  "type": "object",
+  "required": ["schema_version", "source_revision", "scope_id", "items"],
+  "properties": {
+    "schema_version": { "const": "behavior-source-inventory.v1" },
+    "source_revision": { "type": "string", "minLength": 1 },
+    "scope_id": { "type": "string", "minLength": 1 },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "summary", "source_evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "category": {
+            "enum": [
+              "action",
+              "state",
+              "navigation",
+              "effect",
+              "lifecycle",
+              "persistence",
+              "data_flow",
+              "platform_effect"
+            ]
+          },
+          "summary": { "type": "string", "minLength": 1 },
+          "record_kind": {
+            "description": "Required collection fact kind, fixed during source inventory. Defaults to category only when category itself is a fact kind; broad categories such as effect or data_flow require this explicit field.",
+            "enum": ["action", "state", "navigation", "branch", "data", "async", "lifecycle", "check", "scenario"]
+          },
+          "source_evidence": {
+            "description": "IDs of source/test anchors in the contract collection; free-form file/test strings are not verified evidence.",
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

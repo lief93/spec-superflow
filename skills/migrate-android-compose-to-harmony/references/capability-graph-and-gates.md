@@ -49,6 +49,13 @@ Required built-in profiles:
 - `platform`
 - `project`
 
+For a `business` node, `behavior_contract` requires an artifact with
+`artifact_type: behavior_contract_validation` produced by a passing target-phase
+`behavior-contract.v2` validation. Generic unit or repository tests cannot satisfy that gate.
+They may satisfy `state_transition_tests` when scoped and bound to the current source, contract,
+skill, and target revisions. Read [behavior-contract-v2.md](behavior-contract-v2.md) for the
+source inventory, target mapping, and runtime scenario requirements.
+
 Build or `ohosTest` compile never substitutes for device UITest, visual review,
 or manual review. Family-level device evidence may only cover controls when the
 evidence explicitly binds the same mapping/profile/family and current

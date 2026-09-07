@@ -256,7 +256,7 @@ def gate_registry_fixture() -> dict[str, object]:
                     "state_transition_tests",
                 ],
                 "required_tests": [
-                    "behavior_contract_tests",
+                    "behavior_contract_v2_validation",
                     "unit_state_transition_tests",
                 ],
             },
@@ -30456,7 +30456,7 @@ class MigrationToolTests(unittest.TestCase):
                         {"node_id": "storage:db", "status": "verified", "evidence_ids": ["schema", "repo"]},
                     ],
                     "evidence": [
-                        {"id": "behavior", "gate": "behavior_contract", "artifact_type": "unit_tests", "passed": True, "source_revision": "rev1", "contract_sha256": "contract1", "skill_tree_digest": "skill1", "node_ids": ["business:vm"]},
+                        {"id": "behavior", "gate": "behavior_contract", "artifact_type": "behavior_contract_validation", "passed": True, "source_revision": "rev1", "contract_sha256": "contract1", "skill_tree_digest": "skill1", "node_ids": ["business:vm"]},
                         {"id": "endpoint", "gate": "endpoint_contract", "artifact_type": "contract_tests", "passed": True, "source_revision": "rev1", "contract_sha256": "contract1", "skill_tree_digest": "skill1", "node_ids": ["network:api"]},
                         {"id": "request", "gate": "request_response_contract", "artifact_type": "contract_tests", "passed": True, "source_revision": "rev1", "contract_sha256": "contract1", "skill_tree_digest": "skill1", "node_ids": ["network:api"]},
                         {"id": "contract-tests", "gate": "contract_tests", "artifact_type": "contract_tests", "passed": True, "source_revision": "rev1", "contract_sha256": "contract1", "skill_tree_digest": "skill1", "node_ids": ["network:api"]},
@@ -31694,7 +31694,7 @@ class MigrationToolTests(unittest.TestCase):
                 ],
             )
 
-    def test_execution_plan_builder_rejects_similarity_and_first_slice_fallback_ownership(
+    def test_execution_plan_builder_does_not_use_similarity_or_first_slice_fallback_for_classified_foundation(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -31750,8 +31750,100 @@ class MigrationToolTests(unittest.TestCase):
                 "--output",
                 str(plan),
             )
-            self.assertNotEqual(planned.returncode, 0)
-            self.assertIn("unassigned blocker", json.loads(planned.stdout)["error"])
+            self.assertEqual(planned.returncode, 0, planned.stdout + planned.stderr)
+            payload = json.loads(plan.read_text(encoding="utf-8"))
+            orphan_task = next(
+                task
+                for task in payload["tasks"]
+                if task["primary_owner_node_ids"] == ["business:profilehelperorphan"]
+            )
+            self.assertEqual(orphan_task["kind"], "shared_foundation")
+            self.assertEqual(orphan_task["page_node_ids"], [])
+            self.assertEqual(
+                orphan_task["business_node_ids"], ["business:profilehelperorphan"]
+            )
+            self.assertNotIn(
+                "business:profilehelperorphan",
+                next(
+                    task
+                    for task in payload["tasks"]
+                    if task["id"] == "slice:profile"
+                )["business_node_ids"],
+            )
+
+    def test_execution_plan_builder_rejects_unresolved_classified_foundation_without_executable_fallback(
+        self,
+    ) -> None:
+        for unresolved in (
+            [
+                {
+                    "kind": "runtime_relationship",
+                    "reason": "reflection target cannot be resolved",
+                }
+            ],
+            "malformed-unresolved-state",
+        ):
+            with self.subTest(unresolved=unresolved):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    contract, _, contract_sha = self._write_batch2_contract(root)
+                    graph = root / "graph.json"
+                    plan = root / "execution-plan.json"
+                    graph_payload, _ = self._batch2_graph_fixture(
+                        root,
+                        contract_sha256=contract_sha,
+                    )
+                    unresolved_source = (
+                        "app/src/main/java/example/domain/DynamicRelationship.kt"
+                    )
+                    graph_payload["nodes"].append(
+                        {
+                            "id": "business:dynamicrelationship",
+                            "layer": "business",
+                            "parent_id": f"project:{graph_payload['source_revision']}",
+                            "child_ids": [],
+                            "status": "candidate",
+                            "source_revision": graph_payload["source_revision"],
+                            "contract_sha256": contract_sha,
+                            "skill_tree_digest": graph_payload["skill_tree_digest"],
+                            "source_evidence": [unresolved_source],
+                            "primary_source_files": [unresolved_source],
+                            "cross_reference_source_files": [],
+                            "required_semantics": [],
+                            "selected_skill": "migrate-android-compose-to-harmony",
+                            "gate_profile": "business",
+                            "required_gates": [],
+                            "required_tests": [],
+                            "applicability": "applicable",
+                            "unresolved": unresolved,
+                            "evidence_references": [],
+                        }
+                    )
+                    graph_payload["coverage"]["contract_source_file_count"] += 1
+                    graph_payload["coverage"]["assigned_primary_source_file_count"] += 1
+                    write_json(graph, graph_payload)
+                    gate_report = self._write_batch1_gate_report(
+                        root,
+                        graph_path=graph,
+                        graph_payload=graph_payload,
+                    )
+                    planned = run_script(
+                        BUILD_EXECUTION_PLAN,
+                        "--contract",
+                        str(contract),
+                        "--graph",
+                        str(graph),
+                        "--gate-report",
+                        str(gate_report),
+                        "--output",
+                        str(plan),
+                    )
+                    self.assertNotEqual(planned.returncode, 0)
+                    message = json.loads(planned.stdout)["error"]
+                    self.assertIn("unassigned blocker", message)
+                    self.assertIn("production incomplete", message)
+                    self.assertIn("empty executable fallback", message)
+                    self.assertFalse(plan.exists())
 
     def test_execution_plan_builder_rejects_leaf_artifacts_as_standalone_migration_tasks(
         self,
@@ -32424,7 +32516,7 @@ class MigrationToolTests(unittest.TestCase):
             self.assertNotEqual(planned.returncode, 0)
             self.assertIn("stale gate report binding", json.loads(planned.stdout)["error"])
 
-    def test_execution_plan_builder_assigns_global_platform_capability_without_page_token_overlap(
+    def test_execution_plan_builder_assigns_classified_foundations_without_page_token_overlap(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -32434,6 +32526,17 @@ class MigrationToolTests(unittest.TestCase):
             contract_payload = capability_contract_fixture(source, snapshot)
             contract_payload["inventory"]["files_by_layer"]["source"].append(
                 "app/src/main/java/example/platform/LocalFilesBridge.kt"
+            )
+            contract_payload["inventory"]["files_by_layer"]["source"].append(
+                "app/src/main/java/example/domain/PaymentsPolicy.kt"
+            )
+            contract_payload["business"]["models"].append(
+                {
+                    "source": "app/src/main/java/example/domain/PaymentsPolicy.kt",
+                    "kind": "class",
+                    "name": "PaymentsPolicy",
+                    "layer": "source",
+                }
             )
             contract_payload["platform_capabilities"].append(
                 {
@@ -32452,6 +32555,7 @@ class MigrationToolTests(unittest.TestCase):
             bundle = root / "bundle.json"
             gate_report = root / "gate-report.json"
             plan = root / "execution-plan.json"
+            repeated_plan = root / "execution-plan-repeated.json"
             skill_root = root / "skill"
             (skill_root / "scripts").mkdir(parents=True)
             (skill_root / "scripts/generate_arkui_page.py").write_text("# fixture\n", encoding="utf-8")
@@ -32483,6 +32587,26 @@ class MigrationToolTests(unittest.TestCase):
             )
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             graph_payload = json.loads(graph.read_text(encoding="utf-8"))
+            business_node = next(
+                node
+                for node in graph_payload["nodes"]
+                if node["id"] == "business:paymentspolicy"
+            )
+            storage_source = "app/src/main/java/example/storage/PaymentsPolicy.kt"
+            storage_node = json.loads(json.dumps(business_node))
+            storage_node.update(
+                {
+                    "id": "storage:paymentspolicy",
+                    "layer": "storage",
+                    "source_evidence": [storage_source],
+                    "primary_source_files": [storage_source],
+                    "gate_profile": "storage",
+                }
+            )
+            graph_payload["nodes"].append(storage_node)
+            graph_payload["coverage"]["contract_source_file_count"] += 1
+            graph_payload["coverage"]["assigned_primary_source_file_count"] += 1
+            write_json(graph, graph_payload)
             write_json(
                 bundle,
                 {
@@ -32525,12 +32649,51 @@ class MigrationToolTests(unittest.TestCase):
             )
             self.assertEqual(planned.returncode, 0, planned.stdout + planned.stderr)
             payload = json.loads(plan.read_text(encoding="utf-8"))
+            repeated = run_script(
+                BUILD_EXECUTION_PLAN,
+                "--contract",
+                str(contract),
+                "--graph",
+                str(graph),
+                "--gate-report",
+                str(gate_report),
+                "--output",
+                str(repeated_plan),
+            )
+            self.assertEqual(repeated.returncode, 0, repeated.stdout + repeated.stderr)
+            repeated_payload = json.loads(repeated_plan.read_text(encoding="utf-8"))
+            self.assertEqual(repeated_payload["plan_identity"], payload["plan_identity"])
             self.assertEqual(payload["coverage"]["uncovered_production_node_ids"], [])
             self.assertTrue(
                 any(
                     "platform:local-files" in task["platform_node_ids"]
                     for task in payload["tasks"]
                 )
+            )
+            task_by_owner = {
+                task["primary_owner_node_ids"][0]: task
+                for task in payload["tasks"]
+                if len(task["primary_owner_node_ids"]) == 1
+            }
+            business_task = task_by_owner["business:paymentspolicy"]
+            storage_task = task_by_owner["storage:paymentspolicy"]
+            self.assertEqual(business_task["id"], "foundation:business:paymentspolicy")
+            self.assertEqual(storage_task["id"], "foundation:storage:paymentspolicy")
+            self.assertNotEqual(business_task["id"], storage_task["id"])
+            self.assertEqual(business_task["kind"], "shared_foundation")
+            self.assertEqual(storage_task["kind"], "shared_foundation")
+            self.assertEqual(business_task["page_node_ids"], [])
+            self.assertEqual(storage_task["page_node_ids"], [])
+            self.assertEqual(business_task["business_node_ids"], ["business:paymentspolicy"])
+            self.assertEqual(storage_task["storage_node_ids"], ["storage:paymentspolicy"])
+            self.assertEqual(
+                business_task["source_files"],
+                ["app/src/main/java/example/domain/PaymentsPolicy.kt"],
+            )
+            self.assertEqual(storage_task["source_files"], [storage_source])
+            self.assertEqual(
+                payload["topological_task_ids"],
+                repeated_payload["topological_task_ids"],
             )
 
     def test_execution_plan_builder_uses_real_dependency_edges_and_task_lifecycle(self) -> None:

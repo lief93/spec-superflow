@@ -40,8 +40,14 @@ Never preserve these merely for parity:
 - broad storage or permission requests unsupported by the actual feature;
 - Android filesystem assumptions outside the HarmonyOS sandbox.
 
-Record each as an intentional security change in the slice ledger and add a replacement behavior
-test.
+Semantic transcription does not authorize reading blocked secrets, copying unsafe credentials,
+or bypassing platform/security restrictions. It also does not authorize silently fixing the source
+and calling the result equivalent. Record the original observable behavior (without secret data),
+the constrained operation, proposed safe replacement, observable differences, decision and proof
+in the existing slice ledger and behavior scenarios. Keep the affected parity claim explicitly
+non-equivalent/unresolved until the departure is decided; test an approved replacement separately.
+If no permitted equivalent exists, report that boundary rather than claiming full transcription.
+Ordinary source logic defects outside these restrictions are preserved, not automatically repaired.
 
 ## Unsupported capability workflow
 
@@ -51,3 +57,8 @@ test.
 4. Document user-visible differences and data migration impact.
 5. Add a device proof for equivalent/adapted behavior.
 6. Obtain a product decision before shipping degraded or unsupported behavior.
+
+An API-name mapping alone is not semantic equivalence. Apply
+[semantic-transcription.md](semantic-transcription.md) to check return/error behavior, state and
+effect order, lifecycle, cancellation and data representation at the adapter boundary. An
+`adapted` classification documents a substitution; it does not by itself establish parity.
