@@ -395,22 +395,17 @@ ambiguous, or unsupported facts remain explicit `unresolved` records; they are n
 source/contract fallback. The output manifest records `input_mode=page-json-only` and a zero source
 fallback count.
 
-The generated Stage template keeps the status and navigation bars enabled and does not lay page
-content out behind them. Page-JSON-driven output scales the captured tree uniformly by the smaller
-of the host/content width and height ratios, aligns it to the content top, and centers it
-horizontally. Do not compensate for system bars with page-specific offsets or crop a captured tree
-by fitting only one axis when the Android and Harmony content aspect ratios differ.
+The generated Stage template requests fullscreen window layout with status/navigation bars enabled.
+The page renderer uses native layout rather than uniformly scaling a captured screen. Verify the
+mounted root's edge-to-edge/inset policy against Android; neither this template nor a reference
+viewport proves equivalent system-bar behavior.
 
-Without both page inputs, the command retains source-only or legacy code-only candidate behavior for
-diagnostic and compatibility runs; do not use either mode as high-fidelity evidence. The
-generator also consumes `transitive_closures`, reached definitions, semantic calls,
-invocation arguments, parent call IDs, and ordered Modifier chains. It emits a separate ArkUI
-builder for every reached project component, uses generated theme resource names only when their
-hash-checked theme manifest is current, and writes a hash-bound manifest under
-`.migration/arkui-pages/`. It emits no generic UI fallback for an unresolved call. Instead, the
-manifest records the exact call/parameter/modifier/asset issue and sets `generation_complete` to
-`false`; a buildable incomplete page is not fidelity evidence. Repeat execution is refused, and
-`--force` is accepted only when every previously generated output is unchanged.
+There is no source-only or dual-input fallback in this generator CLI. Source calls, definitions,
+arguments and ordered modifiers are resolved upstream into the final page JSON. The generator
+uses current target-owned resources and writes a hash-bound manifest under `.migration/arkui-pages/`.
+Unsupported facts remain explicit and set `generation_complete=false`; a buildable incomplete page
+is not fidelity evidence. Repeat execution is refused, and `--force` is accepted only when every
+previously generated output is unchanged.
 
 This generator intentionally covers only compile-safe static semantics. Runtime branches,
 collection DSLs, state holders, callbacks, Material-version defaults, asset resolution, and
@@ -423,28 +418,26 @@ imports, same-package visibility, or same-file definitions. Before implementing 
 its graph transitively and review every reached component plus the recorded invocation arguments.
 Use `transitive_closures` to select an exact source/composable root and inspect its reached
 definitions, project-component calls, mapped primitive coverage, unmapped components, and cycles.
-Composable parameter defaults are retained for static UI values, and the page generator may use
-compile-safe defaults such as literal `Dp` and `Color` values when an invocation omits them.
+Composable parameter defaults are retained and resolved upstream for static UI values; the ArkUI
+generator consumes the resulting page facts rather than rereading Kotlin defaults.
 Default Android `<string>` resources from `res/values` are copied into Harmony app-level string
 resources during target initialization, and static `stringResource(...)`,
 `UiText.StringResource(...)`, `UiText.DynamicString(...)`, and `.asString()` calls may be emitted
 as `ResourceStr` when the referenced key exists in the target. A default-locale
 `stringResource(...).uppercase()` may be emitted as static text from the copied default string
 value; locale-sensitive case mapping remains explicit reconciliation work.
-`BasicTextField`/`TextField`/`OutlinedTextField` may be emitted as a conservative ArkUI `TextInput`
-only when the source `value` and `onValueChange` are compile-safe string parameters or literals;
-Material decoration, keyboard behavior, transformation, and validation semantics remain explicit
-unresolved records unless separately reconciled.
+`BasicTextField`/`TextField`/`OutlinedTextField` consume their resolved static content, input and
+decoration facts; business callbacks are separate work. Read `page-layout-support.md` for the
+supported input/slot combinations rather than relying on the legacy source-translator branches.
 Static analyzer output filters unresolved lowercase Modifier/helper calls out of the UI component
 list while retaining resolved lowercase project composables. Container-like primitives such as
 `BoxWithConstraints` and `CenterAlignedTopAppBar` may be emitted as structural ArkUI containers
 with a `component_semantics` record for defaults/slot behavior that still needs reconciliation.
 `BasicText` may use the same conservative text emission path as `Text`, and `ClickableText` may
 emit static display text while retaining annotation, span, and click-offset work as
-`component_semantics`. `LazyRow`, `Canvas`, and `DatePickerDialog` may be emitted only as
-structural containers to preserve hierarchy and keep the generated page buildable; item
-virtualization, drawing commands, picker state, dismissal, and sheet/dialog behavior remain
-explicit reconciliation work.
+`component_semantics`. `LazyRow`/`LazyColumn` may render the selected state's expanded children
+with native scrolling, without claiming virtualization. Unsupported custom drawing or dialogs
+remain unresolved, not generic containers that silently replace their semantics.
 Static `painterResource(R.drawable.name)` calls may emit an ArkUI `Image` only after a matching
 `base/media/name.*` asset has been copied or converted locally through the manifest-approved asset
 tools. The generator may apply literal/static tint, but dynamic painter expressions and missing
@@ -453,8 +446,8 @@ media remain asset gaps.
 is static, so supported inner padding/size/background/fill modifiers can still be emitted.
 Compile-safe no-op/default-layout modifiers such as no-argument `wrapContentWidth`,
 `wrapContentHeight`, and `wrapContentSize` may be omitted, and `matchParentSize`, literal
-`heightIn`, literal `alpha`, and direct callback-parameter `clickable(onClick = ...)` may be
-emitted as ArkUI width/height, constraint, opacity, and click handlers. Non-literal constraints,
+`heightIn` and literal `alpha` may be emitted as ArkUI dimensions, constraints and opacity.
+Click metadata does not generate business handlers in the page-only renderer. Non-literal constraints,
 custom gestures, interaction sources, indications, semantics, and parent-scope modifier behavior
 remain explicit unresolved records.
 Project composable parameters of type `Modifier` are classified as UI-boundary forwarding rather
@@ -540,13 +533,17 @@ vendor dependencies from an unrelated project into source control.
 
 ## Implement page-fact-driven visual parity
 
+Follow [Source to Lanhu JSON to ArkUI](references/source-page-workflow.md) for the complete
+executable sequence, including the existing source-page library call, state-fixture example,
+target resources, output filenames, runtime comparison and partial/fatal result semantics.
+
 Migrate one complete dependency chain at a time:
 
 1. Use Android source to enumerate the route's component tree, deterministic visible states, and business transitions.
 2. Generate the code-derived `source-page.json`, then project one explicit state fixture into a
    Lanhu-compatible `version_json.json` plus component and page-state manifests.
-3. Pass that `version_json.json` directly to the ArkUI generator. Optionally fuse same-state
-   UIAutomator facts in memory; never serialize a reduced implementation JSON first.
+3. Pass that `version_json.json` directly to the ArkUI generator; never serialize a reduced
+   implementation JSON or pass a second runtime document first.
 4. Use Android source to implement callbacks, state, navigation, scrolling, lifecycle, and responsive intent.
 5. Copy referenced opaque assets locally only after matching resource keys to manifest paths.
 6. Capture Android and Harmony runtime page JSON for the same route/state and compare the structured facts.
@@ -557,9 +554,10 @@ Migrate one complete dependency chain at a time:
 For visual implementation, the Android source component tree is authoritative for hierarchy,
 component units, sibling order, reusable component identity, layout intent, and state expressions.
 The source-derived Lanhu-compatible `version_json.json` supplies the implementation tree and resolved
-layout/style intent. UIAutomator or an application layout probe may calibrate visible leaf/control
-geometry and exposed platform defaults while producing that file, but it must not replace source
-ownership, parents, siblings, or flow intent. Screenshots remain final pixel-level acceptance inputs
+layout/style intent. The current `generate_lanhu_source_page.py` command takes source facts and an
+optional state fixture, not runtime captures. Runtime measurements diagnose missing/default facts
+in the separate validation path; they must not replace source ownership, parents, siblings or flow
+intent. Screenshots remain final pixel-level acceptance inputs
 and never become the hierarchy. Behavior remains a separate `behavior-contract.v2`; neither visual
 JSON nor screenshot similarity proves business parity.
 
@@ -607,8 +605,9 @@ complete business migration.
 
 `export_lanhu_page_snapshot.py` remains a verification and legacy-compatibility tool. It may bind a
 screenshot and component sidecar into `page-snapshot.v2`, but that reduced artifact is not an
-implementation input and must not sit between `version_json.json` and ArkUI generation. Legacy generated
-Lanhu files without embedded migration metadata may temporarily pass `--lanhu-component-manifest`.
+implementation input and must not sit between `version_json.json` and ArkUI generation. The current
+ArkUI CLI does not accept `--lanhu-component-manifest`; its required source metadata is embedded
+in `version_json.json`.
 
 Copy an approved image or font asset without exposing its bytes:
 
@@ -847,9 +846,9 @@ primitives, so `View`, `Column`, and `Row` cannot replace a project component in
 model. Each directly associated runtime instance and each mapped descendant is attached to its
 source node; rendered instances retain a proven, candidate, or unbound component-ownership path.
 Visible semantic runtime instances that still lack one exact source identity remain in
-`components` as `runtime_visual_fallback` entries so first-pass generation does not erase dynamic
+`components` as `runtime_visual_fallback` entries so the comparison inventory does not erase dynamic
 text, repeated list items, controls, or an outer navigation shell. These entries remain explicitly
-unbound for behavior work. Generic platform wrapper Views may provide bounds or pixels, but must
+unbound; they are not fallback inputs to the source-only generator. Generic platform wrapper Views may provide bounds or pixels, but must
 never be renamed into source/business components; compress them to runtime evidence or retain only
 a distinct screenshot-proven visual surface.
 

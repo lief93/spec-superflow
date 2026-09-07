@@ -2,11 +2,15 @@
 
 `generate_android_page_json.py`, `generate_harmony_page_json.py`, and the real-device wrappers
 `generate_real_android_page_json.py` and `generate_real_harmony_page_json.py` produce the same
-`android-to-harmony.page-snapshot.v2` schema. The result is the migration equivalent of a design
-tool's `version_json`: one deterministic route/state, its exact screenshot, logical viewport,
+`android-to-harmony.page-snapshot.v2` schema. This is a runtime comparison format, not the
+source-generated Lanhu `version_json.json`: one deterministic route/state, its exact screenshot, logical viewport,
 component hierarchy, geometry, content, visual style, asset identity, state, provenance, and
 unresolved source expressions. The real-device wrappers additionally retain the raw runtime tree,
 the code-derived source page, and honest coverage/timing metrics in one new output directory.
+
+For implementation, follow [Source to Lanhu JSON to ArkUI](source-page-workflow.md). It documents
+the source-only route as well as the optional capture-based source-page producer. Runtime
+`page.json` is not accepted as `generate_arkui_page.py --page-json`.
 
 The optional `style.input` section retains `single_line`, `read_only`, `password`,
 `keyboard_type`, and `ime_action`. Password masking and keyboard type are separate facts:
@@ -29,9 +33,10 @@ silently reduced to their first color. Absolute four-corner rounding is supporte
 Start/End rounding needs a resolved layout direction.
 
 The source-to-Lanhu stage expands supported constant size/padding chains into nested layout
-nodes, retaining the original component as the innermost body. It does not use reference frames
-to implement the nesting. Draw operations interleaved with padding, repeated sizes on the same
-axis, intrinsic/required sizes and unresolved expressions are not covered by this expansion.
+nodes. It does not use reference frames to implement the nesting. Supported native/explicit
+surfaces split prefix outer padding from surface content padding, preserving repeated outer
+padding instead of overwriting it. General interleaved drawing, repeated sizes on the same
+axis, intrinsic/required sizes and unresolved expressions still have unsupported combinations.
 See `page-support-inventory.md` for the current boundaries; the inventory is not visual approval.
 
 ## Device and screenshot rules
@@ -189,8 +194,8 @@ Real-page snapshots separate component meaning from platform measurement:
   replace `ScreenHeader`, `AccountActionPanel`, `SavingCard`, or another project component.
 - Each source node lists direct runtime instances separately from mapped runtime descendants. Each
   rendered instance carries `component_context` with a proven, candidate, or unbound business
-  ownership path and the runtime evidence used to derive it. Candidate ownership improves
-  component-scoped first-pass generation but is never promoted to exact source identity.
+  ownership path and the runtime evidence used to derive it. Candidate ownership aids
+  component-scoped comparison but is never promoted to exact source identity.
 - `components` is the rendered-state visual instance graph. Source-bound instances carry their
   exact call identity. Visible text, controls, repeated items, and navigation content with no safe
   one-to-one binding remain present with `source_mapping.status=unbound` and
@@ -201,8 +206,8 @@ Real-page snapshots separate component meaning from platform measurement:
 
 An unbound text instance may reuse the closest compatible typography role declared inside the
 active source component tree when its captured line box and sampled color select that role. This
-remains `source_expression` candidate provenance rather than an exact source binding; it improves
-the generated first pass without turning a geometry match into false ownership evidence.
+remains `source_expression` candidate provenance rather than an exact source binding. It is a
+comparison diagnostic, not a fallback implementation fact for the source-only generator.
 
 A generated `runtime.<digest>` ID remains the cross-platform identity of that unbound rendered
 instance and is not remapped to an unrelated source `Text` by hierarchy order. When one exact
@@ -456,11 +461,10 @@ width or position must not be treated as proof that the source intended an absol
 across every viewport. Generate and compare separate state captures whenever the rendered tree or
 style changes.
 
-The default generated Harmony Stage window keeps status and navigation bars enabled and reserves
-their system-owned areas. The page snapshot tree scales uniformly by the smaller of the host/content
-width and height ratios, stays top-aligned, and is centered horizontally. Fitting both axes avoids
-bottom clipping and accumulated vertical drift when the Android and Harmony content aspect ratios
-differ, without introducing device-specific offsets.
+The Stage template requests fullscreen window layout while keeping status/navigation bars enabled.
+The source-tree renderer uses native layout, not uniform screen scaling. Check the mounted root's
+safe-area policy and actual content bounds on both devices. Different viewport/aspect ratios do
+not become equivalent merely because a window flag or reference frame was set.
 
 Accessibility may omit a project-defined surface even when its pixels remain visible. A real-page
 snapshot may add a screenshot-proven surface instance only after joining the region to source
@@ -494,12 +498,13 @@ and interaction boundaries are checked by component type. Optional fields are no
 merely because the canonical style schema contains them. For example, a transparent `TextButton`
 does not require an invented background or corner radius.
 
-`generate_lanhu_source_page.py` fails before writing output when any required fact is unresolved.
-Source-generated `version_json.json` files without `migration.requiredFacts` are rejected, and
-`generate_arkui_page.py` repeats the gate before rendering. The command result and ArkUI migration
-manifest expose `required_fact_gate` with status counts and concrete component/path failures.
-Ordinary unresolved behavior remains separate and still keeps `generation_complete=false`; passing
-the required-fact gate is not a claim that the whole application behavior is complete.
+Both generators retain unsupported required facts in partial candidate output and report
+`generation_complete=false`, `verdict=fail`; exit zero only means the artifact was written.
+The command result and ArkUI manifest expose `required_fact_gate` and phase-consumption failures.
+Malformed source metadata (including missing `migration.requiredFacts`), invalid hierarchy,
+ambiguous state and unsafe assets/ownership remain fatal. Passing the required-fact gate alone
+does not prove complete UI or business behavior; inspect ordinary unresolved facts and the final
+verdict as well.
 
 ## Comparison output
 

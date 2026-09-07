@@ -5,6 +5,8 @@ read only by the earlier source inventory step. Target-owned image/font files
 remain resource dependencies, not a second layout input. Do not count branches in
 the legacy source-definition translator as support for this entry point.
 
+For executable setup and file provenance, read [Source to Lanhu JSON to ArkUI](source-page-workflow.md).
+
 ## Current Mapping
 
 See [the per-control/property inventory](page-support-inventory.md) and its CSV
@@ -19,7 +21,7 @@ claim that every Compose modifier combination is equivalent.
 | --- | --- | --- | --- |
 | Row/Column | source hierarchy, child order | `page_snapshot_component_lines` | native Row/Column; no screen-position fallback |
 | Box/BoxWithConstraints | contentAlignment, children | `page_snapshot_container_alignment_lines` | Stack with nine-way content alignment |
-| Project component | expanded internal tree | `page_snapshot_component_lines` | one expanded root; unknown multi-root composition fails |
+| Project component | expanded internal tree and slot ownership | `page_snapshot_component_lines` | retain the expanded children; unsupported composition remains unresolved, not a blanket one-child rule |
 | ConstraintLayout | normalized link/center relationships | `page_snapshot_constraint_alignment_lines` | only declared supported anchors; no guessed positions |
 | size(width,height) | `size_arguments`, `static_style_for_call` | `page_snapshot_dimension_lines` | positional/named constant dp values |
 | image intrinsic size | `style.asset.width_dp/height_dp`, separate from modifier sizes in `style.layout` | `page_snapshot_intrinsic_image_lines` | Fit/Inside uses native bounded measurement and aspect ratio; explicit sizes/fill still take precedence; unverified intrinsic scaling modes fail |
@@ -30,7 +32,7 @@ claim that every Compose modifier combination is equivalent.
 | child align | Alignment enum in layoutRules | alignSelf/align branch | Row/Column cross-axis or Stack nine-way alignment |
 | explicit offset | normalized offset layoutRules | `page_snapshot_explicit_offset_line` | constants use declared dp; parent fractions use the bounded BoxWithConstraints scope's target onSizeChange, not reference rectangles; wrap/unbounded scope fails |
 | arrangement | alignment and spacedBy | `page_snapshot_arrangement_space`, `page_snapshot_container_alignment_lines` | includes spacing plus main-axis alignment |
-| padding/margin | edge values and ordered layout wrappers | padding/margin branches | constant pure size/padding chains retain nesting; interleaved drawing and duplicate axis sizes remain blocked |
+| padding/margin | edge values and ordered layout wrappers | padding/margin branches | supported prefix outer padding wraps native/explicit surfaces separately from contentPadding; repeated outer padding retained; general interleaved drawing/duplicate axis sizes remain unsupported |
 | aspect ratio/direction | resolved style fields | aspectRatio/direction branches | constant ratio and ltr/rtl |
 | scroll/LazyRow/LazyColumn | scroll rule and complete child tree | Scroll wrapping native Row/Column | eager expanded children; does not claim lazy virtualization; reverse scroll unsupported |
 | top app bar | Material3 64dp content plus outer padding | measured container and centered title | small centered bar, not collapsing/large bar variants |
@@ -65,6 +67,10 @@ Removed paths: bbox-derived flow margins and missing-offset translation inferenc
 fraction offsets no longer freeze reference parent dimensions. Measurement observers shared
 with border drawing use one callback; source padding is subtracted from the measured scope.
 An unbounded scrolling axis cannot be substituted with its content's measured height.
+
+Supported Material3 outlined decoration retains the editor minimum/content padding and a separate
+supporting-text slot, including space reserved by an empty non-null lambda. This does not imply
+support for every Material version, floating label, error or arbitrary decoration combination.
 
 Not in automatic scope: full Material input decoration/label/error slots; arbitrary
 ConstraintLayout graphs; weight(fill=false); interleaved measure/draw modifier chains;
@@ -151,8 +157,10 @@ malformed model URLs remain unresolved rather than producing a guessed asset.
 Run the current single-input suite:
 
 ```bash
-python3 -B -m unittest discover -s skills/migrate-android-compose-to-harmony/scripts -p test_layout_mapping_contract.py
-python3 -B -m unittest skills.migrate-android-compose-to-harmony.scripts.test_generate_lanhu_source_page skills.migrate-android-compose-to-harmony.scripts.test_generate_arkui_lanhu_input skills.migrate-android-compose-to-harmony.scripts.test_real_page_pipeline
+PYTHONPATH="$SKILL_ROOT/scripts${PYTHONPATH:+:$PYTHONPATH}" python3 -B -m unittest \
+  test_layout_mapping_contract test_generate_lanhu_source_page \
+  test_generate_arkui_lanhu_input test_real_page_pipeline \
+  test_surface_padding test_input_decoration_layout test_static_ui_preservation
 ```
 
 `test_layout_mapping_contract.py` covers exact field failure, repeated-call
