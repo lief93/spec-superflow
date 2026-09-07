@@ -8,6 +8,32 @@ component hierarchy, geometry, content, visual style, asset identity, state, pro
 unresolved source expressions. The real-device wrappers additionally retain the raw runtime tree,
 the code-derived source page, and honest coverage/timing metrics in one new output directory.
 
+The optional `style.input` section retains `single_line`, `read_only`, `password`,
+`keyboard_type`, and `ime_action`. Password masking and keyboard type are separate facts:
+`KeyboardType.Password` does not imply `PasswordVisualTransformation`. The source stage
+records Compose defaults when arguments are absent, but never replaces an unresolved explicit
+argument with a default. The target selects TextInput/TextArea from the JSON alone. Read-only
+uses keyboard suppression and a content-change veto (API 20+), not disabled styling.
+Complex decoration/label/error slots and unsupported keyboard combinations still fail the gate.
+
+`style.control` retains primitive `value`, `minimum`, `maximum`, `steps`, `active_color`,
+`inactive_color`, and `stroke_width_dp`. Booleans for Checkbox/Switch/RadioButton remain in
+`style.state.checked/selected`. These are the supplied page state's facts, not a substitute
+for business reducers or onChange bindings. `style.typography.soft_wrap/min_lines` preserve
+explicit source text-layout arguments; the renderer's supported combinations are listed in
+`page-layout-support.md`. An absent or unsupported value is never replaced with a demo state.
+
+Axis-aligned, full-bounds Clamp gradients retain all colors and stops. Nonmonotonic stops,
+color/stop count mismatches and null colors are rejected. Other brushes/endpoints cannot be
+silently reduced to their first color. Absolute four-corner rounding is supported; asymmetric
+Start/End rounding needs a resolved layout direction.
+
+The source-to-Lanhu stage expands supported constant size/padding chains into nested layout
+nodes, retaining the original component as the innermost body. It does not use reference frames
+to implement the nesting. Draw operations interleaved with padding, repeated sizes on the same
+axis, intrinsic/required sizes and unresolved expressions are not covered by this expansion.
+See `page-support-inventory.md` for the current boundaries; the inventory is not visual approval.
+
 ## Device and screenshot rules
 
 Android and HarmonyOS devices do **not** need identical physical pixel dimensions or density.
@@ -146,6 +172,58 @@ The emitted semantic page compresses uncaptured source wrappers to the nearest c
 source-semantic ancestor and preserves source preorder for siblings. Bounds containment is only a
 fallback when source hierarchy is missing or ambiguous. This keeps platform wrapper nodes and
 equal-size/rotated layouts from creating false hierarchy differences.
+
+Real-page snapshots separate component meaning from platform measurement:
+
+- `source_component_tree` is the source/business component hierarchy for the observed route
+  branch. Its nodes retain source call identity, invocation arguments, modifier order, source
+  style facts, and direct runtime instance bindings.
+- The tree retains every expanded source layer, including layout primitives and composable slot
+  invocations. Call-site children of a `@Composable` lambda parameter are attached beneath the
+  exact `toolbar()`, `content()`, or other slot invocation inside the callee definition; they are
+  not flattened beside the callee's internal layout.
+- The tree indexes `business_root_ids` and `business_component_ids`. Every node declares whether
+  it is a `screen_root`, project component, content slot, layout primitive, or visual primitive,
+  and carries both its exact implementation children, nearest business owner, and the compressed
+  business-component parent/children. Layout primitives such as `Column`, `Row`, and platform `View` therefore cannot
+  replace `ScreenHeader`, `AccountActionPanel`, `SavingCard`, or another project component.
+- Each source node lists direct runtime instances separately from mapped runtime descendants. Each
+  rendered instance carries `component_context` with a proven, candidate, or unbound business
+  ownership path and the runtime evidence used to derive it. Candidate ownership improves
+  component-scoped first-pass generation but is never promoted to exact source identity.
+- `components` is the rendered-state visual instance graph. Source-bound instances carry their
+  exact call identity. Visible text, controls, repeated items, and navigation content with no safe
+  one-to-one binding remain present with `source_mapping.status=unbound` and
+  `method=runtime_visual_fallback`.
+- generic Android/Harmony platform containers remain measurement evidence. They are not promoted
+  to business component identity. A generic node may appear as an unbound visual surface only when
+  its screenshot-proven background differs from its containing surface.
+
+An unbound text instance may reuse the closest compatible typography role declared inside the
+active source component tree when its captured line box and sampled color select that role. This
+remains `source_expression` candidate provenance rather than an exact source binding; it improves
+the generated first pass without turning a geometry match into false ownership evidence.
+
+A generated `runtime.<digest>` ID remains the cross-platform identity of that unbound rendered
+instance and is not remapped to an unrelated source `Text` by hierarchy order. When one exact
+source-owned asset record joins a runtime label to a project component, the same join may narrow
+that label's candidate typography to the component's matching `.title` or `.uiTitle` source field.
+For a vertically ordered source `Column` whose image branch is followed by one explicit `Spacer`
+and its label, the captured image-to-label gap comes from that component-local structure rather
+than a page-wide fixed offset. These joins improve component ownership and visual facts while the
+label's source mapping remains explicitly unbound.
+
+This separation prevents missing runtime IDs from deleting visible UI while keeping source
+ownership honest. Use the source tree to implement component ownership and behavior; use the
+runtime instance graph for the captured state's geometry, content, and sampled appearance.
+
+`source_component_tree.layout_relationships` records non-tree layout composition that ordinary
+parent/child edges cannot express. A Compose `ConstraintLayout` child with `constrainAs` retains
+the complete source constraint body plus the active, instance-resolved anchor edges, margin,
+draw order, and `constraint` versus `overlay` composition. For example, a panel whose top links to
+a sibling cover's bottom with `-24.dp` remains a foreground overlay rather than becoming the next
+item in a `Column`. Unknown conditions, targets, or margins remain explicit unresolved records;
+the generator must not guess or silently convert them to normal flow.
 
 ## Visual facts schema
 
@@ -323,25 +401,41 @@ python3 "$SKILL_ROOT/scripts/generate_harmony_page_json.py" \
 Create one pair for every route and visible state. A default page JSON cannot stand in for loading,
 empty, error, dialog, selected, keyboard-open, or scrolled states.
 
-## Use the Android page as generation input
+## Use the source-generated Lanhu page as generation input
 
-After generating the Android page JSON for one deterministic route/state, pass it to the ArkUI
-page generator together with the code-derived migration contract:
+After generating the source-derived Lanhu-compatible page JSON for one deterministic route/state,
+pass that single page-fact input to the ArkUI generator:
 
 ```bash
 python3 "$SKILL_ROOT/scripts/generate_arkui_page.py" \
-  --contract "$CONTRACT" --target "$TARGET" --module entry \
-  --root-source "app/src/main/java/example/HomeScreen.kt" \
-  --root-composable "HomeScreen" \
-  --android-page-json "$ANDROID_PAGE_JSON"
+  --target "$TARGET" --module entry \
+  --page-json "$LANHU_PAGE_DIR/version_json.json"
 ```
 
-The generator binds the Android page JSON and its screenshot identity into the ArkUI generation
-manifest. It uses exact source `call_id` mappings from each runtime component's attached source
-attributes. Only values with resolved runtime, source, pixel-sampled, or manually verified
-provenance may drive code. Applied fact paths are listed under
-`android_page_input.applied_paths`; ambiguous mappings, unresolved facts, and proven properties
-without a safe ArkUI emitter remain in the ordinary `unresolved` list.
+The page supplies the complete source hierarchy and source-resolved layout/style intent. Any
+runtime measurement used to resolve platform defaults is joined upstream and recorded as provenance
+inside this same document. The generator preserves source parents, children, sibling order, flow,
+constraints, padding, arrangement, and explicit local offsets. Ordinary `frame.left/top` values are
+reference geometry and do not become global ArkUI positions. Only values with resolved runtime,
+source, pixel-sampled, or manually verified provenance may drive code; unresolved facts and proven
+properties without a safe ArkUI emitter remain in the ordinary `unresolved` list. The generator
+must not read the Android source or migration contract to fill a missing page fact.
+
+For source-generated Lanhu documents, prefer the direct generator input:
+
+```bash
+python3 "$SKILL_ROOT/scripts/generate_arkui_page.py" \
+  --target "$TARGET" --module entry \
+  --page-json "$LANHU_PAGE_DIR/version_json.json"
+```
+
+This path parses and validates `version_json.json` in memory; it does not create or consume an
+`implementation-page.json`, migration contract, Android source tree, or second runtime page input.
+A source-generated layer carries the
+`android-to-harmony.lanhu-node.v1` migration extension for source-call identity and behavior-facing
+semantics. Raw Lanhu fields remain the visual authority: `frame` owns full pre-clip geometry,
+`realFrame` and `combinedFrame` remain diagnostics, and a runtime-visible intersection must never
+overwrite `frame`.
 
 Generate the source-attribute inventory at call granularity. Each captured runtime component must
 use the exact deterministic semantic key for one source call; a composable-wide key that aggregates
@@ -361,6 +455,51 @@ owns callbacks, state transitions, scrolling behavior, and responsive layout int
 width or position must not be treated as proof that the source intended an absolute coordinate
 across every viewport. Generate and compare separate state captures whenever the rendered tree or
 style changes.
+
+The default generated Harmony Stage window keeps status and navigation bars enabled and reserves
+their system-owned areas. The page snapshot tree scales uniformly by the smaller of the host/content
+width and height ratios, stays top-aligned, and is centered horizontally. Fitting both axes avoids
+bottom clipping and accumulated vertical drift when the Android and Harmony content aspect ratios
+differ, without introducing device-specific offsets.
+
+Accessibility may omit a project-defined surface even when its pixels remain visible. A real-page
+snapshot may add a screenshot-proven surface instance only after joining the region to source
+background/shadow/elevation evidence and project-owned descendants inside the same region. It may
+also repair a lightly clipped repeated list item from a complete sibling with the same parent,
+business owner, width, and child signature. Both operations retain candidate provenance and must
+not invent a source identity from geometry alone.
+
+A source-owned image that has no runtime node may be projected only when one exact business
+surface, intrinsic asset size, parent alignment, and a statically solvable offset determine its
+layout. When that layout extends beyond the app content bounds, `source_layout_bounds_dp` retains
+the full pre-clip layout while ordinary `bounds_dp`/`bounds_px` retain only the screenshot-visible
+intersection. Generation uses the full source layout; page comparison continues to use the visible
+frame. This prevents system-bar or edge clipping from either rejecting the page JSON or stretching
+the visible fragment into a different image.
+
+## Required component facts
+
+Every source-generated component carries `required_facts`, and the matching Lanhu layer carries
+the same records under `migration.requiredFacts`. Each record names the canonical fact path, the
+source argument or modifier, its exact expression, and one of these statuses:
+
+- `resolved`: the parser materialized the source value;
+- `default_resolved`: a documented framework default applies;
+- `symbolic`: the exact dynamic or relationship expression is retained for target translation;
+- `not_applicable`: the field does not apply to this component state;
+- `unresolved`: a required constant conflicts with or is missing from the parsed facts.
+
+Structure, text constraints, asset identity/scaling, explicit layout parameters, surface styling,
+and interaction boundaries are checked by component type. Optional fields are not made mandatory
+merely because the canonical style schema contains them. For example, a transparent `TextButton`
+does not require an invented background or corner radius.
+
+`generate_lanhu_source_page.py` fails before writing output when any required fact is unresolved.
+Source-generated `version_json.json` files without `migration.requiredFacts` are rejected, and
+`generate_arkui_page.py` repeats the gate before rendering. The command result and ArkUI migration
+manifest expose `required_fact_gate` with status counts and concrete component/path failures.
+Ordinary unresolved behavior remains separate and still keeps `generation_complete=false`; passing
+the required-fact gate is not a claim that the whole application behavior is complete.
 
 ## Comparison output
 

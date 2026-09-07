@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import itertools
 import json
@@ -11,13 +12,18 @@ import math
 import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
+from statistics import median
 from typing import Any
+from urllib.parse import urlsplit
 
+from component_required_facts import normalize_required_facts, required_fact_gate
+from page_component_catalog import NATIVE_CONTAINERS, NATIVE_LEAVES, NATIVE_BUTTONS
 from generate_harmony_theme_resources import commit_payloads, json_bytes
-from init_harmony_project import has_external_ownership_proof, load_contract, sha256_file
+from init_harmony_project import has_external_ownership_proof, sha256_file
 from page_snapshot import (
     PAGE_SCHEMA as PAGE_SNAPSHOT_SCHEMA,
     PageSnapshotError,
@@ -35,6 +41,8 @@ IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 RESOURCE_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 PAGE_INPUT_MAX_BYTES = 10 * 1024 * 1024
+LANHU_VERSION_KEYS = {"meta", "assets", "artboard"}
+LANHU_COMPONENT_MANIFEST_SCHEMA = "android-to-harmony.lanhu-component-manifest.v1"
 FONT_WEIGHT_VALUES = {
     "Thin": 100,
     "ExtraLight": 200,
@@ -88,10 +96,7 @@ FALLBACK_LIST_ITEM_TYPE = "GeneratedFallbackListItem"
 ROOT_PUBLIC_PARAMETER_ALIASES = {
     "enabled": "enabledValue",
 }
-BUTTON_CONTAINER_COMPONENTS = {
-    "Button", "TextButton", "OutlinedButton", "IconButton", "FloatingActionButton",
-    "SmallFloatingActionButton",
-}
+BUTTON_CONTAINER_COMPONENTS = NATIVE_BUTTONS
 STACK_RENDERED_COMPONENTS = {
     "Box",
     "BoxWithConstraints",
@@ -104,8 +109,17 @@ STACK_RENDERED_COMPONENTS = {
     "TopAppBar",
     "CenterAlignedTopAppBar",
 }
+PAGE_SNAPSHOT_COLUMN_COMPONENTS = {"Column", "LazyColumn", "Card"}
+PAGE_SNAPSHOT_ROW_COMPONENTS = {"Row", "LazyRow"}
+PAGE_SNAPSHOT_FLOW_COMPONENTS = (
+    PAGE_SNAPSHOT_COLUMN_COMPONENTS | PAGE_SNAPSHOT_ROW_COMPONENTS
+)
+PAGE_RUNTIME_OVERLAY_LEAF_TYPES = (
+    BUTTON_CONTAINER_COMPONENTS
+    | {"Text", "BasicText", "ClickableText", "BasicTextField", "TextField", "OutlinedTextField"}
+    | {"Image", "Icon", "AsyncImage", "ProgressRing"}
+)
 BLANK_UNSAFE_PARENT_COMPONENTS = BUTTON_CONTAINER_COMPONENTS | STACK_RENDERED_COMPONENTS | {"ListItem", "Stack"}
-PAGE_DRIVEN_FONT_SCALE = Decimal("0.866")
 PAGE_DRIVEN_BASELINE_PX = Decimal("3")
 PAGE_DRIVEN_BASELINE_VP = Decimal("0.85")
 PAGE_DRIVEN_RASTER_PIXEL_VP = Decimal("0.285")
@@ -115,19 +129,40 @@ class ArkUIPageError(RuntimeError):
     pass
 
 
+def runtime_overlay_style_path_allowed(method: str, path: str) -> bool:
+    if not path.startswith("style."):
+        return False
+    if method in {"business_component_id", "child_source_anchor"}:
+        return path.startswith("style.state.")
+    return True
+
+
+def is_direct_native_wrapper(
+    target: dict[str, Any], descendant: dict[str, Any]
+) -> bool:
+    source = target.get("source")
+    return (
+        descendant.get("parent_id") == target.get("id")
+        and isinstance(source, dict)
+        and source.get("custom_component") is True
+        and descendant.get("type") in BUTTON_CONTAINER_COMPONENTS
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate one candidate ArkUI page from an exact Compose component closure."
+        description="Generate one candidate ArkUI page from one source-generated version_json."
     )
-    parser.add_argument("--contract", required=True, type=Path)
     parser.add_argument("--target", required=True, type=Path)
     parser.add_argument("--module", default="entry")
-    parser.add_argument("--root-source", required=True)
-    parser.add_argument("--root-composable", required=True)
     parser.add_argument(
-        "--android-page-json",
+        "--page-json",
+        required=True,
         type=Path,
-        help="optional Android page-snapshot.v2 whose proven visual facts override static visual defaults",
+        help=(
+            "the single source-generated Lanhu version_json containing the complete component "
+            "tree, layout relationships, styles, and provenance"
+        ),
     )
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
@@ -234,6 +269,399 @@ def canonical_sha256(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def normalize_source_component_tree(value: Any) -> dict[str, Any]:
+    required_fields = {
+        "schema", "definitions", "root_ids", "business_root_ids", "business_component_ids",
+        "third_party_component_ids", "components"
+    }
+    optional_fields = {"layout_relationships"}
+    if (
+        not isinstance(value, dict)
+        or not required_fields.issubset(value)
+        or set(value) - required_fields - optional_fields
+    ):
+        raise ArkUIPageError("Android page JSON source component tree is malformed")
+    if value.get("schema") != "android-to-harmony.source-component-tree.v2":
+        raise ArkUIPageError("Android page JSON source component tree schema is unsupported")
+    raw_roots = value.get("root_ids")
+    raw_business_roots = value.get("business_root_ids")
+    raw_business_components = value.get("business_component_ids")
+    raw_third_party_components = value.get("third_party_component_ids")
+    raw_definitions = value.get("definitions")
+    raw_components = value.get("components")
+    if (
+        not isinstance(raw_roots, list)
+        or not isinstance(raw_business_roots, list)
+        or not isinstance(raw_business_components, list)
+        or not isinstance(raw_third_party_components, list)
+        or not isinstance(raw_definitions, list)
+        or not isinstance(raw_components, list)
+        or len(raw_definitions) > 10000
+        or len(raw_components) > 10000
+    ):
+        raise ArkUIPageError("Android page JSON source component tree is malformed")
+    try:
+        root_ids = [require_token(item, "Android page source root id") for item in raw_roots]
+        business_root_ids = [
+            require_token(item, "Android page business root id")
+            for item in raw_business_roots
+        ]
+        business_component_ids = [
+            require_token(item, "Android page business component id")
+            for item in raw_business_components
+        ]
+        third_party_component_ids = [
+            require_token(item, "Android page third-party component id")
+            for item in raw_third_party_components
+        ]
+    except PageSnapshotError as error:
+        raise ArkUIPageError(str(error)) from error
+    if (
+        len(root_ids) != len(set(root_ids))
+        or len(business_root_ids) != len(set(business_root_ids))
+        or len(business_component_ids) != len(set(business_component_ids))
+        or len(third_party_component_ids) != len(set(third_party_component_ids))
+    ):
+        raise ArkUIPageError("Android page JSON source component tree repeats an identity")
+    definitions: list[dict[str, Any]] = []
+    definition_ids: set[str] = set()
+    allowed_component_kinds = {
+        "project_component", "compose_primitive", "third_party_component",
+        "platform_component", "custom_draw",
+    }
+    for raw in raw_definitions:
+        if not isinstance(raw, dict) or set(raw) != {
+            "id", "type", "component_kind", "identity", "dependency", "declared_from"
+        }:
+            raise ArkUIPageError("Android page JSON source component definition is malformed")
+        try:
+            item_id = require_token(raw.get("id"), "Android page source definition id")
+            item_type = require_token(raw.get("type"), "Android page source definition type")
+        except PageSnapshotError as error:
+            raise ArkUIPageError(str(error)) from error
+        if item_id in definition_ids or raw.get("component_kind") not in allowed_component_kinds:
+            raise ArkUIPageError("Android page JSON source component definition is inconsistent")
+        identity = raw.get("identity")
+        declared_from = raw.get("declared_from")
+        dependency = raw.get("dependency")
+        if (
+            not isinstance(identity, dict)
+            or set(identity) != {"status", "qualified_name", "source", "symbol"}
+            or not isinstance(identity.get("status"), str)
+            or not isinstance(identity.get("symbol"), str)
+            or not isinstance(declared_from, dict)
+            or set(declared_from) != {"source", "composable", "package"}
+            or not isinstance(declared_from.get("source"), str)
+            or not isinstance(declared_from.get("composable"), str)
+        ):
+            raise ArkUIPageError("Android page JSON source component definition identity is malformed")
+        if raw["component_kind"] == "third_party_component":
+            if (
+                not isinstance(dependency, dict)
+                or set(dependency) != {"qualified_name", "package_root", "version", "version_status"}
+                or not isinstance(dependency.get("qualified_name"), str)
+                or not isinstance(dependency.get("package_root"), str)
+                or dependency.get("version") is not None
+                or dependency.get("version_status") != "requires_resolved_dependency_graph"
+            ):
+                raise ArkUIPageError("Android page JSON third-party component dependency is malformed")
+        elif dependency is not None:
+            raise ArkUIPageError("Android page JSON non-third-party component has a dependency record")
+        definition_ids.add(item_id)
+        definitions.append(copy.deepcopy(raw))
+    components: list[dict[str, Any]] = []
+    component_ids: set[str] = set()
+    for raw in raw_components:
+        required_component_fields = {
+            "id", "semantic_key", "type", "definition_id", "component_kind", "node_kind", "parent_id", "children_ids",
+            "business_parent_id", "business_owner_id", "business_children_ids", "sibling_index",
+            "capture_membership", "source", "arguments", "modifiers", "style", "provenance",
+            "unresolved", "runtime_instances", "runtime_descendant_ids",
+        }
+        optional_component_fields = {
+            "slot_argument_name", "slot_invocation", "required_facts"
+        }
+        if (
+            not isinstance(raw, dict)
+            or not required_component_fields.issubset(raw)
+            or set(raw) - required_component_fields - optional_component_fields
+        ):
+            raise ArkUIPageError("Android page JSON source component tree contains a malformed component")
+        try:
+            component_id = require_token(raw.get("id"), "Android page source component id")
+            semantic_key = require_token(raw.get("semantic_key"), "Android page source semantic key")
+            component_type = require_token(raw.get("type"), "Android page source component type")
+            component_definition_id = require_token(
+                raw.get("definition_id"), "Android page source component definition id"
+            )
+            parent_id = raw.get("parent_id")
+            if parent_id is not None:
+                parent_id = require_token(parent_id, "Android page source parent id")
+            children_ids = [
+                require_token(item, "Android page source child id")
+                for item in raw.get("children_ids", [])
+            ]
+            business_parent_id = raw.get("business_parent_id")
+            if business_parent_id is not None:
+                business_parent_id = require_token(
+                    business_parent_id, "Android page business parent id"
+                )
+            business_owner_id = raw.get("business_owner_id")
+            if business_owner_id is not None:
+                business_owner_id = require_token(
+                    business_owner_id, "Android page business owner id"
+                )
+            business_children_ids = [
+                require_token(item, "Android page business child id")
+                for item in raw.get("business_children_ids", [])
+            ]
+            runtime_descendant_ids = [
+                require_token(item, "Android page source runtime descendant id")
+                for item in raw.get("runtime_descendant_ids", [])
+            ]
+        except PageSnapshotError as error:
+            raise ArkUIPageError(str(error)) from error
+        if component_id in component_ids:
+            raise ArkUIPageError("Android page JSON source component tree repeats a component id")
+        component_ids.add(component_id)
+        if (
+            len(children_ids) != len(set(children_ids))
+            or len(business_children_ids) != len(set(business_children_ids))
+            or len(runtime_descendant_ids) != len(set(runtime_descendant_ids))
+        ):
+            raise ArkUIPageError("Android page JSON source component tree repeats a child id")
+        node_kind = raw.get("node_kind")
+        if node_kind not in {
+            "screen_root", "project_component", "third_party_component", "platform_component",
+            "custom_draw", "content_slot", "layout_primitive", "visual_primitive"
+        }:
+            raise ArkUIPageError("Android page JSON source component node kind is unsupported")
+        component_kind = raw.get("component_kind")
+        if component_kind not in allowed_component_kinds or component_definition_id not in definition_ids:
+            raise ArkUIPageError("Android page JSON source component definition reference is inconsistent")
+        sibling_index = raw.get("sibling_index")
+        if type(sibling_index) is not int or sibling_index < 0:
+            raise ArkUIPageError("Android page JSON source component sibling index is malformed")
+        if raw.get("capture_membership") not in {"observed_instance", "candidate_active_descendant"}:
+            raise ArkUIPageError("Android page JSON source component capture membership is unsupported")
+        source = raw.get("source")
+        if (
+            not isinstance(source, dict)
+            or not isinstance(source.get("source"), str)
+            or not isinstance(source.get("composable"), str)
+            or not isinstance(source.get("call_id"), str)
+        ):
+            raise ArkUIPageError("Android page JSON source component provenance is malformed")
+        instances = raw.get("runtime_instances")
+        if not isinstance(instances, list):
+            raise ArkUIPageError("Android page JSON source runtime instances are malformed")
+        for instance in instances:
+            if (
+                not isinstance(instance, dict)
+                or set(instance) != {"runtime_component_id", "mapping_method", "mapping_status"}
+                or instance.get("mapping_status") not in {"proven", "candidate"}
+            ):
+                raise ArkUIPageError("Android page JSON source runtime instance is malformed")
+            try:
+                require_token(instance.get("runtime_component_id"), "Android page runtime component id")
+                require_token(instance.get("mapping_method"), "Android page runtime mapping method")
+            except PageSnapshotError as error:
+                raise ArkUIPageError(str(error)) from error
+        try:
+            normalized_style = normalize_style(raw.get("style"), f"Android page source component {component_id}.style")
+            normalized_provenance = normalize_provenance(
+                raw.get("provenance"), f"Android page source component {component_id}.provenance"
+            )
+            normalized_unresolved = normalize_unresolved(
+                raw.get("unresolved"), f"Android page source component {component_id}.unresolved"
+            )
+        except PageSnapshotError as error:
+            raise ArkUIPageError(str(error)) from error
+        try:
+            normalized_required_facts = normalize_required_facts(
+                raw.get("required_facts") or [],
+                f"Android page source component {component_id}.required_facts",
+            )
+        except ValueError as error:
+            raise ArkUIPageError(str(error)) from error
+        component = copy.deepcopy(raw)
+        component["definition_id"] = component_definition_id
+        component["component_kind"] = component_kind
+        component["node_kind"] = node_kind
+        component["business_parent_id"] = business_parent_id
+        component["business_owner_id"] = business_owner_id
+        component["business_children_ids"] = business_children_ids
+        component["runtime_descendant_ids"] = runtime_descendant_ids
+        slot_argument_name = raw.get("slot_argument_name")
+        if slot_argument_name is not None:
+            try:
+                slot_argument_name = require_token(
+                    slot_argument_name, "Android page source slot argument name"
+                )
+            except PageSnapshotError as error:
+                raise ArkUIPageError(str(error)) from error
+        slot_invocation = raw.get("slot_invocation")
+        if slot_invocation is not None:
+            if not isinstance(slot_invocation, dict) or set(slot_invocation) != {"name"}:
+                raise ArkUIPageError("Android page source slot invocation is malformed")
+            try:
+                slot_invocation = {
+                    "name": require_token(
+                        slot_invocation.get("name"),
+                        "Android page source slot invocation name",
+                    )
+                }
+            except PageSnapshotError as error:
+                raise ArkUIPageError(str(error)) from error
+        component["slot_argument_name"] = slot_argument_name
+        component["slot_invocation"] = slot_invocation
+        component["style"] = normalized_style
+        component["provenance"] = normalized_provenance
+        component["unresolved"] = normalized_unresolved
+        component["required_facts"] = normalized_required_facts
+        components.append(component)
+    by_id = {item["id"]: item for item in components}
+    if any(root_id not in by_id or by_id[root_id]["parent_id"] is not None for root_id in root_ids):
+        raise ArkUIPageError("Android page JSON source component root is inconsistent")
+    business_id_set = set(business_component_ids)
+    third_party_id_set = set(third_party_component_ids)
+    if any(
+        component_id not in by_id
+        or by_id[component_id]["node_kind"] not in {"screen_root", "project_component"}
+        for component_id in business_component_ids
+    ):
+        raise ArkUIPageError("Android page JSON business component index is inconsistent")
+    if any(
+        component_id not in by_id
+        or by_id[component_id]["component_kind"] != "third_party_component"
+        or by_id[component_id]["node_kind"] != "third_party_component"
+        for component_id in third_party_component_ids
+    ):
+        raise ArkUIPageError("Android page JSON third-party component index is inconsistent")
+    if third_party_id_set != {
+        item["id"] for item in components if item["component_kind"] == "third_party_component"
+    }:
+        raise ArkUIPageError("Android page JSON third-party component index is incomplete")
+    if any(
+        root_id not in business_id_set or by_id[root_id]["business_parent_id"] is not None
+        for root_id in business_root_ids
+    ):
+        raise ArkUIPageError("Android page JSON business component root is inconsistent")
+    for component in components:
+        parent_id = component["parent_id"]
+        if parent_id is not None and parent_id not in by_id:
+            raise ArkUIPageError("Android page JSON source component parent is unknown")
+        if any(child_id not in by_id for child_id in component["children_ids"]):
+            raise ArkUIPageError("Android page JSON source component child is unknown")
+        if parent_id is not None and component["id"] not in by_id[parent_id]["children_ids"]:
+            raise ArkUIPageError("Android page JSON source component relationship is inconsistent")
+        for index, child_id in enumerate(component["children_ids"]):
+            child = by_id[child_id]
+            if child["parent_id"] != component["id"] or child["sibling_index"] != index:
+                raise ArkUIPageError("Android page JSON source component relationship is inconsistent")
+        business_parent_id = component["business_parent_id"]
+        if business_parent_id is not None and business_parent_id not in business_id_set:
+            raise ArkUIPageError("Android page JSON source business parent is inconsistent")
+        if component["node_kind"] in {"screen_root", "project_component"}:
+            if component["business_owner_id"] != component["id"]:
+                raise ArkUIPageError("Android page JSON business component owner is inconsistent")
+        elif component["business_owner_id"] not in business_id_set:
+            raise ArkUIPageError("Android page JSON source business owner is inconsistent")
+        for child_id in component["business_children_ids"]:
+            if child_id not in business_id_set or by_id[child_id]["business_parent_id"] != component["id"]:
+                raise ArkUIPageError("Android page JSON source business relationship is inconsistent")
+    raw_layout_relationships = value.get("layout_relationships", [])
+    if not isinstance(raw_layout_relationships, list) or len(raw_layout_relationships) > 10000:
+        raise ArkUIPageError("Android page JSON source layout relationships are malformed")
+    layout_relationships: list[dict[str, Any]] = []
+    relationship_ids: set[str] = set()
+    for raw in raw_layout_relationships:
+        if not isinstance(raw, dict) or set(raw) != {
+            "id", "container_id", "container_type", "subject_id", "subject_reference",
+            "composition", "draw_order", "source_expression", "branch_resolution",
+            "active_constraints", "unresolved",
+        }:
+            raise ArkUIPageError("Android page JSON source layout relationship is malformed")
+        try:
+            relationship_id = require_token(raw.get("id"), "Android page layout relationship id")
+            container_id = require_token(raw.get("container_id"), "Android page layout container id")
+            subject_id = require_token(raw.get("subject_id"), "Android page layout subject id")
+            subject_reference = require_token(
+                raw.get("subject_reference"), "Android page layout subject reference"
+            )
+        except PageSnapshotError as error:
+            raise ArkUIPageError(str(error)) from error
+        if relationship_id in relationship_ids:
+            raise ArkUIPageError("Android page JSON source layout relationship repeats an id")
+        relationship_ids.add(relationship_id)
+        if (
+            raw.get("container_type") != "ConstraintLayout"
+            or container_id not in by_id
+            or by_id[container_id]["type"] != "ConstraintLayout"
+            or subject_id not in by_id
+            or by_id[subject_id]["parent_id"] != container_id
+            or raw.get("composition") not in {"constraint", "overlay"}
+            or type(raw.get("draw_order")) is not int
+            or raw["draw_order"] != by_id[subject_id]["sibling_index"]
+            or not isinstance(raw.get("source_expression"), str)
+            or raw.get("branch_resolution") not in {
+                "missing_constraint_body", "not_conditional", "resolved_condition",
+                "unresolved_condition",
+            }
+            or not isinstance(raw.get("active_constraints"), list)
+            or not isinstance(raw.get("unresolved"), list)
+        ):
+            raise ArkUIPageError("Android page JSON source layout relationship is inconsistent")
+        constraints: list[dict[str, Any]] = []
+        for constraint in raw["active_constraints"]:
+            if not isinstance(constraint, dict) or set(constraint) != {
+                "kind", "subject_anchor", "target_id", "target_reference", "target_anchor",
+                "margin_expression", "margin_dp",
+            }:
+                raise ArkUIPageError("Android page JSON source layout constraint is malformed")
+            if (
+                constraint.get("kind") not in {"link_to", "center_around"}
+                or constraint.get("subject_anchor") not in {
+                    "start", "end", "top", "bottom", "baseline", "center"
+                }
+                or constraint.get("target_anchor") not in {
+                    "start", "end", "top", "bottom", "baseline"
+                }
+                or constraint.get("target_id") not in by_id
+                or not isinstance(constraint.get("target_reference"), str)
+                or constraint.get("margin_expression") is not None
+                and not isinstance(constraint.get("margin_expression"), str)
+                or constraint.get("margin_dp") is not None
+                and not isinstance(constraint.get("margin_dp"), (int, float))
+            ):
+                raise ArkUIPageError("Android page JSON source layout constraint is inconsistent")
+            constraints.append(copy.deepcopy(constraint))
+        unresolved = raw["unresolved"]
+        if any(
+            not isinstance(item, dict)
+            or set(item) != {"expression", "reason"}
+            or not isinstance(item.get("expression"), str)
+            or not isinstance(item.get("reason"), str)
+            for item in unresolved
+        ):
+            raise ArkUIPageError("Android page JSON source layout unresolved record is malformed")
+        relationship = copy.deepcopy(raw)
+        relationship["active_constraints"] = constraints
+        layout_relationships.append(relationship)
+    return {
+        "schema": value["schema"],
+        "definitions": definitions,
+        "by_definition_id": {item["id"]: item for item in definitions},
+        "root_ids": root_ids,
+        "business_root_ids": business_root_ids,
+        "business_component_ids": business_component_ids,
+        "third_party_component_ids": third_party_component_ids,
+        "layout_relationships": layout_relationships,
+        "components": components,
+        "by_id": by_id,
+    }
+
+
 def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
     if path is None:
         return None
@@ -264,6 +692,7 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
     optional_fields = {
         "inactive_source_components",
         "runtime_elided_source_components",
+        "source_component_tree",
     }
     if (
         not isinstance(payload, dict)
@@ -382,7 +811,90 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
             )
         except PageSnapshotError as error:
             raise ArkUIPageError(str(error)) from error
+        raw_custom_draw = raw.get("custom_draw")
+        custom_draw = None
+        if raw_custom_draw is not None:
+            expected_custom_draw_fields = {
+                "kind", "value", "total", "start_angle_degrees", "stroke_width_dp",
+                "track_color", "active_color",
+            }
+            if (
+                not isinstance(raw_custom_draw, dict)
+                or set(raw_custom_draw) != expected_custom_draw_fields
+                or raw_custom_draw.get("kind") != "ring_progress"
+                or type(raw_custom_draw.get("value")) not in {int, float}
+                or type(raw_custom_draw.get("total")) not in {int, float}
+                or type(raw_custom_draw.get("start_angle_degrees")) not in {int, float}
+                or type(raw_custom_draw.get("stroke_width_dp")) not in {int, float}
+                or not 0 <= float(raw_custom_draw["value"]) <= float(raw_custom_draw["total"])
+                or float(raw_custom_draw["total"]) <= 0
+                or float(raw_custom_draw["stroke_width_dp"]) <= 0
+                or not isinstance(raw_custom_draw.get("track_color"), str)
+                or re.fullmatch(r"#[0-9A-Fa-f]{8}", raw_custom_draw["track_color"]) is None
+                or not isinstance(raw_custom_draw.get("active_color"), str)
+                or re.fullmatch(r"#[0-9A-Fa-f]{8}", raw_custom_draw["active_color"]) is None
+            ):
+                raise ArkUIPageError(
+                    f"Android page component {component_id} custom draw is malformed"
+                )
+            custom_draw = copy.deepcopy(raw_custom_draw)
         source = raw.get("source")
+        raw_component_context = raw.get("component_context")
+        component_context: dict[str, Any] | None = None
+        if raw_component_context is not None:
+            if not isinstance(raw_component_context, dict) or set(raw_component_context) != {
+                "status", "method", "source_component_id", "business_component_id",
+                "business_component_path", "evidence_runtime_ids",
+            }:
+                raise ArkUIPageError(
+                    f"Android page component {component_id} component context is malformed"
+                )
+            if raw_component_context.get("status") not in {"proven", "candidate", "unbound"}:
+                raise ArkUIPageError(
+                    f"Android page component {component_id} component context status is unsupported"
+                )
+            try:
+                context_source_id = raw_component_context.get("source_component_id")
+                if context_source_id is not None:
+                    context_source_id = require_token(
+                        context_source_id, "Android page component context source id"
+                    )
+                context_business_id = raw_component_context.get("business_component_id")
+                if context_business_id is not None:
+                    context_business_id = require_token(
+                        context_business_id, "Android page component context business id"
+                    )
+                context_business_path = [
+                    require_token(item, "Android page component context business path id")
+                    for item in raw_component_context.get("business_component_path", [])
+                ]
+                context_evidence_ids = [
+                    require_token(item, "Android page component context evidence runtime id")
+                    for item in raw_component_context.get("evidence_runtime_ids", [])
+                ]
+                context_method = require_token(
+                    raw_component_context.get("method"),
+                    "Android page component context method",
+                )
+            except PageSnapshotError as error:
+                raise ArkUIPageError(str(error)) from error
+            if (
+                len(context_business_path) != len(set(context_business_path))
+                or len(context_evidence_ids) != len(set(context_evidence_ids))
+                or context_business_id != (context_business_path[-1] if context_business_path else None)
+                or (raw_component_context["status"] == "unbound") != (context_business_id is None)
+            ):
+                raise ArkUIPageError(
+                    f"Android page component {component_id} component context is inconsistent"
+                )
+            component_context = {
+                "status": raw_component_context["status"],
+                "method": context_method,
+                "source_component_id": context_source_id,
+                "business_component_id": context_business_id,
+                "business_component_path": context_business_path,
+                "evidence_runtime_ids": context_evidence_ids,
+            }
         parent_id = raw.get("parent_id")
         children_ids = raw.get("children_ids")
         sibling_index = raw.get("sibling_index")
@@ -412,7 +924,8 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
                 f"Android page component {component_id} sibling_index is malformed"
             )
         if parent_mapping not in {
-            "smallest-containing-runtime-component", "source-semantic-ancestor"
+            "smallest-containing-runtime-component", "source-semantic-ancestor",
+            "runtime-semantic-ancestor",
         }:
             raise ArkUIPageError(
                 f"Android page component {component_id} parent_mapping is unsupported"
@@ -427,6 +940,15 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
                         f"Android page component {component_id} source attribute has no call_id"
                     )
                 call_ids.append(attribute["call_id"])
+            source_mapping = raw.get("source_mapping")
+            mapped_call_id = (
+                source_mapping.get("source_call_id")
+                if isinstance(source_mapping, dict)
+                and source_mapping.get("status") in {"proven", "candidate"}
+                else None
+            )
+            if isinstance(mapped_call_id, str):
+                call_ids.append(mapped_call_id)
         component = {
             "id": component_id,
             "type": component_type,
@@ -447,8 +969,78 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
             "style": style,
             "provenance": provenance,
             "unresolved": unresolved,
+            "custom_draw": custom_draw,
             "call_ids": sorted(set(call_ids)),
+            "component_context": component_context,
+            "source": copy.deepcopy(source),
         }
+        raw_source_layout_bounds = raw.get("source_layout_bounds_dp")
+        if raw_source_layout_bounds is not None:
+            if (
+                component_context is None
+                or component_context["status"] != "candidate"
+                or component_context["method"] != "source_layout_projection"
+                or not isinstance(raw_source_layout_bounds, dict)
+                or set(raw_source_layout_bounds) != {"x", "y", "width", "height"}
+                or any(
+                    type(raw_source_layout_bounds[field]) not in {int, float}
+                    for field in raw_source_layout_bounds
+                )
+                or any(
+                    not math.isfinite(float(raw_source_layout_bounds[field]))
+                    for field in raw_source_layout_bounds
+                )
+                or raw_source_layout_bounds["width"] <= 0
+                or raw_source_layout_bounds["height"] <= 0
+            ):
+                raise ArkUIPageError(
+                    f"Android page component {component_id} source layout bounds are malformed"
+                )
+            expected_visible_bounds = {
+                "x": max(
+                    float(raw_source_layout_bounds["x"]),
+                    float(content_bounds_dp["x"]),
+                ),
+                "y": max(
+                    float(raw_source_layout_bounds["y"]),
+                    float(content_bounds_dp["y"]),
+                ),
+                "width": min(
+                    float(raw_source_layout_bounds["x"])
+                    + float(raw_source_layout_bounds["width"]),
+                    float(content_bounds_dp["x"])
+                    + float(content_bounds_dp["width"]),
+                )
+                - max(
+                    float(raw_source_layout_bounds["x"]),
+                    float(content_bounds_dp["x"]),
+                ),
+                "height": min(
+                    float(raw_source_layout_bounds["y"])
+                    + float(raw_source_layout_bounds["height"]),
+                    float(content_bounds_dp["y"])
+                    + float(content_bounds_dp["height"]),
+                )
+                - max(
+                    float(raw_source_layout_bounds["y"]),
+                    float(content_bounds_dp["y"]),
+                ),
+            }
+            if (
+                expected_visible_bounds["width"] <= 0
+                or expected_visible_bounds["height"] <= 0
+                or any(
+                    abs(float(bounds_dp[field]) - expected_visible_bounds[field]) > 0.002
+                    for field in ("x", "y", "width", "height")
+                )
+            ):
+                raise ArkUIPageError(
+                    f"Android page component {component_id} source layout bounds do not match its clipped visible bounds"
+                )
+            component["source_layout_bounds_dp"] = {
+                field: float(raw_source_layout_bounds[field])
+                for field in ("x", "y", "width", "height")
+            }
         if component["semantic_key"] is not None:
             try:
                 component["semantic_key"] = require_token(
@@ -533,6 +1125,30 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
             "source_call_id": call_id,
             "reason": reason,
         })
+    source_component_tree = (
+        normalize_source_component_tree(payload["source_component_tree"])
+        if "source_component_tree" in payload
+        else None
+    )
+    if source_component_tree is not None:
+        source_tree_by_id = source_component_tree["by_id"]
+        business_ids = set(source_component_tree["business_component_ids"])
+        runtime_ids = set(by_id)
+        for component in components:
+            context = component["component_context"]
+            if context is None:
+                raise ArkUIPageError(
+                    "Android page JSON with a source component tree requires component context"
+                )
+            if (
+                context["source_component_id"] is not None
+                and context["source_component_id"] not in source_tree_by_id
+            ):
+                raise ArkUIPageError("Android page component context source id is unknown")
+            if any(item not in business_ids for item in context["business_component_path"]):
+                raise ArkUIPageError("Android page component context business path is unknown")
+            if any(item not in runtime_ids for item in context["evidence_runtime_ids"]):
+                raise ArkUIPageError("Android page component context evidence runtime id is unknown")
     return {
         "file": requested.name,
         "byte_count": byte_count,
@@ -560,7 +1176,1488 @@ def load_android_page_input(path: Path | None) -> dict[str, Any] | None:
             for call_id, owners in call_id_owners.items()
         },
         "runtime_elided_source_components": runtime_elided_source_components,
+        "source_component_tree": source_component_tree,
     }
+
+
+def load_bounded_json_object(path: Path, label: str) -> tuple[dict[str, Any], Path, int]:
+    requested = Path(os.path.abspath(os.path.expanduser(str(path))))
+    if requested.is_symlink() or not requested.is_file():
+        raise ArkUIPageError(f"{label} must be an existing non-symbolic-link file")
+    byte_count = requested.stat().st_size
+    if byte_count <= 0 or byte_count > PAGE_INPUT_MAX_BYTES:
+        raise ArkUIPageError(f"{label} must contain 1 byte to 10 MiB")
+    try:
+        payload = json.loads(requested.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ArkUIPageError(f"{label} is invalid: {error}") from error
+    if not isinstance(payload, dict):
+        raise ArkUIPageError(f"{label} must contain a JSON object")
+    return payload, requested, byte_count
+
+
+def require_lanhu_number(value: Any, label: str, *, positive: bool = False) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ArkUIPageError(f"{label} must be numeric")
+    number = float(value)
+    if not math.isfinite(number) or (positive and number <= 0):
+        qualifier = "positive" if positive else "finite"
+        raise ArkUIPageError(f"{label} must be {qualifier}")
+    return number
+
+
+def require_lanhu_frame(
+    value: Any,
+    label: str,
+    *,
+    positive_dimensions: bool = False,
+) -> dict[str, float]:
+    if not isinstance(value, dict):
+        raise ArkUIPageError(f"{label} has no frame")
+    frame = {
+        field: require_lanhu_number(value.get(field), f"{label}.{field}")
+        for field in ("left", "top", "width", "height")
+    }
+    if frame["width"] < 0 or frame["height"] < 0:
+        raise ArkUIPageError(f"{label} frame dimensions must not be negative")
+    if positive_dimensions and (frame["width"] <= 0 or frame["height"] <= 0):
+        raise ArkUIPageError(f"{label} frame dimensions must be positive")
+    return frame
+
+
+def lanhu_color(value: Any) -> str | None:
+    if isinstance(value, str) and re.fullmatch(r"#[0-9A-Fa-f]{8}", value):
+        return value.upper()
+    if not isinstance(value, dict):
+        return None
+    channels = [value.get(name) for name in ("a", "r", "g", "b")]
+    if any(isinstance(channel, bool) or not isinstance(channel, (int, float)) for channel in channels):
+        return None
+    normalized = [float(channel) for channel in channels]
+    if any(not math.isfinite(channel) or channel < 0 or channel > 1 for channel in normalized):
+        return None
+    return "#" + "".join(f"{round(channel * 255):02X}" for channel in normalized)
+
+
+def validate_lanhu_style(value: Any, label: str) -> None:
+    required = {
+        "isEnabled", "opacity", "blendMode", "fills", "borders", "shadows", "blurs"
+    }
+    if not isinstance(value, dict) or not required.issubset(value):
+        missing = sorted(required - set(value) if isinstance(value, dict) else required)
+        raise ArkUIPageError(f"{label} is missing required fields: {missing}")
+    if type(value["isEnabled"]) is not bool:
+        raise ArkUIPageError(f"{label}.isEnabled must be a boolean")
+    opacity = require_lanhu_number(value["opacity"], f"{label}.opacity")
+    if not 0 <= opacity <= 1:
+        raise ArkUIPageError(f"{label}.opacity must be between 0 and 1")
+    if type(value["blendMode"]) is not int:
+        raise ArkUIPageError(f"{label}.blendMode must be an integer")
+    for field in ("fills", "borders", "shadows", "blurs"):
+        if not isinstance(value[field], list):
+            raise ArkUIPageError(f"{label}.{field} must be a list")
+
+
+def validate_lanhu_layout_rules(value: Any, label: str) -> None:
+    if not isinstance(value, list) or len(value) > 1000:
+        raise ArkUIPageError(f"{label} must be a bounded list")
+    for index, rule in enumerate(value):
+        rule_label = f"{label}[{index}]"
+        if not isinstance(rule, dict):
+            raise ArkUIPageError(f"{rule_label} must be an object")
+        modifier_index = rule.get("source_modifier_index")
+        if type(modifier_index) is not int or modifier_index < 0:
+            raise ArkUIPageError(
+                f"{rule_label}.source_modifier_index must be a non-negative integer"
+            )
+        kind = rule.get("kind")
+        if kind == "sizing":
+            axes = rule.get("axes")
+            mode = rule.get("mode")
+            if (
+                not isinstance(axes, list)
+                or not axes
+                or len(axes) != len(set(axes))
+                or any(axis not in {"width", "height"} for axis in axes)
+                or mode not in {"fill_parent", "match_parent", "wrap_content"}
+            ):
+                raise ArkUIPageError(f"{rule_label} sizing rule is malformed")
+            if mode in {"fill_parent", "match_parent"}:
+                fraction = require_lanhu_number(
+                    rule.get("fraction"), f"{rule_label}.fraction"
+                )
+                if not 0 <= fraction <= 1:
+                    raise ArkUIPageError(
+                        f"{rule_label}.fraction must be greater than zero and at most one"
+                    )
+        elif kind == "intrinsic_size":
+            if rule.get("axis") not in {"width", "height"} or rule.get("mode") not in {
+                "min", "max"
+            }:
+                raise ArkUIPageError(f"{rule_label} intrinsic-size rule is malformed")
+        elif kind == "constraints":
+            limits = rule.get("limits")
+            if not isinstance(limits, dict) or not limits or set(limits) - {"minWidth", "maxWidth", "minHeight", "maxHeight"}:
+                raise ArkUIPageError(f"{rule_label} constraints are malformed")
+            for key, value in limits.items():
+                if require_lanhu_number(value, f"{rule_label}.{key}") < 0:
+                    raise ArkUIPageError(f"{rule_label}.{key} must be non-negative")
+            for axis in ("Width", "Height"):
+                if limits.get("min" + axis, 0) > limits.get("max" + axis, float("inf")):
+                    raise ArkUIPageError(f"{rule_label} minimum exceeds maximum")
+        elif kind == "scroll":
+            if rule.get("axis") not in {"vertical", "horizontal"} or type(rule.get("enabled")) is not bool:
+                raise ArkUIPageError(f"{rule_label} scroll rule is malformed")
+        elif kind == "weight":
+            value_number = require_lanhu_number(
+                rule.get("value"), f"{rule_label}.value"
+            )
+            if value_number <= 0 or type(rule.get("fill")) is not bool:
+                raise ArkUIPageError(f"{rule_label} weight rule is malformed")
+        elif kind == "offset":
+            if "x" not in rule and "y" not in rule:
+                raise ArkUIPageError(f"{rule_label} offset rule has no axis")
+            for axis in ("x", "y"):
+                if axis not in rule:
+                    continue
+                offset = rule[axis]
+                if not isinstance(offset, dict):
+                    raise ArkUIPageError(f"{rule_label}.{axis} is malformed")
+                offset_kind = offset.get("kind")
+                if offset_kind == "dp":
+                    require_lanhu_number(offset.get("value"), f"{rule_label}.{axis}.value")
+                elif offset_kind == "parent_fraction":
+                    if offset.get("axis") not in {"width", "height"}:
+                        raise ArkUIPageError(f"{rule_label}.{axis}.axis is malformed")
+                    require_lanhu_number(
+                        offset.get("fraction"), f"{rule_label}.{axis}.fraction"
+                    )
+                else:
+                    raise ArkUIPageError(f"{rule_label}.{axis}.kind is unsupported")
+        elif kind == "constraint_reference":
+            try:
+                require_token(rule.get("reference"), f"{rule_label}.reference")
+            except PageSnapshotError as error:
+                raise ArkUIPageError(str(error)) from error
+        elif kind == "alignment":
+            if not isinstance(rule.get("value"), str) or re.fullmatch(
+                r"Alignment\.[A-Za-z]+", rule["value"]
+            ) is None:
+                raise ArkUIPageError(f"{rule_label} alignment rule is malformed")
+        elif kind == "z_index":
+            require_lanhu_number(rule.get("value"), f"{rule_label}.value")
+        else:
+            raise ArkUIPageError(f"{rule_label}.kind is unsupported")
+
+
+def validate_lanhu_version_document(version: dict[str, Any]) -> None:
+    if set(version) != LANHU_VERSION_KEYS:
+        raise ArkUIPageError("Lanhu version_json must contain exactly meta/assets/artboard")
+    meta = version.get("meta")
+    if not isinstance(meta, dict):
+        raise ArkUIPageError("Lanhu version_json meta is malformed")
+    require_lanhu_number(
+        meta.get("sliceScale"), "Lanhu version_json sliceScale", positive=True
+    )
+    if not isinstance(version.get("assets"), list):
+        raise ArkUIPageError("Lanhu version_json assets must be a list")
+    if not all(isinstance(asset, str) and asset for asset in version["assets"]):
+        raise ArkUIPageError("Lanhu version_json assets must contain non-empty strings")
+    artboard = version.get("artboard")
+    artboard_required = {
+        "id", "name", "type", "visible", "clipped", "opacity", "frame",
+        "realFrame", "combinedFrame", "style", "layers",
+    }
+    if not isinstance(artboard, dict) or not artboard_required.issubset(artboard):
+        missing = sorted(
+            artboard_required - set(artboard) if isinstance(artboard, dict) else artboard_required
+        )
+        raise ArkUIPageError(f"Lanhu artboard is missing required fields: {missing}")
+    for field in ("id", "name", "type"):
+        try:
+            require_token(artboard[field], f"Lanhu artboard {field}")
+        except PageSnapshotError as error:
+            raise ArkUIPageError(str(error)) from error
+    if type(artboard["visible"]) is not bool or type(artboard["clipped"]) is not bool:
+        raise ArkUIPageError("Lanhu artboard visible/clipped fields must be booleans")
+    artboard_opacity = require_lanhu_number(artboard["opacity"], "Lanhu artboard opacity")
+    if not 0 <= artboard_opacity <= 1:
+        raise ArkUIPageError("Lanhu artboard opacity must be between 0 and 1")
+    for field in ("frame", "realFrame", "combinedFrame"):
+        require_lanhu_frame(
+            artboard[field], f"Lanhu artboard {field}", positive_dimensions=True
+        )
+    validate_lanhu_style(artboard["style"], "Lanhu artboard style")
+    if not isinstance(artboard["layers"], list) or not artboard["layers"]:
+        raise ArkUIPageError("Lanhu artboard layers must be a non-empty list")
+
+    layer_required = {
+        "id", "name", "type", "visible", "clipped", "isMask", "opacity", "rotation",
+        "frame", "realFrame", "combinedFrame", "radius", "paths", "style",
+        "hasExportImage", "hasExportDDSImage", "layers",
+    }
+
+    def visit(layer: Any) -> None:
+        if not isinstance(layer, dict) or not layer_required.issubset(layer):
+            missing = sorted(
+                layer_required - set(layer) if isinstance(layer, dict) else layer_required
+            )
+            raise ArkUIPageError(f"Lanhu layer is missing required fields: {missing}")
+        layer_id = layer.get("id")
+        for field in ("id", "name", "type"):
+            try:
+                require_token(layer[field], f"Lanhu layer {layer_id} {field}")
+            except PageSnapshotError as error:
+                raise ArkUIPageError(str(error)) from error
+        for field in ("visible", "clipped", "isMask", "hasExportImage", "hasExportDDSImage"):
+            if type(layer[field]) is not bool:
+                raise ArkUIPageError(f"Lanhu layer {layer_id}.{field} must be a boolean")
+        opacity = require_lanhu_number(layer["opacity"], f"Lanhu layer {layer_id}.opacity")
+        if not 0 <= opacity <= 1:
+            raise ArkUIPageError(f"Lanhu layer {layer_id}.opacity must be between 0 and 1")
+        require_lanhu_number(layer["rotation"], f"Lanhu layer {layer_id}.rotation")
+        for field in ("frame", "realFrame", "combinedFrame"):
+            require_lanhu_frame(layer[field], f"Lanhu layer {layer_id}.{field}")
+        radius = layer["radius"]
+        radius_fields = {"topLeft", "topRight", "bottomRight", "bottomLeft"}
+        if not isinstance(radius, dict) or set(radius) != radius_fields:
+            raise ArkUIPageError(f"Lanhu layer {layer_id}.radius is malformed")
+        for field in radius_fields:
+            number = require_lanhu_number(radius[field], f"Lanhu layer {layer_id}.radius.{field}")
+            if number < 0:
+                raise ArkUIPageError(f"Lanhu layer {layer_id}.radius.{field} must not be negative")
+        if not isinstance(layer["paths"], list) or not isinstance(layer["layers"], list):
+            raise ArkUIPageError(f"Lanhu layer {layer_id} paths/layers must be lists")
+        validate_lanhu_style(layer["style"], f"Lanhu layer {layer_id}.style")
+        migration = layer.get("migration")
+        if layer["type"] == "text" and not isinstance(layer.get("text"), str):
+            unresolved_text = (
+                isinstance(meta.get("sourceGeneration"), dict)
+                and "text" in layer and layer["text"] is None
+                and isinstance(migration, dict)
+                and isinstance(migration.get("unresolved"), list)
+                and any(isinstance(item, dict) and item.get("path") == "style.content.text"
+                        for item in migration["unresolved"])
+            )
+            if not unresolved_text:
+                raise ArkUIPageError(f"Lanhu text layer {layer_id} must contain text or an explicit unresolved fact")
+        if layer["hasExportImage"] and (
+            not isinstance(layer.get("exportImageUrl"), str)
+            or not layer["exportImageUrl"]
+        ):
+            raise ArkUIPageError(
+                f"Lanhu export-image layer {layer_id} must contain exportImageUrl"
+            )
+        migration = layer.get("migration")
+        if migration is not None:
+            migration_required = {
+                "schema", "componentType", "semanticKey", "source", "style",
+                "customDraw", "provenance", "unresolved", "geometryStatus",
+                "geometryEvidence",
+            }
+            migration_allowed = migration_required | {"requiredFacts", "phaseTrace"}
+            source_generated = isinstance(meta.get("sourceGeneration"), dict)
+            if (
+                not isinstance(migration, dict)
+                or not migration_required.issubset(migration)
+                or not set(migration).issubset(migration_allowed)
+                or source_generated and "requiredFacts" not in migration
+            ):
+                raise ArkUIPageError(f"Lanhu layer {layer_id}.migration is malformed")
+            if migration.get("schema") != "android-to-harmony.lanhu-node.v1":
+                raise ArkUIPageError(f"Lanhu layer {layer_id}.migration schema is unsupported")
+            try:
+                require_token(
+                    migration.get("componentType"),
+                    f"Lanhu layer {layer_id}.migration componentType",
+                )
+                require_token(
+                    migration.get("semanticKey"),
+                    f"Lanhu layer {layer_id}.migration semanticKey",
+                )
+                normalize_style(
+                    migration.get("style"),
+                    f"Lanhu layer {layer_id}.migration.style",
+                )
+                normalize_provenance(
+                    migration.get("provenance"),
+                    f"Lanhu layer {layer_id}.migration.provenance",
+                )
+                normalize_unresolved(
+                    migration.get("unresolved"),
+                    f"Lanhu layer {layer_id}.migration.unresolved",
+                )
+                if "requiredFacts" in migration:
+                    normalize_required_facts(
+                        migration.get("requiredFacts"),
+                        f"Lanhu layer {layer_id}.migration.requiredFacts",
+                    )
+            except PageSnapshotError as error:
+                raise ArkUIPageError(str(error)) from error
+            except ValueError as error:
+                raise ArkUIPageError(str(error)) from error
+            source = migration.get("source")
+            if not isinstance(source, dict) or not isinstance(source.get("attributes"), list):
+                raise ArkUIPageError(f"Lanhu layer {layer_id}.migration.source is malformed")
+            if "layoutRules" in source:
+                validate_lanhu_layout_rules(
+                    source["layoutRules"],
+                    f"Lanhu layer {layer_id}.migration.source.layoutRules",
+                )
+            if migration.get("geometryStatus") not in {
+                "source_resolved", "source_inferred", "unresolved"
+            }:
+                raise ArkUIPageError(
+                    f"Lanhu layer {layer_id}.migration.geometryStatus is unsupported"
+                )
+            geometry_evidence = migration.get("geometryEvidence")
+            if not isinstance(geometry_evidence, list) or not all(
+                isinstance(item, str) for item in geometry_evidence
+            ):
+                raise ArkUIPageError(
+                    f"Lanhu layer {layer_id}.migration.geometryEvidence is malformed"
+                )
+            phase_trace = migration.get("phaseTrace")
+            if phase_trace is not None:
+                phase_names = ("measure", "layout", "draw")
+                if (
+                    not isinstance(phase_trace, dict)
+                    or set(phase_trace) != {"schema", "phaseOrder", *phase_names}
+                    or phase_trace.get("schema")
+                    != "android-to-harmony.render-phase-trace.v1"
+                    or phase_trace.get("phaseOrder") != list(phase_names)
+                ):
+                    raise ArkUIPageError(
+                        f"Lanhu layer {layer_id}.migration.phaseTrace is malformed"
+                    )
+                for phase_name in phase_names:
+                    phase = phase_trace.get(phase_name)
+                    if not isinstance(phase, dict) or phase.get("status") not in {
+                        "consumed", "missing"
+                    }:
+                        raise ArkUIPageError(
+                            f"Lanhu layer {layer_id}.migration.phaseTrace.{phase_name} is malformed"
+                        )
+        for child in layer["layers"]:
+            visit(child)
+
+    for root_layer in artboard["layers"]:
+        visit(root_layer)
+    source_generation = meta.get("sourceGeneration")
+    if isinstance(source_generation, dict) and not isinstance(
+        source_generation.get("layoutRelationships"), list
+    ):
+        raise ArkUIPageError(
+            "source-generated Lanhu version_json requires meta.sourceGeneration.layoutRelationships"
+        )
+
+
+def normalize_lanhu_layout_relationships(
+    value: Any,
+    by_id: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or len(value) > 10000:
+        raise ArkUIPageError("Lanhu source layout relationships are malformed")
+    relationships: list[dict[str, Any]] = []
+    relationship_ids: set[str] = set()
+    expected_fields = {
+        "id", "container_id", "container_type", "subject_id", "subject_reference",
+        "composition", "draw_order", "source_expression", "branch_resolution",
+        "active_constraints", "unresolved",
+    }
+    constraint_fields = {
+        "kind", "subject_anchor", "target_id", "target_reference", "target_anchor",
+        "margin_expression", "margin_dp",
+    }
+    for raw in value:
+        if not isinstance(raw, dict) or set(raw) != expected_fields:
+            raise ArkUIPageError("Lanhu source layout relationship is malformed")
+        relationship_id = str(raw.get("id") or "")
+        container_id = str(raw.get("container_id") or "")
+        subject_id = str(raw.get("subject_id") or "")
+        if not relationship_id or relationship_id in relationship_ids:
+            raise ArkUIPageError("Lanhu source layout relationship id is invalid")
+        relationship_ids.add(relationship_id)
+        if (
+            raw.get("container_type") != "ConstraintLayout"
+            or container_id not in by_id
+            or by_id[container_id]["type"] != "ConstraintLayout"
+            or subject_id not in by_id
+            or by_id[subject_id]["parent_id"] != container_id
+            or raw.get("composition") not in {"constraint", "overlay"}
+            or type(raw.get("draw_order")) is not int
+            or raw["draw_order"] != by_id[subject_id]["sibling_index"]
+            or not isinstance(raw.get("subject_reference"), str)
+            or not raw["subject_reference"]
+            or not isinstance(raw.get("source_expression"), str)
+            or raw.get("branch_resolution") not in {
+                "missing_constraint_body", "not_conditional", "resolved_condition",
+                "unresolved_condition",
+            }
+            or not isinstance(raw.get("active_constraints"), list)
+            or not isinstance(raw.get("unresolved"), list)
+        ):
+            raise ArkUIPageError("Lanhu source layout relationship is inconsistent")
+        constraints: list[dict[str, Any]] = []
+        for raw_constraint in raw["active_constraints"]:
+            if not isinstance(raw_constraint, dict) or set(raw_constraint) != constraint_fields:
+                raise ArkUIPageError("Lanhu source layout constraint is malformed")
+            target_id = raw_constraint.get("target_id")
+            if (
+                raw_constraint.get("kind") not in {"link_to", "center_around"}
+                or raw_constraint.get("subject_anchor") not in {
+                    "start", "end", "top", "bottom", "baseline", "center"
+                }
+                or raw_constraint.get("target_anchor") not in {
+                    "start", "end", "top", "bottom", "baseline"
+                }
+                or target_id not in by_id
+                or not isinstance(raw_constraint.get("target_reference"), str)
+                or raw_constraint.get("margin_expression") is not None
+                and not isinstance(raw_constraint.get("margin_expression"), str)
+                or raw_constraint.get("margin_dp") is not None
+                and not isinstance(raw_constraint.get("margin_dp"), (int, float))
+            ):
+                raise ArkUIPageError("Lanhu source layout constraint is inconsistent")
+            constraints.append(copy.deepcopy(raw_constraint))
+        if any(
+            not isinstance(item, dict)
+            or set(item) != {"expression", "reason"}
+            or not isinstance(item.get("expression"), str)
+            or not isinstance(item.get("reason"), str)
+            for item in raw["unresolved"]
+        ):
+            raise ArkUIPageError("Lanhu source layout unresolved record is malformed")
+        relationship = copy.deepcopy(raw)
+        relationship["active_constraints"] = constraints
+        relationships.append(relationship)
+    return relationships
+
+
+def apply_lanhu_visual_style(
+    style: dict[str, dict[str, Any]],
+    layer: dict[str, Any],
+    scale: float,
+) -> list[str]:
+    applied: list[str] = []
+
+    def assign(section: str, field: str, value: Any) -> None:
+        style[section][field] = value
+        applied.append(f"style.{section}.{field}")
+
+    if type(layer.get("visible")) is bool:
+        assign("state", "visible", layer["visible"])
+    layer_style = layer.get("style")
+    if not isinstance(layer_style, dict):
+        layer_style = {}
+    # Lanhu isEnabled enables a paint style, not Android interaction state.
+    opacity = layer.get("opacity", layer_style.get("opacity"))
+    if isinstance(opacity, (int, float)) and not isinstance(opacity, bool):
+        number = float(opacity)
+        if math.isfinite(number) and 0 <= number <= 1:
+            assign("surface", "alpha", number)
+    if type(layer.get("clipped")) is bool:
+        assign("surface", "clip", layer["clipped"])
+    rotation = layer.get("rotation")
+    if isinstance(rotation, (int, float)) and not isinstance(rotation, bool):
+        number = float(rotation)
+        if math.isfinite(number):
+            assign("transform", "rotation_degrees", number)
+    if isinstance(layer.get("text"), str):
+        assign("content", "text", layer["text"])
+    font_size = layer_style.get("fontSize")
+    if isinstance(font_size, (int, float)) and not isinstance(font_size, bool):
+        number = float(font_size) / scale
+        if math.isfinite(number) and number >= 0:
+            assign("typography", "font_size_sp", number)
+    font_weight = layer_style.get("fontWeight")
+    if type(font_weight) is int and 1 <= font_weight <= 1000:
+        assign("typography", "font_weight", font_weight)
+    font_color = layer_style.get("color")
+    if isinstance(font_color, str) and re.fullmatch(r"#[0-9A-Fa-f]{8}", font_color):
+        assign("typography", "color", font_color.upper())
+    radius = layer.get("radius")
+    radius_fields = {
+        "top_left": "topLeft",
+        "top_right": "topRight",
+        "bottom_right": "bottomRight",
+        "bottom_left": "bottomLeft",
+    }
+    if isinstance(radius, dict) and all(
+        isinstance(radius.get(source), (int, float)) and not isinstance(radius.get(source), bool)
+        for source in radius_fields.values()
+    ):
+        assign(
+            "surface",
+            "corner_radius_dp",
+            {
+                target: float(radius[source]) / scale
+                for target, source in radius_fields.items()
+            },
+        )
+    fills = layer_style.get("fills")
+    if isinstance(fills, list):
+        fill = next(
+            (
+                item
+                for item in fills
+                if isinstance(item, dict)
+                and item.get("type") == "color"
+                and item.get("isEnabled", True) is not False
+            ),
+            None,
+        )
+        color = lanhu_color(fill.get("color")) if isinstance(fill, dict) else None
+        if color is not None:
+            assign("surface", "background", {"type": "solid", "color": color})
+    resource = layer.get("exportImageUrl")
+    if isinstance(resource, str) and RESOURCE_NAME_PATTERN.fullmatch(resource):
+        assign("asset", "resource", resource)
+    return applied
+
+
+def load_lanhu_page_input(
+    version_json_path: Path,
+    component_manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    version, version_path, version_bytes = load_bounded_json_object(
+        version_json_path, "Lanhu version_json"
+    )
+    validate_lanhu_version_document(version)
+    manifest: dict[str, Any] | None = None
+    manifest_path: Path | None = None
+    manifest_bytes = 0
+    if component_manifest_path is not None:
+        manifest, manifest_path, manifest_bytes = load_bounded_json_object(
+            component_manifest_path, "Lanhu component manifest"
+        )
+    meta = version.get("meta")
+    source_generated = isinstance(
+        meta.get("sourceGeneration") if isinstance(meta, dict) else None, dict
+    )
+    scale = require_lanhu_number(
+        meta.get("sliceScale") if isinstance(meta, dict) else None,
+        "Lanhu version_json sliceScale",
+        positive=True,
+    )
+    artboard = version.get("artboard")
+    if not isinstance(artboard, dict):
+        raise ArkUIPageError("Lanhu version_json artboard is malformed")
+    artboard_frame = require_lanhu_frame(
+        artboard.get("frame"), "Lanhu artboard", positive_dimensions=True
+    )
+    viewport_width = round(artboard_frame["width"] / scale, 6)
+    viewport_height = round(artboard_frame["height"] / scale, 6)
+
+    layers_by_id: dict[str, dict[str, Any]] = {}
+    layer_parent: dict[str, str | None] = {}
+    layer_children: dict[str, list[str]] = {}
+    layer_order: list[str] = []
+
+    def visit(layer: Any, parent_id: str | None) -> None:
+        if not isinstance(layer, dict) or not isinstance(layer.get("id"), str):
+            raise ArkUIPageError("every Lanhu version_json layer must have a string id")
+        layer_id = layer["id"]
+        if layer_id in layers_by_id:
+            raise ArkUIPageError(f"duplicate Lanhu version_json layer id: {layer_id}")
+        require_lanhu_frame(layer.get("frame"), f"Lanhu layer {layer_id}")
+        children = layer.get("layers") or []
+        if not isinstance(children, list):
+            raise ArkUIPageError(f"Lanhu layer {layer_id} layers must be a list")
+        layers_by_id[layer_id] = layer
+        layer_parent[layer_id] = parent_id
+        layer_children[layer_id] = []
+        layer_order.append(layer_id)
+        for child in children:
+            visit(child, layer_id)
+            layer_children[layer_id].append(child["id"])
+
+    artboard_layers = artboard.get("layers")
+    if not isinstance(artboard_layers, list) or not artboard_layers:
+        raise ArkUIPageError("Lanhu version_json artboard must contain layers")
+    for root_layer in artboard_layers:
+        visit(root_layer, None)
+
+    instances: dict[str, dict[str, Any]] = {}
+    if manifest is not None:
+        if manifest.get("schema") != LANHU_COMPONENT_MANIFEST_SCHEMA:
+            raise ArkUIPageError("Lanhu component manifest schema is unsupported")
+        raw_instances = manifest.get("instances")
+        if not isinstance(raw_instances, list) or len(raw_instances) > 10000:
+            raise ArkUIPageError("Lanhu component manifest instances are malformed")
+        for instance in raw_instances:
+            if not isinstance(instance, dict) or not isinstance(instance.get("id"), str):
+                raise ArkUIPageError(
+                    "every Lanhu component manifest instance must have a string id"
+                )
+            if instance["id"] in instances:
+                raise ArkUIPageError(
+                    f"duplicate Lanhu component manifest instance id: {instance['id']}"
+                )
+            instances[instance["id"]] = instance
+        if set(instances) != set(layers_by_id):
+            raise ArkUIPageError("Lanhu version_json and component manifest instance sets differ")
+        for component_id in layer_order:
+            instance = instances[component_id]
+            if (
+                instance.get("parent_id") != layer_parent[component_id]
+                or instance.get("children_ids") != layer_children[component_id]
+            ):
+                raise ArkUIPageError(
+                    f"Lanhu version_json/component manifest hierarchy mismatch at {component_id}"
+                )
+    else:
+        type_mapping = {
+            "group": "Box",
+            "shapeLayer": "Box",
+            "text": "Text",
+            "image": "Image",
+        }
+        for component_id in layer_order:
+            layer = layers_by_id[component_id]
+            migration = layer.get("migration")
+            if migration is None and source_generated:
+                raise ArkUIPageError(
+                    "source-generated Lanhu version_json requires embedded migration metadata; "
+                    "regenerate it or provide --lanhu-component-manifest for legacy output"
+                )
+            if isinstance(migration, dict):
+                instance = {
+                    "id": component_id,
+                    "type": migration["componentType"],
+                    "semantic_key": migration["semanticKey"],
+                    "parent_id": layer_parent[component_id],
+                    "children_ids": layer_children[component_id],
+                    "sibling_index": (
+                        layer_children[layer_parent[component_id]].index(component_id)
+                        if layer_parent[component_id] is not None
+                        else [
+                            item for item in layer_order if layer_parent[item] is None
+                        ].index(component_id)
+                    ),
+                    "style": migration["style"],
+                    "custom_draw": migration["customDraw"],
+                    "source": migration["source"],
+                    "provenance": migration["provenance"],
+                    "unresolved": migration["unresolved"],
+                    "required_facts": migration.get("requiredFacts") or [],
+                    "phase_trace": migration.get("phaseTrace"),
+                }
+            else:
+                instance = {
+                    "id": component_id,
+                    "type": type_mapping.get(str(layer.get("type")), "Box"),
+                    "semantic_key": layer.get("name") or component_id,
+                    "parent_id": layer_parent[component_id],
+                    "children_ids": layer_children[component_id],
+                    "sibling_index": 0,
+                    "style": {},
+                    "custom_draw": None,
+                    "source": {"attributes": []},
+                    "provenance": [],
+                    "unresolved": [],
+                    "required_facts": [],
+                }
+            instances[component_id] = instance
+
+    for component_id, instance in instances.items():
+        raw_facts = instance.get("required_facts")
+        if raw_facts is None:
+            raw_facts = instance.get("requiredFacts")
+        if source_generated and raw_facts is None:
+            raise ArkUIPageError(
+                f"source-generated Lanhu component {component_id} has no required fact contract"
+            )
+        try:
+            instance["required_facts"] = normalize_required_facts(
+                raw_facts or [], f"Lanhu component {component_id}.required_facts"
+            )
+        except ValueError as error:
+            raise ArkUIPageError(str(error)) from error
+
+    full_frames: dict[str, dict[str, float]] = {}
+    visible_frames: dict[str, dict[str, float]] = {}
+    for component_id in layer_order:
+        raw_frame = require_lanhu_frame(
+            layers_by_id[component_id].get("frame"), f"Lanhu layer {component_id}"
+        )
+        full = {
+            "x": round((raw_frame["left"] - artboard_frame["left"]) / scale, 6),
+            "y": round((raw_frame["top"] - artboard_frame["top"]) / scale, 6),
+            "width": round(raw_frame["width"] / scale, 6),
+            "height": round(raw_frame["height"] / scale, 6),
+        }
+        full_frames[component_id] = full
+        left = max(0.0, full["x"])
+        top = max(0.0, full["y"])
+        right = min(viewport_width, full["x"] + full["width"])
+        bottom = min(viewport_height, full["y"] + full["height"])
+        ancestor = layer_parent[component_id]
+        inside_scroll = False
+        while ancestor is not None:
+            ancestor_instance = instances[ancestor]
+            rules = (ancestor_instance.get("source") or {}).get("layoutRules") or []
+            if ancestor_instance.get("type") in {"LazyColumn", "LazyRow"} or any(r.get("kind") == "scroll" and r.get("enabled") is True for r in rules):
+                inside_scroll = True
+                break
+            ancestor = layer_parent[ancestor]
+        if source_generated and full["width"] >= 0 and full["height"] >= 0:
+            # Source frames are diagnostic estimates, not visibility decisions.
+            # Native measurement must keep even zero-size/estimated-offscreen nodes.
+            visible_frames[component_id] = full
+        elif right > left and bottom > top:
+            visible_frames[component_id] = {
+                "x": round(left, 6),
+                "y": round(top, 6),
+                "width": round(right - left, 6),
+                "height": round(bottom - top, 6),
+            }
+        elif (
+            str(instances[component_id].get("type")) == "Spacer"
+            and isinstance(layer_parent[component_id], str)
+            and (
+                (
+                    str(instances[layer_parent[component_id]].get("type"))
+                    in PAGE_SNAPSHOT_ROW_COMPONENTS
+                    and full["width"] > 0
+                    and full["height"] == 0
+                )
+                or (
+                    str(instances[layer_parent[component_id]].get("type"))
+                    in PAGE_SNAPSHOT_COLUMN_COMPONENTS
+                    and full["width"] == 0
+                    and full["height"] > 0
+                )
+            )
+            and 0 <= full["x"] <= viewport_width
+            and 0 <= full["y"] <= viewport_height
+        ):
+            # A flow spacer can have a zero cross-axis size while still
+            # participating in main-axis measurement and weight distribution.
+            visible_frames[component_id] = full
+
+    def visible_parent(component_id: str) -> str | None:
+        parent_id = layer_parent[component_id]
+        while parent_id is not None and parent_id not in visible_frames:
+            parent_id = layer_parent[parent_id]
+        return parent_id
+
+    parent_by_id = {
+        component_id: visible_parent(component_id)
+        for component_id in visible_frames
+    }
+    children_by_id: dict[str, list[str]] = {
+        component_id: [] for component_id in visible_frames
+    }
+    roots: list[str] = []
+    for component_id in layer_order:
+        if component_id not in visible_frames:
+            continue
+        parent_id = parent_by_id[component_id]
+        if parent_id is None:
+            roots.append(component_id)
+        else:
+            children_by_id[parent_id].append(component_id)
+
+    components: list[dict[str, Any]] = []
+    call_id_owners: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    elided: list[dict[str, str]] = []
+    for component_id in layer_order:
+        instance = instances[component_id]
+        source = instance.get("source")
+        attributes = source.get("attributes") if isinstance(source, dict) else None
+        call_ids = sorted({
+            attribute["call_id"]
+            for attribute in (attributes or [])
+            if isinstance(attribute, dict) and isinstance(attribute.get("call_id"), str)
+        })
+        if component_id not in visible_frames:
+            elided.append({
+                "source_semantic_key": str(instance.get("semantic_key") or component_id),
+                "source_call_id": call_ids[0] if call_ids else f"unavailable:{component_id}",
+                "reason": "outside_artboard",
+            })
+            continue
+        try:
+            style = normalize_style(
+                instance.get("style") or {},
+                f"Lanhu component manifest instance {component_id}.style",
+            )
+            provenance = normalize_provenance(
+                instance.get("provenance") or [],
+                f"Lanhu component manifest instance {component_id}.provenance",
+            )
+            unresolved = normalize_unresolved(
+                instance.get("unresolved") or [],
+                f"Lanhu component manifest instance {component_id}.unresolved",
+            )
+        except PageSnapshotError as error:
+            raise ArkUIPageError(str(error)) from error
+        visual_paths = apply_lanhu_visual_style(
+            style, layers_by_id[component_id], scale
+        )
+        if visual_paths:
+            provenance.append({
+                "paths": sorted(set(visual_paths)),
+                "origin": "source_resolved",
+                "source": f"{version_path.name}#{component_id}",
+            })
+        parent_id = parent_by_id[component_id]
+        siblings = children_by_id[parent_id] if parent_id is not None else roots
+        component = {
+            "id": component_id,
+            "type": str(instance.get("type") or layers_by_id[component_id].get("type") or "Group"),
+            "semantic_key": instance.get("semantic_key"),
+            "bounds_dp": visible_frames[component_id],
+            "source_layout_bounds_dp": full_frames[component_id],
+            "visual_bounds_dp": None,
+            "parent_id": parent_id,
+            "children_ids": children_by_id[component_id],
+            "sibling_index": siblings.index(component_id),
+            "parent_mapping": "source-semantic-ancestor",
+            "style": style,
+            "provenance": provenance,
+            "unresolved": unresolved,
+            "required_facts": copy.deepcopy(instance.get("required_facts") or []),
+            "phase_trace": copy.deepcopy(instance.get("phase_trace")),
+            "custom_draw": copy.deepcopy(instance.get("custom_draw")),
+            "call_ids": call_ids,
+            "component_context": {
+                "status": "candidate",
+                "method": "source_layout_projection",
+                "source_component_id": component_id,
+                "business_component_id": None,
+                "business_component_path": [],
+                "evidence_runtime_ids": [],
+            },
+            "source": copy.deepcopy(source) if isinstance(source, dict) else {"attributes": []},
+        }
+        components.append(component)
+        for call_id in call_ids:
+            call_id_owners[call_id].append(component)
+    by_id = {component["id"]: component for component in components}
+    source_generation = meta.get("sourceGeneration") if isinstance(meta, dict) else None
+    layout_relationships = normalize_lanhu_layout_relationships(
+        source_generation.get("layoutRelationships") if isinstance(source_generation, dict) else [],
+        by_id,
+    )
+    migration_meta = meta.get("migration")
+    page = manifest.get("page") if manifest is not None else (
+        migration_meta.get("page") if isinstance(migration_meta, dict) else None
+    )
+    if not isinstance(page, dict):
+        artboard_id = str(artboard.get("id") or "")
+        page_id, separator, page_state = artboard_id.rpartition("--")
+        page = {
+            "id": page_id if separator else artboard.get("name"),
+            "state": page_state if separator else "default",
+        }
+    if not isinstance(page, dict):
+        raise ArkUIPageError("Lanhu component manifest page identity is malformed")
+    try:
+        normalized_page = {
+            "id": require_token(page.get("id"), "Lanhu page id"),
+            "state": require_token(page.get("state"), "Lanhu page state"),
+        }
+    except PageSnapshotError as error:
+        raise ArkUIPageError(str(error)) from error
+    input_hashes = {"version_json_sha256": sha256_file(version_path)}
+    if manifest_path is not None:
+        input_hashes["component_manifest_sha256"] = sha256_file(manifest_path)
+    result = {
+        "file": version_path.name,
+        "byte_count": version_bytes + manifest_bytes,
+        "sha256": canonical_sha256(input_hashes),
+        "input_format": "lanhu-version-json",
+        "version_json": {
+            "file": version_path.name,
+            "sha256": sha256_file(version_path),
+        },
+        "page": normalized_page,
+        "viewport": {
+            "density": 1.0,
+            "font_scale": 1.0,
+            "orientation": "portrait" if viewport_height >= viewport_width else "landscape",
+            "content_bounds_dp": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": viewport_width,
+                "height": viewport_height,
+            },
+        },
+        "screenshot": None,
+        "components": components,
+        "by_id": by_id,
+        "by_call_id": {
+            call_id: owners[0]
+            for call_id, owners in call_id_owners.items()
+        },
+        "instances_by_call_id": dict(call_id_owners),
+        "runtime_elided_source_components": elided,
+        "source_component_tree": None,
+        "layout_relationships": layout_relationships,
+        "source_generated": source_generated,
+        "font_faces": migration_meta.get("fontFaces", []) if isinstance(migration_meta, dict) else [],
+        "required_fact_gate": required_fact_gate(list(instances.values())),
+        "source_phase_consumption_gate": source_generation.get("phaseConsumptionGate")
+        if isinstance(source_generation, dict) else None,
+    }
+    if manifest_path is not None:
+        result["component_manifest"] = {
+            "file": manifest_path.name,
+            "sha256": sha256_file(manifest_path),
+        }
+    return result
+
+
+def target_fact_phase(path: str) -> str:
+    if path == 'style.input.single_line':
+        return 'measure'
+    if path in {
+        'style.content.text', 'style.content.placeholder',
+        'style.typography.font_size_sp', 'style.typography.font_weight',
+        'style.typography.font_style', 'style.typography.font_family',
+        'style.typography.letter_spacing_sp', 'style.typography.line_height_sp',
+        'style.typography.max_lines', 'style.typography.overflow',
+        'style.typography.min_lines', 'style.typography.soft_wrap',
+    }:
+        return 'measure'
+    if path == 'style.typography.text_align':
+        return 'layout'
+    if path.startswith("source.modifiers.") and path.rsplit(".", 1)[-1] in {"fillmaxwidth", "fillmaxheight", "fillmaxsize", "matchparentsize", "wrapcontentwidth", "wrapcontentheight", "wrapcontentsize", "width", "height", "widthin", "heightin", "sizein", "weight", "verticalscroll", "horizontalscroll"}:
+        return "measure"
+    if path in {"source.modifiers.zindex", "style.layout.z_index"}:
+        return "draw"
+    if path in {"style.layout.alignment", "style.layout.horizontal_arrangement", "style.layout.vertical_arrangement", "style.layout.layout_direction", "style.layout.margin_dp"}:
+        return "layout"
+    if path.startswith("style.layout.") or path in {
+        "style.asset.width_dp", "style.asset.height_dp"
+    }:
+        return "measure"
+    if path.startswith("structure.") or path.startswith("source.modifiers."):
+        return "layout"
+    return "draw"
+
+
+def build_target_phase_consumption_gate(
+    page_input: dict[str, Any] | None,
+    processed_component_ids: set[str],
+    processed_call_ids: set[str],
+    applied_paths: dict[str, set[str]],
+    applied_component_paths: dict[str, set[str]] | None = None,
+) -> dict[str, Any] | None:
+    if page_input is None:
+        return None
+    checks: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    for component in page_input.get("components") or []:
+        source = component.get("source")
+        call_id = source.get("call_id") if isinstance(source, dict) else None
+        rendered = component.get("id") in processed_component_ids
+        # A shared source call may have several differently configured instances.
+        # Another instance's emitted field is not evidence for this component.
+        call_paths: set[str] = set()
+        if applied_component_paths is not None:
+            call_paths.update(applied_component_paths.get(str(component.get("id")), set()))
+        candidate_facts: dict[str, dict[str, Any]] = {}
+        for fact in component.get("required_facts") or []:
+            if not isinstance(fact, dict) or fact.get("status") == "not_applicable":
+                continue
+            path = fact.get("path")
+            if not isinstance(path, str):
+                continue
+            candidate_facts[path] = {
+                "path": path,
+                "expression": fact.get("expression"),
+                "origin": "required_fact",
+                "resolved": fact.get("status") in {"resolved", "default_resolved"},
+            }
+        style = component.get("style")
+        if isinstance(style, dict):
+            for section_name, section in style.items():
+                if not isinstance(section, dict):
+                    continue
+                for field_name, value in section.items():
+                    if value is None or value == [] or value == {}:
+                        continue
+                    path = f"style.{section_name}.{field_name}"
+                    candidate_facts.setdefault(path, {
+                        "path": path,
+                        "expression": None,
+                        "origin": "resolved_style",
+                    })
+        for fact in candidate_facts.values():
+            path = fact["path"]
+            phase = target_fact_phase(path)
+            not_applicable = (
+                path == "style.content.content_description"
+                and fact.get("expression") == "null"
+            ) or (
+                path in {"style.state.selected", "style.state.checked"}
+                and nested_value(component, path) is False
+                and rendered
+            ) or (
+                path == "style.state.clickable"
+                and rendered
+                # The page renderer owns visuals, not the behavior contract.
+                # Keep this boundary in the report instead of dropping the field.
+            ) or (
+                path == "style.asset.sha256"
+                and "style.asset.resource" in call_paths
+            ) or (
+                path in {"style.asset.width_dp", "style.asset.height_dp"}
+                and fact["origin"] == "resolved_style"
+                and "style.asset.resource" in call_paths
+                and all(
+                    f"style.layout.{axis}_dp" in call_paths
+                    or any(
+                        f"source.modifiers.{name}" in call_paths
+                        for name in (f"fillmax{axis}", "fillmaxsize", "matchparentsize")
+                    )
+                    for axis in ("width", "height")
+                )
+            ) or (
+                path == "style.surface.clip"
+                and nested_value(component, path) is False
+                and rendered
+            ) or (
+                path == "style.surface.alpha"
+                and nested_value(component, path) == 1
+                and rendered
+            ) or (
+                path == "style.state.visible"
+                and nested_value(component, path) is True
+                and rendered
+            ) or (
+                path == "style.transform.rotation_degrees"
+                and nested_value(component, path) == 0
+                and rendered
+            ) or (
+                path == "style.content.role"
+                and rendered
+            )
+            consumed = ((rendered and path in call_paths) or not_applicable) and fact.get("resolved", True)
+            check = {
+                "component_id": component.get("id"),
+                "call_id": call_id,
+                "phase": phase,
+                "path": path,
+                "origin": fact["origin"],
+                "status": "not_applicable" if not_applicable else (
+                    "consumed" if consumed else "unconsumed"
+                ),
+            }
+            if path == "style.state.clickable":
+                check["reason"] = "interaction metadata only; click handlers require the separate behavior contract"
+            checks.append(check)
+            if not consumed:
+                failures.append(check)
+    return {
+        "schema": "android-to-harmony.target-phase-gate.v1",
+        "verdict": "pass" if not failures else "fail",
+        "phase_order": ["measure", "layout", "draw"],
+        "check_count": len(checks),
+        "failure_count": len(failures),
+        "status_counts": {
+            status: sum(item["status"] == status for item in checks)
+            for status in ("consumed", "not_applicable", "unconsumed")
+        },
+        "failures": failures,
+        "checks": checks,
+    }
+
+
+def nested_value(value: dict[str, Any], path: str) -> Any:
+    current: Any = value
+    for segment in path.split("."):
+        if not isinstance(current, dict) or segment not in current:
+            return None
+        current = current[segment]
+    return current
+
+
+def set_nested_value(value: dict[str, Any], path: str, child: Any) -> None:
+    segments = path.split(".")
+    current: dict[str, Any] = value
+    for segment in segments[:-1]:
+        nested = current.get(segment)
+        if not isinstance(nested, dict):
+            nested = {}
+            current[segment] = nested
+        current = nested
+    current[segments[-1]] = copy.deepcopy(child)
+
+
+def normalized_runtime_bounds(
+    bounds: dict[str, float],
+    source_content: dict[str, float],
+    runtime_content: dict[str, float],
+) -> dict[str, float]:
+    return {
+        "x": source_content["x"] + bounds["x"] - runtime_content["x"],
+        "y": source_content["y"] + bounds["y"] - runtime_content["y"],
+        "width": bounds["width"],
+        "height": bounds["height"],
+    }
+
+
+def same_bounds(left: dict[str, float], right: dict[str, float], tolerance: float = 0.002) -> bool:
+    return all(abs(left[name] - right[name]) <= tolerance for name in ("x", "y", "width", "height"))
+
+
+def fuse_android_page_inputs(
+    source_page: dict[str, Any] | None,
+    runtime_page: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if runtime_page is None:
+        return source_page
+    if source_page is None:
+        raise ArkUIPageError("Android runtime page JSON requires --android-page-json source-tree input")
+    if source_page["page"] != runtime_page["page"]:
+        raise ArkUIPageError("Android source-tree and runtime page identity/state must match")
+    source_viewport = source_page["viewport"]
+    runtime_viewport = runtime_page["viewport"]
+    if (
+        source_viewport["orientation"] != runtime_viewport["orientation"]
+        or abs(source_viewport["font_scale"] - runtime_viewport["font_scale"]) > 0.001
+    ):
+        raise ArkUIPageError("Android source-tree and runtime orientation/font scale must match")
+    if not source_page["components"] or not all(
+        component["parent_mapping"] == "source-semantic-ancestor"
+        for component in source_page["components"]
+    ):
+        raise ArkUIPageError("Android runtime fusion requires a source-tree page input")
+
+    fused = copy.deepcopy(source_page)
+    source_by_id = fused["by_id"] = {
+        component["id"]: component for component in fused["components"]
+    }
+    source_by_semantic: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    source_by_text: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for component in fused["components"]:
+        semantic_key = component.get("semantic_key")
+        if isinstance(semantic_key, str):
+            source_by_semantic[semantic_key].append(component)
+        text = component["style"]["content"]["text"]
+        if isinstance(text, str) and text:
+            source_by_text[(component["type"], text)].append(component)
+
+    source_content = source_viewport["content_bounds_dp"]
+    runtime_content = runtime_viewport["content_bounds_dp"]
+    matched_source_ids: set[str] = set()
+    matched_runtime_ids: set[str] = set()
+    matched_leaf_count = 0
+    matched_business_container_count = 0
+    rejected_container_count = 0
+    mappings: list[dict[str, str]] = []
+    planned: list[tuple[dict[str, Any], dict[str, Any], str, dict[str, float]]] = []
+
+    def directly_matched_source_target(
+        runtime_component: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        semantic_key = runtime_component.get("semantic_key")
+        semantic_matches = (
+            source_by_semantic.get(semantic_key, []) if isinstance(semantic_key, str) else []
+        )
+        if len(semantic_matches) == 1:
+            candidate = semantic_matches[0]
+            if candidate["type"] == runtime_component["type"]:
+                return candidate, "semantic_key"
+        context = runtime_component.get("component_context")
+        if isinstance(context, dict):
+            source_id = context.get("source_component_id")
+            candidate = source_by_id.get(source_id) if isinstance(source_id, str) else None
+            if isinstance(candidate, dict) and candidate["type"] == runtime_component["type"]:
+                return candidate, "source_component_id"
+        text = runtime_component["style"]["content"]["text"]
+        if isinstance(text, str) and text:
+            text_matches = source_by_text.get((runtime_component["type"], text), [])
+            if len(text_matches) == 1:
+                return text_matches[0], "unique_text"
+        if isinstance(context, dict) and runtime_component["type"] in BUTTON_CONTAINER_COMPONENTS:
+            business_id = context.get("business_component_id")
+            candidate = source_by_id.get(business_id) if isinstance(business_id, str) else None
+            if (
+                isinstance(candidate, dict)
+                and candidate["parent_id"] is not None
+                and candidate["type"] not in PAGE_SNAPSHOT_FLOW_COMPONENTS
+            ):
+                return candidate, "business_component_id"
+        return None, None
+
+    def source_target(runtime_component: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+        direct_target, direct_method = directly_matched_source_target(runtime_component)
+        if direct_target is not None:
+            return direct_target, direct_method
+        state = runtime_component["style"]["state"]
+        content = runtime_component["style"]["content"]
+        if state.get("clickable") is not True and content.get("role") != "button":
+            return None, None
+        anchored_containers: dict[str, dict[str, Any]] = {}
+        for child_id in runtime_component["children_ids"]:
+            child = runtime_page["by_id"].get(child_id)
+            if not isinstance(child, dict):
+                continue
+            child_target, _child_method = directly_matched_source_target(child)
+            if child_target is None:
+                continue
+            parent_id = child_target.get("parent_id")
+            while isinstance(parent_id, str):
+                candidate = source_by_id[parent_id]
+                source = candidate.get("source")
+                is_project_container = (
+                    isinstance(source, dict)
+                    and source.get("custom_component") is True
+                    and candidate["type"] not in PAGE_SNAPSHOT_FLOW_COMPONENTS
+                )
+                if candidate["type"] in BUTTON_CONTAINER_COMPONENTS or is_project_container:
+                    anchored_containers[candidate["id"]] = candidate
+                    break
+                parent_id = candidate.get("parent_id")
+        if len(anchored_containers) == 1:
+            return next(iter(anchored_containers.values())), "child_source_anchor"
+        return None, None
+
+    def apply_runtime_component(
+        target: dict[str, Any],
+        runtime_component: dict[str, Any],
+        method: str,
+    ) -> None:
+        nonlocal matched_leaf_count, matched_business_container_count
+        old_bounds = copy.deepcopy(target["bounds_dp"])
+        new_bounds = normalized_runtime_bounds(
+            runtime_component["bounds_dp"], source_content, runtime_content
+        )
+        target["bounds_dp"] = new_bounds
+        target["_runtime_bounds_applied"] = True
+        runtime_visual_bounds = runtime_component.get("visual_bounds_dp")
+        if isinstance(runtime_visual_bounds, dict):
+            target["visual_bounds_dp"] = normalized_runtime_bounds(
+                runtime_visual_bounds, source_content, runtime_content
+            )
+        for record in runtime_component["provenance"]:
+            if record["origin"] not in {"runtime", "pixel_sampled"}:
+                continue
+            copied_paths: list[str] = []
+            for path in record["paths"]:
+                if not runtime_overlay_style_path_allowed(method, path):
+                    continue
+                value = nested_value(runtime_component, path)
+                if value is None:
+                    continue
+                set_nested_value(target, path, value)
+                copied_paths.append(path)
+            if copied_paths:
+                target["provenance"].append({
+                    "origin": record["origin"],
+                    "paths": copied_paths,
+                    "source": "Android runtime overlay: " + runtime_page["file"],
+                })
+        target["unresolved"].extend(
+            unresolved
+            for unresolved in runtime_component["unresolved"]
+            if unresolved not in target["unresolved"]
+        )
+        if method in {"business_component_id", "child_source_anchor"}:
+            matched_business_container_count += 1
+            for descendant in fused["components"]:
+                if descendant["id"] == target["id"]:
+                    continue
+                if same_bounds(descendant["bounds_dp"], old_bounds) or is_direct_native_wrapper(
+                    target, descendant
+                ):
+                    current = descendant
+                    ancestors: set[str] = set()
+                    while isinstance(current.get("parent_id"), str):
+                        parent_id = current["parent_id"]
+                        if parent_id == target["id"]:
+                            descendant["bounds_dp"] = copy.deepcopy(new_bounds)
+                            descendant["_runtime_bounds_applied"] = True
+                            break
+                        if parent_id in ancestors:
+                            break
+                        ancestors.add(parent_id)
+                        current = source_by_id.get(parent_id, {})
+            parent_id = target.get("parent_id")
+            while isinstance(parent_id, str):
+                parent = source_by_id[parent_id]
+                parent_bounds = parent["bounds_dp"]
+                if (
+                    abs(parent_bounds["y"] - old_bounds["y"]) > 0.002
+                    or abs(parent_bounds["height"] - old_bounds["height"]) > 0.002
+                ):
+                    break
+                parent["bounds_dp"] = {
+                    **parent_bounds,
+                    "y": new_bounds["y"],
+                    "height": new_bounds["height"],
+                }
+                parent["_runtime_bounds_applied"] = True
+                parent_id = parent.get("parent_id")
+        else:
+            matched_leaf_count += 1
+        matched_source_ids.add(target["id"])
+        matched_runtime_ids.add(runtime_component["id"])
+        mappings.append({
+            "runtime_component_id": runtime_component["id"],
+            "source_component_id": target["id"],
+            "method": method,
+        })
+
+    planned_source_ids: set[str] = set()
+    for runtime_component in runtime_page["components"]:
+        target, method = source_target(runtime_component)
+        if target is None or method is None or target["id"] in planned_source_ids:
+            continue
+        if method not in {"business_component_id", "child_source_anchor"}:
+            if target["children_ids"]:
+                rejected_container_count += 1
+                continue
+            if target["type"] not in PAGE_RUNTIME_OVERLAY_LEAF_TYPES:
+                continue
+        planned_source_ids.add(target["id"])
+        planned.append((
+            target,
+            runtime_component,
+            method,
+            normalized_runtime_bounds(
+                runtime_component["bounds_dp"], source_content, runtime_content
+            ),
+        ))
+
+    def is_descendant_or_self(component_id: str, ancestor_id: str) -> bool:
+        current = source_by_id.get(component_id)
+        visited: set[str] = set()
+        while isinstance(current, dict):
+            if current["id"] == ancestor_id:
+                return True
+            parent_id = current.get("parent_id")
+            if not isinstance(parent_id, str) or parent_id in visited:
+                return False
+            visited.add(parent_id)
+            current = source_by_id.get(parent_id)
+        return False
+
+    def component_depth(component: dict[str, Any]) -> int:
+        depth = 0
+        current = component
+        visited: set[str] = set()
+        while isinstance(current.get("parent_id"), str):
+            parent_id = current["parent_id"]
+            if parent_id in visited:
+                break
+            visited.add(parent_id)
+            depth += 1
+            current = source_by_id[parent_id]
+        return depth
+
+    coherent_custom_groups: dict[str, tuple[float, float]] = {}
+    if source_page.get("input_format") != "lanhu-version-json":
+        for component in fused["components"]:
+            source = component.get("source")
+            if not isinstance(source, dict) or source.get("custom_component") is not True:
+                continue
+            descendant_matches = [
+                entry
+                for entry in planned
+                if is_descendant_or_self(entry[0]["id"], component["id"])
+            ]
+            if not descendant_matches:
+                continue
+            x_deltas = [
+                entry[3]["x"] - entry[0]["bounds_dp"]["x"]
+                for entry in descendant_matches
+            ]
+            y_deltas = [
+                entry[3]["y"] - entry[0]["bounds_dp"]["y"]
+                for entry in descendant_matches
+            ]
+            x_shift = float(median(x_deltas))
+            y_shift = float(median(y_deltas))
+            if all(
+                abs(delta - x_shift) <= 6.0 for delta in x_deltas
+            ) and all(abs(delta - y_shift) <= 6.0 for delta in y_deltas):
+                coherent_custom_groups[component["id"]] = (x_shift, y_shift)
+
+    selected_groups: dict[str, tuple[float, float]] = {}
+    for target, _runtime_component, _method, _runtime_bounds in planned:
+        candidates = [
+            source_by_id[component_id]
+            for component_id in coherent_custom_groups
+            if is_descendant_or_self(target["id"], component_id)
+        ]
+        if not candidates:
+            continue
+        selected = min(candidates, key=component_depth)
+        selected_groups[selected["id"]] = coherent_custom_groups[selected["id"]]
+
+    expanded_groups: dict[str, tuple[float, float]] = {}
+    for component_id, shift in selected_groups.items():
+        selected = source_by_id[component_id]
+        root = selected
+        parent_id = root.get("parent_id")
+        while isinstance(parent_id, str):
+            parent = source_by_id[parent_id]
+            if parent["parent_id"] is None or parent["children_ids"] != [root["id"]]:
+                break
+            root = parent
+            parent_id = root.get("parent_id")
+        expanded_groups[root["id"]] = (
+            0.0
+            if root["id"] != selected["id"]
+            and root["bounds_dp"]["width"] > selected["bounds_dp"]["width"] + 1.0
+            else shift[0],
+            shift[1],
+        )
+
+    shifted_source_group_count = 0
+    for component_id, (x_shift, y_shift) in expanded_groups.items():
+        shifted_source_group_count += 1
+        for component in fused["components"]:
+            if not is_descendant_or_self(component["id"], component_id):
+                continue
+            component["bounds_dp"] = {
+                **component["bounds_dp"],
+                "x": component["bounds_dp"]["x"] + x_shift,
+                "y": component["bounds_dp"]["y"] + y_shift,
+            }
+            component["_runtime_bounds_applied"] = True
+            visual_bounds = component.get("visual_bounds_dp")
+            if isinstance(visual_bounds, dict):
+                component["visual_bounds_dp"] = {
+                    **visual_bounds,
+                    "x": visual_bounds["x"] + x_shift,
+                    "y": visual_bounds["y"] + y_shift,
+                }
+
+    for target, runtime_component, method, _runtime_bounds in planned:
+        apply_runtime_component(target, runtime_component, method)
+
+    fused["by_call_id"] = {
+        call_id: component
+        for component in fused["components"]
+        for call_id in component["call_ids"]
+        if len(component["call_ids"]) == 1
+    }
+    owners: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for component in fused["components"]:
+        if len(component["call_ids"]) == 1:
+            owners[component["call_ids"][0]].append(component)
+    fused["instances_by_call_id"] = dict(owners)
+    fused["runtime_overlay"] = {
+        "file": runtime_page["file"],
+        "byte_count": runtime_page["byte_count"],
+        "sha256": runtime_page["sha256"],
+        "screenshot": runtime_page["screenshot"],
+        "viewport": runtime_page["viewport"],
+        "matched_leaf_count": matched_leaf_count,
+        "matched_business_container_count": matched_business_container_count,
+        "rejected_container_count": rejected_container_count,
+        "shifted_source_group_count": shifted_source_group_count,
+        "unmatched_runtime_count": len(runtime_page["components"]) - len(matched_runtime_ids),
+        "mappings": mappings,
+    }
+    return fused
 
 
 def pascal_identifier(value: str) -> str:
@@ -1217,7 +3314,9 @@ def kotlin_string_template(expression: str, parameters: dict[str, str]) -> str |
 
 
 def arkts_string(value: str) -> str:
-    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+    escapes = {'\\': '\\\\', "'": "\\'", '\n': '\\n', '\r': '\\r', '\t': '\\t'}
+    return "'" + ''.join(escapes.get(char, f'\\u{ord(char):04x}' if ord(char) < 32 or char in '\u2028\u2029' else char)
+                         for char in value) + "'"
 
 
 def commentless_kotlin_block_body(value: str) -> str:
@@ -1506,50 +3605,45 @@ class Renderer:
     def __init__(
         self,
         root: dict[str, str],
-        closure: dict[str, Any],
-        calls: list[dict[str, Any]],
-        definitions: dict[tuple[str, str], dict[str, Any]],
         resource_names: set[str],
         string_values: dict[str, str],
-        dimension_token_values: dict[str, str],
-        number_token_values: dict[str, str],
-        color_token_values: dict[str, str],
-        data_classes: dict[str, dict[str, Any]],
-        enum_classes: dict[str, set[str]],
-        enum_string_properties: dict[str, dict[str, dict[str, str]]],
-        route_symbols: dict[str, str],
-        android_page_input: dict[str, Any] | None,
-        verified_font_faces: list[dict[str, Any]],
-        typography_font_roles: dict[str, dict[str, Any]],
+        android_page_input: dict[str, Any],
+        tinted_vector_resources: dict[tuple[str, str], str] | None = None,
     ) -> None:
+        if not isinstance(android_page_input, dict):
+            raise ArkUIPageError(
+                "source-generated page JSON is required; source translation fallback is disabled"
+            )
         self.root = root
-        self.closure = closure
-        self.definitions = definitions
+        self.closure: dict[str, Any] = {}
+        self.definitions: dict[tuple[str, str], dict[str, Any]] = {}
         self.resource_names = resource_names
         self.string_values = string_values
-        self.dimension_token_values = dimension_token_values
-        self.number_token_values = number_token_values
-        self.color_token_values = color_token_values
-        self.data_classes = data_classes
-        self.enum_classes = enum_classes
-        self.enum_string_properties = enum_string_properties
-        self.route_symbols = route_symbols
-        self.route_base_types = {
-            symbol.split(".", 1)[0]
-            for symbol in route_symbols
-            if "." in symbol
-        }
+        self.dimension_token_values: dict[str, str] = {}
+        self.number_token_values: dict[str, str] = {}
+        self.color_token_values: dict[str, str] = {}
+        self.data_classes: dict[str, dict[str, Any]] = {}
+        self.enum_classes: dict[str, set[str]] = {}
+        self.enum_string_properties: dict[str, dict[str, dict[str, str]]] = {}
+        self.route_symbols: dict[str, str] = {}
+        self.route_base_types: set[str] = set()
         self.android_page_input = android_page_input
-        self.verified_font_faces = verified_font_faces
-        self.typography_font_roles = typography_font_roles
+        self.android_page_layout_mode = "snapshot"
+        self.verified_font_faces: list[dict[str, Any]] = []
+        self.typography_font_roles: dict[str, dict[str, Any]] = {}
+        self.tinted_vector_resources = tinted_vector_resources or {}
         self.android_page_by_id: dict[str, dict[str, Any]] = {}
         self.android_page_by_call_id: dict[str, dict[str, Any]] = {}
         self.android_page_instances_by_call_id: dict[str, list[dict[str, Any]]] = {}
         self.android_page_runtime_elided: list[dict[str, str]] = []
         self.android_page_runtime_elided_by_call_id: dict[str, list[dict[str, str]]] = defaultdict(list)
+        self.android_source_tree_by_id: dict[str, dict[str, Any]] = {}
+        self.android_source_layout_by_subject: dict[str, dict[str, Any]] = {}
         self.android_page_applied_paths: dict[str, set[str]] = defaultdict(set)
+        self.android_page_applied_component_paths: dict[str, set[str]] = defaultdict(set)
         self.android_page_reference_paths: dict[str, set[str]] = defaultdict(set)
         self.android_page_processed_call_ids: set[str] = set()
+        self.android_page_processed_component_ids: set[str] = set()
         self.data_class_properties_by_target: dict[str, list[dict[str, Any]]] = {}
         self.data_class_target_names_by_base: dict[str, str] = {}
         self.data_class_interface_properties: dict[str, list[dict[str, Any]]] = {}
@@ -1580,110 +3674,54 @@ class Renderer:
         self._arkts_interface_names: dict[str, str] = {}
         self._arkts_interfaces: list[tuple[str, list[tuple[str, bool, str]]]] = []
         self._arkts_interface_name_counts: dict[str, int] = {}
-        reached = closure.get("reached_definitions")
-        if not isinstance(reached, list) or not reached:
-            raise ArkUIPageError("selected closure has no reached definitions")
         self.reached_keys: list[tuple[str, str]] = []
-        for item in reached:
-            if not isinstance(item, dict) or not isinstance(item.get("source"), str) or not isinstance(item.get("composable"), str):
-                raise ArkUIPageError("selected closure reached definition is invalid")
-            key = (item["source"], item["composable"])
-            if key not in definitions:
-                raise ArkUIPageError(f"selected closure definition is missing: {key[0]}#{key[1]}")
-            self.reached_keys.append(key)
         self.calls_by_definition: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
-        reached_set = set(self.reached_keys)
         self.selected_calls: list[dict[str, Any]] = []
-        for call in calls:
-            if not isinstance(call, dict):
-                raise ArkUIPageError("semantic call inventory entry is invalid")
-            key = (call.get("source"), call.get("composable"))
-            if key not in reached_set:
-                continue
-            if not isinstance(call.get("call_id"), str) or not isinstance(call.get("component"), str):
-                raise ArkUIPageError("semantic call inventory entry is incomplete")
-            self.calls_by_definition[key].append(call)
-            self.selected_calls.append(call)
-        selected_calls_by_id = {call["call_id"]: call for call in self.selected_calls}
-        self.selected_calls_by_id = selected_calls_by_id
+        self.selected_calls_by_id: dict[str, dict[str, Any]] = {}
         self.incoming_project_calls: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
-        for call in self.selected_calls:
-            custom = call.get("custom_composable")
-            definitions_for_call = custom.get("definitions") if isinstance(custom, dict) else None
-            if not isinstance(definitions_for_call, list) or len(definitions_for_call) != 1:
-                continue
-            definition = definitions_for_call[0]
-            if not isinstance(definition, dict):
-                continue
-            callee = (definition.get("source"), definition.get("composable"))
-            if all(isinstance(item, str) for item in callee):
-                self.incoming_project_calls[callee].append(call)
-        if isinstance(android_page_input, dict):
-            self.android_page_by_id = android_page_input["by_id"]
-            self.android_page_instances_by_call_id = android_page_input["instances_by_call_id"]
-            self.android_page_runtime_elided = android_page_input["runtime_elided_source_components"]
-            for entry in self.android_page_runtime_elided:
-                self.android_page_runtime_elided_by_call_id[entry["source_call_id"]].append(entry)
-            for component in android_page_input["components"]:
-                call_ids = component["call_ids"]
-                call = selected_calls_by_id.get(call_ids[0]) if len(call_ids) == 1 else None
-                if len(call_ids) != 1:
-                    self.add_unresolved(
-                        "android_page_mapping",
-                        None,
-                        "Android runtime component must map to exactly one source call before its visual facts can drive ArkUI",
-                        page_component_id=component["id"],
-                        semantic_key=component.get("semantic_key"),
-                        call_ids=call_ids,
-                    )
-                elif call is None:
-                    self.add_unresolved(
-                        "android_page_mapping",
-                        None,
-                        "Android runtime component maps outside the selected Compose closure",
-                        page_component_id=component["id"],
-                        semantic_key=component.get("semantic_key"),
-                        call_id=call_ids[0],
-                    )
-                elif component["type"] != call["component"]:
-                    self.add_unresolved(
-                        "android_page_mapping",
-                        call,
-                        "Android runtime component type does not match the selected source call",
-                        page_component_id=component["id"],
-                        page_component_type=component["type"],
-                    )
-                else:
-                    self.android_page_by_call_id.setdefault(call_ids[0], component)
-                for unresolved in component["unresolved"]:
-                    self.add_unresolved(
-                        "android_page_visual_fact",
-                        call,
-                        "Android page JSON retains an unresolved visual fact",
-                        page_component_id=component["id"],
-                        semantic_key=component.get("semantic_key"),
-                        path=unresolved["path"],
-                        expression=unresolved["expression"],
-                        page_reason=unresolved["reason"],
-                    )
-        for values in self.calls_by_definition.values():
-            values.sort(key=lambda item: (item.get("line", 0), item["call_id"]))
-        self.cycle_edges = {
-            (
-                (item["caller"]["source"], item["caller"]["composable"]),
-                (item["callee"]["source"], item["callee"]["composable"]),
-            )
-            for item in closure.get("cycle_edges", [])
-            if isinstance(item, dict)
-            and isinstance(item.get("caller"), dict)
-            and isinstance(item.get("callee"), dict)
+        self.android_page_by_id = android_page_input["by_id"]
+        self._page_constraint_states: dict[str, dict[str, Any]] = {}
+        if android_page_input["components"] and all(
+            component.get("parent_mapping") == "source-semantic-ancestor"
+            for component in android_page_input["components"]
+        ):
+            self.android_page_layout_mode = "source-tree"
+        self.android_source_tree_by_id = android_page_input["by_id"]
+        self.android_source_layout_by_subject = {
+            relationship["subject_id"]: relationship
+            for relationship in android_page_input.get("layout_relationships") or []
         }
-        for caller, callee in sorted(self.cycle_edges):
+        self.android_page_instances_by_call_id = android_page_input["instances_by_call_id"]
+        self.android_page_runtime_elided = android_page_input["runtime_elided_source_components"]
+        for component in android_page_input["components"]:
+            for fact in component.get("required_facts") or []:
+                if fact["status"] in {"unresolved", "symbolic"}:
+                    self.add_unresolved(
+                        "page_json_required_fact", None,
+                        "Source fact remains unresolved; supported content is still generated",
+                        page_component_id=component["id"],
+                        path=fact["path"], expression=fact.get("expression"),
+                        page_reason=fact.get("reason"),
+                    )
+            for unresolved in component["unresolved"]:
+                self.add_unresolved(
+                    "android_page_visual_fact",
+                    None,
+                    "Android page JSON retains an unresolved visual fact",
+                    page_component_id=component["id"],
+                    semantic_key=component.get("semantic_key"),
+                    path=unresolved["path"],
+                    expression=unresolved["expression"],
+                    page_reason=unresolved["reason"],
+                )
+        source_phase_gate = android_page_input.get("source_phase_consumption_gate") or {}
+        for failure in source_phase_gate.get("failures") or []:
             self.add_unresolved(
-                "cycle",
-                None,
-                f"recursive project component edge {caller[0]}#{caller[1]} -> {callee[0]}#{callee[1]} is omitted",
+                "page_json_source_phase", None, failure["reason"],
+                page_component_id=failure["component_id"], phase=failure["phase"],
+                relationship_id=failure.get("relationship_id"),
             )
+        self.cycle_edges: set[tuple[tuple[str, str], tuple[str, str]]] = set()
 
     def add_unresolved(
         self,
@@ -2276,6 +4314,16 @@ class Renderer:
             return rendered["left"]
         return "{ " + ", ".join(f"{name}: {rendered[name]}" for name in ("left", "right", "top", "bottom")) + " }"
 
+    def page_layout_length(self, value: float) -> str:
+        self._uses_page_layout_pixels = True
+        return f"this.layoutPx({self.page_number(value)})"
+
+    def page_layout_edges(self, value: dict[str, Any]) -> str:
+        rendered = {name: self.page_layout_length(value[name]) for name in ("left", "right", "top", "bottom")}
+        if len(set(rendered.values())) == 1:
+            return rendered["left"]
+        return "{ " + ", ".join(f"{name}: {rendered[name]}" for name in rendered) + " }"
+
     def android_page_visual_lines(
         self,
         call: dict[str, Any],
@@ -2444,6 +4492,25 @@ class Renderer:
                     typography["overflow"],
                     f".textOverflow({{ overflow: {overflow} }})",
                 )
+
+        if component_kind in {"Image", "Icon", "AsyncImage"}:
+            tint = style["asset"]["tint"]
+            if tint is not None:
+                if self.android_page_value_is_proven_for_call(
+                    call, "style.asset.tint", tint
+                ):
+                    lines.extend(
+                        self.image_tint_lines(arkts_string(tint), prefer_template=True)
+                    )
+                    self.record_android_page_path(call, "style.asset.tint")
+                else:
+                    self.add_unresolved(
+                        "android_page_visual_fact",
+                        call,
+                        "Android page visual value is not bound to resolved provenance",
+                        page_component_id=component["id"],
+                        path="style.asset.tint",
+                    )
 
         transform = style["transform"]
         translation_x = transform["translation_x_dp"]
@@ -10080,6 +12147,8 @@ class Renderer:
                         lines.extend(self.image_tint_lines(color, call["component"] == "Icon"))
                 lines.extend(modifiers)
                 return lines
+            if call["component"] == "Spacer":
+                return ["Blank()", *self.modifier_lines(call, {})]
             if call["component"] not in {"BasicTextField", "TextField", "OutlinedTextField"}:
                 return []
             semantic = call.get("semantic_arguments", {})
@@ -10109,21 +12178,321 @@ class Renderer:
         return next((line for line in reversed(lines) if line.startswith(prefix)), None)
 
     def page_snapshot_text_value(self, component: dict[str, Any]) -> str:
-        current: dict[str, Any] | None = component
-        while current is not None:
-            text = current["style"]["content"]["text"]
-            if isinstance(text, str):
-                return text
-            parent_id = current.get("parent_id")
-            current = self.android_page_by_id.get(parent_id) if isinstance(parent_id, str) else None
-        return ""
+        text = component['style']['content'].get('text')
+        return text if isinstance(text, str) else ''
+
+    def page_snapshot_descendant_consumes_typography_color(
+        self,
+        component: dict[str, Any],
+        color: str,
+    ) -> bool:
+        pending = list(component.get("children_ids") or [])
+        while pending:
+            descendant_id = pending.pop()
+            descendant = self.android_page_by_id.get(descendant_id)
+            if not isinstance(descendant, dict):
+                continue
+            typography = (descendant.get("style") or {}).get("typography") or {}
+            if (
+                typography.get("color") == color
+                and "style.typography.color"
+                in self.android_page_applied_component_paths.get(descendant_id, set())
+            ):
+                return True
+            pending.extend(descendant.get("children_ids") or [])
+        return False
+
+    @staticmethod
+    def page_snapshot_layout_rules(component: dict[str, Any]) -> list[dict[str, Any]]:
+        source = component.get("source")
+        rules = source.get("layoutRules") if isinstance(source, dict) else None
+        return [rule for rule in rules if isinstance(rule, dict)] if isinstance(rules, list) else []
+
+    @classmethod
+    def page_snapshot_axis_layout_rule(
+        cls,
+        component: dict[str, Any],
+        axis: str,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] | None = None
+        for rule in cls.page_snapshot_layout_rules(component):
+            if (
+                rule.get("kind") == "sizing"
+                and axis in (rule.get("axes") or [])
+            ) or (
+                rule.get("kind") == "intrinsic_size"
+                and rule.get("axis") == axis
+            ):
+                result = rule
+        return result
+
+    @classmethod
+    def page_snapshot_source_layout_weight(cls, component: dict[str, Any]) -> str | None:
+        for rule in cls.page_snapshot_layout_rules(component):
+            if rule.get("kind") == "weight":
+                if rule.get("fill") is not True:
+                    return None
+                return f".layoutWeight({decimal_literal(Decimal(str(rule['value'])))})"
+        source = component.get("source")
+        modifiers = source.get("modifiers") if isinstance(source, dict) else None
+        if not isinstance(modifiers, list):
+            return None
+        for modifier in modifiers:
+            if not isinstance(modifier, dict) or modifier.get("name") != "weight":
+                continue
+            arguments = modifier.get("arguments")
+            if not isinstance(arguments, str):
+                continue
+            positional, named = named_arguments(arguments)
+            if named.get("fill", positional[1] if len(positional) > 1 else "true").strip() != "true":
+                return None
+            value = (
+                positional[0].strip()
+                if positional
+                else str(named.get("weight") or "").strip()
+            )
+            match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)[fF]?", value)
+            if match is not None:
+                return f".layoutWeight({match.group(1)})"
+        return None
+
+    @staticmethod
+    def page_snapshot_has_explicit_axis_size(
+        component: dict[str, Any],
+        axis: str,
+    ) -> bool:
+        style = component.get("style")
+        if not isinstance(style, dict):
+            return False
+        layout = style.get("layout")
+        key = f"{axis}_dp"
+        return isinstance(layout, dict) and layout.get(key) is not None
+
+    def page_snapshot_dimension_lines(
+        self,
+        component: dict[str, Any],
+        bounds: dict[str, float],
+        parent: dict[str, Any] | None,
+        parent_type: str | None,
+        is_text: bool,
+    ) -> list[str]:
+        component_type = component["type"]
+        weight = self.page_snapshot_source_layout_weight(component)
+        result: list[str] = []
+        for axis in ("width", "height"):
+            rule = self.page_snapshot_axis_layout_rule(component, axis)
+            if rule is None and self.page_snapshot_stretched_axis(component, axis):
+                result.append(".alignSelf(ItemAlign.Stretch)")
+                continue
+            if isinstance(rule, dict):
+                if rule.get("kind") == "intrinsic_size" or rule.get("mode") == "wrap_content":
+                    self.record_page_layout_rule(component, rule)
+                    if component_type == "ConstraintLayout":
+                        # RelativeContainer otherwise defaults to filling both axes.
+                        fills = any(
+                            (self.page_snapshot_axis_layout_rule(child, axis) or {}).get("mode") == "fill_parent"
+                            for child_id in component.get("children_ids", [])
+                            if (child := self.android_page_by_id.get(child_id)) is not None
+                        )
+                        result.append(f".{axis}({arkts_string('100%' if fills else 'auto')})")
+                    continue
+                if rule.get("mode") in {"fill_parent", "match_parent"}:
+                    match_parent_name = getattr(self, '_page_match_parent_sizes', {}).get(component['id'])
+                    if rule.get('mode') == 'match_parent' and match_parent_name:
+                        result.append(f'.{axis}(this.{match_parent_name}{axis.title()})')
+                        self.record_page_layout_rule(component, rule)
+                        continue
+                    parent_rule = self.page_snapshot_axis_layout_rule(parent, axis) if parent else None
+                    if parent_rule and parent_rule.get("kind") == "intrinsic_size":
+                        if (parent_type, axis) in {("Row", "height"), ("Column", "width")} and rule["fraction"] == 1:
+                            result.append(".alignSelf(ItemAlign.Stretch)")
+                        else:
+                            self.add_page_json_unresolved(component, f"layout.{axis}", "intrinsic parent fill requires a full cross-axis stretch")
+                    else:
+                        percentage = decimal_literal(Decimal(str(float(rule["fraction"]) * 100)))
+                        result.append(f".{axis}('{percentage}%')")
+                    self.record_page_layout_rule(component, rule)
+                    continue
+            if self.page_snapshot_root_fills_viewport(component, parent, axis):
+                result.append(f".{axis}('100%')")
+                continue
+            if self.page_snapshot_fills_parent_inner_axis(component, parent, axis):
+                result.append(f".{axis}('100%')")
+                continue
+            weighted_axis = (
+                weight is not None
+                and (
+                    (parent_type == "Row" and axis == "width")
+                    or (parent_type == "Column" and axis == "height")
+                )
+            )
+            if weighted_axis:
+                continue
+            layout = component["style"]["layout"]
+            explicit = layout.get(f"{axis}_dp")
+            explicit_path = f"style.layout.{axis}_dp"
+            if explicit is not None:
+                self.record_page_paths(component, {explicit_path})
+                result.append(f".{axis}({self.page_layout_length(float(explicit))})")
+            elif component_type in {"CenterAlignedTopAppBar", "TopAppBar"}:
+                if axis == "width":
+                    result.append(".width('100%')")
+            elif component_type == "Spacer" and weight is None:
+                result.append(f".{axis}(0)")
+        return result
+
+    def page_snapshot_intrinsic_image_lines(self, component: dict[str, Any]) -> list[str]:
+        if component["type"] not in {"Image", "Icon", "AsyncImage"}:
+            return []
+        if any(
+            fact.get("origin") == "modifier" and fact.get("path") in {"style.asset.width_dp", "style.asset.height_dp"}
+            for fact in component.get("required_facts", [])
+        ):
+            self.add_page_json_unresolved(component, "style.layout", "legacy image JSON conflates modifier sizes with intrinsic asset sizes; regenerate the page JSON")
+            return []
+        asset = component["style"]["asset"]
+        axes = [
+            axis for axis in ("width", "height")
+            if not self.page_snapshot_has_explicit_axis_size(component, axis)
+            and (self.page_snapshot_axis_layout_rule(component, axis) or {}).get("mode") not in {"fill_parent", "match_parent"}
+        ]
+        if not axes:
+            return []
+        sizes = {axis: asset.get(f"{axis}_dp") for axis in ("width", "height")}
+        if not all(isinstance(value, (int, float)) and value > 0 for value in sizes.values()):
+            return []
+        if asset.get("content_scale") not in {None, "fit", "inside"}:
+            self.add_page_json_unresolved(component, "style.asset.content_scale", "intrinsic image measurement currently supports Fit/Inside; other modes require explicit layout sizes")
+            return []
+        limits = {"max" + axis.title(): sizes[axis] for axis in axes}
+        for rule in self.page_snapshot_layout_rules(component):
+            if rule["kind"] == "constraints":
+                # Explicit source constraints override an intrinsic preference.
+                limits.update(rule["limits"])
+                self.record_page_layout_rule(component, rule)
+        self.record_page_paths(component, {f"style.asset.{axis}_dp" for axis in ("width", "height")})
+        values = ", ".join(f"{key}: {self.page_number(value)}" for key, value in limits.items())
+        lines = [f".constraintSize({{ {values} }})"]
+        if len(axes) == 2 and component["style"]["layout"].get("aspect_ratio") is None:
+            lines.append(f".aspectRatio({self.page_number(sizes['width'] / sizes['height'])})")
+        return lines
+
+    def page_snapshot_stretched_axis(self, component: dict[str, Any], axis: str) -> bool:
+        if self.page_snapshot_has_explicit_axis_size(component, axis):
+            return False
+        parent = self.android_page_by_id.get(component.get("parent_id"))
+        if not parent:
+            return False
+        rule = self.page_snapshot_axis_layout_rule(component, axis)
+        if rule:
+            parent_rule = self.page_snapshot_axis_layout_rule(parent, axis)
+            return bool(
+                rule.get("mode") == "fill_parent" and rule.get("fraction") == 1
+                and parent_rule and parent_rule.get("kind") == "intrinsic_size"
+                and (parent.get("type"), axis) in {("Row", "height"), ("Column", "width")}
+            )
+        return bool(
+            (parent.get("source") or {}).get("custom_component")
+            and parent.get("children_ids") == [component["id"]]
+            and self.page_snapshot_stretched_axis(parent, axis)
+        )
+
+    def record_page_paths(self, component: dict[str, Any], paths: set[str]) -> None:
+        if not hasattr(self, "android_page_applied_component_paths"):
+            self.android_page_applied_component_paths = defaultdict(set)
+        self.android_page_applied_component_paths[component["id"]].update(paths)
+
+    def record_page_layout_rule(self, component: dict[str, Any], rule: dict[str, Any]) -> None:
+        if isinstance(rule.get("source_modifier_name"), str):
+            self.record_page_paths(component, {f"source.modifiers.{rule['source_modifier_name'].lower()}"})
+        modifiers = (component.get("source") or {}).get("modifiers") or []
+        index = rule.get("source_modifier_index")
+        if type(index) is int and 0 <= index < len(modifiers):
+            name = modifiers[index].get("name")
+            if isinstance(name, str):
+                self.record_page_paths(component, {f"source.modifiers.{name.lower()}"})
+
+    def page_snapshot_minimum_constraint_line(
+        self,
+        component: dict[str, Any],
+        bounds: dict[str, float],
+    ) -> str | None:
+        if component.get("type") not in BUTTON_CONTAINER_COMPONENTS:
+            return None
+        if self.page_snapshot_has_explicit_axis_size(component, "height"):
+            return None
+        if component.get('type') == 'IconButton' and not self.page_snapshot_has_explicit_axis_size(component, 'width'):
+            padding = component['style']['layout'].get('padding_dp') or {}
+            return f".constraintSize({{ minWidth: {self.page_layout_length(48 + padding.get('left', 0) + padding.get('right', 0))}, minHeight: {self.page_layout_length(48)} }})"
+        return f".constraintSize({{ minHeight: {self.page_layout_length(48)} }})"
+
+    def page_snapshot_flow_shrink_line(
+        self,
+        component: dict[str, Any],
+        parent_type: str | None,
+    ) -> str | None:
+        if parent_type not in {"Column", "Row"}:
+            return None
+        if self.page_snapshot_source_layout_weight(component) is not None:
+            return None
+        return ".flexShrink(0)"
+
+    def page_snapshot_root_fills_viewport(
+        self,
+        component: dict[str, Any],
+        parent: dict[str, Any] | None,
+        axis: str,
+    ) -> bool:
+        if parent is not None or component.get("parent_id") is not None:
+            return False
+        return not self.page_snapshot_has_explicit_axis_size(component, axis)
+
+    def page_snapshot_fills_parent_inner_axis(
+        self,
+        component: dict[str, Any],
+        parent: dict[str, Any] | None,
+        axis: str,
+    ) -> bool:
+        if axis not in {"width", "height"} or not isinstance(parent, dict):
+            return False
+        if self.page_snapshot_has_explicit_axis_size(component, axis):
+            return False
+        parent_source = parent.get("source")
+        custom_parent = (
+            isinstance(parent_source, dict)
+            and (parent_source.get("custom_component") is True or parent.get("type") in {"content", "toolbar"})
+            and parent.get("children_ids") == [component.get("id")]
+        )
+        if not custom_parent:
+            return False
+        parent_rule = self.page_snapshot_axis_layout_rule(parent, axis)
+        if parent_rule:
+            ancestor = self.android_page_by_id.get(parent.get("parent_id"))
+            ancestor_rule = self.page_snapshot_axis_layout_rule(ancestor, axis) if ancestor else None
+            if ancestor_rule and ancestor_rule.get("kind") == "intrinsic_size":
+                return False
+            return parent_rule.get("mode") in {"fill_parent", "match_parent"}
+        if self.page_snapshot_has_explicit_axis_size(parent, axis):
+            return True
+        ancestor = self.android_page_by_id.get(parent.get("parent_id"))
+        if self.page_snapshot_source_layout_weight(parent) and ancestor:
+            if (ancestor.get("type"), axis) in {("Row", "width"), ("Column", "height")}:
+                return True
+        return self.page_snapshot_fills_parent_inner_axis(parent, ancestor, axis)
 
     def page_snapshot_bounds(
         self,
         component: dict[str, Any],
         parent_bounds: dict[str, float],
     ) -> tuple[dict[str, float], float, float]:
-        bounds = dict(component.get("visual_bounds_dp") or component["bounds_dp"])
+        if component.get("_runtime_bounds_applied") is True:
+            bounds = dict(component["bounds_dp"])
+        else:
+            bounds = dict(
+                component.get("source_layout_bounds_dp")
+                or component.get("visual_bounds_dp")
+                or component["bounds_dp"]
+            )
         if (
             component["type"] in {"BasicTextField", "TextField", "OutlinedTextField"}
             and component.get("visual_bounds_dp") is not None
@@ -10265,6 +12634,36 @@ class Renderer:
             bounds["y"] -= float(PAGE_DRIVEN_BASELINE_VP)
         return bounds
 
+    def page_snapshot_source_draw_order(self, component: dict[str, Any]) -> int | None:
+        context = component.get("component_context")
+        if not isinstance(context, dict):
+            return None
+        source_ids = [
+            source_id
+            for source_id in (
+                context.get("source_component_id"),
+                context.get("business_component_id"),
+            )
+            if isinstance(source_id, str)
+        ]
+        for source_id in source_ids:
+            current = self.android_source_tree_by_id.get(source_id)
+            while isinstance(current, dict):
+                relationship = self.android_source_layout_by_subject.get(current["id"])
+                if (
+                    isinstance(relationship, dict)
+                    and relationship.get("composition") == "overlay"
+                    and not relationship.get("unresolved")
+                ):
+                    return int(relationship["draw_order"])
+                parent_id = current.get("parent_id")
+                current = (
+                    self.android_source_tree_by_id.get(parent_id)
+                    if isinstance(parent_id, str)
+                    else None
+                )
+        return None
+
     def page_snapshot_source_radius(
         self,
         call: dict[str, Any] | None,
@@ -10274,24 +12673,47 @@ class Renderer:
             return None
         expression: str | None = None
         semantic = call.get("semantic_arguments")
-        shape = semantic.get("shape") if isinstance(semantic, dict) else None
-        if isinstance(shape, dict) and isinstance(shape.get("expression"), str):
-            expression = shape["expression"]
+        if isinstance(semantic, dict):
+            surface_argument = next(
+                (
+                    semantic.get(name)
+                    for name in ("shape", "corners", "cornerRadius")
+                    if isinstance(semantic.get(name), dict)
+                    and isinstance(semantic[name].get("expression"), str)
+                ),
+                None,
+            )
+            if isinstance(surface_argument, dict):
+                expression = surface_argument["expression"]
         if expression is None:
-            definition = self.definitions.get((call["source"], call["composable"]), {})
+            definition_key = (call["source"], call["composable"])
+            custom = call.get("custom_composable")
+            custom_definitions = custom.get("definitions") if isinstance(custom, dict) else None
+            if (
+                isinstance(custom_definitions, list)
+                and len(custom_definitions) == 1
+                and isinstance(custom_definitions[0], dict)
+            ):
+                definition_key = (
+                    custom_definitions[0].get("source"),
+                    custom_definitions[0].get("composable"),
+                )
+            definition = self.definitions.get(definition_key, {})
             expression = next(
                 (
                     parameter.get("default")
                     for parameter in definition.get("parameters", [])
                     if isinstance(parameter, dict)
-                    and parameter.get("name") == "shape"
+                    and parameter.get("name") in {"shape", "corners", "cornerRadius"}
                     and isinstance(parameter.get("default"), str)
                 ),
                 None,
             )
         if expression is None:
             return None
-        radius = self.rounded_corner_radius_expression(expression, {})
+        radius = self.dimension_expression(expression, {})
+        if radius is None:
+            radius = self.rounded_corner_radius_expression(expression, {})
         if radius is None or re.fullmatch(r"-?[0-9]+(?:\.[0-9]+)?", radius) is None:
             return None
         value = min(float(radius), bounds["width"] / 2, bounds["height"] / 2)
@@ -10347,6 +12769,389 @@ class Renderer:
             surfaces.append((anchor["id"], surface_lines))
         return surfaces
 
+    def page_snapshot_flow_container(self, component: dict[str, Any]) -> str | None:
+        container = self.page_snapshot_layout_container(component)
+        return container if container in {"Column", "Row"} else None
+
+    def page_snapshot_layout_container(self, component: dict[str, Any]) -> str | None:
+        if self.android_page_layout_mode != "source-tree":
+            return None
+        component_type = component["type"]
+        if component_type in PAGE_SNAPSHOT_FLOW_COMPONENTS:
+            return "Column" if component_type in PAGE_SNAPSHOT_COLUMN_COMPONENTS else "Row"
+        if component_type == "ConstraintLayout":
+            return "RelativeContainer"
+        return None
+
+    def page_snapshot_constraint_alignment_lines(
+        self,
+        component: dict[str, Any],
+    ) -> list[str]:
+        try:
+            return self.page_snapshot_supported_constraint_lines(component)
+        except ArkUIPageError as error:
+            # The document graph was validated on input. A missing mapping here
+            # is a local capability gap, not permission to infer coordinates.
+            self.add_page_json_unresolved(component, "source.layout_relationships", str(error))
+            return []
+
+    def page_snapshot_supported_constraint_lines(
+        self,
+        component: dict[str, Any],
+    ) -> list[str]:
+        if self.android_page_layout_mode != "source-tree":
+            return []
+        relationship = self.android_source_layout_by_subject.get(component["id"])
+        if not isinstance(relationship, dict):
+            raise ArkUIPageError(
+                f"ConstraintLayout child has no source relationship: {component['id']}"
+            )
+        if relationship.get("unresolved"):
+            raise ArkUIPageError(
+                f"ConstraintLayout relationship is unresolved: {component['id']}"
+            )
+        rules: list[str] = []
+        emitted_keys: set[str] = set()
+        horizontal_target = {
+            "start": "HorizontalAlign.Start",
+            "end": "HorizontalAlign.End",
+        }
+        vertical_target = {
+            "top": "VerticalAlign.Top",
+            "bottom": "VerticalAlign.Bottom",
+        }
+        for constraint in relationship.get("active_constraints") or []:
+            margin = constraint.get("margin_dp")
+            if margin not in {None, 0, 0.0}:
+                raise ArkUIPageError(
+                    "ConstraintLayout margins are not yet representable without changing "
+                    f"layout semantics: {component['id']}"
+                )
+            kind = constraint.get("kind")
+            subject_anchor = constraint.get("subject_anchor")
+            target_anchor = constraint.get("target_anchor")
+            parent = self.android_page_by_id.get(component.get("parent_id"))
+            axis = "height" if subject_anchor == "top" else "width"
+            parent_rule = self.page_snapshot_axis_layout_rule(parent, axis) if parent else None
+            other_axis_anchors = {"bottom", "center"} if axis == "height" else {"end", "middle"}
+            if (
+                kind == "link_to"
+                and subject_anchor in {"top", "start"}
+                and subject_anchor == target_anchor
+                and constraint.get("target_reference") == "parent"
+                and parent_rule and parent_rule.get("mode") == "wrap_content"
+                and not any(c.get("subject_anchor") in other_axis_anchors for c in relationship["active_constraints"])
+            ):
+                # The origin is already zero. Keeping this redundant anchor disables
+                # RelativeContainer's native wrap measurement in the same axis.
+                continue
+            if kind == "center_around":
+                if target_anchor in horizontal_target:
+                    rule_key = "middle"
+                    alignment = horizontal_target[target_anchor]
+                elif target_anchor in vertical_target:
+                    rule_key = "center"
+                    alignment = vertical_target[target_anchor]
+                else:
+                    raise ArkUIPageError(
+                        f"unsupported centerAround anchor: {target_anchor}"
+                    )
+            elif kind == "link_to":
+                if subject_anchor in {"start", "end"} and target_anchor in horizontal_target:
+                    rule_key = "left" if subject_anchor == "start" else "right"
+                    alignment = horizontal_target[target_anchor]
+                elif subject_anchor in {"top", "bottom"} and target_anchor in vertical_target:
+                    rule_key = subject_anchor
+                    alignment = vertical_target[target_anchor]
+                else:
+                    raise ArkUIPageError(
+                        "unsupported or cross-axis ConstraintLayout link: "
+                        f"{component['id']}:{subject_anchor}->{target_anchor}"
+                    )
+            else:
+                raise ArkUIPageError(
+                    f"unsupported ConstraintLayout relationship kind: {kind}"
+                )
+            if rule_key in emitted_keys:
+                raise ArkUIPageError(
+                    f"duplicate ConstraintLayout rule {rule_key}: {component['id']}"
+                )
+            target_id = constraint.get("target_id")
+            if constraint.get("target_reference") == "parent":
+                anchor = "__container__"
+            else:
+                target = self.android_page_by_id.get(target_id)
+                anchor = target.get("semantic_key") if isinstance(target, dict) else None
+                if not isinstance(anchor, str) or not anchor:
+                    raise ArkUIPageError(
+                        f"ConstraintLayout target has no ArkUI id: {target_id}"
+                    )
+            rules.append(
+                f"{rule_key}: {{ anchor: {arkts_string(anchor)}, align: {alignment} }}"
+            )
+            emitted_keys.add(rule_key)
+        if not rules and not relationship.get("active_constraints"):
+            raise ArkUIPageError(
+                f"ConstraintLayout child has no active constraints: {component['id']}"
+            )
+        return [f".alignRules({{ {', '.join(rules)} }})"] if rules else []
+
+    def page_snapshot_requires_position(
+        self,
+        component: dict[str, Any],
+        bounds: dict[str, float],
+        parent: dict[str, Any] | None,
+        parent_container: str | None,
+    ) -> bool:
+        if self.android_page_layout_mode == "source-tree":
+            return False
+        return parent_container is not None
+
+    def page_snapshot_explicit_offset_line(
+        self,
+        component: dict[str, Any],
+        parent: dict[str, Any] | None,
+    ) -> str | None:
+        if self.android_page_layout_mode != "source-tree" or not isinstance(parent, dict):
+            return None
+        offset_rule = next(
+            (
+                rule
+                for rule in reversed(self.page_snapshot_layout_rules(component))
+                if rule.get("kind") == "offset"
+            ),
+            None,
+        )
+        if isinstance(offset_rule, dict):
+            values: list[str] = []
+            for axis in ("x", "y"):
+                offset = offset_rule.get(axis)
+                if not isinstance(offset, dict):
+                    continue
+                if offset.get("kind") == "dp":
+                    value = float(offset["value"])
+                    if abs(value) > 0.001:
+                        values.append(f"{axis}: {self.page_number(value)}")
+                else:
+                    parent_axis = str(offset["axis"])
+                    scope = parent
+                    while scope and scope['type'] != 'BoxWithConstraints':
+                        scope = self.android_page_by_id.get(scope.get('parent_id'))
+                    bounded = False
+                    if scope:
+                        rule = self.page_snapshot_axis_layout_rule(scope, parent_axis) or {}
+                        bounded = self.page_snapshot_has_explicit_axis_size(scope, parent_axis)
+                        if not bounded and rule.get('mode') == 'fill_parent' and rule.get('fraction') == 1:
+                            bounded = True
+                            ancestor = self.android_page_by_id.get(scope.get('parent_id'))
+                            while ancestor:
+                                if self.page_snapshot_has_explicit_axis_size(ancestor, parent_axis):
+                                    break
+                                scroll_axis = 'vertical' if parent_axis == 'height' else 'horizontal'
+                                if ancestor['type'] == ('LazyColumn' if parent_axis == 'height' else 'LazyRow') or any(
+                                    r.get('kind') == 'scroll' and r.get('axis') == scroll_axis and r.get('enabled')
+                                    for r in self.page_snapshot_layout_rules(ancestor)
+                                ):
+                                    bounded = False
+                                    break
+                                ancestor = self.android_page_by_id.get(ancestor.get('parent_id'))
+                    if not bounded:
+                        self.add_page_json_unresolved(component, 'source.modifiers.offset',
+                            'parent max constraint needs a bounded, size-filling BoxWithConstraints scope; wrap size is not max constraint')
+                        return None
+                    state = self._page_constraint_states.setdefault(scope['id'], {
+                        'name': f'pageConstraint{len(self._page_constraint_states)}', 'axes': set()})
+                    state['axes'].add(parent_axis)
+                    values.append(f"{axis}: this.{state['name']}{parent_axis.title()} * {self.page_number(float(offset['fraction']))}")
+            return f".translate({{ {', '.join(values)} }})" if values else None
+        source = component.get("source")
+        modifiers = source.get("modifiers") if isinstance(source, dict) else None
+        if not isinstance(modifiers, list) or not any(
+            isinstance(modifier, dict) and modifier.get("name") == "offset"
+            for modifier in modifiers
+        ):
+            return None
+        self.add_page_json_unresolved(
+            component,
+            "source.modifiers.offset",
+            "offset requires a normalized layout rule; deriving translation from bbox is forbidden",
+        )
+        return None
+
+    def add_page_json_unresolved(
+        self,
+        component: dict[str, Any],
+        path: str,
+        reason: str,
+    ) -> None:
+        self.add_unresolved(
+            "page_json_missing_fact",
+            None,
+            reason,
+            page_component_id=component["id"],
+            semantic_key=component.get("semantic_key"),
+            path=path,
+        )
+
+    @staticmethod
+    def page_snapshot_arrangement_space(component: dict[str, Any]) -> str | None:
+        layout = component["style"]["layout"]
+        key = (
+            "vertical_arrangement"
+            if component["type"] in PAGE_SNAPSHOT_COLUMN_COMPONENTS
+            else "horizontal_arrangement"
+        )
+        expression = layout.get(key)
+        if not isinstance(expression, str):
+            return None
+        match = re.fullmatch(
+            r"(?:Arrangement\.)?spacedBy\(\s*(?:space\s*=\s*)?(-?[0-9]+(?:\.[0-9]+)?)\.dp\s*(?:,\s*(?:alignment\s*=\s*)?Alignment\.[A-Za-z]+\s*)?\)",
+            expression,
+        )
+        return match.group(1) if match is not None else None
+
+    def page_snapshot_container_alignment_lines(
+        self,
+        component: dict[str, Any],
+    ) -> list[str]:
+        component_type = component["type"]
+        layout = component["style"]["layout"]
+        alignment = layout.get("alignment")
+        lines: list[str] = []
+        if component_type in PAGE_SNAPSHOT_ROW_COMPONENTS:
+            mapped = {
+                "Top": "VerticalAlign.Top",
+                "CenterVertically": "VerticalAlign.Center",
+                "Bottom": "VerticalAlign.Bottom",
+            }.get(str(alignment or "Top").removeprefix("Alignment."))
+            if mapped is not None:
+                lines.append(f".alignItems({mapped})")
+            arrangement = layout.get("horizontal_arrangement")
+        elif component_type in PAGE_SNAPSHOT_COLUMN_COMPONENTS:
+            mapped = {
+                "Start": "HorizontalAlign.Start",
+                "CenterHorizontally": "HorizontalAlign.Center",
+                "End": "HorizontalAlign.End",
+            }.get(str(alignment or "Start").removeprefix("Alignment."))
+            if mapped is not None:
+                lines.append(f".alignItems({mapped})")
+            arrangement = layout.get("vertical_arrangement")
+        else:
+            arrangement = None
+        justify = {
+            "Arrangement.Start": "FlexAlign.Start",
+            "Arrangement.Center": "FlexAlign.Center",
+            "Arrangement.End": "FlexAlign.End",
+            "Arrangement.Top": "FlexAlign.Start",
+            "Arrangement.Bottom": "FlexAlign.End",
+            "Arrangement.SpaceBetween": "FlexAlign.SpaceBetween",
+            "Arrangement.SpaceAround": "FlexAlign.SpaceAround",
+            "Arrangement.SpaceEvenly": "FlexAlign.SpaceEvenly",
+        }.get(arrangement)
+        if self.page_snapshot_arrangement_space(component) is not None:
+            match = re.search(r"Alignment\.(\w+)", str(arrangement))
+            justify = {"CenterHorizontally": "FlexAlign.Center", "CenterVertically": "FlexAlign.Center",
+                       "Start": "FlexAlign.Start", "Top": "FlexAlign.Start",
+                       "End": "FlexAlign.End", "Bottom": "FlexAlign.End"}.get(match.group(1) if match else "Start")
+        if justify is not None:
+            lines.append(f".justifyContent({justify})")
+        if component_type == "CenterAlignedTopAppBar":
+            return lines
+        if component_type not in {"Box", "BoxWithConstraints"}:
+            return lines
+        mapped = {
+            "Center": "Alignment.Center",
+            "CenterStart": "Alignment.Start",
+            "CenterEnd": "Alignment.End",
+            "TopStart": "Alignment.TopStart",
+            "TopCenter": "Alignment.Top",
+            "TopEnd": "Alignment.TopEnd",
+            "BottomStart": "Alignment.BottomStart",
+            "BottomCenter": "Alignment.Bottom",
+            "BottomEnd": "Alignment.BottomEnd",
+        }.get(str(alignment or "TopStart").removeprefix("Alignment."))
+        return [f".alignContent({mapped})", *lines] if mapped is not None else lines
+
+    def page_snapshot_decorated_input_lines(self, component, decoration, parent_bounds, parent_type, indent):
+        # BasicTextField owns editing; its decoration owns padding, chrome and slots.
+        outer = copy.deepcopy(component)
+        outer['type'] = 'Box'
+        outer['style']['content']['text'] = None
+        inner = copy.deepcopy(component)
+        inner['id'] += '-editor'
+        inner['semantic_key'] += '__editor'
+        inner['parent_id'] = decoration['id']
+        inner['children_ids'] = []
+        inner['style']['layout'] = {key: None for key in inner['style']['layout']}
+        inner['style']['surface'] = {key: None for key in inner['style']['surface']}
+        inner['source'] = {'layoutRules': [{'kind': 'weight', 'value': 1.0, 'fill': True}]}
+        row = copy.deepcopy(decoration)
+        row['type'] = 'Row'
+        row['style']['layout']['alignment'] = 'CenterVertically'
+        facts = (decoration.get('source') or {}).get('input_decoration') or {}
+        outlined = facts.get('kind') == 'material3-outlined'
+        leading, trailing, supporting = [], [], []
+        for child_id in row['children_ids']:
+            child = self.android_page_by_id[child_id]
+            slot = (child.get('source') or {}).get('slot_argument_name')
+            if outlined and slot == 'supportingText':
+                supporting.append(child_id)
+                continue
+            (leading if slot == 'leadingIcon' else trailing).append(child_id)
+            if slot not in {'leadingIcon', 'trailingIcon'}:
+                self.add_page_json_unresolved(child, 'source.slot_argument_name',
+                    'input decoration slot retained; floating label/supporting layout is not resolved')
+        row['children_ids'] = leading + [inner['id']] + trailing
+        outer['children_ids'] = [row['id']]
+        updates = {outer['id']: outer, row['id']: row, inner['id']: inner}
+        if outlined:
+            fill_width = {'kind': 'sizing', 'axes': ['width'], 'mode': 'fill_parent', 'fraction': 1}
+
+            def container(suffix, kind, child_ids, padding=None, min_height=None):
+                node = copy.deepcopy(decoration)
+                node.update(id=decoration['id'] + '-' + suffix,
+                            semantic_key=decoration['semantic_key'] + '__' + suffix,
+                            type=kind, children_ids=child_ids, required_facts=[], unresolved=[])
+                node['style'] = {group: dict.fromkeys(values) for group, values in node['style'].items()}
+                node['style']['layout'].update(padding_dp=padding, alignment='Center' if kind == 'Box' else 'Start')
+                rules = [copy.deepcopy(fill_width)]
+                if min_height is not None:
+                    rules.append({'kind': 'constraints', 'limits': {'minHeight': min_height}})
+                node['source'] = {'layoutRules': rules}
+                updates[node['id']] = node
+                return node
+
+            # Material measures the editor with content padding, but icons without it.
+            padding = row['style']['layout'].get('padding_dp') or dict.fromkeys(('left', 'right', 'top', 'bottom'), 0)
+            line = container('text_line', 'Box', [inner['id']], min_height=facts['text_min_height_dp'])
+            padded = container('text_padding', 'Box', [line['id']],
+                               dict(left=0, right=0, top=padding['top'], bottom=padding['bottom']))
+            padded['source']['layoutRules'] = [{'kind': 'weight', 'value': 1.0, 'fill': True}]
+            padded['parent_id'], line['parent_id'], inner['parent_id'] = row['id'], padded['id'], line['id']
+            inner['source']['layoutRules'] = [copy.deepcopy(fill_width)]
+            row['style']['layout']['padding_dp'] = {**padding, 'top': 0, 'bottom': 0}
+            row['source'].setdefault('layoutRules', []).append(copy.deepcopy(fill_width))
+            row['children_ids'] = leading + [padded['id']] + trailing
+            if facts.get('supporting_text') is True or supporting:
+                support = container('supporting', 'Column', supporting,
+                                    facts['supporting_padding_dp'], facts['supporting_min_height_dp'])
+                support['parent_id'] = outer['id']
+                for child_id in supporting:
+                    updates[child_id] = {**self.android_page_by_id[child_id], 'parent_id': support['id']}
+                outer['type'] = 'Column'
+                outer['children_ids'].append(support['id'])
+            self.record_page_paths(decoration, {'source.input_decoration'})
+        original = {node_id: self.android_page_by_id.get(node_id) for node_id in updates}
+        self.android_page_by_id.update(updates)
+        try:
+            return self.page_snapshot_component_lines(outer, parent_bounds, parent_type, indent)
+        finally:
+            for node_id, node in original.items():
+                if node is None:
+                    self.android_page_by_id.pop(node_id, None)
+                else:
+                    self.android_page_by_id[node_id] = node
+
     def page_snapshot_component_lines(
         self,
         component: dict[str, Any],
@@ -10357,73 +13162,493 @@ class Renderer:
         prefix = " " * indent
         component_type = component["type"]
         children = [self.android_page_by_id[child_id] for child_id in component["children_ids"]]
-        call = None
-        if len(component["call_ids"]) == 1:
-            candidate_call = self.selected_calls_by_id.get(component["call_ids"][0])
-            if candidate_call is not None and candidate_call["component"] == component_type:
-                call = candidate_call
-        source_lines = self.page_snapshot_source_lines(call) if call is not None else []
+        native_containers = NATIVE_CONTAINERS
+        native_leaves = NATIVE_LEAVES
+        project_wrapper = (component.get("source") or {}).get("custom_component") is True
+        if project_wrapper and self.android_page_layout_mode == 'source-tree':
+            lines = []
+            for child in children:
+                lines.extend(self.page_snapshot_component_lines(child, parent_bounds, parent_type, indent))
+            self.android_page_processed_component_ids.add(component['id'])
+            applied = self.android_page_applied_component_paths[component['id']]
+            applied.update({
+                'structure.type', 'structure.parent_id', 'structure.children_ids', 'structure.sibling_index'})
+            for child in children:
+                consumed = self.android_page_applied_component_paths.get(child['id'], set())
+                for section, values in component['style'].items():
+                    for field, value in values.items():
+                        path = f'style.{section}.{field}'
+                        if value is not None and path in consumed and child['style'].get(section, {}).get(field) == value:
+                            applied.add(path)
+                for rule in self.page_snapshot_layout_rules(component):
+                    if rule in self.page_snapshot_layout_rules(child):
+                        self.record_page_layout_rule(component, rule)
+            return lines
+        if component_type not in native_containers | native_leaves | BUTTON_CONTAINER_COMPONENTS and not project_wrapper:
+            self.add_page_json_unresolved(component, "structure.type", f"unsupported component {component_type}; implicit Stack fallback is disabled")
+            return []
+        source_layout_weight = self.page_snapshot_source_layout_weight(component)
         bounds, relative_x, relative_y = self.page_snapshot_bounds(component, parent_bounds)
         is_text = component_type in {"Text", "BasicText", "ClickableText"}
         is_text_field = component_type in {"BasicTextField", "TextField", "OutlinedTextField"}
+        if (is_text or is_text_field) and not isinstance(component["style"]["content"].get("text"), str):
+            self.add_page_json_unresolved(component, "style.content.text", "dynamic content is unresolved; native control and static styles are retained without invented text")
+        decoration = next((child for child in children if child['type'] == 'DecorationBox'), None)
+        if is_text_field and decoration is not None:
+            return self.page_snapshot_decorated_input_lines(component, decoration, parent_bounds, parent_type, indent)
+        input_style = component['style'].get('input') or {}
+        control = component['style'].get('control') or {}
+        size_updates: list[str] = []
+        multiline_input = is_text_field and input_style.get('single_line') is False
         is_button = component_type in BUTTON_CONTAINER_COMPONENTS
+        intrinsic_image_lines = self.page_snapshot_intrinsic_image_lines(component)
+        page_tint_baked = False
+        emitted_phase_paths: set[str] = set()
+        scroll_rule = next((r for r in self.page_snapshot_layout_rules(component) if r["kind"] == "scroll"), None)
+        scroll_axis = (scroll_rule or {}).get("axis") if (scroll_rule or {}).get("enabled") else None
+        if component_type in {"LazyColumn", "LazyRow"}:
+            scroll_axis = "vertical" if component_type == "LazyColumn" else "horizontal"
 
         if is_text:
             lines = [f"{prefix}Text({arkts_string(self.page_snapshot_text_value(component))})"]
+            emitted_phase_paths.add("style.content.text")
         elif is_text_field:
-            lines = [f"{prefix}TextInput({{ text: {arkts_string(self.page_snapshot_text_value(component))} }})"]
+            options = [f"text: {arkts_string(self.page_snapshot_text_value(component))}"]
+            emitted_phase_paths.add("style.content.text")
+            placeholder = component["style"]["content"].get("placeholder")
+            if isinstance(placeholder, str):
+                options.append(f"placeholder: {arkts_string(placeholder)}")
+                emitted_phase_paths.add("style.content.placeholder")
+            input_component = 'TextArea' if multiline_input else 'TextInput'
+            lines = [f"{prefix}{input_component}({{ {', '.join(options)} }})"]
+            if component_type == 'BasicTextField':
+                lines.extend([f'{prefix}  .padding(0)', f"{prefix}  .backgroundColor('#00000000')",
+                              f'{prefix}  .borderRadius(0)'])
+            if input_style.get('single_line') is not None:
+                emitted_phase_paths.add('style.input.single_line')
         elif is_button:
-            lines = [f"{prefix}Button() {{"]
-            if call is not None:
-                for image_call in self.page_snapshot_elided_image_calls(component, call):
-                    for image_line in self.page_snapshot_source_lines(image_call):
-                        lines.append(f"{prefix}  {image_line}")
-            for child in children:
-                lines.extend(self.page_snapshot_component_lines(child, component["bounds_dp"], component_type, indent + 2))
-            lines.append(f"{prefix}}}")
-        elif component_type in {"Image", "Icon", "AsyncImage"} and call is not None:
-            semantic = call.get("semantic_arguments", {})
-            painter = semantic.get("painter") if isinstance(semantic, dict) else None
-            expression = painter.get("expression") if isinstance(painter, dict) else None
-            media = self.painter_resource_expression(expression, {}) if isinstance(expression, str) else None
-            media = media or "$r('app.media.start_icon')"
-            lines = [f"{prefix}Image({media})"]
-        elif children:
+            # A runtime accessibility "button" proves click semantics and bounds,
+            # not Material/ArkUI button chrome.  The page snapshot already owns
+            # the captured surface, border, radius, and shadow, so render a neutral
+            # visual container and apply those facts without ArkUI's blue default.
             lines = [f"{prefix}Stack() {{"]
-            for child in children:
-                lines.extend(self.page_snapshot_component_lines(child, component["bounds_dp"], component_type, indent + 2))
+            if len(children) > 1:
+                lines.append(f"{prefix}  Row() {{")
+                for child in children:
+                    lines.extend(
+                        self.page_snapshot_component_lines(
+                            child, bounds, "Row", indent + 4
+                        )
+                    )
+                lines.extend((f"{prefix}  }}", f"{prefix}    .alignItems(VerticalAlign.Center)"))
+            else:
+                for child in children:
+                    lines.extend(
+                        self.page_snapshot_component_lines(
+                            child, bounds, component_type, indent + 2
+                        )
+                    )
             lines.append(f"{prefix}}}")
+        elif component_type in {"Image", "Icon", "AsyncImage"}:
+            page_resource = component["style"]["asset"].get("resource")
+            page_tint = component["style"]["asset"].get("tint")
+            media = None
+            if isinstance(page_resource, str) and isinstance(page_tint, str):
+                tinted_resource = self.tinted_vector_resources.get(
+                    (page_resource, page_tint)
+                )
+                if tinted_resource is not None:
+                    media = f"$r('app.media.{tinted_resource}')"
+                    page_tint_baked = True
+            if (
+                media is None
+                and isinstance(page_resource, str)
+                and RESOURCE_NAME_PATTERN.fullmatch(page_resource) is not None
+                and f"media:{page_resource}" in self.resource_names
+            ):
+                media = f"$r('app.media.{page_resource}')"
+            if media is None:
+                if component_type == "AsyncImage" and isinstance(page_resource, str):
+                    try:
+                        uri = urlsplit(page_resource)
+                        if uri.scheme in {"http", "https"} and uri.hostname and not uri.username and not uri.password:
+                            media = arkts_string(page_resource)
+                    except ValueError:
+                        pass
+            if media is None:
+                self.add_page_json_unresolved(
+                    component,
+                    "style.asset.resource",
+                    "page JSON image has no target-resolvable asset; source fallback is disabled",
+                )
+                return []
+            lines = [f"{prefix}Image({media})"]
+            emitted_phase_paths.add("style.asset.resource")
+        elif component_type in {'Checkbox', 'Switch', 'RadioButton'}:
+            field = 'selected' if component_type == 'RadioButton' else 'checked'
+            checked = component['style']['state'].get(field)
+            if not isinstance(checked, bool):
+                self.add_page_json_unresolved(component, 'style.state.' + field, 'selection state is required')
+                return []
+            boolean = str(checked).lower()
+            if component_type == 'Checkbox':
+                lines = [f'{prefix}Checkbox()', f'{prefix}  .select({boolean})',
+                         f'{prefix}  .shape(CheckBoxShape.ROUNDED_SQUARE)']
+            elif component_type == 'Switch':
+                lines = [f'{prefix}Toggle({{ type: ToggleType.Switch, isOn: {boolean} }})']
+            else:
+                key = arkts_string(component['id'])
+                lines = [f'{prefix}Radio({{ value: {key}, group: {key} }})', f'{prefix}  .checked({boolean})']
+            lines.extend([f'{prefix}  .margin(0)', f'{prefix}  .padding(0)'])
+            emitted_phase_paths.add('style.state.' + field)
+        elif component_type == 'Slider':
+            value, low, high, steps = (control.get(k) for k in ('value', 'minimum', 'maximum', 'steps'))
+            if any(v is None for v in (value, low, high, steps)) or high <= low or steps <= 0:
+                self.add_page_json_unresolved(component, 'style.control.steps',
+                    'native Slider requires explicit discrete steps; continuous Compose slider must not become a stepped slider')
+                return []
+            step = (high - low) / (steps + 1)
+            if step < 0.01:
+                self.add_page_json_unresolved(component, 'style.control.steps', 'native Slider minimum step is 0.01')
+                return []
+            lines = [f'{prefix}Slider({{ value: {self.page_number(max(low, min(high, value)))}, min: {self.page_number(low)}, max: {self.page_number(high)}, step: {self.page_number(step)} }})']
+            emitted_phase_paths.update('style.control.' + k for k in ('value', 'minimum', 'maximum', 'steps'))
+        elif component_type in {'LinearProgressIndicator', 'CircularProgressIndicator'}:
+            value = control.get('value')
+            if value is None:
+                self.add_page_json_unresolved(component, 'style.control.value', 'indeterminate animation requires a separate renderer')
+                return []
+            if control.get('minimum') != 0 or control.get('maximum') != 1:
+                self.add_page_json_unresolved(component, 'style.control', 'Compose progress requires a normalized 0..1 range')
+                return []
+            if control.get('inactive_color') and component['style']['surface'].get('background') is not None:
+                self.add_page_json_unresolved(component, 'style.surface.background',
+                    'trackColor and an outer modifier background require separate draw layers')
+                return []
+            shape = 'Linear' if component_type == 'LinearProgressIndicator' else 'Ring'
+            lines = [f'{prefix}Progress({{ value: {self.page_number(max(0, min(1, value)))}, total: 1, type: ProgressType.{shape} }})']
+            for field, method in [('active_color', 'color'), ('inactive_color', 'backgroundColor')]:
+                if control.get(field):
+                    lines.append(f'{prefix}  .{method}({arkts_string(control[field])})')
+                    emitted_phase_paths.add('style.control.' + field)
+            if control.get('stroke_width_dp') is not None:
+                lines.append(f"{prefix}  .style({{ strokeWidth: {self.page_number(control['stroke_width_dp'])} }})")
+                emitted_phase_paths.add('style.control.stroke_width_dp')
+            emitted_phase_paths.update('style.control.' + k for k in ('value', 'minimum', 'maximum'))
+        elif component_type in {'Divider', 'HorizontalDivider', 'VerticalDivider'}:
+            lines = [f'{prefix}Divider()', f"{prefix}  .vertical({str(component_type == 'VerticalDivider').lower()})"]
+            if control.get('stroke_width_dp') is not None:
+                lines.append(f"{prefix}  .strokeWidth({self.page_number(control['stroke_width_dp'])})")
+                emitted_phase_paths.add('style.control.stroke_width_dp')
+            if control.get('active_color'):
+                lines.append(f"{prefix}  .color({arkts_string(control['active_color'])})")
+                emitted_phase_paths.add('style.control.active_color')
+        elif component_type == "ProgressRing":
+            custom_draw = component.get("custom_draw")
+            if isinstance(custom_draw, dict):
+                progress_value = self.page_number(float(custom_draw["value"]))
+                progress_total = self.page_number(float(custom_draw["total"]))
+            else:
+                value_text = component["style"]["content"].get("text")
+                match = re.fullmatch(r"(100|[0-9]{1,2})%", str(value_text or ""))
+                if match is None:
+                    return []
+                progress_value = str(int(match.group(1)))
+                progress_total = "100"
+            lines = [
+                f"{prefix}Progress({{ value: {progress_value}, total: {progress_total}, type: ProgressType.Ring }})"
+            ]
+        elif component_type == "Spacer":
+            lines = [f"{prefix}Blank()"] if parent_type in {"Row", "Column", "Flex"} else [f"{prefix}Stack() {{", f"{prefix}}}"]
+        elif component_type in {'TopAppBar', 'CenterAlignedTopAppBar', 'Scaffold'}:
+            if component_type == 'Scaffold':
+                self._page_scaffold_states[component['id']] = f'scaffold{len(self._page_scaffold_states)}'
+            is_appbar = component_type != 'Scaffold'
+            lines = [f"{prefix}{'RelativeContainer' if is_appbar else 'Stack'}() {{"]
+            for child in children:
+                child_lines = self.page_snapshot_component_lines(child, bounds, 'Stack', indent + 2)
+                slot = (child.get('source') or {}).get('slot_argument_name')
+                alignment = ({'title': 'Center' if component_type == 'CenterAlignedTopAppBar' else 'Start',
+                              'navigationIcon': 'Start', 'actions': 'End'}
+                             if component_type != 'Scaffold' else
+                             {'topBar': 'Top', 'bottomBar': 'Bottom', 'content': 'TopStart'})
+                if child_lines and slot in alignment:
+                    if is_appbar:
+                        edge = {'navigationIcon': 'left', 'actions': 'right', 'title': 'middle'}[slot]
+                        align = {'left': 'Start', 'right': 'End', 'middle': 'Center'}[edge]
+                        child_lines.append(f"{prefix}    .alignRules({{ {edge}: {{ anchor: '__container__', align: HorizontalAlign.{align} }}, center: {{ anchor: '__container__', align: VerticalAlign.Center }} }})")
+                    else:
+                        child_lines.append(f'{prefix}    .align(Alignment.{alignment[slot]})')
+                    if component_type == 'Scaffold' and slot in {'topBar', 'bottomBar'}:
+                        state_name = self._page_scaffold_states[component['id']] + slot.title()
+                        child_lines.append(f'{prefix}    .onAreaChange((_old, area) => {{ this.{state_name} = Number(area.height) }})')
+                        child_lines.append(f'{prefix}    .zIndex(1)')
+                elif child_lines:
+                    self.add_page_json_unresolved(child, 'source.slot_argument_name',
+                                                  'native container child requires an explicit supported slot')
+                lines.extend(child_lines)
+            lines.append(f'{prefix}}}')
+            if is_appbar:
+                if not self.page_snapshot_has_explicit_axis_size(component, 'height'):
+                    lines.append(f'{prefix}  .height({self.page_layout_length(64)})')
+                lines.append(f'{prefix}  .padding({{ left: {self.page_layout_length(4)}, right: {self.page_layout_length(4)} }})')
+            else:
+                lines.append(f'{prefix}  .alignContent(Alignment.TopStart)')
+        elif children or component_type in native_containers:
+            layout_container = self.page_snapshot_layout_container(component)
+            if project_wrapper and self.page_snapshot_stretched_axis(component, "height"):
+                layout_container = "Row"
+            elif project_wrapper and self.page_snapshot_stretched_axis(component, "width"):
+                layout_container = "Column"
+            rendered_container = layout_container or "Stack"
+            space = (
+                self.page_snapshot_arrangement_space(component)
+                if rendered_container in {"Column", "Row"}
+                else None
+            )
+            constructor = (
+                f"{rendered_container}({{ space: {self.page_layout_length(float(space))} }})"
+                if space is not None
+                else f"{rendered_container}()"
+            )
+            container_prefix = prefix + "  " if scroll_axis else prefix
+            lines = [f"{prefix}Scroll() {{"] if scroll_axis else []
+            lines.append(f"{container_prefix}{constructor} {{")
+            for child in children:
+                if component_type in {'Box', 'BoxWithConstraints'} and any(
+                    rule.get('mode') == 'match_parent' for rule in self.page_snapshot_layout_rules(child)
+                ):
+                    name = f'pageMatchParent{len(self._page_match_parent_sizes)}'
+                    self._page_match_parent_sizes[child['id']] = name
+                    child_lines = self.page_snapshot_component_lines(child, bounds, 'Stack', 4)
+                    self._page_match_parent_builders.append([
+                        f'  @State private {name}Width: Length = 0',
+                        f'  @State private {name}Height: Length = 0',
+                        '  @Builder', f'  private {name}() {{', *child_lines, '  }', '',
+                    ])
+                    size_updates.extend([f'this.{name}Width = current.width ?? this.{name}Width',
+                                         f'this.{name}Height = current.height ?? this.{name}Height'])
+                    continue
+                lines.extend(
+                    self.page_snapshot_component_lines(
+                        child, bounds, rendered_container, indent + (4 if scroll_axis else 2)
+                    )
+                )
+            lines.append(f"{container_prefix}}}")
+            for child in children:
+                name = self._page_match_parent_sizes.get(child['id'])
+                if name:
+                    lines.append(f'{container_prefix}  .overlay(this.{name}(), {{ align: Alignment.TopStart }})')
+            if scroll_axis:
+                lines.extend(f"{container_prefix}  {line}" for line in self.page_snapshot_container_alignment_lines(component))
+                lines.append(f"{container_prefix}  .{'width' if scroll_axis == 'vertical' else 'height'}('100%')")
+                lines.extend([f"{prefix}}}", f"{prefix}  .scrollable(ScrollDirection.{scroll_axis.title()})", f"{prefix}  .scrollBar(BarState.Off)"])
+                lines.append(f'{prefix}  .align(Alignment.TopStart)')
+                if scroll_rule:
+                    self.record_page_layout_rule(component, scroll_rule)
         else:
             return []
 
-        if is_text and parent_type not in BUTTON_CONTAINER_COMPONENTS:
-            relative_y -= float(PAGE_DRIVEN_BASELINE_VP)
-        lines.append(
-            f"{prefix}  .position({{ x: {self.page_number(relative_x)}, y: {self.page_number(relative_y)} }})"
+        is_flow_child = (
+            self.android_page_layout_mode == "source-tree"
+            and parent_type in {"Column", "Row"}
         )
-        if not is_text:
-            lines.append(f"{prefix}  .width({self.page_number(bounds['width'])})")
-        lines.append(f"{prefix}  .height({self.page_number(bounds['height'])})")
+        parent_component = self.android_page_by_id.get(component.get("parent_id", ""))
+        structural_parent = parent_component
+        if self.android_page_layout_mode == 'source-tree':
+            while parent_component and (parent_component.get('source') or {}).get('custom_component'):
+                parent_component = self.android_page_by_id.get(parent_component.get('parent_id'))
+        centered_button_child = (
+            parent_type in BUTTON_CONTAINER_COMPONENTS
+            and isinstance(parent_component, dict)
+            and parent_component.get("children_ids") == [component["id"]]
+        )
+        requires_position = self.page_snapshot_requires_position(
+            component, bounds, parent_component, parent_type
+        )
+        if (
+            is_text
+            and parent_type not in BUTTON_CONTAINER_COMPONENTS
+            and not is_flow_child
+            and requires_position
+        ):
+            relative_y -= float(PAGE_DRIVEN_BASELINE_VP)
+        if centered_button_child:
+            lines.append(f"{prefix}  .align(Alignment.Center)")
+        elif parent_type == "RelativeContainer":
+            for alignment_line in self.page_snapshot_constraint_alignment_lines(component):
+                lines.append(f"{prefix}  {alignment_line}")
+            for rule in self.page_snapshot_layout_rules(component):
+                if rule["kind"] == "constraint_reference":
+                    self.record_page_layout_rule(component, rule)
+        elif requires_position:
+            lines.append(
+                f"{prefix}  .position({{ x: {self.page_number(relative_x)}, y: {self.page_number(relative_y)} }})"
+            )
+        if self.android_page_layout_mode == "source-tree":
+            resolved_translation = self.page_snapshot_explicit_offset_line(
+                component, parent_component
+            )
+            if resolved_translation is not None:
+                lines.append(f"{prefix}  {resolved_translation}")
+                for rule in self.page_snapshot_layout_rules(component):
+                    if rule["kind"] == "offset":
+                        self.record_page_layout_rule(component, rule)
+        source_draw_order = self.page_snapshot_source_draw_order(component)
+        parent = parent_component
+        parent_draw_order = (
+            self.page_snapshot_source_draw_order(parent)
+            if isinstance(parent, dict)
+            else None
+        )
+        if source_draw_order is not None and source_draw_order != parent_draw_order:
+            lines.append(f"{prefix}  .zIndex({source_draw_order})")
+        if source_layout_weight is not None:
+            lines.append(f"{prefix}  {source_layout_weight}")
+        for rule in self.page_snapshot_layout_rules(component):
+            if rule["kind"] == "weight":
+                if source_layout_weight is not None and parent_type in {"Row", "Column"}:
+                    self.record_page_layout_rule(component, rule)
+                else:
+                    self.add_page_json_unresolved(component, "source.modifiers.weight", "weight requires Row/Column and fill=true; fill=false allocation is not yet equivalent")
+            elif rule["kind"] == "alignment":
+                value = rule["value"].removeprefix("Alignment.")
+                mapped = {"Start": "ItemAlign.Start", "End": "ItemAlign.End", "Top": "ItemAlign.Start", "Bottom": "ItemAlign.End", "CenterHorizontally": "ItemAlign.Center", "CenterVertically": "ItemAlign.Center"}.get(value)
+                if parent_type in {"Row", "Column"} and mapped:
+                    lines.append(f"{prefix}  .alignSelf({mapped})")
+                    self.record_page_layout_rule(component, rule)
+                elif parent_type == "Stack":
+                    mapped = {"TopStart": "TopStart", "TopCenter": "Top", "TopEnd": "TopEnd", "CenterStart": "Start", "Center": "Center", "CenterEnd": "End", "BottomStart": "BottomStart", "BottomCenter": "Bottom", "BottomEnd": "BottomEnd"}.get(value)
+                    if mapped:
+                        lines.append(f"{prefix}  .align(Alignment.{mapped})")
+                        self.record_page_layout_rule(component, rule)
+            elif rule["kind"] == "z_index":
+                lines.append(f"{prefix}  .zIndex({rule['value']})")
+                self.record_page_layout_rule(component, rule)
+            elif rule["kind"] == "constraints":
+                if not intrinsic_image_lines:
+                    limits = ", ".join(f"{key}: {self.page_layout_length(value)}" for key, value in rule["limits"].items())
+                    lines.append(f"{prefix}  .constraintSize({{ {limits} }})")
+                self.record_page_layout_rule(component, rule)
+            elif rule["kind"] == "scroll" and not rule["enabled"]:
+                self.record_page_layout_rule(component, rule)
+        flow_shrink = self.page_snapshot_flow_shrink_line(component, parent_type)
+        if flow_shrink is not None:
+            lines.append(f"{prefix}  {flow_shrink}")
+        lines.extend(
+            f"{prefix}  {line}"
+            for line in self.page_snapshot_dimension_lines(
+                component,
+                bounds,
+                parent_component,
+                parent_type,
+                is_text,
+            )
+        )
+        minimum_constraint = self.page_snapshot_minimum_constraint_line(component, bounds)
+        lines.extend(f"{prefix}  {line}" for line in intrinsic_image_lines)
+        if minimum_constraint is not None:
+            lines.append(f"{prefix}  {minimum_constraint}")
+        if component_type in {"CenterAlignedTopAppBar", "TopAppBar"} and not self.page_snapshot_has_explicit_axis_size(component, "height"):
+            padding = component["style"]["layout"].get("padding_dp") or {}
+            height = 64 + float(padding.get("top", 0)) + float(padding.get("bottom", 0))
+            lines.append(f"{prefix}  .constraintSize({{ minHeight: {self.page_layout_length(height)} }})")
         semantic_key = component.get("semantic_key")
         if isinstance(semantic_key, str):
             lines.append(f"{prefix}  .id({arkts_string(semantic_key)})")
+        alignment_lines = self.page_snapshot_container_alignment_lines(component)
+        if not scroll_axis:
+            lines.extend(f"{prefix}  {line}" for line in alignment_lines)
+        if any(".alignItems(" in line or ".alignContent(" in line for line in alignment_lines):
+            emitted_phase_paths.add("style.layout.alignment")
+        if any(".justifyContent(" in line for line in alignment_lines):
+            emitted_phase_paths.add("style.layout.vertical_arrangement" if component_type in PAGE_SNAPSHOT_COLUMN_COMPONENTS else "style.layout.horizontal_arrangement")
+        if is_button:
+            lines.append(f"{prefix}  .padding(0)")
 
         style = component["style"]
+        state = style["state"]
+        if isinstance(state.get("enabled"), bool):
+            lines.append(f"{prefix}  .enabled({str(state['enabled']).lower()})")
+            emitted_phase_paths.add("style.state.enabled")
+        if state.get("visible") is False:
+            lines.append(f"{prefix}  .visibility(Visibility.None)")
+            emitted_phase_paths.add("style.state.visible")
+        description = style["content"].get("content_description")
+        if isinstance(description, str):
+            lines.append(f"{prefix}  .accessibilityText({arkts_string(description)})")
+            emitted_phase_paths.add("style.content.content_description")
+        transform = style["transform"]
+        translation = {axis: transform.get(f"translation_{axis}_dp") for axis in ("x", "y")}
+        if any(value is not None for value in translation.values()):
+            if any(rule['kind'] == 'offset' for rule in self.page_snapshot_layout_rules(component)):
+                self.add_page_json_unresolved(component, "style.transform", "offset plus explicit translation requires ordered transform composition")
+            else:
+                values = ', '.join(f"{axis}: {self.page_layout_length(value)}" for axis, value in translation.items() if value is not None)
+                lines.append(f"{prefix}  .translate({{ {values} }})")
+                emitted_phase_paths.update(f"style.transform.translation_{axis}_dp" for axis, value in translation.items() if value is not None)
+        if transform.get('scale_x') is not None or transform.get('scale_y') is not None:
+            values = ', '.join(f"{axis}: {self.page_number(transform.get('scale_' + axis) if transform.get('scale_' + axis) is not None else 1)}" for axis in ('x', 'y'))
+            lines.append(f"{prefix}  .scale({{ {values} }})")
+            emitted_phase_paths.update(f"style.transform.scale_{axis}" for axis in ('x', 'y') if transform.get('scale_' + axis) is not None)
+        if transform.get('rotation_degrees') not in (None, 0):
+            lines.append(f"{prefix}  .rotate({{ angle: {self.page_number(transform['rotation_degrees'])} }})")
+            emitted_phase_paths.add('style.transform.rotation_degrees')
+        layout_style = style["layout"]
+        if layout_style.get("aspect_ratio") is not None:
+            lines.append(f"{prefix}  .aspectRatio({self.page_number(layout_style['aspect_ratio'])})")
+            emitted_phase_paths.add("style.layout.aspect_ratio")
+        if isinstance(layout_style.get("margin_dp"), dict):
+            lines.append(f"{prefix}  .margin({self.page_layout_edges(layout_style['margin_dp'])})")
+            emitted_phase_paths.add("style.layout.margin_dp")
+        direction = {"ltr": "Ltr", "rtl": "Rtl"}.get(layout_style.get("layout_direction"))
+        if direction:
+            lines.append(f"{prefix}  .direction(Direction.{direction})")
+            emitted_phase_paths.add("style.layout.layout_direction")
+        if layout_style.get("z_index") is not None:
+            lines.append(f"{prefix}  .zIndex({self.page_number(layout_style['z_index'])})")
+            emitted_phase_paths.add("style.layout.z_index")
         surface = style["surface"]
         background = surface["background"]
         if isinstance(background, dict) and background.get("type") == "solid":
             lines.append(f"{prefix}  .backgroundColor({arkts_string(background['color'])})")
+            emitted_phase_paths.add("style.surface.background")
+        elif isinstance(background, dict) and background.get('type') == 'linear_gradient':
+            direction = {0: 'Top', 90: 'Right', 180: 'Bottom', 270: 'Left'}.get(background.get('angle_degrees'))
+            if direction and background.get('tile_mode', 'clamp') == 'clamp' and not any(
+                key in background for key in ('center', 'radius_dp', 'resource')
+            ):
+                colors = background['colors']
+                stops = background.get('stops') or [i / (len(colors) - 1) for i in range(len(colors))]
+                pairs = ', '.join(f"[{arkts_string(color)}, {self.page_number(stop)}]" for color, stop in zip(colors, stops))
+                lines.append(f"{prefix}  .linearGradient({{ direction: GradientDirection.{direction}, colors: [{pairs}], repeating: false }})")
+                emitted_phase_paths.add('style.surface.background')
+            else:
+                self.add_page_json_unresolved(component, 'style.surface.background', 'gradient needs axis-aligned bounds and clamp tile mode')
+        if surface.get("alpha") is not None:
+            lines.append(f"{prefix}  .opacity({self.page_number(surface['alpha'])})")
+            emitted_phase_paths.add("style.surface.alpha")
         border = surface["border"]
+        if isinstance(border, dict) and (
+            border.get('edges') or border.get('dash_dp')
+            or border.get('width_dp') is None or border.get('color') is None
+        ):
+            self.add_page_json_unresolved(component, 'style.surface.border', 'per-edge/custom-dash or incomplete border needs a dedicated draw renderer')
+            border = None
         if isinstance(border, dict):
-            lines.append(
-                f"{prefix}  .border({{ width: {self.page_number(border['width_dp'])}, "
-                f"color: {arkts_string(border['color'])} }})"
-            )
+            border_parts = [
+                f"width: Math.max(1, Math.ceil(this.getUIContext().vp2px({self.page_number(border['width_dp'])}))) + 'px'",
+                f"color: {arkts_string(border['color'])}",
+            ]
+            if border.get("style") == "dashed":
+                border_parts.append("style: BorderStyle.Dashed")
+            elif border.get("style") == "dotted":
+                border_parts.append("style: BorderStyle.Dotted")
+            elif border.get("style") == "none":
+                border_parts = ["width: 0"]
+            emitted_phase_paths.add("style.surface.border")
         radius = surface["corner_radius_dp"]
-        source_radius = self.page_snapshot_source_radius(call, bounds)
-        if source_radius is not None:
-            lines.append(f"{prefix}  .borderRadius({self.page_number(source_radius)})")
-        elif isinstance(radius, dict):
+        if isinstance(radius, dict):
             values = {name: self.page_number(radius[name]) for name in radius}
             if len(set(values.values())) == 1:
                 radius_expression = values["top_left"]
@@ -10435,92 +13660,294 @@ class Renderer:
                     + ", bottomLeft: " + values["bottom_left"] + " }"
                 )
             lines.append(f"{prefix}  .borderRadius({radius_expression})")
+            emitted_phase_paths.add("style.surface.corner_radius_dp")
+        if isinstance(border, dict):
+            builder = f"pageBorder{len(self._page_border_builders)}"
+            self._page_border_builders.append([
+                f"  @State private {builder}Width: Length = 0",
+                f"  @State private {builder}Height: Length = 0", "",
+                "  @Builder", f"  private {builder}() {{", "    Stack() {}",
+                f"      .width(this.{builder}Width)", f"      .height(this.{builder}Height)",
+                f"      .border({{ {', '.join(border_parts)} }})",
+                f"      .borderRadius({radius_expression if isinstance(radius, dict) else '0'})",
+                "      .hitTestBehavior(HitTestMode.Transparent)", "  }", "",
+            ])
+            size_updates.extend([f'this.{builder}Width = current.width ?? 0', f'this.{builder}Height = current.height ?? 0'])
+            lines.append(f"{prefix}  .overlay(this.{builder}(), {{ align: Alignment.Center }})")
+        if surface.get("clip") is True:
+            lines.append(f"{prefix}  .clip(true)")
+            emitted_phase_paths.add("style.surface.clip")
+        shadows = surface["shadows"]
+        if isinstance(shadows, list) and (len(shadows) > 1 or any(shadow.get('spread_radius_dp') != 0 for shadow in shadows)):
+            self.add_page_json_unresolved(component, 'style.surface.shadows', 'multiple shadows or spread cannot be represented by one ArkUI shadow')
+            shadows = None
+        if isinstance(shadows, list) and shadows:
+            shadow = shadows[0]
+            # ShadowOptions uses physical pixels, unlike most ArkUI dimensions.
+            lines.append(
+                f"{prefix}  .shadow({{ radius: this.getUIContext().vp2px({self.page_number(shadow['blur_radius_dp'])}), "
+                f"color: {arkts_string(shadow['color'])}, "
+                f"offsetX: this.getUIContext().vp2px({self.page_number(shadow['offset_x_dp'])}), "
+                f"offsetY: this.getUIContext().vp2px({self.page_number(shadow['offset_y_dp'])}) }})"
+            )
+            emitted_phase_paths.add("style.surface.shadows")
 
         if is_text or is_text_field:
             typography = style["typography"]
-            font_family_line = self.page_snapshot_line(source_lines, ".fontFamily(")
-            source_font_size_line = self.page_snapshot_line(source_lines, ".fontSize(")
-            source_font_weight_line = self.page_snapshot_line(source_lines, ".fontWeight(")
-            source_font_color_line = self.page_snapshot_line(source_lines, ".fontColor(")
+            font_style = {'normal': 'Normal', 'italic': 'Italic'}.get(typography.get('font_style'))
+            if font_style:
+                lines.append(f"{prefix}  .fontStyle(FontStyle.{font_style})")
+                emitted_phase_paths.add('style.typography.font_style')
             page_font_family = typography["font_family"]
-            if isinstance(page_font_family, str):
-                resolved_weight = typography["font_weight"]
-                alias = self.verified_font_alias(page_font_family, resolved_weight)
-                if alias is not None:
-                    font_family_line = f".fontFamily({arkts_string(alias)})"
             font_size = typography["font_size_sp"]
-            if font_size is None and source_font_size_line is not None:
-                match = re.fullmatch(r"\.fontSize\((-?[0-9]+(?:\.[0-9]+)?)\)", source_font_size_line)
-                font_size = float(match.group(1)) if match is not None else None
             if font_size is not None:
                 rendered_font_size = Decimal(str(font_size))
-                if font_family_line is not None and parent_type not in BUTTON_CONTAINER_COMPONENTS:
-                    rendered_font_size *= PAGE_DRIVEN_FONT_SCALE
                 if is_text_field:
                     rendered_font_size = rendered_font_size.quantize(
                         Decimal("1"), rounding=ROUND_HALF_UP
                     )
-                lines.append(f"{prefix}  .fontSize({decimal_literal(rendered_font_size)})")
+                if is_text and self.verified_font_alias(str(page_font_family or ''), typography.get('font_weight')):
+                    lines.append(f"{prefix}  .fontSize(this.nativeFontSize({self.page_number(font_size)}))")
+                else:
+                    lines.append(f"{prefix}  .fontSize({decimal_literal(rendered_font_size)})")
+                emitted_phase_paths.add("style.typography.font_size_sp")
             font_weight = typography["font_weight"]
-            if font_family_line is not None and font_weight is not None:
-                alias_match = re.fullmatch(r"\.fontFamily\('([^']+)'\)", font_family_line)
-                face = (
-                    next(
-                        (
-                            item
-                            for item in self.verified_font_faces
-                            if alias_match is not None and item["alias"] == alias_match.group(1)
-                        ),
-                        None,
-                    )
-                    if alias_match is not None
-                    else None
-                )
-                if face is not None and face["match_names"]:
-                    weighted_alias = self.verified_font_alias(
-                        sorted(face["match_names"])[0], font_weight
-                    )
-                    if weighted_alias is not None:
-                        font_family_line = f".fontFamily({arkts_string(weighted_alias)})"
             if font_weight is not None:
                 lines.append(f"{prefix}  .fontWeight({font_weight})")
-            elif source_font_weight_line is not None:
-                lines.append(f"{prefix}  {source_font_weight_line}")
-            if font_family_line is not None:
-                lines.append(f"{prefix}  {font_family_line}")
+                emitted_phase_paths.add("style.typography.font_weight")
+            if isinstance(page_font_family, str):
+                alias = self.verified_font_alias(page_font_family, typography.get("font_weight"))
+                if alias is not None or page_font_family in {"sans-serif", "serif", "monospace", "HarmonyOS Sans"}:
+                    lines.append(f"{prefix}  .fontFamily({arkts_string(alias or page_font_family)})")
+                    emitted_phase_paths.add("style.typography.font_family")
+                else:
+                    self.add_page_json_unresolved(component, "style.typography.font_family", f"font family {page_font_family} has no verified registered asset")
             color = typography["color"]
             if color is not None:
                 lines.append(f"{prefix}  .fontColor({arkts_string(color)})")
-            elif source_font_color_line is not None:
-                lines.append(f"{prefix}  {source_font_color_line}")
-            lines.append(f"{prefix}  .maxLines(1)")
+                emitted_phase_paths.add("style.typography.color")
+            line_height = typography["line_height_sp"]
+            font_alias = self.verified_font_alias(str(page_font_family or ''), typography.get("font_weight"))
+            font_face = next((face for face in self.verified_font_faces if face['alias'] == font_alias), None)
+            if is_text and font_face is not None and font_size is not None:
+                self._uses_page_font_metrics = True
+                args = f"$rawfile({arkts_string(font_face['rawfile'])}), {self.page_number(font_size)}"
+                if not self.page_snapshot_has_explicit_axis_size(component, 'height') and not any(
+                    rule['kind'] == 'constraints' for rule in self.page_snapshot_layout_rules(component)
+                ) and (typography.get('min_lines') or 1) == 1:
+                    lines.append(f"{prefix}  .constraintSize({{ minHeight: this.nativeLineHeight({args}) }})")
+                lines.append(f"{prefix}  .lineHeight(this.nativeLineHeight({args}))")
+                lines.append(f"{prefix}  .halfLeading(true)")
+                if line_height is not None:
+                    lines.append(f"{prefix}  .lineSpacing(this.nativeLineSpacing({args}, {self.page_number(line_height)}), {{ onlyBetweenLines: true }})")
+                    emitted_phase_paths.add("style.typography.line_height_sp")
+            elif line_height is not None:
+                lines.append(
+                    f"{prefix}  .lineHeight({self.page_number(line_height)})"
+                )
+                emitted_phase_paths.add("style.typography.line_height_sp")
+            letter_spacing = typography["letter_spacing_sp"]
+            if letter_spacing is not None:
+                lines.append(
+                    f"{prefix}  .letterSpacing({self.page_number(letter_spacing)})"
+                )
+                emitted_phase_paths.add("style.typography.letter_spacing_sp")
+            text_align = {
+                "start": "TextAlign.Start",
+                "center": "TextAlign.Center",
+                "end": "TextAlign.End",
+                "justify": "TextAlign.Justify",
+            }.get(typography["text_align"])
+            if text_align is not None:
+                lines.append(f"{prefix}  .textAlign({text_align})")
+                emitted_phase_paths.add("style.typography.text_align")
+            max_lines = typography["max_lines"]
+            soft_wrap = typography.get('soft_wrap')
+            if soft_wrap is False:
+                if is_text and re.search(r'[\n\r\u2028\u2029]', self.page_snapshot_text_value(component)) is None:
+                    lines.append(f'{prefix}  .maxLines(1)')
+                    emitted_phase_paths.add('style.typography.soft_wrap')
+                    if max_lines is not None:
+                        emitted_phase_paths.add('style.typography.max_lines')
+                else:
+                    self.add_page_json_unresolved(component, 'style.typography.soft_wrap', 'unwrapped hard line breaks require paragraph-specific rendering')
+            elif soft_wrap is True:
+                emitted_phase_paths.add('style.typography.soft_wrap')
+            if max_lines is not None and soft_wrap is not False:
+                lines.append(f"{prefix}  .maxLines({max_lines})")
+                emitted_phase_paths.add("style.typography.max_lines")
+            min_lines = typography.get('min_lines')
+            if min_lines == 1:
+                emitted_phase_paths.add('style.typography.min_lines')
+            elif min_lines is not None:
+                if is_text and font_face is not None and font_size is not None and not any(
+                    rule['kind'] == 'constraints' for rule in self.page_snapshot_layout_rules(component)
+                ):
+                    if not self.page_snapshot_has_explicit_axis_size(component, 'height'):
+                        padding = style['layout'].get('padding_dp') or {}
+                        vertical_padding = float(padding.get('top', 0)) + float(padding.get('bottom', 0))
+                        args = f"$rawfile({arkts_string(font_face['rawfile'])}), {self.page_number(font_size)}, {self.page_number(line_height or 0)}, {min_lines}, {self.page_number(vertical_padding)}"
+                        lines.append(f'{prefix}  .constraintSize({{ minHeight: this.nativeMinLinesHeight({args}) }})')
+                    emitted_phase_paths.add('style.typography.min_lines')
+                else:
+                    self.add_page_json_unresolved(component, 'style.typography.min_lines',
+                        'minLines > 1 requires verified text font metrics without conflicting constraints; not a reference bbox height')
+            overflow = {
+                "clip": "TextOverflow.Clip",
+                "ellipsis": "TextOverflow.Ellipsis",
+            }.get(typography["overflow"])
+            if overflow is not None:
+                argument = overflow if is_text_field else f"{{ overflow: {overflow} }}"
+                lines.append(f"{prefix}  .textOverflow({argument})")
+                emitted_phase_paths.add("style.typography.overflow")
+            decoration = {
+                "none": "TextDecorationType.None",
+                "underline": "TextDecorationType.Underline",
+                "line_through": "TextDecorationType.LineThrough",
+            }.get(typography["decoration"])
+            if decoration is not None:
+                lines.append(
+                    f"{prefix}  .decoration({{ type: {decoration} }})"
+                )
+                emitted_phase_paths.add("style.typography.decoration")
+
+        if component_type in {"Image", "Icon", "AsyncImage"}:
+            content_scale = {
+                "fit": "ImageFit.Contain",
+                "crop": "ImageFit.Cover",
+                "fill": "ImageFit.Fill",
+                "inside": "ImageFit.ScaleDown",
+                "none": "ImageFit.None",
+            }.get(style["asset"].get("content_scale"))
+            if content_scale is not None:
+                lines.append(f"{prefix}  .objectFit({content_scale})")
+                emitted_phase_paths.add("style.asset.content_scale")
+            tint = style["asset"].get("tint")
+            if isinstance(tint, str) and not page_tint_baked:
+                lines.extend(
+                    f"{prefix}  {line}"
+                    for line in self.image_tint_lines(arkts_string(tint))
+                )
+                emitted_phase_paths.add("style.asset.tint")
+        elif component_type == "ProgressRing":
+            custom_draw = component.get("custom_draw")
+            if isinstance(custom_draw, dict):
+                lines.extend((
+                    f"{prefix}  .color({arkts_string(custom_draw['active_color'])})",
+                    f"{prefix}  .backgroundColor({arkts_string(custom_draw['track_color'])})",
+                    f"{prefix}  .style({{ strokeWidth: {self.page_number(float(custom_draw['stroke_width_dp']))} }})",
+                ))
 
         padding = style["layout"]["padding_dp"]
-        if is_text_field and padding is None and call is not None:
-            padding = next(
-                (
-                    instance["style"]["layout"]["padding_dp"]
-                    for instance in self.android_page_instances(call)
-                    if instance["style"]["layout"]["padding_dp"] is not None
-                ),
-                None,
-            )
-        if is_text_field and isinstance(padding, dict):
-            adjusted = dict(padding)
-            adjusted["left"] = max(0.0, adjusted["left"] - 1.5)
-            adjusted["right"] = max(0.0, adjusted["right"] - 1.5)
-            adjusted["left"] = float(round(adjusted["left"]))
-            adjusted["right"] = float(round(adjusted["right"]))
-            lines.append(f"{prefix}  .padding({self.page_edge_value(adjusted)})")
-        if is_text_field:
+        if isinstance(padding, dict):
+            lines.append(f"{prefix}  .padding({self.page_layout_edges(padding)})")
+            emitted_phase_paths.add("style.layout.padding_dp")
+        if is_text_field and not multiline_input:
             lines.append(f"{prefix}  .showPasswordIcon(false)")
+        if is_text_field:
+            password = input_style.get('password')
+            keyboard = input_style.get('keyboard_type')
+            if multiline_input and (password or keyboard in {'password', 'number_password'}):
+                self.add_page_json_unresolved(component, 'style.input.password', 'multiline password needs a dedicated transformation renderer')
+            else:
+                kind = ('number_password' if keyboard in {'number', 'number_password'} else 'password') if password else keyboard
+                native_types = ({'text': 'NORMAL', 'number': 'NUMBER', 'phone': 'PHONE_NUMBER', 'email': 'EMAIL', 'url': 'URL', 'decimal': 'NUMBER_DECIMAL'}
+                    if multiline_input else {'text': 'Normal', 'number': 'Number', 'phone': 'PhoneNumber', 'email': 'Email', 'url': 'URL', 'decimal': 'NUMBER_DECIMAL', 'password': 'Password', 'number_password': 'NUMBER_PASSWORD'})
+                if kind in native_types:
+                    lines.append(f"{prefix}  .type({'TextAreaType' if multiline_input else 'InputType'}.{native_types[kind]})")
+                    emitted_phase_paths.add('style.input.keyboard_type')
+                if password is not None:
+                    if not multiline_input and kind in {'password', 'number_password'}:
+                        lines.append(f"{prefix}  .showPassword({str(not password).lower()})")
+                    emitted_phase_paths.add('style.input.password')
+            read_only = input_style.get('read_only')
+            if read_only is True:
+                lines.append(f"{prefix}  .enableKeyboardOnFocus(false)")
+                lines.append(f"{prefix}  .onWillChange(() => false)")
+                emitted_phase_paths.add('style.input.read_only')
+            elif read_only is False:
+                emitted_phase_paths.add('style.input.read_only')
+            action = input_style.get('ime_action')
+            action_map = {'go': 'Go', 'search': 'Search', 'send': 'Send', 'next': 'Next', 'done': 'Done',
+                          'default': 'NEW_LINE' if multiline_input else 'Done'}
+            if multiline_input:
+                action_map['none'] = 'NEW_LINE'
+            if action in action_map:
+                lines.append(f"{prefix}  .enterKeyType(EnterKeyType.{action_map[action]})")
+                emitted_phase_paths.add('style.input.ime_action')
 
-        if call is not None:
-            self.android_page_processed_call_ids.add(call["call_id"])
-            applied = self.android_page_applied_paths[call["call_id"]]
-            applied.update({"bounds_dp.x", "bounds_dp.y", "bounds_dp.width", "bounds_dp.height"})
-            if component.get("visual_bounds_dp") is not None:
-                applied.add("visual_bounds_dp")
+        measured = self._page_constraint_states.get(component['id'])
+        if measured:
+            padding = style['layout'].get('padding_dp') or {}
+            for axis in sorted(measured['axes']):
+                edges = ('left', 'right') if axis == 'width' else ('top', 'bottom')
+                inset = sum(float(padding.get(edge) or 0) for edge in edges)
+                size_updates.append(f"this.{measured['name']}{axis.title()} = Math.max(0, Number(current.{axis}) - {self.page_number(inset)})")
+        if size_updates:
+            lines.append(f"{prefix}  .onSizeChange((_old, current) => {{ {'; '.join(size_updates)} }})")
+        scaffold_padding = (component.get('source') or {}).get('scaffold_padding')
+        if isinstance(scaffold_padding, dict):
+            owner = self._page_scaffold_states.get(scaffold_padding.get('owner_id'))
+            edges = scaffold_padding.get('edges') or {}
+            if owner and edges and set(edges.values()) <= {'topBar', 'bottomBar'}:
+                padding = style['layout'].get('padding_dp') or {}
+                values = []
+                for edge in ('left', 'right', 'top', 'bottom'):
+                    offset = self.page_number(padding.get(edge, 0))
+                    expression = f'this.{owner}{edges[edge].title()} + {offset}' if edge in edges else offset
+                    values.append(f'{edge}: {expression}')
+                lines.append(f"{prefix}  .padding({{ {', '.join(values)} }})")
+            else:
+                self.add_page_json_unresolved(component, 'source.scaffold_padding', 'Scaffold padding owner/slot is unavailable')
+
+        component_text = style["content"].get("text")
+        if isinstance(component_text, str) and "style.content.text" not in emitted_phase_paths:
+            pending_descendants = list(component.get("children_ids") or [])
+            while pending_descendants:
+                descendant_id = pending_descendants.pop()
+                descendant = self.android_page_by_id.get(descendant_id)
+                if not isinstance(descendant, dict):
+                    continue
+                if (
+                    descendant["style"]["content"].get("text") == component_text
+                    and "style.content.text"
+                    in self.android_page_applied_component_paths.get(descendant_id, set())
+                ):
+                    emitted_phase_paths.add("style.content.text")
+                    break
+                pending_descendants.extend(descendant.get("children_ids") or [])
+
+        component_color = style["typography"].get("color")
+        if (
+            isinstance(component_color, str)
+            and "style.typography.color" not in emitted_phase_paths
+            and self.page_snapshot_descendant_consumes_typography_color(
+                component, component_color
+            )
+        ):
+            emitted_phase_paths.add("style.typography.color")
+
+        if not hasattr(self, "android_page_applied_component_paths"):
+            self.android_page_applied_component_paths = defaultdict(set)
+        component_applied = self.android_page_applied_component_paths[component["id"]]
+        component_applied.update(
+            {"bounds_dp.x", "bounds_dp.y", "bounds_dp.width", "bounds_dp.height"}
+        )
+        component_applied.update(emitted_phase_paths)
+        component_applied.add("structure.type")
+        if all(child["id"] in self.android_page_processed_component_ids for child in children):
+            component_applied.add("structure.children_ids")
+        if parent_component is None and component.get("parent_id") is None:
+            component_applied.update({"structure.parent_id", "structure.sibling_index"})
+        elif structural_parent is not None and component["id"] in structural_parent["children_ids"]:
+            component_applied.add("structure.parent_id")
+            if structural_parent["children_ids"].index(component["id"]) == component.get("sibling_index"):
+                component_applied.add("structure.sibling_index")
+        if component.get("source_layout_bounds_dp") is not None:
+            component_applied.add("source_layout_bounds_dp")
+        if not hasattr(self, "android_page_processed_component_ids"):
+            self.android_page_processed_component_ids = set()
+        self.android_page_processed_component_ids.add(component["id"])
         return lines
 
     def render_android_page_snapshot(self) -> list[str]:
@@ -10532,19 +13959,21 @@ class Renderer:
             for component in self.android_page_input["components"]
             if component["parent_id"] is None
         ]
-        roots.sort(key=lambda component: (component["sibling_index"], component["bounds_dp"]["y"], component["bounds_dp"]["x"]))
+        roots.sort(
+            key=lambda component: (
+                0 if component["style"]["content"].get("role") == "surface" else 1,
+                component["sibling_index"],
+                component["bounds_dp"]["y"],
+                component["bounds_dp"]["x"],
+            )
+        )
         lines = ["  @Builder", "  private renderAndroidPageSnapshot() {", "    Stack() {"]
-        surfaces_by_anchor: dict[str, list[list[str]]] = defaultdict(list)
-        for anchor_id, surface_lines in self.page_snapshot_elided_surfaces(content_bounds):
-            surfaces_by_anchor[anchor_id].append(surface_lines)
         for component in roots:
-            for surface_lines in surfaces_by_anchor.get(component["id"], []):
-                lines.extend(surface_lines)
             lines.extend(self.page_snapshot_component_lines(component, content_bounds, None, 6))
         lines.extend([
             "    }",
-            f"      .width({self.page_number(content_bounds['width'])})",
-            f"      .height({self.page_number(content_bounds['height'])})",
+            "      .width('100%')",
+            "      .height('100%')",
         ])
         if "compose_theme_background" in self.resource_names:
             lines.append("      .backgroundColor($r('app.color.compose_theme_background'))")
@@ -10611,41 +14040,26 @@ class Renderer:
         return lines
 
     def render(self) -> str:
-        root_key = (self.root["source"], self.root["composable"])
         struct_name = f"Generated{pascal_identifier(self.root['composable'])}"
-        root_public_parameters = self.root_public_parameters(root_key)
+        root_public_parameters: list[dict[str, Any]] = []
         self._root_public_parameters = root_public_parameters
-        root_public_parameter_names = {
-            parameter["name"]: parameter["public_name"]
-            for parameter in root_public_parameters
-        }
-        ordered = [root_key] + sorted(key for key in self.reached_keys if key != root_key)
-        definition_sections: list[list[str]] = []
-        for key in ordered:
-            definition_sections.append(self.render_definition(key))
+        self._page_border_builders: list[list[str]] = []
+        self._page_constraint_states: dict[str, dict[str, Any]] = {}
+        self._page_scaffold_states: dict[str, str] = {}
+        self._page_match_parent_sizes: dict[str, str] = {}
+        self._page_match_parent_builders: list[list[str]] = []
         page_snapshot_section = self.render_android_page_snapshot()
-        selected_call_ids = {call["call_id"] for call in self.selected_calls}
-        for call_id, component in self.android_page_by_call_id.items():
-            if call_id in selected_call_ids and call_id not in self.android_page_processed_call_ids:
-                self.add_unresolved(
-                    "android_page_mapping",
-                    next(call for call in self.selected_calls if call["call_id"] == call_id),
-                    "Android page facts mapped to a source call that emitted no visual ArkUI boundary",
-                    page_component_id=component["id"],
-                )
         lines = [
-            (
-                "// Generated from an audited Compose semantic contract and Android page facts."
-                if self.android_page_input is not None
-                else "// Generated from an audited Compose semantic contract."
-            ),
+            "// Generated only from the audited source-generated version_json.",
             "// Unresolved behavior is recorded in the paired .migration manifest.",
             "",
         ]
         if self._uses_resource_manager:
             lines.extend(["import resourceManager from '@ohos.resourceManager';", ""])
-        if self._uses_drawing_color_filter:
+        if self._uses_drawing_color_filter or getattr(self, "_uses_page_font_metrics", False):
             lines.extend(["import drawing from '@ohos.graphics.drawing';", ""])
+        if getattr(self, "_uses_page_font_metrics", False):
+            lines.extend(["import { LengthMetrics } from '@ohos.arkui.node';", ""])
         if self._uses_fallback_list_item:
             lines.extend([
                 f"interface {FALLBACK_LIST_ITEM_TYPE} {{",
@@ -10668,6 +14082,51 @@ class Renderer:
             "@Component",
             f"export struct {struct_name} {{",
         ])
+        for border_builder in self._page_border_builders:
+            lines.extend(border_builder)
+        for overlay_builder in self._page_match_parent_builders:
+            lines.extend(overlay_builder)
+        for name in self._page_scaffold_states.values():
+            lines.extend([f'  @State private {name}{slot.title()}: number = 0' for slot in ('topBar', 'bottomBar')])
+        for state in self._page_constraint_states.values():
+            for axis in sorted(state['axes']):
+                lines.append(f"  @State private {state['name']}{axis.title()}: number = 0")
+        if getattr(self, "_uses_page_layout_pixels", False):
+            lines.extend([
+                "  private layoutPx(value: number): string {",
+                "    return Math.round(this.getUIContext().vp2px(value)) + 'px'",
+                "  }",
+                "",
+            ])
+        if getattr(self, "_uses_page_font_metrics", False):
+            lines.extend([
+                "  private nativeFontSize(size: number): string {",
+                "    return Math.floor(this.getUIContext().fp2px(size)) + 'px'",
+                "  }",
+                "",
+                "  private nativeLinePixels(file: Resource, size: number): number {",
+                "    const font = new drawing.Font()",
+                "    font.setTypeface(drawing.Typeface.makeFromRawFile(file))",
+                "    font.setSize(this.getUIContext().fp2px(size))",
+                "    const metrics = font.getMetrics()",
+                "    return Math.round(metrics.descent) - Math.round(metrics.ascent)",
+                "  }",
+                "",
+                "  private nativeLineHeight(file: Resource, size: number): string {",
+                "    return this.nativeLinePixels(file, size) + 'px'",
+                "  }",
+                "",
+                "  private nativeMinLinesHeight(file: Resource, size: number, requested: number, count: number, padding: number): string {",
+                "    const natural = this.nativeLinePixels(file, size)",
+                "    const extra = Math.max(0, Math.round(this.getUIContext().fp2px(requested)) - natural)",
+                "    return (natural * count + extra * (count - 1) + Math.round(this.getUIContext().vp2px(padding))) + 'px'",
+                "  }",
+                "",
+                "  private nativeLineSpacing(file: Resource, size: number, requested: number): LengthMetrics {",
+                "    return LengthMetrics.px(Math.max(0, Math.round(this.getUIContext().fp2px(requested)) - this.nativeLinePixels(file, size)))",
+                "  }",
+                "",
+            ])
         for parameter in root_public_parameters:
             lines.append(
                 f"  {parameter['public_name']}: "
@@ -10677,10 +14136,6 @@ class Renderer:
             lines.append("")
         for field in sorted(self.state_fields.values(), key=lambda item: item["name"]):
             initial_value = field["initial_value"]
-            if IDENTIFIER_PATTERN.fullmatch(initial_value) is not None:
-                public_name = root_public_parameter_names.get(initial_value)
-                if public_name is not None:
-                    initial_value = f"this.{public_name}"
             lines.append(f"  @State {field['name']}: {field['type']} = {initial_value}")
         if root_public_parameters or self.state_fields:
             lines.append("")
@@ -10809,23 +14264,19 @@ class Renderer:
                 "  }",
                 "",
             ])
+        lines.append("  build() {")
         lines.extend([
-            "  build() {",
-            (
-                "    this.renderAndroidPageSnapshot()"
-                if self.android_page_input is not None
-                else f"    this.{builder_name(*root_key)}({', '.join('this.' + parameter['public_name'] for parameter in root_public_parameters)})"
-            ),
-            "  }",
-            "",
+            "    Stack() {",
+            "      this.renderAndroidPageSnapshot()",
+            "    }",
+            "      .alignContent(Alignment.TopStart)",
+            "      .width('100%')",
+            "      .height('100%')",
         ])
+        lines.extend(("  }", ""))
         if page_snapshot_section:
             lines.extend(page_snapshot_section)
             lines.append("")
-        for index, section in enumerate(definition_sections):
-            if index:
-                lines.append("")
-            lines.extend(section)
         lines.extend(("}", ""))
         return "\n".join(lines)
 
@@ -10911,6 +14362,42 @@ def expression_font_weight(expression: str, key: str, fallback: int) -> int:
     if match is None:
         return fallback
     return FONT_WEIGHT_VALUES.get(match.group(1), fallback)
+
+
+def load_page_font_faces(target: Path, module: str, page: dict[str, Any]) -> list[dict[str, Any]]:
+    faces = page.get("font_faces", [])
+    if not isinstance(faces, list):
+        raise ArkUIPageError("page fontFaces must be a list")
+    if not faces:
+        return []
+    ledger_path = target / ".migration/assets.json"
+    if ledger_path.is_symlink() or not ledger_path.is_file():
+        raise ArkUIPageError("page fonts require a verified target asset ledger")
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    if ledger.get("schema") != "android-to-harmony.asset-ledger.v1":
+        raise ArkUIPageError("unsupported font asset ledger")
+    result = []
+    for face in faces:
+        if not isinstance(face, dict) or set(face) != {"family", "resource", "weight"}:
+            raise ArkUIPageError("page font face must have family/resource/weight")
+        family, resource, weight = face["family"], face["resource"], face["weight"]
+        if not isinstance(family, str) or not isinstance(resource, str) or RESOURCE_NAME_PATTERN.fullmatch(resource) is None or type(weight) is not int or not 1 <= weight <= 1000:
+            raise ArkUIPageError("invalid page font face")
+        matches = [(path, meta) for path, meta in ledger.get("assets", {}).items()
+                   if isinstance(meta, dict) and Path(meta.get("asset_path", "")).stem == resource
+                   and Path(meta.get("asset_path", "")).parent.name == "font"]
+        if len(matches) != 1:
+            raise ArkUIPageError(f"missing or ambiguous font asset {resource}")
+        relative, metadata = matches[0]
+        destination = target / relative
+        raw_root = (target / module / "src/main/resources/rawfile").resolve()
+        if destination.is_symlink() or not destination.resolve().is_relative_to(raw_root) or not destination.is_file() or sha256_file(destination) != metadata.get("destination_sha256"):
+            raise ArkUIPageError(f"font asset hash/path mismatch: {relative}")
+        result.append({"alias": pascal_identifier(resource) + str(weight), "weight": weight,
+                       "rawfile": destination.resolve().relative_to(raw_root).as_posix(),
+                       "target_path": relative, "sha256": metadata["destination_sha256"],
+                       "match_names": [normalized_font_name(family)]})
+    return result
 
 
 def load_verified_font_faces(
@@ -11220,90 +14707,195 @@ def validate_previous(
         or manifest.get("root") != root
     ):
         raise ArkUIPageError("previous ArkUI generation manifest does not own this output")
-    relative = output_path.relative_to(target).as_posix()
     outputs = manifest.get("outputs")
-    metadata = outputs.get(relative) if isinstance(outputs, dict) else None
-    if not isinstance(metadata, dict) or metadata.get("sha256") != sha256_file(output_path):
-        raise ArkUIPageError("generated ArkUI output changed after generation")
+    if not isinstance(outputs, dict):
+        raise ArkUIPageError("previous ArkUI generation manifest outputs are invalid")
+    relative = output_path.relative_to(target).as_posix()
+    if relative not in outputs:
+        raise ArkUIPageError("previous ArkUI generation manifest does not own the page output")
+    for owned_relative, metadata in outputs.items():
+        if (
+            not isinstance(owned_relative, str)
+            or not isinstance(metadata, dict)
+            or not isinstance(metadata.get("sha256"), str)
+        ):
+            raise ArkUIPageError("previous ArkUI generation manifest output entry is invalid")
+        owned_path = target / owned_relative
+        if (
+            not owned_path.is_file()
+            or owned_path.is_symlink()
+            or metadata["sha256"] != sha256_file(owned_path)
+        ):
+            raise ArkUIPageError(
+                f"generated ArkUI output changed after generation: {owned_relative}"
+            )
+
+
+def derive_page_tinted_vectors(
+    target: Path,
+    module: str,
+    page_identity: str,
+    android_page_input: dict[str, Any] | None,
+) -> tuple[dict[tuple[str, str], str], dict[Path, bytes], list[dict[str, str]]]:
+    if android_page_input is None:
+        return {}, {}, []
+    media_root = target / module / "src/main/resources/base/media"
+    mappings: dict[tuple[str, str], str] = {}
+    payloads: dict[Path, bytes] = {}
+    records: list[dict[str, str]] = []
+    for component in android_page_input["components"]:
+        asset = component["style"]["asset"]
+        resource = asset.get("resource")
+        tint = asset.get("tint")
+        if (
+            not isinstance(resource, str)
+            or RESOURCE_NAME_PATTERN.fullmatch(resource) is None
+            or not isinstance(tint, str)
+            or re.fullmatch(r"#[0-9A-Fa-f]{8}", tint) is None
+            or (resource, tint) in mappings
+        ):
+            continue
+        source = media_root / f"{resource}.svg"
+        if not source.is_file() or source.is_symlink():
+            continue
+        source_bytes = source.read_bytes()
+        try:
+            root = ET.fromstring(source_bytes)
+        except ET.ParseError as error:
+            raise ArkUIPageError(f"target vector resource is malformed: {resource}") from error
+        alpha = int(tint[1:3], 16) / 255
+        rgb = f"#{tint[3:].upper()}"
+        shape_names = {"path", "rect", "circle", "ellipse", "line", "polyline", "polygon"}
+        for element in root.iter():
+            local_name = element.tag.rsplit("}", 1)[-1]
+            if local_name not in shape_names:
+                continue
+            fill = element.get("fill")
+            if fill is None or fill.lower() != "none":
+                element.set("fill", rgb)
+                if alpha < 1:
+                    existing_alpha = float(element.get("fill-opacity", "1"))
+                    element.set(
+                        "fill-opacity",
+                        f"{existing_alpha * alpha:.6f}".rstrip("0").rstrip("."),
+                    )
+            stroke = element.get("stroke")
+            if stroke is not None and stroke.lower() != "none":
+                element.set("stroke", rgb)
+                if alpha < 1:
+                    existing_alpha = float(element.get("stroke-opacity", "1"))
+                    element.set(
+                        "stroke-opacity",
+                        f"{existing_alpha * alpha:.6f}".rstrip("0").rstrip("."),
+                    )
+        if root.tag.startswith("{http://www.w3.org/2000/svg}"):
+            ET.register_namespace("", "http://www.w3.org/2000/svg")
+        output_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        output_name = f"a2h_{page_identity[:8]}_{resource}_{tint[1:].lower()}"
+        if RESOURCE_NAME_PATTERN.fullmatch(output_name) is None:
+            raise ArkUIPageError(f"derived page vector name is invalid: {output_name}")
+        destination = media_root / f"{output_name}.svg"
+        mappings[(resource, tint)] = output_name
+        payloads[destination] = output_bytes
+        records.append({
+            "source_resource": resource,
+            "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
+            "tint": tint.upper(),
+            "output": destination.relative_to(target).as_posix(),
+            "sha256": hashlib.sha256(output_bytes).hexdigest(),
+        })
+    return mappings, payloads, sorted(records, key=lambda item: item["output"])
+
+
+def derive_page_root(android_page_input: dict[str, Any]) -> dict[str, str]:
+    roots = [
+        component
+        for component in android_page_input["components"]
+        if component["parent_id"] is None
+    ]
+    identities = {
+        (source.get("source"), source.get("composable"))
+        for component in roots
+        for source in [component.get("source")]
+        if isinstance(source, dict)
+        and isinstance(source.get("source"), str)
+        and source["source"]
+        and isinstance(source.get("composable"), str)
+        and source["composable"]
+    }
+    if len(identities) != 1:
+        raise ArkUIPageError(
+            "page JSON must identify exactly one source root; source fallback is disabled"
+        )
+    source, composable = next(iter(identities))
+    return {
+        "source": require_safe_relative_source(source),
+        "composable": composable,
+    }
 
 
 def generate(
-    contract_path: Path,
     target_path: Path,
     module: str,
-    root_source: str,
-    root_composable: str,
-    android_page_json: Path | None,
+    page_json: Path,
     force: bool,
 ) -> dict[str, Any]:
-    root_source = require_safe_relative_source(root_source)
     target = normalize_target(target_path)
     require_module(target, module)
-    contract, resolved_contract = load_contract(contract_path)
-    if contract is None or resolved_contract is None:
-        raise ArkUIPageError("migration contract is required")
-    closure, all_calls, definitions = require_contract_ui(contract, root_source, root_composable)
-    root = {"source": root_source, "composable": root_composable}
+    android_page_input = load_lanhu_page_input(page_json)
+    if not android_page_input.get("source_generated"):
+        raise ArkUIPageError(
+            "--page-json must be a source-generated Lanhu version_json"
+        )
+    root = derive_page_root(android_page_input)
+    identity = hashlib.sha256(
+        f"{root['source']}#{root['composable']}".encode("utf-8")
+    ).hexdigest()[:16]
     resource_names, string_values = load_theme_resources(target, module)
-    dimension_token_values, number_token_values, color_token_values = load_static_theme_tokens(contract)
-    data_classes = load_kotlin_data_classes(contract)
-    enum_classes = load_kotlin_enums(contract)
-    enum_string_properties = load_kotlin_enum_string_properties(contract)
-    route_symbols = load_route_symbols(contract)
-    android_page_input = load_android_page_input(android_page_json)
-    verified_font_faces = load_verified_font_faces(target, module, contract)
-    typography_font_roles = load_typography_font_roles(contract)
+    required_gate = android_page_input.get("required_fact_gate")
+    tinted_vector_resources, tinted_vector_payloads, tinted_vector_records = (
+        derive_page_tinted_vectors(target, module, identity, android_page_input)
+    )
     renderer = Renderer(
         root,
-        closure,
-        all_calls,
-        definitions,
         resource_names,
         string_values,
-        dimension_token_values,
-        number_token_values,
-        color_token_values,
-        data_classes,
-        enum_classes,
-        enum_string_properties,
-        route_symbols,
         android_page_input,
-        verified_font_faces,
-        typography_font_roles,
+        tinted_vector_resources,
     )
+    renderer.verified_font_faces = load_page_font_faces(target, module, android_page_input)
     source = renderer.render()
-    output_relative = (
-        f"{module}/src/main/ets/generated/Generated{pascal_identifier(root_composable)}.ets"
+    target_phase_gate = build_target_phase_consumption_gate(
+        android_page_input,
+        renderer.android_page_processed_component_ids,
+        renderer.android_page_processed_call_ids,
+        renderer.android_page_applied_paths,
+        renderer.android_page_applied_component_paths,
     )
-    identity = hashlib.sha256(f"{root_source}#{root_composable}".encode("utf-8")).hexdigest()[:16]
+    phase_gate_enforced = android_page_input.get("input_format") == "lanhu-version-json"
+    if phase_gate_enforced and target_phase_gate["verdict"] != "pass":
+        for failure in target_phase_gate["failures"]:
+            renderer.add_unresolved(
+                "page_json_unconsumed_fact",
+                None,
+                "page JSON fact was not consumed by the ArkUI emitter",
+                page_component_id=failure["component_id"],
+                path=failure["path"],
+                phase=failure["phase"],
+            )
+    generation_complete = not renderer.unresolved and target_phase_gate["verdict"] == "pass"
+    output_relative = (
+        f"{module}/src/main/ets/generated/Generated{pascal_identifier(root['composable'])}.ets"
+    )
     manifest_relative = f".migration/arkui-pages/{identity}.json"
     output_path = target / output_relative
     manifest_path = target / manifest_relative
     validate_previous(target, output_path, manifest_path, root, module, force)
     output_bytes = source.encode("utf-8")
-    selected_definitions = [
-        definitions[key]
-        for key in renderer.reached_keys
-    ]
     semantic_input = {
-        "root": root,
-        "closure": closure,
-        "definitions": selected_definitions,
-        "calls": renderer.selected_calls,
-        "verified_font_faces": [
-            {
-                "alias": face["alias"],
-                "weight": face["weight"],
-                "rawfile": face["rawfile"],
-                "sha256": face["sha256"],
-            }
-            for face in verified_font_faces
-        ],
-        "android_page_input_sha256": (
-            android_page_input["sha256"] if android_page_input is not None else None
-        ),
+        "input_mode": "page-json-only",
+        "page_json_sha256": android_page_input["sha256"],
     }
-    source_git = contract.get("source", {}).get("git") if isinstance(contract.get("source"), dict) else None
     manifest = {
         "schema": MANIFEST_SCHEMA,
         "generator": "migrate-android-compose-to-harmony",
@@ -11312,31 +14904,36 @@ def generate(
         "target_root": ".",
         "module": module,
         "root": root,
-        "source_revision": source_git.get("revision") if isinstance(source_git, dict) else None,
-        "contract_sha256": sha256_file(resolved_contract),
+        "input_mode": "page-json-only",
+        "source_fallback_count": 0,
+        "source_fallbacks": [],
         "semantic_input_sha256": canonical_sha256(semantic_input),
         "expanded_definition_count": len(renderer.reached_keys),
         "selected_call_count": len(renderer.selected_calls),
-        "verified_font_assets": [
-            {
-                "alias": face["alias"],
-                "weight": face["weight"],
-                "target_path": face["target_path"],
-                "sha256": face["sha256"],
-            }
-            for face in verified_font_faces
-        ],
-        "generation_complete": not renderer.unresolved,
+        "verified_font_assets": renderer.verified_font_faces,
+        "generation_complete": generation_complete,
+        "verdict": "pass" if generation_complete else "fail",
+        "required_fact_gate": required_gate,
+        "source_phase_consumption_gate": android_page_input.get("source_phase_consumption_gate"),
+        "target_phase_consumption_gate": target_phase_gate,
         "unresolved": renderer.unresolved,
         "outputs": {
             output_relative: {
                 "sha256": hashlib.sha256(output_bytes).hexdigest(),
-                "root_component": f"Generated{pascal_identifier(root_composable)}",
-            }
+                "root_component": f"Generated{pascal_identifier(root['composable'])}",
+            },
+            **{
+                record["output"]: {
+                    "sha256": record["sha256"],
+                    "kind": "page_state_tinted_vector",
+                }
+                for record in tinted_vector_records
+            },
         },
+        "derived_page_assets": tinted_vector_records,
         "limitations": [
-            "The semantic contract is a static candidate inventory rather than a Kotlin compiler AST.",
-            "Runtime branches, DSL-generated calls, Material defaults, state, callbacks, and assets are complete only when they have no explicit unresolved record.",
+            "The generator consumes only the source-generated version_json and target-owned resources.",
+            "Missing or symbolic page facts are recorded as unresolved and are never filled from Android source or a migration contract.",
             "A successful ArkTS build proves source compatibility, not visual or behavioral parity.",
         ],
     }
@@ -11345,22 +14942,45 @@ def generate(
             "file": android_page_input["file"],
             "byte_count": android_page_input["byte_count"],
             "sha256": android_page_input["sha256"],
+            "input_format": android_page_input["input_format"],
+            "layout_mode": renderer.android_page_layout_mode,
             "page": android_page_input["page"],
             "viewport": android_page_input["viewport"],
             "screenshot": android_page_input["screenshot"],
             "component_count": len(android_page_input["components"]),
+            "source_component_count": len(android_page_input["components"]),
+            "business_component_count": sum(
+                bool((component.get("source") or {}).get("custom_component"))
+                for component in android_page_input["components"]
+            ),
+            "layout_relationship_count": len(android_page_input["layout_relationships"]),
+            "overlay_relationship_count": sum(
+                relationship["composition"] == "overlay"
+                for relationship in android_page_input["layout_relationships"]
+            ),
             "mapped_call_count": len(renderer.android_page_by_call_id),
             "applied_paths": {
                 call_id: sorted(paths)
                 for call_id, paths in sorted(renderer.android_page_applied_paths.items())
+            },
+            "component_applied_paths": {
+                component_id: sorted(paths)
+                for component_id, paths in sorted(
+                    renderer.android_page_applied_component_paths.items()
+                )
             },
             "reference_paths": {
                 call_id: sorted(paths)
                 for call_id, paths in sorted(renderer.android_page_reference_paths.items())
             },
         }
+        manifest["android_page_input"]["version_json"] = android_page_input["version_json"]
     manifest_bytes = json_bytes(manifest)
-    commit_payloads({output_path: output_bytes, manifest_path: manifest_bytes})
+    commit_payloads({
+        output_path: output_bytes,
+        manifest_path: manifest_bytes,
+        **tinted_vector_payloads,
+    })
     return {
         "target": str(target),
         "module": module,
@@ -11368,7 +14988,18 @@ def generate(
         "output": output_relative,
         "manifest": manifest_relative,
         "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
-        "generation_complete": not renderer.unresolved,
+        "generation_complete": generation_complete,
+        "verdict": "pass" if generation_complete else "fail",
+        "required_fact_gate": required_gate,
+        "target_phase_consumption_gate": (
+            {
+                key: value
+                for key, value in target_phase_gate.items()
+                if key != "checks"
+            }
+            if isinstance(target_phase_gate, dict)
+            else None
+        ),
         "unresolved_count": len(renderer.unresolved),
         "expanded_definition_count": len(renderer.reached_keys),
     }
@@ -11378,12 +15009,9 @@ def main() -> int:
     args = parse_args()
     try:
         result = generate(
-            args.contract,
             args.target,
             args.module,
-            args.root_source,
-            args.root_composable,
-            args.android_page_json,
+            args.page_json,
             args.force,
         )
     except (ArkUIPageError, OSError, TypeError, ValueError) as error:

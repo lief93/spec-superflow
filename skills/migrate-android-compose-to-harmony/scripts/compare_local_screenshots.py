@@ -167,9 +167,9 @@ def load_component_inventory(
     side: str,
     expected_dimensions: tuple[int, int],
     expected_screenshot: Path,
-) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]]]:
     if requested_path is None:
-        return None, []
+        return None, [], []
     path = resolve_component_input(requested_path, side)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -199,6 +199,7 @@ def load_component_inventory(
                 "unmapped_visual_fact_components",
                 "inactive_source_components",
                 "runtime_elided_source_components",
+                "source_component_tree",
             })
         if not required_page_fields.issubset(payload) or not set(payload).issubset(allowed_page_fields):
             raise ComparisonError(f"{side} page snapshot has unsupported root fields")
@@ -482,7 +483,336 @@ def load_component_inventory(
                 "width": bounds_dp["width"],
                 "height": bounds_dp["height"],
             }
-    return record, components
+    business_components = (
+        load_business_component_inventory(
+            payload.get("source_component_tree"),
+            components,
+            side,
+        )
+        if schema == PAGE_SNAPSHOT_V2_SCHEMA
+        else []
+    )
+    record["business_component_count"] = len(business_components)
+    return record, components, business_components
+
+
+def load_business_component_inventory(
+    raw_tree: Any,
+    runtime_components: list[dict[str, Any]],
+    side: str,
+) -> list[dict[str, Any]]:
+    if raw_tree is None:
+        return []
+    required_tree_fields = {
+        "business_root_ids",
+        "business_component_ids",
+        "components",
+    }
+    allowed_tree_fields = required_tree_fields | {
+        "schema",
+        "root_ids",
+        "definitions",
+        "layout_relationships",
+        "third_party_component_ids",
+    }
+    if (
+        not isinstance(raw_tree, dict)
+        or not required_tree_fields.issubset(raw_tree)
+        or not set(raw_tree).issubset(allowed_tree_fields)
+    ):
+        raise ComparisonError(f"{side} source component tree is malformed")
+    raw_components = raw_tree["components"]
+    business_ids = raw_tree["business_component_ids"]
+    business_root_ids = raw_tree["business_root_ids"]
+    if (
+        not isinstance(raw_components, list)
+        or len(raw_components) > 10000
+        or not isinstance(business_ids, list)
+        or len(business_ids) > 10000
+        or not isinstance(business_root_ids, list)
+        or len(business_root_ids) > 10000
+    ):
+        raise ComparisonError(f"{side} source component tree lists are malformed")
+    normalized_business_ids = [
+        validate_component_token(value, "business_component_ids")
+        for value in business_ids
+    ]
+    normalized_root_ids = [
+        validate_component_token(value, "business_root_ids")
+        for value in business_root_ids
+    ]
+    if (
+        len(normalized_business_ids) != len(set(normalized_business_ids))
+        or len(normalized_root_ids) != len(set(normalized_root_ids))
+    ):
+        raise ComparisonError(f"{side} source component tree contains duplicate ids")
+
+    source_by_id: dict[str, dict[str, Any]] = {}
+    for raw_component in raw_components:
+        required_component_fields = {
+            "id",
+            "semantic_key",
+            "type",
+            "component_kind",
+            "node_kind",
+            "business_parent_id",
+            "business_children_ids",
+            "runtime_instances",
+            "runtime_descendant_ids",
+            "source",
+        }
+        if (
+            not isinstance(raw_component, dict)
+            or not required_component_fields.issubset(raw_component)
+        ):
+            raise ComparisonError(f"{side} source component tree contains a malformed component")
+        source_id = validate_component_token(raw_component["id"], "source component id")
+        if source_id in source_by_id:
+            raise ComparisonError(f"{side} source component tree contains duplicate components")
+        source_by_id[source_id] = raw_component
+    if any(source_id not in source_by_id for source_id in normalized_business_ids):
+        raise ComparisonError(f"{side} business component id is missing from the source tree")
+    if any(source_id not in source_by_id for source_id in normalized_root_ids):
+        raise ComparisonError(f"{side} business root id is missing from the source tree")
+
+    runtime_by_id = {
+        component["component_id"]: component for component in runtime_components
+    }
+
+    def source_subtree_ids(root_id: str) -> list[str]:
+        pending = [root_id]
+        visited: set[str] = set()
+        ordered: list[str] = []
+        while pending:
+            current = pending.pop()
+            if current in visited or current not in source_by_id:
+                continue
+            visited.add(current)
+            ordered.append(current)
+            children = source_by_id[current].get("children_ids", [])
+            if isinstance(children, list):
+                pending.extend(
+                    child_id for child_id in reversed(children) if isinstance(child_id, str)
+                )
+        return ordered
+
+    def reliable_runtime_anchors(root_id: str) -> list[str]:
+        anchors: list[str] = []
+        reliable_methods = {
+            "exact_text",
+            "exact_content_description",
+            "explicit_runtime_source_map",
+            "stable_runtime_id",
+        }
+        for source_descendant_id in source_subtree_ids(root_id):
+            source_descendant = source_by_id[source_descendant_id]
+            instances = source_descendant.get("runtime_instances", [])
+            if not isinstance(instances, list):
+                continue
+            for instance in instances:
+                if not isinstance(instance, dict):
+                    continue
+                runtime_id = instance.get("runtime_component_id")
+                method = instance.get("mapping_method")
+                if runtime_id in runtime_by_id and method in reliable_methods:
+                    anchors.append(runtime_id)
+        return list(dict.fromkeys(anchors))
+
+    def runtime_control_boundary(runtime_id: str) -> str:
+        current = runtime_by_id[runtime_id]
+        parent_id = current.get("parent_id")
+        if parent_id is None or parent_id not in runtime_by_id:
+            return runtime_id
+        parent = runtime_by_id[parent_id]
+        current_area = current["bounds"]["width"] * current["bounds"]["height"]
+        parent_area = parent["bounds"]["width"] * parent["bounds"]["height"]
+        if parent_area / current_area <= 20:
+            return parent_id
+        return runtime_id
+
+    def union_bounds(components: list[dict[str, Any]]) -> dict[str, int]:
+        left = min(component["bounds"]["x"] for component in components)
+        top = min(component["bounds"]["y"] for component in components)
+        right = max(
+            component["bounds"]["x"] + component["bounds"]["width"]
+            for component in components
+        )
+        bottom = max(
+            component["bounds"]["y"] + component["bounds"]["height"]
+            for component in components
+        )
+        return {
+            "x": left,
+            "y": top,
+            "width": right - left,
+            "height": bottom - top,
+        }
+
+    def union_bounds_dp(components: list[dict[str, Any]]) -> dict[str, float]:
+        bounds = [
+            component.get("comparison_bounds_dp", component.get("bounds_dp"))
+            for component in components
+        ]
+        bounds = [item for item in bounds if isinstance(item, dict)]
+        left = min(float(item["x"]) for item in bounds)
+        top = min(float(item["y"]) for item in bounds)
+        right = max(float(item["x"]) + float(item["width"]) for item in bounds)
+        bottom = max(float(item["y"]) + float(item["height"]) for item in bounds)
+        return {
+            "x": round(left, 3),
+            "y": round(top, 3),
+            "width": round(right - left, 3),
+            "height": round(bottom - top, 3),
+        }
+
+    def source_record(raw_source: Any) -> dict[str, Any] | None:
+        if not isinstance(raw_source, dict):
+            return None
+        source_path = raw_source.get("source")
+        composable = raw_source.get("composable")
+        line = raw_source.get("line")
+        if (
+            not isinstance(source_path, str)
+            or not isinstance(composable, str)
+            or type(line) is not int
+            or line <= 0
+        ):
+            return None
+        return {
+            "path": validate_source_path(source_path),
+            "line": line,
+            "composable": validate_component_token(composable, "source composable"),
+        }
+
+    def owned_visual_controls(owner_id: str) -> list[dict[str, Any]]:
+        controls: list[dict[str, Any]] = []
+        for source_component in raw_components:
+            if (
+                source_component.get("id") == owner_id
+                or source_component.get("business_owner_id") != owner_id
+                or source_component.get("component_kind")
+                in {"project_component", "third_party_component"}
+                or source_component.get("node_kind")
+                in {"layout_primitive", "content_slot"}
+            ):
+                continue
+            semantic_key = source_component.get("semantic_key")
+            component_type = source_component.get("type")
+            if not isinstance(semantic_key, str) or not isinstance(component_type, str):
+                continue
+            controls.append(
+                {
+                    "semantic_key": validate_component_token(
+                        semantic_key, "control semantic_key"
+                    ),
+                    "component_type": validate_component_token(
+                        component_type, "control component type"
+                    ),
+                    "source": source_record(source_component.get("source")),
+                }
+            )
+        return sorted(controls, key=lambda item: item["semantic_key"])
+
+    result: list[dict[str, Any]] = []
+    for source_id in normalized_business_ids:
+        raw_component = source_by_id[source_id]
+        component_kind = raw_component["component_kind"]
+        if component_kind not in {"project_component", "third_party_component"}:
+            continue
+        semantic_key = validate_component_token(
+            raw_component["semantic_key"], "business semantic_key"
+        )
+        component_type = validate_component_token(
+            raw_component["type"], "business component type"
+        )
+        parent_id = raw_component["business_parent_id"]
+        if parent_id is not None:
+            parent_id = validate_component_token(parent_id, "business_parent_id")
+            if parent_id not in source_by_id:
+                raise ComparisonError(f"{side} business parent id is unknown")
+        raw_children = raw_component["business_children_ids"]
+        if not isinstance(raw_children, list) or len(raw_children) > 10000:
+            raise ComparisonError(f"{side} business children ids are malformed")
+        child_ids = [
+            validate_component_token(value, "business_children_ids")
+            for value in raw_children
+        ]
+        if any(child_id not in source_by_id for child_id in child_ids):
+            raise ComparisonError(f"{side} business child id is unknown")
+
+        raw_instances = raw_component["runtime_instances"]
+        if not isinstance(raw_instances, list) or len(raw_instances) > 10000:
+            raise ComparisonError(f"{side} business runtime instances are malformed")
+        direct_ids: list[str] = []
+        for instance in raw_instances:
+            if (
+                not isinstance(instance, dict)
+                or not isinstance(instance.get("runtime_component_id"), str)
+                or instance.get("mapping_status") not in {"proven", "candidate"}
+            ):
+                raise ComparisonError(f"{side} business runtime instance is malformed")
+            runtime_id = validate_component_token(
+                instance["runtime_component_id"], "runtime_component_id"
+            )
+            if runtime_id in runtime_by_id:
+                direct_ids.append(runtime_id)
+        raw_descendant_ids = raw_component["runtime_descendant_ids"]
+        if not isinstance(raw_descendant_ids, list) or len(raw_descendant_ids) > 10000:
+            raise ComparisonError(f"{side} business runtime descendants are malformed")
+        descendant_ids = [
+            validate_component_token(value, "runtime_descendant_ids")
+            for value in raw_descendant_ids
+            if isinstance(value, str)
+        ]
+        anchor_roots = child_ids or [source_id]
+        anchor_groups = [reliable_runtime_anchors(root_id) for root_id in anchor_roots]
+        reliable_anchors = (
+            list(dict.fromkeys(runtime_id for group in anchor_groups for runtime_id in group))
+            if all(anchor_groups)
+            else []
+        )
+        boundary_ids = list(dict.fromkeys(
+            runtime_control_boundary(runtime_id) for runtime_id in reliable_anchors
+        ))
+        descendant_matches = [
+            runtime_id for runtime_id in descendant_ids if runtime_id in runtime_by_id
+        ]
+        if direct_ids:
+            mapped_ids = direct_ids
+            runtime_mapping = "direct_runtime_instance"
+        elif boundary_ids:
+            mapped_ids = boundary_ids
+            runtime_mapping = "semantic_anchor_parent"
+        elif descendant_matches:
+            mapped_ids = descendant_matches
+            runtime_mapping = "runtime_descendant_union"
+        else:
+            mapped_ids = []
+            runtime_mapping = "unavailable"
+        mapped_components = [runtime_by_id[runtime_id] for runtime_id in mapped_ids]
+        result.append(
+            {
+                "source_component_id": source_id,
+                "semantic_key": semantic_key,
+                "component_type": component_type,
+                "component_kind": component_kind,
+                "business_parent_semantic_key": (
+                    source_by_id[parent_id]["semantic_key"] if parent_id is not None else None
+                ),
+                "business_children_semantic_keys": [
+                    source_by_id[child_id]["semantic_key"] for child_id in child_ids
+                ],
+                "bounds": union_bounds(mapped_components) if mapped_components else None,
+                "bounds_dp": (
+                    union_bounds_dp(mapped_components) if mapped_components else None
+                ),
+                "runtime_component_ids": mapped_ids,
+                "runtime_mapping": runtime_mapping,
+                "source": source_record(raw_component["source"]),
+                "controls": owned_visual_controls(source_id),
+            }
+        )
+    return result
 
 
 def validate_sha256(value: Any, field: str) -> str:
@@ -847,6 +1177,917 @@ def image_ssim(left: Any, right: Any) -> float:
     return round(sum(scores) / len(scores), 6)
 
 
+def normalized_component_bounds(
+    bounds: dict[str, int],
+    crop: tuple[int, int, int, int],
+    target: tuple[int, int],
+) -> dict[str, int] | None:
+    crop_x, crop_y, crop_width, crop_height = crop
+    left = max(bounds["x"], crop_x)
+    top = max(bounds["y"], crop_y)
+    right = min(bounds["x"] + bounds["width"], crop_x + crop_width)
+    bottom = min(bounds["y"] + bounds["height"], crop_y + crop_height)
+    if left >= right or top >= bottom:
+        return None
+    normalized_left = max(0, math.floor((left - crop_x) * target[0] / crop_width))
+    normalized_top = max(0, math.floor((top - crop_y) * target[1] / crop_height))
+    normalized_right = min(
+        target[0], math.ceil((right - crop_x) * target[0] / crop_width)
+    )
+    normalized_bottom = min(
+        target[1], math.ceil((bottom - crop_y) * target[1] / crop_height)
+    )
+    if normalized_left >= normalized_right or normalized_top >= normalized_bottom:
+        return None
+    return {
+        "x": normalized_left,
+        "y": normalized_top,
+        "width": normalized_right - normalized_left,
+        "height": normalized_bottom - normalized_top,
+    }
+
+
+def bounds_iou(left: dict[str, int], right: dict[str, int]) -> float:
+    intersection_width = max(
+        0,
+        min(left["x"] + left["width"], right["x"] + right["width"])
+        - max(left["x"], right["x"]),
+    )
+    intersection_height = max(
+        0,
+        min(left["y"] + left["height"], right["y"] + right["height"])
+        - max(left["y"], right["y"]),
+    )
+    intersection = intersection_width * intersection_height
+    union = (
+        left["width"] * left["height"]
+        + right["width"] * right["height"]
+        - intersection
+    )
+    return intersection / union if union else 0.0
+
+
+def detect_visual_surface_candidates(image: Any) -> list[dict[str, Any]]:
+    """Locate large visible surfaces without assigning semantic ownership."""
+    analysis_scale = min(1.0, 480 / image.width)
+    analysis_size = (
+        max(1, round(image.width * analysis_scale)),
+        max(1, round(image.height * analysis_scale)),
+    )
+    analysis = image.resize(analysis_size, Image.Resampling.BILINEAR)
+    quantized = analysis.quantize(
+        colors=32,
+        method=Image.Quantize.MEDIANCUT,
+        dither=Image.Dither.NONE,
+    )
+    width, height = quantized.size
+    pixels = quantized.tobytes()
+    palette = quantized.getpalette()
+    parents: list[int] = []
+    stats: list[list[int]] = []
+    previous_runs: dict[int, list[tuple[int, int, int]]] = {}
+
+    def create_label(color: int, left: int, right: int, top: int) -> int:
+        label = len(parents)
+        parents.append(label)
+        stats.append([color, left, top, right, top, right - left])
+        return label
+
+    def find(label: int) -> int:
+        while parents[label] != label:
+            parents[label] = parents[parents[label]]
+            label = parents[label]
+        return label
+
+    def union(left_label: int, right_label: int) -> int:
+        left_root = find(left_label)
+        right_root = find(right_label)
+        if left_root == right_root:
+            return left_root
+        parents[right_root] = left_root
+        left_stats = stats[left_root]
+        right_stats = stats[right_root]
+        left_stats[1] = min(left_stats[1], right_stats[1])
+        left_stats[2] = min(left_stats[2], right_stats[2])
+        left_stats[3] = max(left_stats[3], right_stats[3])
+        left_stats[4] = max(left_stats[4], right_stats[4])
+        left_stats[5] += right_stats[5]
+        return left_root
+
+    for y in range(height):
+        row = pixels[y * width:(y + 1) * width]
+        current_runs: dict[int, list[tuple[int, int, int]]] = {}
+        x = 0
+        while x < width:
+            color = row[x]
+            start = x
+            x += 1
+            while x < width and row[x] == color:
+                x += 1
+            label = create_label(color, start, x, y)
+            for previous_left, previous_right, previous_label in previous_runs.get(
+                color, []
+            ):
+                if previous_left <= x and previous_right >= start:
+                    label = union(label, previous_label)
+            current_runs.setdefault(color, []).append((start, x, label))
+        previous_runs = current_runs
+
+    candidates: list[dict[str, Any]] = []
+    for root in {find(label) for label in range(len(parents))}:
+        color_index, left, top, right, bottom, pixel_count = stats[root]
+        candidate_width = right - left
+        candidate_height = bottom - top + 1
+        area = candidate_width * candidate_height
+        fill_ratio = pixel_count / area
+        if (
+            candidate_width < width * 0.15
+            or candidate_height < max(6, height * 0.008)
+            or fill_ratio < 0.25
+            or (candidate_width > width * 0.95 and candidate_height > height * 0.85)
+        ):
+            continue
+        bounds = {
+            "x": max(0, round(left / analysis_scale)),
+            "y": max(0, round(top / analysis_scale)),
+            "width": min(image.width, round(candidate_width / analysis_scale)),
+            "height": min(image.height, round(candidate_height / analysis_scale)),
+        }
+        bounds["width"] = min(bounds["width"], image.width - bounds["x"])
+        bounds["height"] = min(bounds["height"], image.height - bounds["y"])
+        candidates.append(
+            {
+                "bounds": bounds,
+                "fill_ratio": round(fill_ratio, 6),
+                "color_rgb": palette[color_index * 3:color_index * 3 + 3],
+                "method": "pillow_quantized_connected_surface_v1",
+            }
+        )
+
+    # Decorative images can interrupt a full-width surface. Merge only fragments
+    # that jointly touch both screen edges; separate cards remain separate.
+    merged_indexes: set[int] = set()
+    merged_candidates: list[dict[str, Any]] = []
+    for left_index, left_candidate in enumerate(candidates):
+        if left_index in merged_indexes:
+            continue
+        left_bounds = left_candidate["bounds"]
+        if left_bounds["x"] > image.width * 0.02:
+            continue
+        best: tuple[float, int, dict[str, Any]] | None = None
+        for right_index, right_candidate in enumerate(candidates):
+            if right_index == left_index or right_index in merged_indexes:
+                continue
+            right_bounds = right_candidate["bounds"]
+            if right_bounds["x"] + right_bounds["width"] < image.width * 0.98:
+                continue
+            overlap = max(
+                0,
+                min(
+                    left_bounds["y"] + left_bounds["height"],
+                    right_bounds["y"] + right_bounds["height"],
+                ) - max(left_bounds["y"], right_bounds["y"]),
+            )
+            overlap_ratio = overlap / min(
+                left_bounds["height"], right_bounds["height"]
+            )
+            gap = right_bounds["x"] - (left_bounds["x"] + left_bounds["width"])
+            color_delta = max(
+                abs(int(left_candidate["color_rgb"][index]) - int(right_candidate["color_rgb"][index]))
+                for index in range(3)
+            )
+            if overlap_ratio < 0.6 or gap < 0 or gap > image.width * 0.1 or color_delta > 8:
+                continue
+            score = overlap_ratio - gap / image.width
+            if best is None or score > best[0]:
+                best = (score, right_index, right_candidate)
+        if best is None:
+            continue
+        _, right_index, right_candidate = best
+        right_bounds = right_candidate["bounds"]
+        top = min(left_bounds["y"], right_bounds["y"])
+        bottom = max(
+            left_bounds["y"] + left_bounds["height"],
+            right_bounds["y"] + right_bounds["height"],
+        )
+        merged_candidates.append(
+            {
+                "bounds": {
+                    "x": 0,
+                    "y": top,
+                    "width": image.width,
+                    "height": bottom - top,
+                },
+                "fill_ratio": round(
+                    (
+                        left_candidate["fill_ratio"]
+                        * left_bounds["width"]
+                        * left_bounds["height"]
+                        + right_candidate["fill_ratio"]
+                        * right_bounds["width"]
+                        * right_bounds["height"]
+                    )
+                    / (image.width * (bottom - top)),
+                    6,
+                ),
+                "color_rgb": left_candidate["color_rgb"],
+                "method": "pillow_quantized_connected_surface_v1_edge_merge",
+            }
+        )
+        merged_indexes.update({left_index, right_index})
+    candidates.extend(merged_candidates)
+    return sorted(
+        candidates,
+        key=lambda item: item["bounds"]["width"] * item["bounds"]["height"],
+        reverse=True,
+    )
+
+
+def visual_surface_for_runtime_bounds(
+    candidates: list[dict[str, Any]],
+    runtime_bounds: dict[str, int],
+) -> tuple[dict[str, Any], float] | None:
+    scored = [
+        (bounds_iou(candidate["bounds"], runtime_bounds), candidate)
+        for candidate in candidates
+    ]
+    score, candidate = max(scored, default=(0.0, None), key=lambda item: item[0])
+    if candidate is None or score < 0.6:
+        return None
+    return candidate, round(score, 6)
+
+
+def matching_visual_surface(
+    reference: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    image_size: tuple[int, int],
+) -> tuple[dict[str, Any], float] | None:
+    reference_bounds = reference["bounds"]
+    reference_center = (
+        reference_bounds["x"] + reference_bounds["width"] / 2,
+        reference_bounds["y"] + reference_bounds["height"] / 2,
+    )
+    matches: list[tuple[float, dict[str, Any]]] = []
+    for candidate in candidates:
+        bounds = candidate["bounds"]
+        width_ratio = bounds["width"] / reference_bounds["width"]
+        height_ratio = bounds["height"] / reference_bounds["height"]
+        if not 0.72 <= width_ratio <= 1.28 or not 0.65 <= height_ratio <= 1.35:
+            continue
+        size_error = abs(math.log(width_ratio)) + abs(math.log(height_ratio))
+        center = (bounds["x"] + bounds["width"] / 2, bounds["y"] + bounds["height"] / 2)
+        position_error = math.hypot(
+            (center[0] - reference_center[0]) / image_size[0],
+            (center[1] - reference_center[1]) / image_size[1],
+        )
+        aspect_error = abs(
+            math.log(
+                (bounds["width"] / bounds["height"])
+                / (reference_bounds["width"] / reference_bounds["height"])
+            )
+        )
+        error = size_error + aspect_error + position_error * 0.35
+        confidence = max(0.0, 1.0 - error / 1.2)
+        if confidence >= 0.7:
+            matches.append((confidence, candidate))
+    if not matches:
+        return None
+    confidence, candidate = max(matches, key=lambda item: item[0])
+    return candidate, round(confidence, 6)
+
+
+def local_similarity(
+    left_rgb: Any,
+    right_rgb: Any,
+    max_side: int = 320,
+) -> dict[str, Any]:
+    analysis_width = max(left_rgb.width, right_rgb.width)
+    analysis_height = max(left_rgb.height, right_rgb.height)
+    scale = min(1.0, max_side / max(analysis_width, analysis_height))
+    analysis_size = (
+        max(1, round(analysis_width * scale)),
+        max(1, round(analysis_height * scale)),
+    )
+    if left_rgb.size != analysis_size:
+        left_rgb = left_rgb.resize(analysis_size, Image.Resampling.LANCZOS)
+    if right_rgb.size != analysis_size:
+        right_rgb = right_rgb.resize(analysis_size, Image.Resampling.LANCZOS)
+    left_tolerant = left_rgb.filter(
+        ImageFilter.GaussianBlur(RASTERIZATION_TOLERANCE_RADIUS_PX)
+    )
+    right_tolerant = right_rgb.filter(
+        ImageFilter.GaussianBlur(RASTERIZATION_TOLERANCE_RADIUS_PX)
+    )
+    metrics = {
+        "ssim_color": image_ssim(left_tolerant, right_tolerant),
+        "ssim_luma": channel_ssim(
+            left_tolerant.convert("L"), right_tolerant.convert("L")
+        ),
+        "ssim_edges": channel_ssim(
+            left_rgb.convert("L")
+            .filter(ImageFilter.FIND_EDGES)
+            .filter(ImageFilter.GaussianBlur(EDGE_TOLERANCE_RADIUS_PX)),
+            right_rgb.convert("L")
+            .filter(ImageFilter.FIND_EDGES)
+            .filter(ImageFilter.GaussianBlur(EDGE_TOLERANCE_RADIUS_PX)),
+        ),
+    }
+    magnitude = max_channel_difference(ImageChops.difference(left_rgb, right_rgb))
+    changed_mask = magnitude.point(
+        lambda value: 255 if value >= 16 else 0,
+        mode="L",
+    )
+    return {
+        "analysis_size_px": {
+            "width": analysis_size[0],
+            "height": analysis_size[1],
+        },
+        "metrics": metrics,
+        "ssim_score": round(min(metrics.values()), 6),
+        "changed_pixel_ratio": round(
+            changed_pixel_count(changed_mask) / (analysis_size[0] * analysis_size[1]),
+            6,
+        ),
+    }
+
+
+def business_component_ssim_rankings(
+    left_rgb: Any,
+    right_rgb: Any,
+    left_business_components: list[dict[str, Any]],
+    right_business_components: list[dict[str, Any]],
+    left_crop: tuple[int, int, int, int],
+    right_crop: tuple[int, int, int, int],
+    target: tuple[int, int],
+) -> list[dict[str, Any]]:
+    def unique_by_semantic_key(
+        components: list[dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for component in components:
+            grouped.setdefault(component["semantic_key"], []).append(component)
+        return {
+            semantic_key: matches[0]
+            for semantic_key, matches in grouped.items()
+            if len(matches) == 1
+        }
+
+    left_by_key = unique_by_semantic_key(left_business_components)
+    right_by_key = unique_by_semantic_key(right_business_components)
+    shared_semantic_keys = sorted(set(left_by_key) & set(right_by_key))
+    if not shared_semantic_keys:
+        return []
+    left_surface_candidates = detect_visual_surface_candidates(left_rgb)
+    right_surface_candidates = detect_visual_surface_candidates(right_rgb)
+    left_density_samples = [
+        float(component["bounds"]["width"]) / float(component["bounds_dp"]["width"])
+        for component in left_business_components
+        if component["bounds"] is not None
+        and component["bounds_dp"] is not None
+        and float(component["bounds_dp"]["width"]) > 0
+    ]
+    target_pixels_per_dp_global = (
+        sorted(left_density_samples)[len(left_density_samples) // 2]
+        * target[0]
+        / left_crop[2]
+        if left_density_samples
+        else None
+    )
+    full_area = target[0] * target[1]
+    rankings: list[dict[str, Any]] = []
+    for semantic_key in shared_semantic_keys:
+        left_component = left_by_key[semantic_key]
+        right_component = right_by_key[semantic_key]
+        left_input_bounds = left_component["bounds"]
+        right_input_bounds = right_component["bounds"]
+        left_input_bounds_dp = left_component["bounds_dp"]
+        right_input_bounds_dp = right_component["bounds_dp"]
+        left_bounds = (
+            normalized_component_bounds(left_input_bounds, left_crop, target)
+            if left_input_bounds is not None
+            else None
+        )
+        right_bounds = (
+            normalized_component_bounds(right_input_bounds, right_crop, target)
+            if right_input_bounds is not None
+            else None
+        )
+        mapping_pair = {
+            left_component["runtime_mapping"], right_component["runtime_mapping"]
+        }
+        if left_bounds is None or right_bounds is None:
+            bounds_comparability = "one_sided_projection"
+        elif mapping_pair == {"direct_runtime_instance"}:
+            bounds_comparability = "proven_direct_runtime_bounds"
+        elif mapping_pair.issubset(
+            {"direct_runtime_instance", "semantic_anchor_parent"}
+        ) or len(mapping_pair) == 1:
+            bounds_comparability = "candidate_equivalent_runtime_bounds"
+        else:
+            bounds_comparability = "incompatible_runtime_scopes"
+        left_boundary_source = "runtime_component_bounds" if left_bounds is not None else None
+        right_boundary_source = "runtime_component_bounds" if right_bounds is not None else None
+        pillow_boundary_confidence = None
+        if bounds_comparability in {
+            "one_sided_projection",
+            "incompatible_runtime_scopes",
+        }:
+            left_surface = (
+                visual_surface_for_runtime_bounds(left_surface_candidates, left_bounds)
+                if left_bounds is not None
+                else None
+            )
+            right_surface = (
+                visual_surface_for_runtime_bounds(right_surface_candidates, right_bounds)
+                if right_bounds is not None
+                else None
+            )
+            if left_surface is not None and right_surface is None:
+                matched = matching_visual_surface(
+                    left_surface[0], right_surface_candidates, target
+                )
+                if matched is not None:
+                    right_surface = matched
+            elif right_surface is not None and left_surface is None:
+                matched = matching_visual_surface(
+                    right_surface[0], left_surface_candidates, target
+                )
+                if matched is not None:
+                    left_surface = matched
+            if left_surface is not None and right_surface is not None:
+                left_bounds = left_surface[0]["bounds"]
+                right_bounds = right_surface[0]["bounds"]
+                left_boundary_source = left_surface[0]["method"]
+                right_boundary_source = right_surface[0]["method"]
+                pillow_boundary_confidence = round(
+                    min(left_surface[1], right_surface[1]), 6
+                )
+                bounds_comparability = "pillow_visual_surface_pair"
+        if left_bounds is None and right_bounds is None:
+            continue
+        available_bounds = [
+            bounds for bounds in (left_bounds, right_bounds) if bounds is not None
+        ]
+        union_left = min(bounds["x"] for bounds in available_bounds)
+        union_top = min(bounds["y"] for bounds in available_bounds)
+        union_right = max(
+            bounds["x"] + bounds["width"] for bounds in available_bounds
+        )
+        union_bottom = max(
+            bounds["y"] + bounds["height"] for bounds in available_bounds
+        )
+        union = (union_left, union_top, union_right, union_bottom)
+        screen_position = local_similarity(left_rgb.crop(union), right_rgb.crop(union))
+        ssim_score = screen_position["ssim_score"]
+        geometry_delta_px = None
+        geometry_delta_dp = None
+        max_abs_geometry_delta_dp = None
+        target_pixels_per_dp = target_pixels_per_dp_global
+        if (
+            left_bounds is not None
+            and right_bounds is not None
+            and bounds_comparability != "incompatible_runtime_scopes"
+            and target_pixels_per_dp is not None
+        ):
+            geometry_delta_px = {
+                field: right_bounds[field] - left_bounds[field]
+                for field in ("x", "y", "width", "height")
+            }
+            geometry_delta_dp = {
+                field: round(value / target_pixels_per_dp, 3)
+                for field, value in geometry_delta_px.items()
+            }
+            max_abs_geometry_delta_dp = round(
+                max(abs(value) for value in geometry_delta_dp.values()), 3
+            )
+        aligned_appearance = None
+        aspect_ratio_delta = None
+        if (
+            left_bounds is not None
+            and right_bounds is not None
+            and bounds_comparability != "incompatible_runtime_scopes"
+        ):
+            left_aspect = left_bounds["width"] / left_bounds["height"]
+            right_aspect = right_bounds["width"] / right_bounds["height"]
+            aspect_ratio_delta = round(right_aspect - left_aspect, 6)
+            aligned_appearance = local_similarity(
+                left_rgb.crop(
+                    (
+                        left_bounds["x"],
+                        left_bounds["y"],
+                        left_bounds["x"] + left_bounds["width"],
+                        left_bounds["y"] + left_bounds["height"],
+                    )
+                ),
+                right_rgb.crop(
+                    (
+                        right_bounds["x"],
+                        right_bounds["y"],
+                        right_bounds["x"] + right_bounds["width"],
+                        right_bounds["y"] + right_bounds["height"],
+                    )
+                ),
+            )
+        component_area = (union_right - union_left) * (union_bottom - union_top)
+        area_ratio = component_area / full_area
+        impact_score = max(0.0, 1.0 - ssim_score) * area_ratio
+        rankings.append(
+            {
+                "semantic_key": semantic_key,
+                "component_type": left_component["component_type"],
+                "component_kind": left_component["component_kind"],
+                "source": left_component["source"] or right_component["source"],
+                "business_parent_semantic_key": left_component[
+                    "business_parent_semantic_key"
+                ],
+                "business_children_semantic_keys": left_component[
+                    "business_children_semantic_keys"
+                ],
+                "left_runtime_mapping": left_component["runtime_mapping"],
+                "right_runtime_mapping": right_component["runtime_mapping"],
+                "bounds_comparability": bounds_comparability,
+                "left_boundary_source": left_boundary_source,
+                "right_boundary_source": right_boundary_source,
+                "pillow_boundary_confidence": pillow_boundary_confidence,
+                "left_input_bounds": left_input_bounds,
+                "right_input_bounds": right_input_bounds,
+                "left_input_bounds_dp": left_input_bounds_dp,
+                "right_input_bounds_dp": right_input_bounds_dp,
+                "geometry_coordinate_space": "normalized_target_content",
+                "geometry_delta_px": geometry_delta_px,
+                "geometry_delta_dp": geometry_delta_dp,
+                "max_abs_geometry_delta_dp": max_abs_geometry_delta_dp,
+                "target_pixels_per_dp": (
+                    round(target_pixels_per_dp, 6)
+                    if target_pixels_per_dp is not None
+                    else None
+                ),
+                "geometry_over_1dp": (
+                    max_abs_geometry_delta_dp > 1.0
+                    if max_abs_geometry_delta_dp is not None
+                    else None
+                ),
+                "left_normalized_bounds": left_bounds,
+                "right_normalized_bounds": right_bounds,
+                "comparison_bounds": {
+                    "x": union_left,
+                    "y": union_top,
+                    "width": union_right - union_left,
+                    "height": union_bottom - union_top,
+                },
+                "comparison_region_basis": (
+                    "paired_pillow_visual_surfaces"
+                    if bounds_comparability == "pillow_visual_surface_pair"
+                    else "paired_runtime_union"
+                    if left_bounds is not None and right_bounds is not None
+                    else (
+                        "left_runtime_projection"
+                        if left_bounds is not None
+                        else "right_runtime_projection"
+                    )
+                ),
+                "analysis_size_px": screen_position["analysis_size_px"],
+                "metrics": screen_position["metrics"],
+                "ssim_score": round(ssim_score, 6),
+                "screen_position_metrics": screen_position["metrics"],
+                "screen_position_ssim_score": round(ssim_score, 6),
+                "aligned_appearance_metrics": (
+                    aligned_appearance["metrics"]
+                    if aligned_appearance is not None
+                    else None
+                ),
+                "aligned_appearance_ssim_score": (
+                    aligned_appearance["ssim_score"]
+                    if aligned_appearance is not None
+                    else None
+                ),
+                "aligned_appearance_analysis_size_px": (
+                    aligned_appearance["analysis_size_px"]
+                    if aligned_appearance is not None
+                    else None
+                ),
+                "component_aspect_ratio_delta": aspect_ratio_delta,
+                "changed_pixel_ratio": screen_position["changed_pixel_ratio"],
+                "normalized_area_ratio": round(area_ratio, 6),
+                "impact_score": round(impact_score, 8),
+            }
+        )
+    rankings.sort(
+        key=lambda item: (
+            item["impact_score"],
+            1.0 - item["ssim_score"],
+            item["changed_pixel_ratio"],
+        ),
+        reverse=True,
+    )
+    for index, item in enumerate(rankings, 1):
+        item["rank"] = index
+    return rankings
+
+
+def attach_business_component_control_diagnostics(
+    rankings: list[dict[str, Any]],
+    left_business_components: list[dict[str, Any]],
+    right_business_components: list[dict[str, Any]],
+    component_geometry: list[dict[str, Any]],
+    component_styles: list[dict[str, Any]],
+) -> None:
+    left_business = {
+        component["semantic_key"]: component for component in left_business_components
+    }
+    right_business = {
+        component["semantic_key"]: component for component in right_business_components
+    }
+    geometry_by_key = {item["semantic_key"]: item for item in component_geometry}
+    style_by_key = {item["semantic_key"]: item for item in component_styles}
+
+    for ranking in rankings:
+        semantic_key = ranking["semantic_key"]
+        left_controls = {
+            control["semantic_key"]: control
+            for control in left_business.get(semantic_key, {}).get("controls", [])
+        }
+        right_controls = {
+            control["semantic_key"]: control
+            for control in right_business.get(semantic_key, {}).get("controls", [])
+        }
+        diagnostics: list[dict[str, Any]] = []
+        for control_key in sorted(set(left_controls) | set(right_controls)):
+            left_control = left_controls.get(control_key)
+            right_control = right_controls.get(control_key)
+            geometry = geometry_by_key.get(control_key)
+            style = style_by_key.get(control_key)
+            presence_status = (
+                "pass" if left_control is not None and right_control is not None else "fail"
+            )
+            geometry_status = (
+                "fail"
+                if geometry is not None and geometry["over_1dp"]
+                else ("pass" if geometry is not None else "unavailable")
+            )
+            style_status = style["status"] if style is not None else "unavailable"
+            status = (
+                "fail"
+                if "fail" in {presence_status, geometry_status, style_status}
+                else (
+                    "pass"
+                    if "pass" in {geometry_status, style_status}
+                    else "unavailable"
+                )
+            )
+            control = left_control or right_control
+            diagnostics.append(
+                {
+                    "semantic_key": control_key,
+                    "component_type": control["component_type"],
+                    "source": control["source"],
+                    "presence_status": presence_status,
+                    "geometry_status": geometry_status,
+                    "geometry": geometry,
+                    "style_status": style_status,
+                    "style": style,
+                    "status": status,
+                }
+            )
+        diagnostics.sort(
+            key=lambda item: (
+                item["status"] == "fail",
+                (
+                    item["geometry"]["max_abs_delta_dp"]
+                    if item["geometry"] is not None
+                    else -1
+                ),
+                item["semantic_key"],
+            ),
+            reverse=True,
+        )
+        ranking["control_diagnostics"] = diagnostics
+        ranking["control_summary"] = {
+            "total": len(diagnostics),
+            "failed": sum(item["status"] == "fail" for item in diagnostics),
+            "passed": sum(item["status"] == "pass" for item in diagnostics),
+            "unavailable": sum(
+                item["status"] == "unavailable" for item in diagnostics
+            ),
+        }
+
+
+def summarize_business_components(
+    rankings: list[dict[str, Any]],
+    minimum_ssim: float,
+) -> dict[str, Any]:
+    ranked_keys = {item["semantic_key"] for item in rankings}
+    leaf_components = [
+        item
+        for item in rankings
+        if not ranked_keys.intersection(item["business_children_semantic_keys"])
+    ]
+    aligned_leaf_components = [
+        item
+        for item in leaf_components
+        if item["aligned_appearance_ssim_score"] is not None
+    ]
+    total_weight = sum(
+        item["normalized_area_ratio"] for item in aligned_leaf_components
+    )
+    aligned_score = (
+        sum(
+            item["aligned_appearance_ssim_score"]
+            * item["normalized_area_ratio"]
+            for item in aligned_leaf_components
+        )
+        / total_weight
+        if total_weight > 0
+        else None
+    )
+    return {
+        "minimum_ssim": minimum_ssim,
+        "business_component_count": len(rankings),
+        "leaf_business_component_count": len(leaf_components),
+        "aligned_leaf_component_count": len(aligned_leaf_components),
+        "aligned_leaf_area_weighted_ssim_score": (
+            round(aligned_score, 6) if aligned_score is not None else None
+        ),
+        "position_over_1dp_count": sum(
+            item["geometry_over_1dp"] is True for item in rankings
+        ),
+        "aligned_appearance_below_threshold_count": sum(
+            item["aligned_appearance_ssim_score"] is not None
+            and item["aligned_appearance_ssim_score"] < minimum_ssim
+            for item in rankings
+        ),
+        "one_sided_projection_count": sum(
+            item["bounds_comparability"] == "one_sided_projection"
+            for item in rankings
+        ),
+        "incompatible_runtime_scope_count": sum(
+            item["bounds_comparability"] == "incompatible_runtime_scopes"
+            for item in rankings
+        ),
+        "pillow_visual_surface_pair_count": sum(
+            item["bounds_comparability"] == "pillow_visual_surface_pair"
+            for item in rankings
+        ),
+        "failed_control_count": sum(
+            item["control_summary"]["failed"] for item in rankings
+        ),
+        "unavailable_control_count": sum(
+            item["control_summary"]["unavailable"] for item in rankings
+        ),
+        "aggregation_rule": (
+            "area_weighted_leaf_business_components_with_comparable_two_sided_bounds"
+        ),
+    }
+
+
+def render_human_report(report: dict[str, Any]) -> str:
+    verdict = report["verdict"]
+    analysis = report["difference_analysis"]
+    rankings = analysis["business_component_ssim_rankings"]
+    summary = analysis["business_component_summary"]
+
+    def score(value: Any) -> str:
+        return "不可用" if value is None else f"{float(value):.3f}"
+
+    def delta(value: dict[str, Any] | None) -> str:
+        if value is None:
+            return "不可用"
+        labels = {"x": "dx", "y": "dy", "width": "dw", "height": "dh"}
+        return ", ".join(
+            f"{labels[field]}={float(value[field]):+.3f}dp"
+            for field in ("x", "y", "width", "height")
+        )
+
+    def comparability(value: str) -> str:
+        return {
+            "proven_direct_runtime_bounds": "双侧直接运行边界",
+            "candidate_equivalent_runtime_bounds": "候选等价运行边界",
+            "one_sided_projection": "仅单侧边界，投影诊断",
+            "incompatible_runtime_scopes": "双侧采集范围不同，不可直接比较",
+            "pillow_visual_surface_pair": "Pillow 配对的可见表面边界",
+        }.get(value, value)
+
+    lines = [
+        "# 截图对比报告",
+        "",
+        "## 总体结论",
+        "",
+        f"- **最终结果：{'通过' if verdict['status'] == 'pass' else '失败'}**",
+        f"- 全屏严格 SSIM：`{report['ssim_score']:.6f}`",
+        f"- 验收阈值：`{verdict['minimum_ssim']:.3f}`",
+        "- 说明：全屏 SSIM 包含位置、尺寸和内部外观差异。",
+    ]
+    if verdict["failure_reasons"]:
+        lines.extend(["- 失败原因：", ""])
+        lines.extend(f"  - {reason}" for reason in verdict["failure_reasons"])
+    lines.extend(
+        [
+            "",
+            "## 组件汇总",
+            "",
+            f"- 业务组件：`{summary['business_component_count']}` 个",
+            f"- 可用于对齐后汇总的叶子组件：`{summary['aligned_leaf_component_count']}` 个",
+            "- 忽略组件位置后的面积加权 SSIM："
+            f"`{score(summary['aligned_leaf_area_weighted_ssim_score'])}`",
+            f"- 位置或尺寸偏差超过 1dp：`{summary['position_over_1dp_count']}` 个",
+            "- 对齐后内部外观低于阈值："
+            f"`{summary['aligned_appearance_below_threshold_count']}` 个",
+            f"- 明确失败的子控件：`{summary['failed_control_count']}` 个",
+            f"- 子控件信息不足：`{summary['unavailable_control_count']}` 个",
+            f"- 仅单侧边界：`{summary['one_sided_projection_count']}` 个",
+            f"- 双侧采集范围不一致：`{summary['incompatible_runtime_scope_count']}` 个",
+            f"- Pillow 补全双侧可见边界：`{summary['pillow_visual_surface_pair_count']}` 个",
+            "",
+            "## 业务组件排名",
+            "",
+            "| 排名 | 业务组件 | 位置/尺寸偏差 | 屏幕位置 SSIM | 对齐后外观 SSIM | 失败控件 | 边界可信度 |",
+            "| ---: | --- | --- | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for item in rankings:
+        lines.append(
+            "| "
+            f"{item['rank']} | `{item['component_type']}` | "
+            f"{delta(item['geometry_delta_dp'])} | "
+            f"{score(item['screen_position_ssim_score'])} | "
+            f"{score(item['aligned_appearance_ssim_score'])} | "
+            f"{item['control_summary']['failed']} | "
+            f"{comparability(item['bounds_comparability'])} |"
+        )
+
+    lines.extend(["", "## 组件与控件明细", ""])
+    for item in rankings:
+        source = item.get("source")
+        source_text = (
+            f"`{source['path']}:{source['line']}`"
+            if isinstance(source, dict)
+            else "不可用"
+        )
+        lines.extend(
+            [
+                f"### {item['rank']}. {item['component_type']}",
+                "",
+                f"- 语义 ID：`{item['semantic_key']}`",
+                f"- 源码：{source_text}",
+                f"- 边界：{comparability(item['bounds_comparability'])}",
+                f"- 位置/尺寸：{delta(item['geometry_delta_dp'])}",
+                f"- 屏幕位置 SSIM：`{score(item['screen_position_ssim_score'])}`",
+                f"- 对齐后外观 SSIM：`{score(item['aligned_appearance_ssim_score'])}`",
+            ]
+        )
+        if item["pillow_boundary_confidence"] is not None:
+            lines.append(
+                "- Pillow 边界置信度："
+                f"`{float(item['pillow_boundary_confidence']):.3f}`；"
+                "该边界表示可见表面，不包含透明点击区。"
+            )
+        failed_controls = [
+            control for control in item["control_diagnostics"]
+            if control["status"] == "fail"
+        ]
+        if failed_controls:
+            lines.extend(["- 失败控件：", ""])
+            for control in failed_controls:
+                geometry = control.get("geometry")
+                style = control.get("style")
+                style_issue_count = (
+                    style.get("blocking_issue_count", 0)
+                    if isinstance(style, dict)
+                    else 0
+                )
+                lines.append(
+                    "  - "
+                    f"`{control['component_type']}` `{control['semantic_key']}`："
+                    f"{delta(geometry.get('delta_dp') if geometry else None)}；"
+                    f"样式问题 `{style_issue_count}` 项"
+                )
+        elif item["control_summary"]["total"] == 0:
+            lines.append("- 控件结论：当前组件未采集到可独立比较的语义控件。")
+        elif item["control_summary"]["unavailable"]:
+            lines.append(
+                "- 控件结论："
+                f"`{item['control_summary']['unavailable']}` 个控件缺少双侧可靠事实，未判通过。"
+            )
+        else:
+            lines.append("- 控件结论：没有检测到控件级失败。")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## 阅读规则",
+            "",
+            "- `dx < 0` 表示右侧实现更靠左，`dy < 0` 表示更靠上。",
+            "- 屏幕位置 SSIM 低、对齐后外观 SSIM 高：主要是位置或尺寸问题。",
+            "- 两个 SSIM 都低：位置和组件内部外观都需要检查。",
+            "- 显示“不可用”不是通过，而是当前运行树没有提供可比较的双侧边界。",
+            "- Pillow 边界只补全卡片、按钮、背景等可见表面，不推测透明 padding 或点击区域。",
+            "- 组件汇总只对不重复覆盖的叶子业务组件按面积加权。",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def save_png(image: Any, destination: Path) -> None:
     image.save(destination, format="PNG", compress_level=6)
 
@@ -1143,9 +2384,15 @@ def compare_component_geometry(
                 "left_component_id": left["component_id"],
                 "right_component_id": right["component_id"],
                 "coordinate_space": (
-                    "content_relative_logical_units"
-                    if "comparison_bounds_dp" in left and "comparison_bounds_dp" in right
-                    else "screen_logical_units"
+                    left.get("comparison_coordinate_space")
+                    if left.get("comparison_coordinate_space") is not None
+                    and left.get("comparison_coordinate_space")
+                    == right.get("comparison_coordinate_space")
+                    else (
+                        "content_relative_logical_units"
+                        if "comparison_bounds_dp" in left and "comparison_bounds_dp" in right
+                        else "screen_logical_units"
+                    )
                 ),
                 "left_bounds_dp": left_bounds,
                 "right_bounds_dp": right_bounds,
@@ -1155,6 +2402,75 @@ def compare_component_geometry(
             }
         )
     return comparisons
+
+
+def normalize_component_geometry_to_explicit_crops(
+    left_components: list[dict[str, Any]],
+    right_components: list[dict[str, Any]],
+    left_crop: tuple[int, int, int, int],
+    right_crop: tuple[int, int, int, int],
+    left_record: dict[str, Any] | None,
+    right_record: dict[str, Any] | None,
+    left_crop_source: str,
+    right_crop_source: str,
+) -> dict[str, Any] | None:
+    if (
+        left_crop_source != "explicit"
+        or right_crop_source != "explicit"
+        or left_record is None
+        or right_record is None
+        or left_record.get("schema") != PAGE_SNAPSHOT_V2_SCHEMA
+        or right_record.get("schema") != PAGE_SNAPSHOT_V2_SCHEMA
+    ):
+        return None
+    left_viewport = left_record.get("viewport")
+    right_viewport = right_record.get("viewport")
+    if not isinstance(left_viewport, dict) or not isinstance(right_viewport, dict):
+        return None
+    if left_viewport.get("orientation") != right_viewport.get("orientation"):
+        return None
+    if abs(float(left_viewport["font_scale"]) - float(right_viewport["font_scale"])) > 0.001:
+        return None
+    aspect_delta = abs(left_crop[2] / left_crop[3] - right_crop[2] / right_crop[3])
+    if aspect_delta > 0.001:
+        return None
+
+    left_density = float(left_viewport["density"])
+    right_density = float(right_viewport["density"])
+    reference_width_dp = left_crop[2] / left_density
+    reference_height_dp = left_crop[3] / left_density
+    coordinate_space = "explicit_crop_normalized_reference_logical_units"
+
+    for components, crop in (
+        (left_components, left_crop),
+        (right_components, right_crop),
+    ):
+        crop_x, crop_y, crop_width, crop_height = crop
+        for component in components:
+            bounds = component["bounds"]
+            component["comparison_bounds_dp"] = {
+                "x": round((bounds["x"] - crop_x) * reference_width_dp / crop_width, 3),
+                "y": round((bounds["y"] - crop_y) * reference_height_dp / crop_height, 3),
+                "width": round(bounds["width"] * reference_width_dp / crop_width, 3),
+                "height": round(bounds["height"] * reference_height_dp / crop_height, 3),
+            }
+            component["comparison_coordinate_space"] = coordinate_space
+
+    return {
+        "reference_side": "left",
+        "reference_logical_size_dp": {
+            "width": round(reference_width_dp, 3),
+            "height": round(reference_height_dp, 3),
+        },
+        "left_crop_logical_size_dp": {
+            "width": round(left_crop[2] / left_density, 3),
+            "height": round(left_crop[3] / left_density, 3),
+        },
+        "right_crop_logical_size_dp": {
+            "width": round(right_crop[2] / right_density, 3),
+            "height": round(right_crop[3] / right_density, 3),
+        },
+    }
 
 
 def unique_components_by_semantic_key(
@@ -1370,6 +2686,7 @@ def viewport_compatibility(
     right_crop: tuple[int, int, int, int],
     left_record: dict[str, Any] | None,
     right_record: dict[str, Any] | None,
+    explicit_crop_transform: dict[str, Any] | None,
 ) -> dict[str, Any]:
     aspect_delta = abs(left_crop[2] / left_crop[3] - right_crop[2] / right_crop[3])
     left_viewport = left_record.get("viewport") if left_record else None
@@ -1393,7 +2710,7 @@ def viewport_compatibility(
         same_font_scale = abs(left_viewport["font_scale"] - right_viewport["font_scale"]) <= 0.001
     pixel_compatible = (
         aspect_delta <= 0.001
-        and same_logical_size is True
+        and (same_logical_size is True or explicit_crop_transform is not None)
         and same_orientation is True
         and same_font_scale is True
     )
@@ -1404,8 +2721,14 @@ def viewport_compatibility(
         "same_font_scale": same_font_scale,
         "logical_content_delta_dp": logical_content_delta_dp,
         "cropped_aspect_ratio_delta": round(aspect_delta, 8),
+        "uniform_explicit_crop_transform": explicit_crop_transform is not None,
+        "explicit_crop_transform": explicit_crop_transform,
         "pixel_comparison_compatible": pixel_compatible,
-        "geometry_comparison_mode": "content_relative_platform_logical_units",
+        "geometry_comparison_mode": (
+            "explicit_crop_normalized_reference_logical_units"
+            if explicit_crop_transform is not None
+            else "content_relative_platform_logical_units"
+        ),
         "requirement": (
             "Physical pixel dimensions may differ. Pixel metrics require aligned content aspect ratio, "
             "orientation, system-bar crop, font scale, locale, theme, and deterministic state."
@@ -1731,13 +3054,13 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
     right_image = load_image(right, "right")
     left_dimensions = left_image.size
     right_dimensions = right_image.size
-    left_component_record, left_components = load_component_inventory(
+    left_component_record, left_components, left_business_components = load_component_inventory(
         args.left_components,
         "left",
         left_dimensions,
         left,
     )
-    right_component_record, right_components = load_component_inventory(
+    right_component_record, right_components, right_business_components = load_component_inventory(
         args.right_components,
         "right",
         right_dimensions,
@@ -1782,6 +3105,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
         annotated_difference = output / "annotated-difference.png"
         side_by_side = output / "side-by-side.png"
         report_path = output / "comparison.json"
+        human_report_path = output / "comparison-summary.md"
         normalized_left_image = normalize(left_image, left_crop, target)
         normalized_right_image = normalize(right_image, right_crop, target)
         save_png(normalized_left_image, normalized_left)
@@ -1814,12 +3138,22 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             ),
             "ssim_edges": channel_ssim(left_edges, right_edges),
         }
+        ssim_score = min(metrics.values())
         difference_image = ImageEnhance.Brightness(
             raw_difference
         ).enhance(4.0)
         save_png(difference_image, difference)
         difference_analysis, annotated_difference_image = analyze_difference(
             raw_difference,
+            left_crop,
+            right_crop,
+            target,
+        )
+        business_component_rankings = business_component_ssim_rankings(
+            left_rgb,
+            right_rgb,
+            left_business_components,
+            right_business_components,
             left_crop,
             right_crop,
             target,
@@ -1843,6 +3177,16 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             component_presence["runtime_elisions_match"] = False
             component_presence["status"] = "fail"
         component_hierarchy = compare_component_hierarchy(left_components, right_components)
+        explicit_crop_transform = normalize_component_geometry_to_explicit_crops(
+            left_components,
+            right_components,
+            left_crop,
+            right_crop,
+            left_component_record,
+            right_component_record,
+            left_crop_source,
+            right_crop_source,
+        )
         component_geometry = compare_component_geometry(
             left_components,
             right_components,
@@ -1850,6 +3194,22 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
         component_styles = compare_component_styles(
             left_components,
             right_components,
+        )
+        attach_business_component_control_diagnostics(
+            business_component_rankings,
+            left_business_components,
+            right_business_components,
+            component_geometry,
+            component_styles,
+        )
+        difference_analysis["business_component_ssim_rankings"] = (
+            business_component_rankings
+        )
+        difference_analysis["business_component_summary"] = (
+            summarize_business_components(
+                business_component_rankings,
+                args.min_ssim,
+            )
         )
         difference_analysis["component_presence"] = component_presence
         difference_analysis["component_hierarchy_deltas"] = component_hierarchy
@@ -1872,6 +3232,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             right_crop,
             left_component_record,
             right_component_record,
+            explicit_crop_transform,
         )
         verdict = build_verdict(
             left_component_record,
@@ -1929,6 +3290,7 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             "component_inventories": component_inventory_records,
             "source_attribute_inventory": source_attribute_record,
             "metrics": metrics,
+            "ssim_score": ssim_score,
             "raw_metrics": raw_metrics,
             "rasterization_comparison": {
                 "tolerance": "gaussian",
@@ -1961,6 +3323,15 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
                 "Image artifacts contain protected pixels and must remain local unless explicitly authorized.",
             ],
         }
+        human_report_path.write_text(
+            render_human_report(report),
+            encoding="utf-8",
+        )
+        report["human_report"] = {
+            "file": human_report_path.name,
+            "byte_count": human_report_path.stat().st_size,
+            "sha256": sha256_file(human_report_path),
+        }
         report_path.write_text(
             json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
@@ -1980,8 +3351,11 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
         "schema": COMMAND_SCHEMA,
         "report": "comparison.json",
         "report_sha256": sha256_file(report_path),
+        "human_report": "comparison-summary.md",
+        "human_report_sha256": sha256_file(human_report_path),
         "artifact_count": len(report["artifacts"]),
         "metrics": metrics,
+        "ssim_score": ssim_score,
         "verdict": report["verdict"]["status"],
     }
 

@@ -1816,6 +1816,39 @@ class MigrationToolTests(unittest.TestCase):
             "Alignment.TopStart",
         )
 
+    def test_page_driven_project_surface_uses_callee_dp_radius_default(self) -> None:
+        from generate_arkui_page import Renderer
+
+        renderer = object.__new__(Renderer)
+        renderer._current_parameter_values = {}
+        renderer._current_parameter_defaults = {}
+        renderer.definitions = {
+            ("components/PrimaryCard.kt", "PrimaryCard"): {
+                "parameters": [
+                    {"name": "corners", "type": "Dp", "default": "10.dp"}
+                ]
+            }
+        }
+        call = {
+            "source": "screens/Home.kt",
+            "composable": "Home",
+            "component": "PrimaryCard",
+            "semantic_arguments": {},
+            "custom_composable": {
+                "definitions": [{
+                    "source": "components/PrimaryCard.kt",
+                    "composable": "PrimaryCard",
+                }]
+            },
+        }
+
+        self.assertEqual(
+            renderer.page_snapshot_source_radius(
+                call, {"x": 0.0, "y": 0.0, "width": 300.0, "height": 160.0}
+            ),
+            10.0,
+        )
+
     def test_arkui_page_generator_uses_proven_android_page_visual_facts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -2413,8 +2446,12 @@ class MigrationToolTests(unittest.TestCase):
                                     }
                                 ],
                             },
-                            "style": {},
-                            "provenance": [],
+                            "style": {"asset": {"tint": "#FF49454F"}},
+                            "provenance": [{
+                                "paths": ["style.asset.tint"],
+                                "origin": "runtime",
+                                "source": "Android instrumentation",
+                            }],
                             "unresolved": [],
                         },
                         {
@@ -2472,17 +2509,23 @@ class MigrationToolTests(unittest.TestCase):
             self.assertTrue(result["generation_complete"])
             output = target / result["output"]
             generated_source = output.read_text(encoding="utf-8")
+            self.assertIn(".alignContent(Alignment.TopStart)", generated_source)
+            self.assertNotIn("pageSnapshotScale", generated_source)
+            self.assertNotIn("pageSnapshotOffsetX", generated_source)
+            self.assertNotIn(".scale({", generated_source)
+            self.assertNotIn(".onAreaChange(", generated_source)
             snapshot_start = generated_source.index("private renderAndroidPageSnapshot()")
             title_start = generated_source.index("Text('Sign in')")
-            title_end = generated_source.index("Button() {", title_start)
+            title_end = generated_source.index("Stack() {", title_start)
             title_source = generated_source[title_start:title_end]
             self.assertNotIn(".width(120)", title_source)
             self.assertIn(".height(32)", title_source)
             self.assertIn(".position({ x: 30, y: 75.15 })", title_source)
-            self.assertIn(".fontSize(19.918)", title_source)
+            self.assertIn(".fontSize(23)", title_source)
             self.assertIn(".fontWeight(600)", title_source)
             self.assertIn(".fontFamily('Brand600')", title_source)
             self.assertIn(".fontColor('#FF112233')", title_source)
+            self.assertIn(".lineHeight(29)", title_source)
             self.assertIn(".id('LoginTitle')", title_source)
             self.assertEqual(title_source.count(".width("), 0)
             self.assertEqual(title_source.count(".height("), 1)
@@ -2490,9 +2533,10 @@ class MigrationToolTests(unittest.TestCase):
             self.assertEqual(title_source.count(".fontWeight("), 1)
             self.assertEqual(title_source.count(".fontFamily("), 1)
             self.assertEqual(title_source.count(".fontColor("), 1)
+            self.assertEqual(title_source.count(".lineHeight("), 1)
             self.assertNotIn(".layoutWeight(", title_source)
             self.assertNotIn(".width('100%')", title_source)
-            back_start = generated_source.index("Button() {", title_end)
+            back_start = title_end
             back_end = generated_source.index("Text('Payment Card')", back_start)
             back_source = generated_source[back_start:back_end]
             self.assertIn("Image($r('app.media.logo'))", back_source)
@@ -2505,32 +2549,26 @@ class MigrationToolTests(unittest.TestCase):
             self.assertIn(".height(20)", card_source)
             self.assertIn(".backgroundColor('#FF100D40')", card_source)
             self.assertIn(".borderRadius(4)", card_source)
-            self.assertIn(".alignItems(HorizontalAlign.Start)", generated_source)
-            self.assertRegex(
+            self.assertIn("TextInput({ text: 'example@mail.com' })", generated_source)
+            self.assertIn(".id('LoginEmailInput')", generated_source)
+            self.assertIn(
+                "Image($r('app.media.logo'))\n"
+                "          .position({ x: 0, y: 226 })\n"
+                "          .width(76)\n"
+                "          .height(110)\n"
+                "          .id('LoginLeftLogo')\n"
+                "          .colorFilter(drawing.ColorFilter.createBlendModeColorFilter("
+                "0xFF49454F, drawing.BlendMode.SRC_IN))",
                 generated_source,
-                r"private Cover_[0-9a-f]+\(\) \{\s+Row\(\) \{[\s\S]*?\}\s+\.height\(176\)",
             )
-            self.assertRegex(
+            self.assertIn(
+                "Image($r('app.media.logo'))\n"
+                "          .position({ x: 170, y: 146 })\n"
+                "          .width(190)\n"
+                "          .height(250)\n"
+                "          .id('LoginLogo')",
                 generated_source,
-                r"Stack\(\) \{\s+this\.Cover_[0-9a-f]+\(.*?\)\s+\}\s+\.alignContent\(Alignment\.TopStart\)",
             )
-            self.assertRegex(
-                generated_source,
-                r"this\.CapturedField_[0-9a-f]+\(\{ value: 'example@mail\.com' \}\)",
-            )
-            self.assertRegex(
-                generated_source,
-                r"Stack\(\) \{\s+this\.CapturedField_[0-9a-f]+\(\{ value: 'example@mail\.com' \}\)\s+\}\s+\.alignContent\(Alignment\.TopStart\)",
-            )
-            logo_start = generated_source.index(
-                "Image($r('app.media.logo'))",
-                generated_source.index("private Cover_"),
-            )
-            logo_source = generated_source[logo_start:logo_start + 280]
-            self.assertIn(".height(160)", logo_source)
-            self.assertIn(".rotate({ angle: -45 })", logo_source)
-            self.assertNotIn(".width(190)", logo_source)
-            self.assertNotIn(".height(250)", logo_source)
             self.assertIn(
                 "fontManager.registerFont({ familyName: 'Brand600', familySrc: $rawfile('fonts/brand_semibold.ttf') })",
                 generated_source,
@@ -2543,6 +2581,10 @@ class MigrationToolTests(unittest.TestCase):
             self.assertEqual(
                 manifest["android_page_input"]["sha256"],
                 hashlib.sha256(page_json.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                manifest["android_page_input"]["layout_mode"],
+                "snapshot",
             )
             self.assertEqual(
                 set(manifest["android_page_input"]["applied_paths"][text_call["call_id"]]),
@@ -2583,6 +2625,208 @@ class MigrationToolTests(unittest.TestCase):
                     "visual_bounds_dp",
                 ],
             )
+
+            source_tree_page = json.loads(json.dumps(page_payload))
+            for component in source_tree_page["components"]:
+                component["parent_mapping"] = "source-semantic-ancestor"
+            source_tree_by_id = {
+                component["id"]: component
+                for component in source_tree_page["components"]
+            }
+            source_tree_root = source_tree_by_id["login-root"]
+            source_tree_cursor = source_tree_root["bounds_dp"]["y"]
+            for child_id in source_tree_root["children_ids"]:
+                child = source_tree_by_id[child_id]
+                child["bounds_dp"]["y"] = source_tree_cursor
+                child["bounds_px"]["y"] = round(source_tree_cursor * 3)
+                source_tree_cursor += child["bounds_dp"]["height"]
+            source_tree_page_json = root / "login-source-tree.android-page.json"
+            write_json(source_tree_page_json, source_tree_page)
+            source_tree_target = initialize_target("SourceTreeFixture")
+            source_tree_result = run_script(
+                GENERATE_ARKUI_PAGE,
+                "--contract",
+                str(contract),
+                "--target",
+                str(source_tree_target),
+                "--root-source",
+                "app/src/main/java/example/LoginScreen.kt",
+                "--root-composable",
+                "LoginScreen",
+                "--android-page-json",
+                str(source_tree_page_json),
+            )
+            self.assertEqual(
+                source_tree_result.returncode,
+                0,
+                source_tree_result.stdout + source_tree_result.stderr,
+            )
+            source_tree_summary = json.loads(source_tree_result.stdout)
+            source_tree_source = (
+                source_tree_target / source_tree_summary["output"]
+            ).read_text(encoding="utf-8")
+            source_tree_manifest = json.loads(
+                (source_tree_target / source_tree_summary["manifest"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                source_tree_manifest["android_page_input"]["layout_mode"],
+                "source-tree",
+            )
+            source_tree_builder = source_tree_source[
+                source_tree_source.index("private renderAndroidPageSnapshot()"):
+            ]
+            self.assertIn("Column() {", source_tree_builder)
+            source_tree_title = source_tree_builder[
+                source_tree_builder.index("Text('Sign in')"):
+                source_tree_builder.index("Stack() {", source_tree_builder.index("Text('Sign in')"))
+            ]
+            self.assertNotIn(".position(", source_tree_title)
+
+            runtime_overlay = json.loads(json.dumps(source_tree_page))
+            runtime_overlay["capture"]["screenshot"]["sha256"] = "c" * 64
+            runtime_by_id = {
+                component["id"]: component
+                for component in runtime_overlay["components"]
+            }
+            runtime_by_id["login-root"]["bounds_dp"] = {
+                "x": 0,
+                "y": 24,
+                "width": 300,
+                "height": 744,
+            }
+            runtime_by_id["login-title"]["bounds_dp"] = {
+                "x": 42,
+                "y": 24,
+                "width": 132,
+                "height": 32,
+            }
+            runtime_page_json = root / "login-runtime.android-page.json"
+            write_json(runtime_page_json, runtime_overlay)
+            fused_target = initialize_target("FusedPageFixture")
+            fused_result = run_script(
+                GENERATE_ARKUI_PAGE,
+                "--contract",
+                str(contract),
+                "--target",
+                str(fused_target),
+                "--root-source",
+                "app/src/main/java/example/LoginScreen.kt",
+                "--root-composable",
+                "LoginScreen",
+                "--android-page-json",
+                str(source_tree_page_json),
+                "--android-runtime-page-json",
+                str(runtime_page_json),
+            )
+            self.assertEqual(
+                fused_result.returncode,
+                0,
+                fused_result.stdout + fused_result.stderr,
+            )
+            fused_summary = json.loads(fused_result.stdout)
+            fused_source = (fused_target / fused_summary["output"]).read_text(encoding="utf-8")
+            fused_builder = fused_source[
+                fused_source.index("private renderAndroidPageSnapshot()"):
+            ]
+            fused_title = fused_builder[
+                fused_builder.index("Text('Sign in')"):
+                fused_builder.index("Stack() {", fused_builder.index("Text('Sign in')"))
+            ]
+            self.assertNotIn(".margin({ left: 42", fused_title)
+            self.assertNotIn(".position(", fused_title)
+            self.assertIn(".height(32)", fused_title)
+            self.assertIn(".width(360)", fused_builder)
+            self.assertIn(".alignItems(HorizontalAlign.Start)", fused_builder)
+            fused_manifest = json.loads(
+                (fused_target / fused_summary["manifest"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                fused_manifest["android_page_input"]["runtime_overlay"]["sha256"],
+                hashlib.sha256(runtime_page_json.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                fused_manifest["android_page_input"]["runtime_overlay"]["matched_leaf_count"],
+                6,
+            )
+            self.assertGreaterEqual(
+                fused_manifest["android_page_input"]["runtime_overlay"]["rejected_container_count"],
+                1,
+            )
+
+            anchored_source_page = json.loads(json.dumps(source_tree_page))
+            anchored_source_by_id = {
+                component["id"]: component
+                for component in anchored_source_page["components"]
+            }
+            anchored_source_by_id["login-root"]["children_ids"].remove("login-title")
+            anchored_source_by_id["login-back-button"]["children_ids"] = ["login-title"]
+            anchored_source_by_id["login-title"]["parent_id"] = "login-back-button"
+            anchored_source_by_id["login-title"]["sibling_index"] = 0
+            for sibling_index, child_id in enumerate(
+                anchored_source_by_id["login-root"]["children_ids"]
+            ):
+                anchored_source_by_id[child_id]["sibling_index"] = sibling_index
+            anchored_source_json = root / "login-anchored-source-tree.android-page.json"
+            write_json(anchored_source_json, anchored_source_page)
+
+            anchored_runtime_page = json.loads(json.dumps(anchored_source_page))
+            anchored_runtime_by_id = {
+                component["id"]: component
+                for component in anchored_runtime_page["components"]
+            }
+            anchored_button = anchored_runtime_by_id["login-back-button"]
+            anchored_button["type"] = "Button"
+            anchored_button["semantic_key"] = "runtime.generated.button"
+            anchored_button["bounds_dp"] = {
+                "x": 24,
+                "y": 88,
+                "width": 280,
+                "height": 64,
+            }
+            anchored_button["bounds_px"] = {
+                "x": 72,
+                "y": 264,
+                "width": 840,
+                "height": 192,
+            }
+            anchored_runtime_json = root / "login-anchored-runtime.android-page.json"
+            write_json(anchored_runtime_json, anchored_runtime_page)
+
+            anchored_target = initialize_target("AnchoredContainerFixture")
+            anchored_result = run_script(
+                GENERATE_ARKUI_PAGE,
+                "--contract",
+                str(contract),
+                "--target",
+                str(anchored_target),
+                "--root-source",
+                "app/src/main/java/example/LoginScreen.kt",
+                "--root-composable",
+                "LoginScreen",
+                "--android-page-json",
+                str(anchored_source_json),
+                "--android-runtime-page-json",
+                str(anchored_runtime_json),
+            )
+            self.assertEqual(
+                anchored_result.returncode,
+                0,
+                anchored_result.stdout + anchored_result.stderr,
+            )
+            anchored_summary = json.loads(anchored_result.stdout)
+            anchored_manifest = json.loads(
+                (anchored_target / anchored_summary["manifest"]).read_text(encoding="utf-8")
+            )
+            anchored_overlay = anchored_manifest["android_page_input"]["runtime_overlay"]
+            self.assertIn(
+                {
+                    "runtime_component_id": "login-back-button",
+                    "source_component_id": "login-back-button",
+                    "method": "child_source_anchor",
+                },
+                anchored_overlay["mappings"],
+            )
+            self.assertEqual(anchored_overlay["matched_business_container_count"], 1)
 
             unsupported_platform = json.loads(json.dumps(page_payload))
             unsupported_platform["platform"] = "harmony"
@@ -2733,7 +2977,7 @@ class MigrationToolTests(unittest.TestCase):
             mismatched_source = (
                 mismatched_target / mismatched_summary["output"]
             ).read_text(encoding="utf-8")
-            self.assertIn("Text('Sign in')", mismatched_source)
+            self.assertNotIn("Text('Sign in')", mismatched_source)
             self.assertNotIn("Wrong page text", mismatched_source)
 
             unresolved_page = json.loads(json.dumps(page_payload))
@@ -23723,6 +23967,8 @@ class MigrationToolTests(unittest.TestCase):
                     "start_window_background": "#F7F8FA",
                     "compose_color_brand_primary": "#FF112233",
                     "compose_theme_on_primary": "#FFFFFFFF",
+                    "compose_theme_on_surface": "#FF1D1B20",
+                    "compose_theme_error": "#FFB3261E",
                     "compose_theme_primary": "#FF112233",
                 },
             )
@@ -24470,6 +24716,67 @@ class MigrationToolTests(unittest.TestCase):
             self.assertEqual(converted.returncode, 0, converted.stdout)
             self.assertIn('fill-opacity="0"', destination.read_text(encoding="utf-8"))
 
+    def test_contract_extracts_canvas_draw_arc_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "android"
+            snapshot = root / "snapshot"
+            contract = root / "contract.json"
+            screen = source / "app/src/main/java/example/ProgressRing.kt"
+            screen.parent.mkdir(parents=True)
+            screen.write_text(
+                """
+                package example
+
+                import androidx.compose.foundation.Canvas
+                import androidx.compose.runtime.Composable
+                import androidx.compose.ui.Modifier
+
+                @Composable
+                fun ProgressRing(progress: Float, color: Color, width: Dp) {
+                  Canvas(Modifier.fillMaxSize()) {
+                    drawArc(
+                      color = color,
+                      startAngle = 0F,
+                      sweepAngle = progress * 360F,
+                      useCenter = false,
+                      style = Stroke(width.toPx())
+                    )
+                  }
+                }
+                """,
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_script(PREPARE, "--source", str(source), "--snapshot", str(snapshot)).returncode,
+                0,
+            )
+            analyzed = run_script(
+                ANALYZE,
+                "--snapshot",
+                str(snapshot),
+                "--output",
+                str(contract),
+            )
+            self.assertEqual(analyzed.returncode, 0, analyzed.stdout + analyzed.stderr)
+            calls = json.loads(contract.read_text(encoding="utf-8"))["ui"][
+                "semantic_translation_candidates"
+            ]["calls"]
+            canvas = next(call for call in calls if call["component"] == "Canvas")
+            self.assertEqual(
+                canvas["custom_draw_commands"],
+                [{
+                    "kind": "arc",
+                    "arguments": {
+                        "color": "color",
+                        "startAngle": "0F",
+                        "sweepAngle": "progress * 360F",
+                        "useCenter": "false",
+                        "style": "Stroke(width.toPx())",
+                    },
+                }],
+            )
+
     def test_vector_conversion_preserves_basic_path_stroke(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -24521,6 +24828,75 @@ class MigrationToolTests(unittest.TestCase):
             self.assertIn('stroke-width="2"', svg)
             self.assertIn('stroke-opacity="0.25098"', svg)
 
+    def test_vector_conversion_preserves_linear_gradient_path_stroke(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "android"
+            snapshot = root / "snapshot"
+            target = root / "HarmonyFixture"
+            drawable = source / "app/src/main/res/drawable/ic_gradient_stroke.xml"
+            destination = target / "entry/src/main/resources/base/media/ic_gradient_stroke.svg"
+            drawable.parent.mkdir(parents=True)
+            drawable.write_text(
+                """<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+  <path android:fillColor="@android:color/transparent"
+      android:strokeWidth="2" android:strokeAlpha="0.5"
+      android:pathData="M2,2 L22,22">
+    <aapt:attr name="android:strokeColor">
+      <gradient android:startX="0" android:startY="0"
+          android:endX="24" android:endY="24" android:type="linear">
+        <item android:offset="0" android:color="#FFFFFFFF" />
+        <item android:offset="1" android:color="#00FFFFFF" />
+      </gradient>
+    </aapt:attr>
+  </path>
+</vector>
+""",
+                encoding="utf-8",
+            )
+            prepared = run_script(
+                PREPARE, "--source", str(source), "--snapshot", str(snapshot)
+            )
+            self.assertEqual(prepared.returncode, 0, prepared.stdout)
+            initialized = run_script(
+                INITIALIZE,
+                "--output",
+                str(target),
+                "--project-name",
+                "HarmonyFixture",
+                "--bundle-name",
+                "com.example.harmonyfixture",
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stdout)
+            converted = run_script(
+                CONVERT_VECTOR,
+                "--manifest",
+                str(snapshot / ".android-to-harmony-safe.json"),
+                "--asset-path",
+                "app/src/main/res/drawable/ic_gradient_stroke.xml",
+                "--target",
+                str(target),
+                "--destination",
+                str(destination),
+            )
+            self.assertEqual(converted.returncode, 0, converted.stdout)
+            svg = destination.read_text(encoding="utf-8")
+            self.assertIn(
+                '<linearGradient id="gradient_1" gradientUnits="userSpaceOnUse" '
+                'x1="0" y1="0" x2="24" y2="24">',
+                svg,
+            )
+            self.assertIn('<stop offset="0" stop-color="#FFFFFF" />', svg)
+            self.assertIn(
+                '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />',
+                svg,
+            )
+            self.assertIn('stroke="url(#gradient_1)"', svg)
+            self.assertIn('stroke-opacity="0.5"', svg)
+
     def test_vector_conversion_preserves_stroke_cap_join_and_miter_limit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -24571,6 +24947,56 @@ class MigrationToolTests(unittest.TestCase):
             self.assertIn('stroke-linecap="round"', svg)
             self.assertIn('stroke-linejoin="bevel"', svg)
             self.assertIn('stroke-miterlimit="4"', svg)
+
+    def test_vector_conversion_accepts_compiled_numeric_stroke_enums(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "android"
+            snapshot = root / "snapshot"
+            target = root / "HarmonyFixture"
+            drawable = source / "app/src/main/res/drawable/ic_numeric_stroke.xml"
+            destination = target / "entry/src/main/resources/base/media/ic_numeric_stroke.svg"
+            drawable.parent.mkdir(parents=True)
+            drawable.write_text(
+                """<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+  <path android:strokeColor="#FF000000" android:strokeWidth="2"
+      android:strokeLineCap="1" android:strokeLineJoin="2"
+      android:pathData="M2,2 L22,22" />
+</vector>
+""",
+                encoding="utf-8",
+            )
+            prepared = run_script(
+                PREPARE, "--source", str(source), "--snapshot", str(snapshot)
+            )
+            self.assertEqual(prepared.returncode, 0, prepared.stdout)
+            initialized = run_script(
+                INITIALIZE,
+                "--output",
+                str(target),
+                "--project-name",
+                "HarmonyFixture",
+                "--bundle-name",
+                "com.example.harmonyfixture",
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stdout)
+            converted = run_script(
+                CONVERT_VECTOR,
+                "--manifest",
+                str(snapshot / ".android-to-harmony-safe.json"),
+                "--asset-path",
+                "app/src/main/res/drawable/ic_numeric_stroke.xml",
+                "--target",
+                str(target),
+                "--destination",
+                str(destination),
+            )
+            self.assertEqual(converted.returncode, 0, converted.stdout)
+            svg = destination.read_text(encoding="utf-8")
+            self.assertIn('stroke-linecap="round"', svg)
+            self.assertIn('stroke-linejoin="bevel"', svg)
 
     def test_skill_tree_manifest_is_path_independent_and_detects_changes(
         self,
@@ -25113,7 +25539,10 @@ class MigrationToolTests(unittest.TestCase):
                 output / "entry/src/main/ets/entryability/EntryAbility.ets"
             ).read_text(encoding="utf-8")
             self.assertIn("setWindowLayoutFullScreen(true)", entry_ability)
-            self.assertIn("setWindowSystemBarEnable([])", entry_ability)
+            self.assertIn(
+                "setWindowSystemBarEnable(['status', 'navigation'])",
+                entry_ability,
+            )
 
             state = json.loads(
                 (output / ".migration/state.json").read_text(encoding="utf-8")

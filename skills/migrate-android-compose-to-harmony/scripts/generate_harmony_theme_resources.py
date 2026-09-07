@@ -38,7 +38,10 @@ NAMED_COLORS = {
     "Color.Gray": "#FF9E9E9E",
 }
 MATERIAL3_LIGHT_COLOR_DEFAULTS = {
+    # Material 3 ColorLightTokens (verified against 1.3.2 source).
     "onPrimary": "#FFFFFFFF",
+    "onSurface": "#FF1D1B20",
+    "error": "#FFB3261E",
 }
 
 

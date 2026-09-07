@@ -25,6 +25,8 @@ from copy_local_asset import (
 
 ANDROID_NS = "http://schemas.android.com/apk/res/android"
 ANDROID = f"{{{ANDROID_NS}}}"
+AAPT_NS = "http://schemas.android.com/aapt"
+AAPT = f"{{{AAPT_NS}}}"
 LEDGER_SCHEMA = "android-to-harmony.vector-conversion-ledger.v1"
 PATH_DATA_PATTERN = re.compile(r"[MmZzLlHhVvCcSsQqTtAa0-9eE+.,\s-]+\Z")
 DIMENSION_PATTERN = re.compile(r"([0-9]+(?:\.[0-9]+)?)dp\Z")
@@ -374,6 +376,7 @@ def convert_vector(
 
     path_count = 0
     clip_path_count = 0
+    gradient_count = 0
 
     def visit_children(parent: ET.Element, indent: str) -> None:
         nonlocal path_count, resolved_color_resource_count
@@ -440,7 +443,7 @@ def convert_vector(
         return clip_id
 
     def emit_path(child: ET.Element, indent: str) -> None:
-        nonlocal path_count, resolved_color_resource_count
+        nonlocal path_count, resolved_color_resource_count, gradient_count
         require_attributes(
             child,
             {"pathData"},
@@ -495,6 +498,16 @@ def convert_vector(
         stroke_line_cap = child.get(f"{ANDROID}strokeLineCap")
         stroke_line_join = child.get(f"{ANDROID}strokeLineJoin")
         stroke_miter_limit = child.get(f"{ANDROID}strokeMiterLimit")
+        stroke_line_cap = {
+            "0": "butt",
+            "1": "round",
+            "2": "square",
+        }.get(stroke_line_cap, stroke_line_cap)
+        stroke_line_join = {
+            "0": "miter",
+            "1": "round",
+            "2": "bevel",
+        }.get(stroke_line_join, stroke_line_join)
         if stroke_line_cap is not None and stroke_line_cap not in {"butt", "round", "square"}:
             raise VectorConversionError("Android vector strokeLineCap is unsupported")
         if stroke_line_join is not None and stroke_line_join not in {"bevel", "miter", "round"}:
@@ -504,7 +517,135 @@ def convert_vector(
             if stroke_miter_limit is not None
             else None
         )
-        if stroke_color_value is not None:
+        complex_colors: dict[str, str] = {}
+        for complex_color in child:
+            if complex_color.tag != f"{AAPT}attr":
+                raise VectorConversionError(
+                    "Android vector path contains an unsupported child element"
+                )
+            if set(complex_color.attrib) != {"name"}:
+                raise VectorConversionError(
+                    "Android vector complex color must declare only its name"
+                )
+            color_name = complex_color.get("name")
+            if color_name not in {"android:fillColor", "android:strokeColor"}:
+                raise VectorConversionError(
+                    "Android vector path contains an unsupported complex color"
+                )
+            if color_name in complex_colors:
+                raise VectorConversionError(
+                    "Android vector path repeats a complex color"
+                )
+            gradient_children = list(complex_color)
+            if len(gradient_children) != 1:
+                raise VectorConversionError(
+                    "Android vector complex color must contain one gradient"
+                )
+            gradient = gradient_children[0]
+            if gradient.tag.rsplit("}", 1)[-1] != "gradient":
+                raise VectorConversionError(
+                    "Android vector complex color contains an unsupported value"
+                )
+            require_attributes(
+                gradient,
+                {"startX", "startY", "endX", "endY"},
+                {"type", "tileMode"},
+                "Android vector gradient",
+            )
+            gradient_type = gradient.get(f"{ANDROID}type", "linear")
+            if gradient_type != "linear":
+                raise VectorConversionError(
+                    "Android vector complex color currently supports only linear gradients"
+                )
+            tile_mode = gradient.get(f"{ANDROID}tileMode", "clamp")
+            spread_methods = {"clamp": "pad", "repeat": "repeat", "mirror": "reflect"}
+            if tile_mode not in spread_methods:
+                raise VectorConversionError("Android vector gradient tileMode is unsupported")
+            coordinates = [
+                parse_signed_number(gradient.get(f"{ANDROID}{name}"), name)
+                for name in ("startX", "startY", "endX", "endY")
+            ]
+            stops: list[str] = []
+            for item in gradient:
+                if item.tag.rsplit("}", 1)[-1] != "item":
+                    raise VectorConversionError(
+                        "Android vector gradient contains an unsupported child"
+                    )
+                require_attributes(
+                    item,
+                    {"offset", "color"},
+                    set(),
+                    "Android vector gradient item",
+                )
+                offset = parse_non_negative_number(
+                    item.get(f"{ANDROID}offset"), "gradient item offset"
+                )
+                if offset > 1:
+                    raise VectorConversionError(
+                        "Android vector gradient item offset must be from 0 to 1"
+                    )
+                (
+                    stop_color,
+                    stop_opacity,
+                    stop_resolved_resource,
+                    stop_dynamic_color_token,
+                    stop_platform_color_token,
+                ) = parse_color(item.get(f"{ANDROID}color") or "", color_resources)
+                if stop_dynamic_color_token is not None:
+                    raise VectorConversionError(
+                        "Android vector gradient theme colors are not safely convertible"
+                    )
+                if stop_resolved_resource:
+                    resolved_color_resource_count += 1
+                if stop_platform_color_token is not None:
+                    resolved_platform_color_tokens.add(stop_platform_color_token)
+                stop_attributes = [
+                    f'offset="{compact_number(offset)}"',
+                    f'stop-color="{stop_color}"',
+                ]
+                if stop_opacity is not None:
+                    stop_attributes.append(f'stop-opacity="{stop_opacity}"')
+                stops.append(f"      <stop {' '.join(stop_attributes)} />")
+            if len(stops) < 2:
+                raise VectorConversionError(
+                    "Android vector linear gradient must contain at least two items"
+                )
+            gradient_count += 1
+            gradient_id = f"gradient_{gradient_count}"
+            x1, y1, x2, y2 = (compact_number(value) for value in coordinates)
+            spread = spread_methods[tile_mode]
+            spread_attribute = "" if spread == "pad" else f' spreadMethod="{spread}"'
+            definition_lines.append(
+                f'    <linearGradient id="{gradient_id}" gradientUnits="userSpaceOnUse" '
+                f'x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"{spread_attribute}>'
+            )
+            definition_lines.extend(stops)
+            definition_lines.append("    </linearGradient>")
+            complex_colors[color_name] = f"url(#{gradient_id})"
+            converted_fields.add(f"{color_name.removeprefix('android:')}.gradient")
+
+        complex_stroke = complex_colors.get("android:strokeColor")
+        if stroke_color_value is not None and complex_stroke is not None:
+            raise VectorConversionError(
+                "Android vector path cannot declare two stroke colors"
+            )
+        if complex_stroke is not None:
+            stroke_width = (
+                parse_non_negative_number(stroke_width_value, "strokeWidth")
+                if stroke_width_value is not None
+                else 0.0
+            )
+            attributes.append(f'stroke="{complex_stroke}"')
+            attributes.append(f'stroke-width="{compact_number(stroke_width)}"')
+            if stroke_alpha_value is not None:
+                stroke_opacity = combined_opacity(
+                    None,
+                    parse_alpha(stroke_alpha_value, "strokeAlpha"),
+                )
+                if stroke_opacity is not None:
+                    attributes.append(f'stroke-opacity="{stroke_opacity}"')
+            converted_fields.add("strokeColor")
+        elif stroke_color_value is not None:
             (
                 stroke,
                 stroke_opacity,
@@ -561,6 +702,26 @@ def convert_vector(
                 raise VectorConversionError("Android vector fillType is unsupported")
             attributes.append(f'fill-rule="{fill_rules[fill_type]}"')
             converted_fields.add("fillType")
+        complex_fill = complex_colors.get("android:fillColor")
+        if complex_fill is not None:
+            if child.get(f"{ANDROID}fillColor") is not None:
+                raise VectorConversionError(
+                    "Android vector path cannot declare two fill colors"
+                )
+            attributes = [
+                attribute
+                for attribute in attributes
+                if not attribute.startswith("fill-opacity=")
+            ]
+            attributes[1] = f'fill="{complex_fill}"'
+            if fill_alpha_value is not None:
+                fill_opacity = combined_opacity(
+                    None,
+                    parse_alpha(fill_alpha_value, "fillAlpha"),
+                )
+                if fill_opacity is not None:
+                    attributes.append(f'fill-opacity="{fill_opacity}"')
+            converted_fields.add("fillColor.gradient")
         converted_fields.update({"pathData", "fillColor"})
         path_lines.append(f"{indent}<path {' '.join(attributes)} />")
         path_count += 1

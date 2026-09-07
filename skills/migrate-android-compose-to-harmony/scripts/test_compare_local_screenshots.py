@@ -819,6 +819,392 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
             self.assertEqual(geometry["max_abs_delta_dp"], 2.0)
             self.assertTrue(geometry["over_1dp"])
 
+    def test_business_component_ssim_uses_pillow_surface_when_runtime_boundary_is_missing(self) -> None:
+        from PIL import Image, ImageDraw
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.png"
+            right = root / "harmony.png"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+
+            for path, size, scale, changed in (
+                (left, (192, 144), 3, False),
+                (right, (128, 96), 2, True),
+            ):
+                image = Image.new("RGB", size, "white")
+                draw = ImageDraw.Draw(image)
+                draw.rectangle(
+                    (8 * scale, 8 * scale, 24 * scale - 1, 24 * scale - 1),
+                    fill="blue" if changed else "red",
+                )
+                draw.rectangle(
+                    (40 * scale, 8 * scale, 56 * scale - 1, 24 * scale - 1),
+                    fill="green",
+                )
+                image.save(path)
+
+            for path, side, screenshot, density in (
+                (left_page, "android", left, 3),
+                (right_page, "harmony", right, 2),
+            ):
+                write_page_snapshot_v2(
+                    path, side, screenshot, density, 0, 16, "#FFFFFFFF", "a" * 64
+                )
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                style = payload["components"][0]["style"]
+                scale = int(density)
+                components = [
+                    {
+                        "id": f"{side}-runtime-layout",
+                        "type": "Row",
+                        "semantic_key": "profile-layout",
+                        "bounds_px": {"x": 0, "y": 0, "width": 64 * scale, "height": 48 * scale},
+                        "bounds_dp": {"x": 0, "y": 0, "width": 64, "height": 48},
+                        "parent_id": None,
+                        "children_ids": [],
+                        "sibling_index": 0,
+                        "style": style,
+                        "provenance": [],
+                        "unresolved": [],
+                    }
+                ]
+                source_components = [
+                    {
+                        "id": "source-layout",
+                        "semantic_key": "profile-layout",
+                        "type": "Row",
+                        "component_kind": "compose_primitive",
+                        "node_kind": "screen_root",
+                        "business_parent_id": None,
+                        "business_children_ids": ["source-0", "source-1"],
+                        "runtime_instances": [
+                            {
+                                "runtime_component_id": f"{side}-runtime-layout",
+                                "mapping_status": "proven",
+                            }
+                        ],
+                        "runtime_descendant_ids": [],
+                        "source": {
+                            "source": "app/src/main/java/example/Profile.kt",
+                            "line": 8,
+                            "composable": "ProfileScreen",
+                            "custom_component": False,
+                        },
+                    }
+                ]
+                for index, (semantic_key, component_type, x_dp) in enumerate(
+                    (
+                        ("profile-card", "ProfileCard", 8),
+                        ("menu-button", "MenuButton", 40),
+                    )
+                ):
+                    runtime_id = f"{side}-runtime-{index}"
+                    source_id = f"source-{index}"
+                    components.append(
+                        {
+                            "id": runtime_id,
+                            "type": component_type,
+                            "semantic_key": semantic_key,
+                            "bounds_px": {
+                                "x": x_dp * scale,
+                                "y": 8 * scale,
+                                "width": 16 * scale,
+                                "height": 16 * scale,
+                            },
+                            "bounds_dp": {
+                                "x": x_dp,
+                                "y": 8,
+                                "width": 16,
+                                "height": 16,
+                            },
+                            "parent_id": None,
+                            "children_ids": [],
+                            "sibling_index": index,
+                            "style": style,
+                            "provenance": [],
+                            "unresolved": [],
+                        }
+                    )
+                    source_components.append(
+                        {
+                            "id": source_id,
+                            "semantic_key": semantic_key,
+                            "type": component_type,
+                            "component_kind": "project_component",
+                            "node_kind": "project_component",
+                            "business_parent_id": "source-layout",
+                            "business_children_ids": [],
+                            "runtime_instances": (
+                                []
+                                if side == "android" and semantic_key == "profile-card"
+                                else [
+                                    {
+                                        "runtime_component_id": runtime_id,
+                                        "mapping_status": "proven",
+                                    }
+                                ]
+                            ),
+                            "runtime_descendant_ids": [],
+                            "source": {
+                                "source": "app/src/main/java/example/Profile.kt",
+                                "line": 10 + index,
+                                "composable": "ProfileScreen",
+                                "custom_component": True,
+                            },
+                        }
+                    )
+                payload["components"] = components
+                payload["source_component_tree"] = {
+                    "business_root_ids": ["source-layout"],
+                    "business_component_ids": ["source-layout", "source-0", "source-1"],
+                    "components": source_components,
+                }
+                path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left),
+                "--right", str(right),
+                "--left-components", str(left_page),
+                "--right-components", str(right_page),
+                "--target-size", "64x48",
+                "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            command_result = json.loads(result.stdout)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            rankings = report["difference_analysis"]["business_component_ssim_rankings"]
+            self.assertEqual(rankings[0]["semantic_key"], "profile-card")
+            self.assertEqual(rankings[0]["component_type"], "ProfileCard")
+            self.assertLess(rankings[0]["ssim_score"], 0.95)
+            self.assertEqual(
+                rankings[0]["comparison_region_basis"],
+                "paired_pillow_visual_surfaces",
+            )
+            self.assertEqual(
+                rankings[0]["bounds_comparability"], "pillow_visual_surface_pair"
+            )
+            self.assertIsNone(rankings[0]["left_input_bounds"])
+            self.assertEqual(
+                rankings[0]["geometry_delta_dp"],
+                {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0},
+            )
+            self.assertLess(rankings[0]["aligned_appearance_ssim_score"], 0.95)
+            self.assertGreaterEqual(rankings[0]["pillow_boundary_confidence"], 0.6)
+            unchanged = next(item for item in rankings if item["semantic_key"] == "menu-button")
+            self.assertGreater(unchanged["ssim_score"], 0.99)
+            self.assertNotIn("Row", {item["component_type"] for item in rankings})
+            self.assertEqual(command_result["ssim_score"], min(report["metrics"].values()))
+
+    def test_business_component_separates_position_from_aligned_appearance_and_lists_controls(self) -> None:
+        from PIL import Image, ImageDraw
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.png"
+            right = root / "harmony.png"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+
+            for path, side, size, density, y_dp in (
+                (left, "android", (192, 144), 3, 8),
+                (right, "harmony", (128, 96), 2, 12),
+            ):
+                image = Image.new("RGB", size, "white")
+                draw = ImageDraw.Draw(image)
+                draw.rectangle(
+                    (
+                        8 * density,
+                        y_dp * density,
+                        24 * density - 1,
+                        (y_dp + 16) * density - 1,
+                    ),
+                    fill="red",
+                )
+                image.save(path)
+                page = left_page if side == "android" else right_page
+                write_page_snapshot_v2(
+                    page, side, path, density, 0, 16, "#FFFFFFFF", "a" * 64
+                )
+                payload = json.loads(page.read_text(encoding="utf-8"))
+                style = payload["components"][0]["style"]
+                runtime_component = {
+                    "id": f"{side}-profile-card",
+                    "type": "ProfileCard",
+                    "semantic_key": "profile-card",
+                    "bounds_px": {
+                        "x": 8 * density,
+                        "y": y_dp * density,
+                        "width": 16 * density,
+                        "height": 16 * density,
+                    },
+                    "bounds_dp": {"x": 8, "y": y_dp, "width": 16, "height": 16},
+                    "parent_id": None,
+                    "children_ids": [f"{side}-title"],
+                    "sibling_index": 0,
+                    "style": style,
+                    "provenance": [],
+                    "unresolved": [],
+                }
+                runtime_text = {
+                    "id": f"{side}-title",
+                    "type": "Text",
+                    "semantic_key": "profile-title",
+                    "bounds_px": {
+                        "x": 10 * density,
+                        "y": (y_dp + 2) * density,
+                        "width": 12 * density,
+                        "height": 4 * density,
+                    },
+                    "bounds_dp": {
+                        "x": 10,
+                        "y": y_dp + 2,
+                        "width": 12,
+                        "height": 4,
+                    },
+                    "parent_id": f"{side}-profile-card",
+                    "children_ids": [],
+                    "sibling_index": 0,
+                    "style": style,
+                    "provenance": [],
+                    "unresolved": [],
+                }
+                payload["components"] = [runtime_component, runtime_text]
+                payload["source_component_tree"] = {
+                    "business_root_ids": ["source-profile-card"],
+                    "business_component_ids": ["source-profile-card"],
+                    "components": [
+                        {
+                            "id": "source-profile-card",
+                            "semantic_key": "profile-card",
+                            "type": "ProfileCard",
+                            "component_kind": "project_component",
+                            "node_kind": "project_component",
+                            "business_owner_id": "source-profile-card",
+                            "business_parent_id": None,
+                            "business_children_ids": [],
+                            "children_ids": ["source-layout"],
+                            "runtime_instances": [
+                                {
+                                    "runtime_component_id": f"{side}-profile-card",
+                                    "mapping_status": "proven",
+                                    "mapping_method": "stable_runtime_id",
+                                }
+                            ],
+                            "runtime_descendant_ids": [f"{side}-title"],
+                            "source": {
+                                "source": "app/src/main/java/example/Profile.kt",
+                                "line": 10,
+                                "composable": "ProfileScreen",
+                                "custom_component": True,
+                            },
+                        },
+                        {
+                            "id": "source-layout",
+                            "semantic_key": "profile-layout",
+                            "type": "Row",
+                            "component_kind": "compose_primitive",
+                            "node_kind": "layout_primitive",
+                            "business_owner_id": "source-profile-card",
+                            "business_parent_id": None,
+                            "business_children_ids": [],
+                            "children_ids": ["source-title"],
+                            "runtime_instances": [],
+                            "runtime_descendant_ids": [f"{side}-title"],
+                            "source": {
+                                "source": "app/src/main/java/example/Profile.kt",
+                                "line": 11,
+                                "composable": "ProfileCard",
+                                "custom_component": False,
+                            },
+                        },
+                        {
+                            "id": "source-title",
+                            "semantic_key": "profile-title",
+                            "type": "Text",
+                            "component_kind": "compose_primitive",
+                            "node_kind": "visual_primitive",
+                            "business_owner_id": "source-profile-card",
+                            "business_parent_id": None,
+                            "business_children_ids": [],
+                            "children_ids": [],
+                            "runtime_instances": [
+                                {
+                                    "runtime_component_id": f"{side}-title",
+                                    "mapping_status": "candidate",
+                                    "mapping_method": "exact_text",
+                                }
+                            ],
+                            "runtime_descendant_ids": [],
+                            "source": {
+                                "source": "app/src/main/java/example/Profile.kt",
+                                "line": 12,
+                                "composable": "ProfileCard",
+                                "custom_component": False,
+                            },
+                        },
+                    ],
+                }
+                page.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left),
+                "--right", str(right),
+                "--left-components", str(left_page),
+                "--right-components", str(right_page),
+                "--target-size", "64x48",
+                "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            component = report["difference_analysis"]["business_component_ssim_rankings"][0]
+            self.assertEqual(component["semantic_key"], "profile-card")
+            self.assertEqual(
+                component["bounds_comparability"], "proven_direct_runtime_bounds"
+            )
+            self.assertEqual(
+                component["geometry_delta_dp"],
+                {"x": 0.0, "y": 4.0, "width": 0.0, "height": 0.0},
+            )
+            self.assertTrue(component["geometry_over_1dp"])
+            self.assertLess(component["screen_position_ssim_score"], 0.99)
+            self.assertGreater(component["aligned_appearance_ssim_score"], 0.99)
+            self.assertEqual(component["control_summary"]["total"], 1)
+            self.assertEqual(component["control_summary"]["failed"], 1)
+            control = component["control_diagnostics"][0]
+            self.assertEqual(control["semantic_key"], "profile-title")
+            self.assertEqual(control["component_type"], "Text")
+            self.assertEqual(control["geometry"]["delta_dp"]["y"], 4.0)
+            self.assertNotIn(
+                "profile-layout",
+                {item["semantic_key"] for item in component["control_diagnostics"]},
+            )
+            summary = report["difference_analysis"]["business_component_summary"]
+            self.assertEqual(summary["business_component_count"], 1)
+            self.assertEqual(summary["position_over_1dp_count"], 1)
+            self.assertEqual(summary["failed_control_count"], 1)
+            self.assertGreater(
+                summary["aligned_leaf_area_weighted_ssim_score"], 0.99
+            )
+            human_report = (output / "comparison-summary.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("# 截图对比报告", human_report)
+            self.assertIn("`ProfileCard`", human_report)
+            self.assertIn("dy=+4.000dp", human_report)
+            self.assertIn("`Text` `profile-title`", human_report)
+            command_result = json.loads(result.stdout)
+            self.assertEqual(command_result["human_report"], "comparison-summary.md")
+            self.assertEqual(
+                command_result["human_report_sha256"],
+                sha256_file(output / "comparison-summary.md"),
+            )
+
     def test_v2_page_snapshots_compare_style_and_allow_equal_logical_viewports(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1062,6 +1448,74 @@ class LocalScreenshotComparisonTests(unittest.TestCase):
                 report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
                 self.assertFalse(report["viewport_compatibility"]["pixel_comparison_compatible"])
                 self.assertEqual(report["verdict"]["status"], "fail")
+
+    def test_v2_explicit_equivalent_crops_compare_in_one_reference_geometry_space(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = root / "android.ppm"
+            right = root / "harmony.ppm"
+            left_page = root / "android-page.json"
+            right_page = root / "harmony-page.json"
+            output = root / "comparison"
+            write_solid_ppm(left, 192, 144)
+            write_solid_ppm(right, 128, 96)
+            write_page_snapshot_v2(
+                left_page, "android", left, 3, 12, 16, "#FFFFFFFF", "a" * 64
+            )
+            write_page_snapshot_v2(
+                right_page,
+                "harmony",
+                right,
+                2,
+                12,
+                16,
+                "#FFFFFFFF",
+                "a" * 64,
+                logical_content_size=(56, 42),
+            )
+            right_payload = json.loads(right_page.read_text(encoding="utf-8"))
+            right_payload["components"][0]["bounds_px"] = {
+                "x": 28,
+                "y": 14,
+                "width": 56,
+                "height": 56,
+            }
+            right_payload["components"][0]["bounds_dp"] = {
+                "x": 14,
+                "y": 7,
+                "width": 28,
+                "height": 28,
+            }
+            right_page.write_text(json.dumps(right_payload) + "\n", encoding="utf-8")
+
+            result = self.run_compare(
+                "--left", str(left),
+                "--right", str(right),
+                "--left-components", str(left_page),
+                "--right-components", str(right_page),
+                "--left-crop", "0,0,192,144",
+                "--right-crop", "0,0,112,84",
+                "--target-size", "64x48",
+                "--output-dir", str(output),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+            viewport = report["viewport_compatibility"]
+            self.assertFalse(viewport["same_logical_content_size"])
+            self.assertTrue(viewport["uniform_explicit_crop_transform"])
+            self.assertTrue(viewport["pixel_comparison_compatible"])
+            self.assertEqual(
+                viewport["geometry_comparison_mode"],
+                "explicit_crop_normalized_reference_logical_units",
+            )
+            geometry = report["difference_analysis"]["component_geometry_deltas"][0]
+            self.assertEqual(
+                geometry["coordinate_space"],
+                "explicit_crop_normalized_reference_logical_units",
+            )
+            self.assertEqual(geometry["max_abs_delta_dp"], 0.0)
+            self.assertEqual(report["verdict"]["status"], "pass")
 
     def test_v2_unresolved_facts_are_blocking_even_without_numeric_delta(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

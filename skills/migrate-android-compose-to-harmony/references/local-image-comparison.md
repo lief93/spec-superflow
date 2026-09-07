@@ -55,6 +55,8 @@ its retained hash.
 - `ssim_color` responds to overall color and rendered-pixel differences.
 - `ssim_luma` reduces color influence and emphasizes luminance/layout differences.
 - `ssim_edges` emphasizes component geometry, outlines, and text strokes.
+- `ssim_score` is the minimum of those three values. This single strict score passes a threshold
+  exactly when all three SSIM metrics pass it.
 
 The comparator calculates tiled SSIM directly with Pillow. Its values form a stable baseline for
 this comparator revision, but are not numerically interchangeable with ffmpeg, scikit-image, or a
@@ -116,6 +118,42 @@ component and ranks them by their strongest geometric match. When the inventory 
 `AutoTrackingCard`, together with `hotspot_ids`, `hotspot_count`, `max_match_score`, and
 `max_hotspot_severity`. This is the direct candidate answer to “which source component should I
 inspect first”; it still does not identify the incorrect property or authorize a fix.
+
+For complete v2 snapshots with `source_component_tree`, prefer
+`difference_analysis.business_component_ssim_rankings`. It takes reusable project and third-party
+component instances from `business_component_ids`, excluding Compose layout primitives such as
+`Row`, `Column`, and `Box`. Each row records the component semantic key, type, source file and line,
+runtime mapping method, normalized bounds, local `ssim_score`, changed-pixel ratio, and an
+area-weighted `impact_score`. Read `geometry_delta_dp` for `x/y/width/height` placement differences,
+`screen_position_ssim_score` for the component at its actual screen position, and
+`aligned_appearance_ssim_score` for an independent-bbox comparison that removes placement before
+checking internal appearance. The aligned score does not replace geometry; check
+`component_aspect_ratio_delta` separately. `control_diagnostics` then lists the owned semantic
+controls and their geometry/style failures beneath the business component. Layout wrappers and
+content slots are excluded.
+
+`bounds_comparability` distinguishes direct measured bounds, candidate anchor-derived bounds,
+incompatible runtime scopes, and one-sided projections. If one platform does not expose a custom
+component boundary, the other platform's component region is used only as a diagnostic projection;
+geometry and aligned appearance remain unavailable instead of reporting false precision.
+`comparison_region_basis` states that limitation. Component SSIM is a ranking signal, not additive
+attribution to the global SSIM score.
+
+Before leaving such a component unresolved, the comparator uses deterministic local Pillow
+processing to enumerate large quantized connected-color surfaces. It first joins a visible surface
+to the platform that has a runtime component boundary, then searches the other screenshot for a
+surface with compatible size, aspect ratio, and position. A successful pair is reported as
+`pillow_visual_surface_pair`, with each boundary method and `pillow_boundary_confidence`. This
+recovers visible cards, buttons, and header backgrounds without image-model inference. It does not
+recover transparent padding, click targets, or same-color containers; those remain unresolved and
+still require a runtime layout probe.
+
+The same output directory contains `comparison-summary.md` for human review. It states the overall
+verdict, global SSIM, an area-weighted aligned-appearance summary over non-overlapping leaf business
+components, counts of position/appearance/control failures, a business-component ranking table, and
+the failed semantic controls nested below each component. The JSON remains the machine-readable
+source of truth; the Markdown is deterministically rendered from that report and its SHA-256 is
+returned by the command.
 
 ## Map a component to sanitized source attributes
 

@@ -49,6 +49,7 @@ COMPOSE_COMPONENTS = (
     "Dialog",
     "DatePicker",
     "DatePickerDialog",
+    "DecorationBox",
     "DropdownMenu",
     "DropdownMenuItem",
     "Divider",
@@ -60,6 +61,7 @@ COMPOSE_COMPONENTS = (
     "FlowRow",
     "HorizontalPager",
     "HorizontalDivider",
+    "VerticalDivider",
     "Icon",
     "IconButton",
     "Image",
@@ -302,6 +304,7 @@ UI_SEMANTIC_ARGUMENTS = {
     "confirmButton",
     "content",
     "containerColor",
+    "container",
     "contentAlignment",
     "contentColor",
     "contentDescription",
@@ -342,10 +345,12 @@ UI_SEMANTIC_ARGUMENTS = {
     "leadingIcon",
     "label",
     "lineHeight",
+    "letterSpacing",
     "layoutType",
     "maxItemsInEachRow",
     "maxLines",
     "minLines",
+    "model",
     "onClick",
     "onCheckedChange",
     "onDismissRequest",
@@ -386,11 +391,14 @@ UI_SEMANTIC_ARGUMENTS = {
     "targetState",
     "text",
     "textAlign",
+    "textDecoration",
     "textStyle",
     "thickness",
     "tint",
     "title",
     "thumbContent",
+    "thumb",
+    "track",
     "tonalElevation",
     "trackColor",
     "trailingIcon",
@@ -1083,6 +1091,7 @@ def extract_data_class_factory_functions(
                 cursor += 1
             return_expression: str | None = None
             local_values: dict[str, str] = {}
+            static_record = False
             if cursor < len(companion_body_code) and companion_body_code[cursor] == "{":
                 function_closing = balanced_closing(companion_body_code, cursor, "{", "}")
                 if function_closing is None:
@@ -1090,6 +1099,8 @@ def extract_data_class_factory_functions(
                 function_body = companion_body[cursor + 1 : function_closing]
                 function_body_code = companion_body_code[cursor + 1 : function_closing]
                 local_values = local_value_expressions(function_body, function_body_code)
+                static_record = (len(re.findall(r'\breturn\b', function_body_code)) == 1
+                                 and not re.search(r'\b(?:if|when|for|while|try|throw|var)\b', function_body_code))
                 for return_match in re.finditer(r"\breturn\b", function_body_code):
                     expression_start = return_match.end()
                     expression_end = local_value_expression_end(function_body_code, expression_start)
@@ -1103,6 +1114,7 @@ def extract_data_class_factory_functions(
                 candidate = normalize_expression(companion_body[expression_start:expression_end])
                 if re.match(rf"{re.escape(class_name)}\s*\(", candidate, re.S) is not None:
                     return_expression = candidate
+                    static_record = True
             if return_expression is None:
                 continue
             factory: dict[str, Any] = {
@@ -1110,11 +1122,48 @@ def extract_data_class_factory_functions(
                 "line": text.count("\n", 0, body_opening + 1 + companion_opening + 1 + function_match.start()) + 1,
                 "return_expression": return_expression,
                 "parameters": parameters,
+                "static_record": static_record,
             }
             if local_values:
                 factory["local_values"] = local_values
             factories.append(factory)
     return factories
+
+
+def extract_static_string_helpers(files: dict[str, str]) -> list[dict[str, Any]]:
+    helpers = []
+    # Recognize the complete grouping algorithm, never infer behavior from a helper's name.
+    grouping = re.compile(
+        r'val(?P<builder>\w+)=StringBuilder\(\)var(?P<count>\w+)=0'
+        r'for\((?P<char>\w+)inthis\)\{if\((?P=count)>0&&(?P=count)%(?P<group>\w+)==0\)'
+        r'\{(?P=builder)\.append\((?P<divider>\w+)\)\}'
+        r'(?P=builder)\.append\((?P=char)\)(?P=count)\+\+\}'
+        r'return(?P=builder)\.toString\(\)')
+    for source, text in sorted(files.items()):
+        if not source.endswith('.kt'):
+            continue
+        code = lexical_code_mask(text)
+        for match in re.finditer(r'\bfun\s+String\.(\w+)\s*\(', code):
+            end = balanced_closing(code, match.end() - 1, '(', ')')
+            if end is None:
+                continue
+            signature = re.match(r'\s*:\s*String\s*\{', code[end + 1:])
+            if signature is None:
+                continue
+            opening = end + signature.end()
+            closing = balanced_closing(code, opening, '{', '}')
+            if closing is None:
+                continue
+            body = re.sub(r'\s+', '', code[opening + 1:closing])
+            algorithm = grouping.fullmatch(body)
+            if algorithm is None:
+                continue
+            helpers.append({'name': match.group(1), 'source': source,
+                            'line': text.count('\n', 0, match.start()) + 1,
+                            'kind': 'group_string', 'group_parameter': algorithm['group'],
+                            'separator_parameter': algorithm['divider'],
+                            'parameters': compact_parameters(text[match.end():end])})
+    return helpers
 
 
 def extract_kotlin_data_classes(files: dict[str, str]) -> dict[str, Any]:
@@ -1233,6 +1282,7 @@ def extract_kotlin_data_classes(files: dict[str, str]) -> dict[str, Any]:
         "authoritative": False,
         "class_count": len(classes),
         "classes": classes,
+        "string_helpers": extract_static_string_helpers(files),
         "limitations": [
             "Only primary-constructor data class properties are retained.",
             "Property types are candidates until imports, aliases, generics, and runtime defaults are reconciled.",
@@ -1888,6 +1938,9 @@ def local_value_expression_end(code: str, start: int) -> int:
             next_index = index + 1
             while next_index < len(code) and code[next_index].isspace():
                 next_index += 1
+            if next_index < len(code) and code[next_index] == ".":
+                index += 1
+                continue
             if code.startswith("else", next_index) and (
                 next_index + len("else") == len(code)
                 or not (code[next_index + len("else")].isalnum() or code[next_index + len("else")] == "_")
@@ -1909,6 +1962,28 @@ def trailing_lambda_parameter_names(lambda_source: str) -> list[str]:
     if match is None:
         return []
     return [name.strip() for name in match.group(1).split(",")]
+
+
+def canvas_draw_commands(lambda_source: str) -> list[dict[str, Any]]:
+    code = lexical_code_mask(lambda_source, mask_strings=False)
+    commands: list[dict[str, Any]] = []
+    index = 0
+    while index < len(code):
+        match = re.search(r"\bdrawArc\s*\(", code[index:])
+        if match is None:
+            break
+        opening = index + match.end() - 1
+        closing = balanced_closing(code, opening, "(", ")")
+        if closing is None:
+            break
+        arguments: dict[str, str] = {}
+        for chunk, _, _ in split_top_level_spans(lambda_source[opening + 1 : closing]):
+            named = split_named_argument(chunk)
+            if named is not None:
+                arguments[named[0]] = normalize_expression(named[1])
+        commands.append({"kind": "arc", "arguments": arguments})
+        index = closing + 1
+    return commands
 
 
 def receiver_expression_before_member_call(body: str, body_code: str, dot_index: int) -> str | None:
@@ -2011,6 +2086,105 @@ def enclosing_if_conditions(body: str, body_code: str) -> list[dict[str, Any]]:
                 "condition": condition,
             }
         )
+        else_start = block_close + 1
+        while else_start < len(body_code) and body_code[else_start].isspace():
+            else_start += 1
+        if not body_code.startswith("else", else_start):
+            continue
+        else_open = else_start + len("else")
+        while else_open < len(body_code) and body_code[else_open].isspace():
+            else_open += 1
+        if else_open >= len(body_code) or body_code[else_open] != "{":
+            continue
+        else_close = balanced_closing(body_code, else_open, "{", "}")
+        if else_close is None:
+            continue
+        conditions.append(
+            {
+                "start": else_open + 1,
+                "end": else_close,
+                "condition": f"!({condition})",
+            }
+        )
+    return conditions
+
+
+def enclosing_when_conditions(body: str, body_code: str) -> list[dict[str, Any]]:
+    conditions: list[dict[str, Any]] = []
+    for match in re.finditer(r"\bwhen\s*(\(|\{)", body_code):
+        subject: str | None = None
+        if match.group(1) == "(":
+            subject_open = match.end() - 1
+            subject_close = balanced_closing(body_code, subject_open, "(", ")")
+            if subject_close is None:
+                continue
+            subject = normalize_expression(body[subject_open + 1 : subject_close])
+            block_open = subject_close + 1
+        else:
+            block_open = match.end() - 1
+        while block_open < len(body_code) and body_code[block_open].isspace():
+            block_open += 1
+        if block_open >= len(body_code) or body_code[block_open] != "{":
+            continue
+        block_close = balanced_closing(body_code, block_open, "{", "}")
+        if block_close is None:
+            continue
+        if subject is not None and not subject:
+            continue
+        branch_code = body_code[block_open + 1 : block_close]
+        branch_offset = block_open + 1
+        prior_conditions: list[str] = []
+        branches = []
+        for branch in re.finditer(r"(?m)^[ \t]*(.+?)\s*->", branch_code):
+            prefix = branch_code[: branch.start()]
+            if prefix.count("{") != prefix.count("}"):
+                continue
+            label = normalize_expression(branch.group(1))
+            if not label:
+                continue
+            branches.append((branch, label))
+        for index, (branch, label) in enumerate(branches):
+            branch_start = branch_offset + branch.end()
+            while branch_start < block_close and body_code[branch_start].isspace():
+                branch_start += 1
+            if branch_start >= block_close:
+                continue
+            if body_code[branch_start] == "{":
+                branch_end = balanced_closing(body_code, branch_start, "{", "}")
+                if branch_end is None or branch_end > block_close:
+                    continue
+                range_start = branch_start + 1
+            else:
+                branch_end = (
+                    branch_offset + branches[index + 1][0].start()
+                    if index + 1 < len(branches)
+                    else block_close
+                )
+                range_start = branch_start
+            if label == "else":
+                if not prior_conditions:
+                    continue
+                condition = "!(" + " || ".join(prior_conditions) + ")"
+            else:
+                if subject is None:
+                    branch_condition = label
+                elif label.startswith(("is ", "!is ")):
+                    branch_condition = f"{subject} {label}"
+                else:
+                    branch_condition = f"{subject} == {label}"
+                condition = (
+                    f"({branch_condition}) && !({' || '.join(prior_conditions)})"
+                    if prior_conditions
+                    else branch_condition
+                )
+                prior_conditions.append(branch_condition)
+            conditions.append(
+                {
+                    "start": range_start,
+                    "end": branch_end,
+                    "condition": condition,
+                }
+            )
     return conditions
 
 
@@ -2069,14 +2243,14 @@ def for_each_scopes(body: str, body_code: str) -> list[dict[str, Any]]:
             continue
         raw_lambda_body = body[opening + 1 : closing]
         parameters = trailing_lambda_parameter_names(raw_lambda_body)
-        if len(parameters) != 1:
+        if len(parameters) > 1:
             continue
         scopes.append(
             {
                 "start": opening + 1,
                 "end": closing,
                 "collection": receiver,
-                "item_parameter": parameters[0],
+                "item_parameter": parameters[0] if parameters else "it",
             }
         )
     return scopes
@@ -2097,6 +2271,7 @@ def extract_semantic_ui_calls(
     local_values = local_value_expressions(body, body_code)
     let_scopes = implicit_it_let_scopes(body, body_code)
     if_conditions = enclosing_if_conditions(body, body_code)
+    when_conditions = enclosing_when_conditions(body, body_code)
     item_scopes = lazy_items_scopes(body, body_code)
     item_scopes.extend(for_each_scopes(body, body_code))
     slot_parameter_names = slot_parameter_names or set()
@@ -2115,7 +2290,7 @@ def extract_semantic_ui_calls(
         else:
             closing = opening
             raw_arguments = ""
-        argument_spans = split_top_level_spans(raw_arguments)
+        argument_spans = [span for span in split_top_level_spans(raw_arguments) if span[0].strip()]
         argument_chunks = [chunk for chunk, _, _ in argument_spans]
         named_arguments = dict(
             named
@@ -2160,6 +2335,7 @@ def extract_semantic_ui_calls(
         lambda_opening = opening if delimiter == "{" else after_call
         span_end = closing + 1
         trailing_lambda_expression = None
+        raw_trailing_lambda_body: str | None = None
         trailing_lambda_parameters: list[str] = []
         trailing_lambda_span: tuple[int, int] | None = None
         if lambda_opening < len(body_code) and body_code[lambda_opening] == "{":
@@ -2167,6 +2343,7 @@ def extract_semantic_ui_calls(
             if lambda_end is not None:
                 span_end = lambda_end + 1
                 raw_lambda_body = body[lambda_opening + 1 : lambda_end]
+                raw_trailing_lambda_body = raw_lambda_body
                 trailing_lambda_parameters = trailing_lambda_parameter_names(raw_lambda_body)
                 lambda_body = re.sub(r"\s+", " ", raw_lambda_body.strip())
                 trailing_lambda_expression = "{}" if not lambda_body else f"{{ {lambda_body} }}"
@@ -2183,16 +2360,18 @@ def extract_semantic_ui_calls(
             ),
             None,
         )
-        visibility_condition = next(
-            (
-                condition["condition"]
-                for condition in sorted(
-                    if_conditions,
-                    key=lambda item: item["end"] - item["start"],
-                )
-                if condition["start"] <= match.start() < condition["end"]
-            ),
-            None,
+        visibility_conditions = [
+            condition["condition"]
+            for condition in sorted(
+                if_conditions + when_conditions,
+                key=lambda item: (item["start"], -(item["end"] - item["start"])),
+            )
+            if condition["start"] <= match.start() < condition["end"]
+        ]
+        visibility_condition = (
+            " && ".join(f"({condition})" for condition in visibility_conditions)
+            if len(visibility_conditions) > 1
+            else visibility_conditions[0] if visibility_conditions else None
         )
         item_scope = next(
             (
@@ -2266,13 +2445,39 @@ def extract_semantic_ui_calls(
                 "semantic_arguments": semantic_arguments,
                 "positional_arguments": positional_arguments,
                 "ordered_modifier_chain": modifier_chain,
+                "modifier_expression": modifier_expression,
                 "state_slots": state_slots,
                 "trailing_lambda_parameters": trailing_lambda_parameters,
                 "_start": match.start(),
                 "_end": span_end,
             }
+        if component == 'DecorationBox' and re.search(
+            r'\bOutlinedTextFieldDefaults\s*\.\s*$', body_code[:match.start()]
+        ):
+            candidate['decoration_kind'] = 'material3-outlined'
+        native_slots = {
+            'Scaffold': {'topBar', 'bottomBar', 'content', 'snackbarHost', 'floatingActionButton'},
+            'TopAppBar': {'title', 'navigationIcon', 'actions'},
+            'CenterAlignedTopAppBar': {'title', 'navigationIcon', 'actions'},
+            'DecorationBox': {'leadingIcon', 'trailingIcon', 'placeholder', 'label', 'supportingText', 'container', 'innerTextField'},
+        }.get(component, set())
+        if native_slots:
+            spans = []
+            for chunk, chunk_start, chunk_end in argument_spans:
+                named = split_named_argument(chunk)
+                if named is not None and named[0] in native_slots:
+                    spans.append({'name': named[0], 'start': opening + 1 + chunk_start,
+                                  'end': opening + 1 + chunk_end})
+            if component == 'Scaffold' and trailing_lambda_span is not None:
+                spans.append({'name': 'content', 'start': trailing_lambda_span[0],
+                              'end': trailing_lambda_span[1]})
+            candidate['_slot_argument_spans'] = spans
         if component in slot_parameter_names:
             candidate["slot_invocation"] = {"name": component}
+        if component == "Canvas" and raw_trailing_lambda_body is not None:
+            commands = canvas_draw_commands(raw_trailing_lambda_body)
+            if commands:
+                candidate["custom_draw_commands"] = commands
         if local_values:
             candidate["local_values"] = local_values
         if visibility_condition is not None:
@@ -2445,12 +2650,12 @@ def compact_parameters(parameters: str) -> list[dict[str, Any]]:
         if match is not None:
             parameter = {
                 "name": match.group(1),
-                "type": match.group(2).strip()[:160],
+                "type": match.group(2).strip(),
             }
             if annotations:
                 parameter["annotations"] = annotations
             if match.group(3) is not None:
-                parameter["default"] = match.group(3).strip()[:240]
+                parameter["default"] = match.group(3).strip()
             results.append(parameter)
     return results
 

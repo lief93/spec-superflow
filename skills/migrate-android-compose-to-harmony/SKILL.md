@@ -311,29 +311,34 @@ values, it omits the ambiguous resource, records `resource_name_collision`, and 
 resource generation; it is not migration completion. Use `--force` only when all prior generated
 outputs are unchanged.
 
-After theme resources exist, generate one exact Compose component closure as a conservative ArkUI
-page candidate:
+After theme resources and copied target assets exist, generate the ArkUI page directly from the
+source-generated page JSON:
 
 ```bash
 python3 "$SKILL_ROOT/scripts/generate_arkui_page.py" \
-  --contract "$CONTRACT" --target "$TARGET" --module entry \
-  --root-source "app/src/main/java/example/HomeScreen.kt" \
-  --root-composable "HomeScreen" \
-  --android-page-json "$ANDROID_PAGE_JSON"
+  --target "$TARGET" --module entry \
+  --page-json "$LANHU_PAGE_DIR/version_json.json"
 ```
 
-The root identity is the source-relative path plus composable name; a name alone is deliberately
-insufficient. Generate `ANDROID_PAGE_JSON` from the exact Android route/state capture before
-high-fidelity page generation. The generator accepts only a v2 Android page snapshot, binds its
-hash, page/state, viewport, screenshot identity, and applied property paths into the generation
-manifest, and maps runtime components to exact source `call_id` values through the embedded source
-attribute inventory. Proven Android geometry, content, typography, spacing, surface, and transform
-facts override static visual defaults where a compile-safe ArkUI emitter exists. Missing or
-ambiguous call mappings, unresolved Android visual facts, unproved values, and proven properties
-without a safe emitter remain explicit generation blockers rather than being guessed.
+`version_json.json` is the only page-fact input. The generator derives the root identity from its
+single source root and does not reopen the Android source, migration contract, or a runtime sidecar.
+For active component/field mappings, unsupported combinations, and exact consumption gates,
+read [page-layout-support.md](references/page-layout-support.md). Do not count legacy source
+translator tests as evidence for this single-input renderer.
+It contains the source hierarchy, component ownership, sibling order, layout intent, resolved visual
+facts, provenance, and unresolved facts. Runtime capture may enrich that document upstream. Missing,
+ambiguous, or unsupported facts remain explicit `unresolved` records; they are never filled by a
+source/contract fallback. The output manifest records `input_mode=page-json-only` and a zero source
+fallback count.
 
-Without `--android-page-json`, the command retains its legacy code-only candidate behavior for
-diagnostic and compatibility runs; do not use that legacy mode as pixel-fidelity evidence. The
+The generated Stage template keeps the status and navigation bars enabled and does not lay page
+content out behind them. Page-JSON-driven output scales the captured tree uniformly by the smaller
+of the host/content width and height ratios, aligns it to the content top, and centers it
+horizontally. Do not compensate for system bars with page-specific offsets or crop a captured tree
+by fitting only one axis when the Android and Harmony content aspect ratios differ.
+
+Without both page inputs, the command retains source-only or legacy code-only candidate behavior for
+diagnostic and compatibility runs; do not use either mode as high-fidelity evidence. The
 generator also consumes `transitive_closures`, reached definitions, semantic calls,
 invocation arguments, parent call IDs, and ordered Modifier chains. It emits a separate ArkUI
 builder for every reached project component, uses generated theme resource names only when their
@@ -473,20 +478,73 @@ vendor dependencies from an unrelated project into source control.
 
 Migrate one complete dependency chain at a time:
 
-1. Use Android source to enumerate the route's deterministic visible states and business transitions.
-2. Capture one Android page JSON and screenshot for every applicable route/state.
-3. Generate the initial ArkUI hierarchy and visual properties from proven page JSON facts.
+1. Use Android source to enumerate the route's component tree, deterministic visible states, and business transitions.
+2. Generate the code-derived `source-page.json`, then project one explicit state fixture into a
+   Lanhu-compatible `version_json.json` plus component and page-state manifests.
+3. Pass that `version_json.json` directly to the ArkUI generator. Optionally fuse same-state
+   UIAutomator facts in memory; never serialize a reduced implementation JSON first.
 4. Use Android source to implement callbacks, state, navigation, scrolling, lifecycle, and responsive intent.
 5. Copy referenced opaque assets locally only after matching resource keys to manifest paths.
-6. Generate the matching Harmony page JSON and compare the structured page facts.
-7. Compare the paired screenshots for the final pixel-fidelity verdict.
+6. Capture Android and Harmony runtime page JSON for the same route/state and compare the structured facts.
+7. Compare the paired screenshots for the final pixel-fidelity verdict; do not feed screenshot-derived
+   geometry or style back into implementation facts.
 8. Add unit, demand-related UITest, and device scenarios for the slice.
 
-For visual implementation, Android page JSON is the primary rendered-state contract: component
-hierarchy, geometry, padding/margin, typography, surfaces, assets, transforms, and visible state.
-Android source remains authoritative for behavior and layout intent that a single rendered frame
-cannot express. The screenshot is the final pixel-level acceptance input, not a substitute for
-either the structured page facts or the source behavior contract.
+For visual implementation, the Android source component tree is authoritative for hierarchy,
+component units, sibling order, reusable component identity, layout intent, and state expressions.
+The source-derived Lanhu-compatible `version_json.json` supplies the implementation tree and resolved
+layout/style intent. UIAutomator or an application layout probe may calibrate visible leaf/control
+geometry and exposed platform defaults while producing that file, but it must not replace source
+ownership, parents, siblings, or flow intent. Screenshots remain final pixel-level acceptance inputs
+and never become the hierarchy. Behavior remains a separate `behavior-contract.v2`; neither visual
+JSON nor screenshot similarity proves business parity.
+
+Generate the source-derived Lanhu contract for one explicit state:
+
+```bash
+python3 "$SKILL_ROOT/scripts/generate_lanhu_source_page.py" \
+  --source-page "$ANDROID_CAPTURE/source-page.json" \
+  --state-fixture "$STATE_FIXTURE" \
+  --viewport-width-dp "$WIDTH_DP" \
+  --viewport-height-dp "$HEIGHT_DP" \
+  --slice-scale 2 \
+  --output-dir "$LANHU_PAGE_DIR"
+
+python3 "$SKILL_ROOT/scripts/generate_arkui_page.py" \
+  --target "$TARGET" --module entry \
+  --page-json "$LANHU_PAGE_DIR/version_json.json"
+```
+
+`generate_lanhu_source_page.py` must preserve one connected source tree, explicit parent/child and
+sibling order, reusable definition/instance identity, state projection provenance, and unresolved facts.
+It must not invent dynamic values. `version_json.meta.sourceGeneration` records projected instance and
+geometry-status counts so completeness can be recalculated. Each source-generated layer embeds an
+`android-to-harmony.lanhu-node.v1` migration extension, so the single `version_json.json` carries the
+source component type, semantic key, source call mapping, normalized style, provenance, and unresolved
+facts needed by generation. The generator validates required Lanhu document, artboard, layer, style,
+frame, text, and export-resource fields before rendering. `frame` is always the full pre-clip layout;
+negative coordinates are valid and must never be replaced by the visible intersection.
+
+Every source-generated layer must also include `migration.requiredFacts`. Required component facts
+distinguish parsed constants, framework defaults, retained symbolic expressions, non-applicable
+fields, and genuine unresolved values. Evaluate the required-fact gate for both Lanhu output and
+ArkUI generation, but do not abort candidate generation for unsupported facts. Retain each
+`unresolved` component/path/expression and upstream phase failure in the candidate and report.
+Both commands exit zero when artifacts are written, including partial candidates; the separate
+`generation_complete=false` and `verdict=fail` forbid treating them as complete. Unsupported
+controls may be omitted from the candidate while their facts remain in JSON. Unknown text stays
+null with an explicit unresolved record, never a guessed string or an inherited parent label.
+Malformed hierarchy, ambiguous page state, unsafe assets and target ownership still stop the
+command. Never fall back to whole-screen coordinates or sampled runtime style to hide a gap. A
+transparent component is valid without an invented background, while explicit text constraints,
+assets, alignment, spacing, shape, and relationship modifiers must be parsed or retained exactly.
+The ordinary renderer `unresolved` list remains separate, so a required-fact pass does not imply
+complete business migration.
+
+`export_lanhu_page_snapshot.py` remains a verification and legacy-compatibility tool. It may bind a
+screenshot and component sidecar into `page-snapshot.v2`, but that reduced artifact is not an
+implementation input and must not sit between `version_json.json` and ArkUI generation. Legacy generated
+Lanhu files without embedded migration metadata may temporarily pass `--lanhu-component-manifest`.
 
 Copy an approved image or font asset without exposing its bytes:
 
@@ -638,6 +696,30 @@ runtime/source components to inspect first and listing their hotspot IDs. The in
 rejects display text, unknown fields, stale screenshot dimensions, and non-identifier tokens.
 Component pairing and the impact summary remain candidate-only.
 
+For complete v2 snapshots, use `difference_analysis.business_component_ssim_rankings` as the first
+diagnostic list. It ranks source-defined reusable project/third-party component instances by local
+SSIM loss and affected area, excludes layout primitives such as `Row`/`Column`/`Box`, and links each
+entry to its source file and call line. Controls remain drill-down evidence inside a component;
+do not replace this list with a flat control ranking. `comparison_region_basis` distinguishes
+two-sided measured bounds from a one-sided projected diagnostic region when a runtime does not
+expose the custom component boundary. Diagnose each component with all three independent signals:
+`geometry_delta_dp` reports `x/y/width/height`, `screen_position_ssim_score` includes placement, and
+`aligned_appearance_ssim_score` compares independently aligned component crops. Read
+`control_diagnostics` below the component for the specific semantic controls whose geometry or
+style failed. Do not treat projected or incompatible runtime scopes as measured geometry; use
+`bounds_comparability` and leave unavailable values unresolved.
+
+The comparator may upgrade a missing runtime boundary to `pillow_visual_surface_pair` only when a
+deterministically detected visible surface first overlaps the known-side runtime component and a
+compatible surface is found on the other screenshot. Retain its confidence and boundary method in
+the report. Treat it as a visual-surface boundary, not proof of transparent layout padding or click
+area. No model image recognition is involved.
+
+Give human reviewers `comparison-summary.md` from the comparison output directory instead of
+requiring them to inspect `comparison.json`. The Markdown summarizes the verdict and component
+metrics, then nests failed controls under their owning business component. Preserve the JSON as the
+auditable machine-readable record and bind both files by the hashes printed on stdout.
+
 Create `SOURCE_ATTRIBUTE_INVENTORY` from the same exact Compose closure before comparison:
 
 ```bash
@@ -692,6 +774,28 @@ through `semantic_key`. Read [page-snapshot.md](references/page-snapshot.md) for
 fact schema, provenance rules, and cross-device viewport requirements. Physical screenshot sizes
 may differ; whole-screen pixel metrics require equivalent logical content aspect, orientation,
 system-bar crop, font scale, locale, theme, state, and scroll position.
+
+For real-page captures, treat `source_component_tree` as the component model and `components` as
+the rendered-state instance model. The source tree preserves project composables, primitives,
+call IDs, invocation arguments, modifiers, source styles, and source parent/child structure for the
+observed route branch. It separately indexes screen/project component boundaries and labels layout
+primitives, so `View`, `Column`, and `Row` cannot replace a project component in the component
+model. Each directly associated runtime instance and each mapped descendant is attached to its
+source node; rendered instances retain a proven, candidate, or unbound component-ownership path.
+Visible semantic runtime instances that still lack one exact source identity remain in
+`components` as `runtime_visual_fallback` entries so first-pass generation does not erase dynamic
+text, repeated list items, controls, or an outer navigation shell. These entries remain explicitly
+unbound for behavior work. Generic platform wrapper Views may provide bounds or pixels, but must
+never be renamed into source/business components; compress them to runtime evidence or retain only
+a distinct screenshot-proven visual surface.
+
+When a runtime tree elides a project card or surface, a large screenshot-proven solid region may
+be rejoined only to a project component whose source closure proves background, shadow, or
+elevation semantics and whose captured descendants occupy that region. For repeated project-owned
+list items, a lightly clipped runtime item may reuse the complete sibling height only when parent,
+owner, width, and child-type signature agree; image and progress children that were centered in
+the clipped item are then centered in the recovered height. These repairs recover measurement,
+not business identity, and remain candidate provenance.
 
 For a component with a proven non-identity rotation or scale, platform runtime APIs may expose
 different clipped/transformed AABBs. In that case the strict comparator uses the proven
@@ -752,7 +856,8 @@ The report and command stdout include a final `pass` or `fail`. A pass requires 
 snapshots, equivalent component presence and hierarchy, geometry within 1dp, no unresolved or
 one-sided proven style facts, compatible logical viewport/orientation/font scale, and all three
 SSIM metrics at or above `--min-ssim` (default `0.95`). Process exit code zero means comparison
-completed; read `verdict` for the UI result. The color-channel tolerance remains 8. Raw asset pixel
+completed; read `verdict` for the UI result. `ssim_score` is the minimum of color, luma, and edge
+SSIM and is the concise strict score for reporting. The color-channel tolerance remains 8. Raw asset pixel
 dimensions are retained as metadata, while cross-density size comparison uses normalized logical
 units. This automated verdict does not replace authorized product acceptance. Treat every generated
 PNG as protected image data. For private screenshots, neither the

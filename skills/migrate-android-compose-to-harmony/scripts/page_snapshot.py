@@ -34,6 +34,7 @@ STYLE_SECTIONS: dict[str, tuple[str, ...]] = {
     "typography": (
         "font_size_sp", "font_weight", "font_style", "font_family", "letter_spacing_sp",
         "line_height_sp", "text_align", "max_lines", "overflow", "color", "decoration",
+        "soft_wrap", "min_lines",
     ),
     "asset": (
         "resource", "sha256", "width_px", "height_px", "width_dp", "height_dp",
@@ -44,6 +45,8 @@ STYLE_SECTIONS: dict[str, tuple[str, ...]] = {
     ),
     "state": ("visible", "enabled", "selected", "checked", "clickable"),
     "content": ("text", "placeholder", "content_description", "role", "locale"),
+    "input": ("single_line", "read_only", "password", "keyboard_type", "ime_action"),
+    "control": ("value", "minimum", "maximum", "steps", "active_color", "inactive_color", "stroke_width_dp"),
 }
 
 
@@ -213,6 +216,12 @@ def normalize_background(value: Any, label: str) -> dict[str, Any] | None:
         raise PageSnapshotError(f"{label}.color is required for a solid background")
     if kind in {"linear_gradient", "radial_gradient", "sweep_gradient"} and "colors" not in result:
         raise PageSnapshotError(f"{label}.colors are required for a gradient background")
+    if kind in {"linear_gradient", "radial_gradient", "sweep_gradient"}:
+        if None in result['colors']:
+            raise PageSnapshotError(f"{label}.colors cannot contain null")
+        stops = result.get('stops')
+        if stops is not None and (len(stops) != len(result['colors']) or stops != sorted(stops)):
+            raise PageSnapshotError(f"{label}.stops must be ordered and match colors")
     if kind in {"image", "resource"} and "resource" not in result:
         raise PageSnapshotError(f"{label}.resource is required for a resource background")
     return result
@@ -296,7 +305,7 @@ def normalize_style(value: Any, label: str) -> dict[str, dict[str, Any]]:
                 target[field] = normalize_border(raw, path)
             elif field == "shadows":
                 target[field] = normalize_shadows(raw, path)
-            elif field in {"visible", "enabled", "selected", "checked", "clickable", "clip"}:
+            elif field in {"visible", "enabled", "selected", "checked", "clickable", "clip", "single_line", "read_only", "password", "soft_wrap"}:
                 if raw is not None and type(raw) is not bool:
                     raise PageSnapshotError(f"{path} must be a boolean")
                 target[field] = raw
@@ -304,8 +313,19 @@ def normalize_style(value: Any, label: str) -> dict[str, dict[str, Any]]:
                 target[field] = optional_number(raw, path, 0.0)
                 if target[field] is not None and target[field] > 1:
                     raise PageSnapshotError(f"{path} must be between 0 and 1")
+            elif section == 'control':
+                if field in {'active_color', 'inactive_color'}:
+                    target[field] = optional_color(raw, path)
+                else:
+                    target[field] = optional_number(raw, path, 0 if field in {'steps', 'stroke_width_dp'} else None)
+                    if field == 'steps' and raw is not None and float(raw) != int(raw):
+                        raise PageSnapshotError(f'{path} must be an integer')
             elif field == "layout_direction":
                 target[field] = optional_enum(raw, path, {"ltr", "rtl"})
+            elif field == 'keyboard_type':
+                target[field] = optional_enum(raw, path, {'text', 'number', 'phone', 'email', 'url', 'decimal', 'password', 'number_password'})
+            elif field == 'ime_action':
+                target[field] = optional_enum(raw, path, {'default', 'none', 'go', 'search', 'send', 'next', 'done', 'previous'})
             elif field in {"font_style"}:
                 target[field] = optional_enum(raw, path, {"normal", "italic"})
             elif field in {"text_align"}:
@@ -330,7 +350,7 @@ def normalize_style(value: Any, label: str) -> dict[str, dict[str, Any]]:
                 "alignment", "horizontal_arrangement", "vertical_arrangement", "decoration"
             }:
                 target[field] = None if raw is None else bounded_string(raw, path, 120)
-            elif field in {"width_px", "height_px", "max_lines"}:
+            elif field in {"width_px", "height_px", "max_lines", "min_lines"}:
                 if raw is not None and (type(raw) is not int or raw <= 0):
                     raise PageSnapshotError(f"{path} must be a positive integer")
                 target[field] = raw
@@ -345,6 +365,12 @@ def normalize_style(value: Any, label: str) -> dict[str, dict[str, Any]]:
                 if field == "aspect_ratio":
                     minimum = 0.001
                 target[field] = optional_number(raw, path, minimum)
+    control = result['control']
+    if control['minimum'] is not None and control['maximum'] is not None and control['minimum'] >= control['maximum']:
+        raise PageSnapshotError(f'{label}.control requires minimum < maximum')
+    typography = result['typography']
+    if typography['min_lines'] is not None and typography['max_lines'] is not None and typography['min_lines'] > typography['max_lines']:
+        raise PageSnapshotError(f'{label}.typography requires min_lines <= max_lines')
     return result
 
 
