@@ -29,10 +29,13 @@ def preserve_component_states(raw, projected, fixture, registry):
     active = {n['id']:n for n in projected['components']}
     catalogs, diagnostics = [], []
     replacements = {}
-    for instance in raw['components']:
+    for active_instance in projected['components']:
+        # Source IDs identify definitions; expanded IDs identify independent UI instances.
+        instance = nodes[active_instance.get('source_component_id', active_instance['id'])]
         definition = definitions.get(instance.get('definition_id'), {})
-        if definition.get('component_kind') != 'project_component' or instance['id'] not in active:
+        if definition.get('component_kind') != 'project_component':
             continue
+        instance_id = active_instance['id']
         subtree = descendants(nodes, instance['id'])
         # Branch ownership is the callee definition, never the page's enclosing branch.
         owned = [n for n in subtree[1:] if n.get('source', {}).get('composable') == definition['type']
@@ -46,7 +49,7 @@ def preserve_component_states(raw, projected, fixture, registry):
         if not groups:
             continue
         if len(groups) != 1:
-            diagnostics.append({'component_id':instance['id'], 'path':'source.component_ui_states',
+            diagnostics.append({'component_id':instance_id, 'path':'source.component_ui_states',
                 'expression':definition['type'], 'reason':'multiple UI branch groups require explicit local-state composition; all-state coverage is incomplete'})
             continue
         group_id, group = next(iter(groups.items()))
@@ -54,20 +57,22 @@ def preserve_component_states(raw, projected, fixture, registry):
                          and f.get('source') == definition['identity'].get('source')), {})
         counts = when_entry_counts(function.get('body'))
         if len(counts) == 1 and ':when:' in group_id and counts[0] != len(group['branches']):
-            diagnostics.append({'component_id':instance['id'], 'path':'source.component_ui_states',
+            diagnostics.append({'component_id':instance_id, 'path':'source.component_ui_states',
                 'expression':definition['type'], 'reason':'PSI when branches disagree with collected UI paths; all-state coverage is incomplete'})
             continue
         if len(group['branches']) > 16:
-            diagnostics.append({'component_id':instance['id'], 'path':'source.component_ui_states',
+            diagnostics.append({'component_id':instance_id, 'path':'source.component_ui_states',
                 'expression':definition['type'], 'reason':'component UI branch count exceeds 16; not truncated silently'})
             continue
-        selected = next((p['branch_id'] for n in owned if n['id'] in active
-            and active[n['id']].get('source', {}).get('state_resolution', {}).get('status') != 'unresolved'
+        owned_ids = {n['id'] for n in owned}
+        selected = next((p['branch_id'] for n in descendants(active, instance_id)
+            if n.get('source_component_id', n['id']) in owned_ids
+            and n.get('source', {}).get('state_resolution', {}).get('status') != 'unresolved'
             for p in n.get('ui_state_path', []) if p['group_id'] == group_id), None)
         selection_origin = 'selected-page-state' if selected else 'ui-placeholder-default'
         selected = selected or ('else' if 'else' in group['branches'] else group['branches'][0])
         catalog = {'schema':'ui-migration.component-ui-states.v1', 'definition_id':definition['id'],
-            'instance_id':instance['id'], 'name':definition['type'], 'parameters':definition.get('parameters', []),
+            'instance_id':instance_id, 'name':definition['type'], 'parameters':definition.get('parameters', []),
             'selector':'uiState', 'selected':selected, 'selection_origin':selection_origin,
             'business_verified':False, 'variants':[]}
         for branch in group['branches']:
@@ -90,20 +95,22 @@ def preserve_component_states(raw, projected, fixture, registry):
                 'display_values':fixture.get('ui_preview', {}).get('display_values', {})}
             value, projection = project_source_page(payload, scene, allow_unresolved=True, api_registry=registry)
             # Resolve within the caller's theme/layout context before isolating the component.
-            value['components'] = descendants({n['id']:n for n in value['components']}, instance['id'])
+            value['components'] = descendants({n['id']:n for n in value['components']}, instance_id)
             value['components'][0].update(parent_id=None, sibling_index=0)
             catalog['variants'].append({'id':branch, 'condition':group['conditions'].get(branch),
                                         'payload':value, 'projection':projection})
             if branch == selected:
-                replacement = copy.deepcopy(value['components'])
-                replacement[0].update(parent_id=instance.get('parent_id'), sibling_index=instance.get('sibling_index', 0))
-                replacements[instance['id']] = ({n['id'] for n in subtree}, replacement)
+                replacements[instance_id] = copy.deepcopy(value['components'])
         catalogs.append(catalog)
     result = copy.deepcopy(projected)
-    for _, (removed, replacement) in replacements.items():
+    for instance_id, replacement in replacements.items():
         current = result['components']
-        index = next((i for i,n in enumerate(current) if n['id'] == replacement[0]['id']), None)
+        index = next((i for i,n in enumerate(current) if n['id'] == instance_id), None)
         if index is not None:
+            # Remove the current expanded subtree, including pager/list/slot instances.
+            removed = {n['id'] for n in descendants({n['id']:n for n in current}, instance_id)}
+            replacement[0].update(parent_id=current[index].get('parent_id'),
+                                  sibling_index=current[index].get('sibling_index', 0))
             result['components'] = [n for n in current[:index] if n['id'] not in removed] + replacement + [n for n in current[index:] if n['id'] not in removed]
     result.setdefault('source_diagnostics', []).extend(diagnostics)
     return result, catalogs
