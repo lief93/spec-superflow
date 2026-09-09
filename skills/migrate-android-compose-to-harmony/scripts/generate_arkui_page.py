@@ -8,6 +8,7 @@ from typing import Any
 import argparse
 import hashlib
 import json
+from ui_migration.naming import source_identifier
 from ui_migration.contracts.identity import canonical_sha256, require_contract_ui, require_safe_relative_source
 from ui_migration.arkui.project import normalize_target, require_module, validate_previous
 from ui_migration.arkui.renderer import (
@@ -146,7 +147,7 @@ def generate(
         "outputs": {
             output_relative: {
                 "sha256": hashlib.sha256(output_bytes).hexdigest(),
-                "root_component": f"Generated{pascal_identifier(root['composable'])}",
+                "root_component": source_identifier(root['composable']),
             },
             **{
                 record["output"]: {

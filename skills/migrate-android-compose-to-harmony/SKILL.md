@@ -8,6 +8,11 @@ description: Migrate local Android Jetpack Compose or Android Views/XML applicat
 For tooling maintenance, read [tooling-architecture.md](references/tooling-architecture.md).
 Commands keep their existing names; install the complete skill, including `scripts/ui_migration/`.
 
+For blank pages or missing sections, follow the ordered
+[source-to-runtime diagnosis](references/source-page-workflow.md#blank-pages-and-missing-components).
+Locate the first stage that loses UI before changing adapters or adding testTags;
+zero runtime/source mapping alone is not proof of the cause of blank target output.
+
 For multiple pages of one project, extract and reuse `project-style-definitions.json` as described
 in [source-page-workflow.md](references/source-page-workflow.md#reuse-project-wide-styles).
 Refresh explicitly after theme changes; do not add hash-based invalidation. Each page embeds its

@@ -341,6 +341,7 @@ def build_source_page_spec(
             caller_bindings = {**parameter_bindings, **(call.get('local_values') or {})}
             child_scopes = {name: function_scopes.get((str(target[0]), str(target[1])), {})
                             for name in child_bindings}
+            invocation_names = {}
             for argument_index, argument in enumerate(custom.get("arguments", [])):
                 if not isinstance(argument, dict) or not isinstance(argument.get("expression"), str):
                     continue
@@ -351,6 +352,10 @@ def build_source_page_spec(
                         argument_name = candidate_name if isinstance(candidate_name, str) else None
                 if isinstance(argument_name, str):
                     argument_expression = str(argument['expression']).strip()
+                    from .source_names import reference_name
+                    caller_name = reference_name(argument_expression)
+                    if caller_name:
+                        invocation_names[argument_name] = caller_name
                     child_scopes[argument_name] = (parameter_scopes or {}).get(
                         argument_expression, function_scopes.get(definition, {}))
                     child_bindings[argument_name] = bind_source_expression(
@@ -366,6 +371,8 @@ def build_source_page_spec(
                 target_declaration,
             )
             component['invocation_bindings'] = copy.deepcopy(child_bindings)
+            if invocation_names:
+                component['source']['invocation_names'] = invocation_names
             # Carry a forwarded slot's actual destination back through each business component.
             for argument in custom.get('arguments', []):
                 destination = slot_hosts.get(argument.get('name'))

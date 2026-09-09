@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from ui_migration.common import arkts_string, pascal_identifier
+from ui_migration.common import arkts_string
+from ui_migration.naming import source_identifier
 
 
 @dataclass
@@ -21,7 +22,7 @@ class ArkUIDocument:
     style_token_imports: list[str] = field(default_factory=list)
 
     def render(self):
-        struct_name = f"Generated{pascal_identifier(self.root['composable'])}"
+        struct_name = source_identifier(self.root['composable'])
         lines = [
             "// Generated only from the audited source-generated version_json.",
             "// Unresolved behavior is recorded in the paired .migration manifest.",

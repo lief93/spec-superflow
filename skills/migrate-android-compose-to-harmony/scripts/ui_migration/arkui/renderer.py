@@ -93,7 +93,7 @@ class Renderer:
             )
         self._page_match_parent_sizes = {}
         self.lengths = LayoutLengths()
-        self.business_components = BusinessComponents(android_page_input.get('component_definitions') or [])
+        self.business_components = BusinessComponents(android_page_input.get('component_definitions') or [], root['composable'])
         self.layout = LayoutPolicy(LayoutContext(
             self.android_page_by_id, self.android_page_layout_mode,
             self.android_source_layout_by_subject, self._page_constraint_states,

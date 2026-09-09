@@ -300,6 +300,10 @@ def lanhu_layer(
     text = content.get("text")
     has_asset = isinstance(asset.get("resource"), str) and bool(asset["resource"])
     migration_source = copy.deepcopy(node.get("source") or {})
+    from .source_names import property_name_hints
+    hints = property_name_hints(node)
+    if hints:
+        migration_source['property_names'] = hints
     migration_source["modifiers"] = copy.deepcopy(node.get("modifiers") or [])
     if node.get('slot_argument_name'):
         migration_source['slot_argument_name'] = node['slot_argument_name']

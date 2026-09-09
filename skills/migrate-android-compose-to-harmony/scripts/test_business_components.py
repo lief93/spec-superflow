@@ -106,9 +106,47 @@ class BusinessComponentsTest(unittest.TestCase):
         report = renderer.business_components.report()
         shell = [d for d in report['definitions'] if d['symbol'] == 'Shell'][0]
         self.assertEqual(shell['builder_count'], 1, report)
-        self.assertIn('slot0: BusinessSlot', output)
-        self.assertIn('this.renderBusinessSlot(slot0)', output)
-        self.assertNotIn('slot0()', output)
+        self.assertIn('content: BusinessSlot', output)
+        self.assertIn('this.renderBusinessSlot(content)', output)
+        self.assertNotIn('content()', output)
+
+    def test_source_names_survive_single_json_without_numbered_fields(self):
+        _, _, _, _, output = compile_page(self.CODE)
+        self.assertIn('export struct Page', output)
+        self.assertIn('interface CaptionProps', output)
+        self.assertIn('private Caption(props: CaptionProps)', output)
+        self.assertIn('label: string', output)
+        self.assertIn('Text(props.label)', output)
+        self.assertNotRegex(output, r'\bv\d+\b|businessCaption[0-9a-f]{12}')
+
+    def test_multiple_fields_keep_names_and_nested_arguments_are_not_swapped(self):
+        _, _, _, _, output = compile_page('''
+@Composable fun Page() { Pair(title = "First", subtitle = "Second") }
+@Composable fun Pair(title: String, subtitle: String) { Caption(title); Caption(subtitle) }
+@Composable fun Caption(label: String) { Text(label) }
+''')
+        self.assertIn('title: string', output)
+        self.assertIn('subtitle: string', output)
+        self.assertIn('label: props.title', output)
+        self.assertIn('label: props.subtitle', output)
+
+    def test_same_property_used_twice_does_not_create_duplicate_fields(self):
+        _, _, _, _, output = compile_page('''
+@Composable fun Page() { Label("A") }
+@Composable fun Label(title: String) { Text(title); Text(title) }
+''')
+        self.assertIn('title: string', output)
+        self.assertIn('title2: string', output)
+
+    def test_overload_names_use_parameter_names_not_hashes(self):
+        _, _, _, _, output = compile_page('''
+@Composable fun Page() { Column { Badge(label = "A"); Badge(value = 1) } }
+@Composable fun Badge(label: String) { Text(label) }
+@Composable fun Badge(value: Int) { Text("Number") }
+''')
+        self.assertIn('private BadgeByLabel(', output)
+        self.assertIn('private BadgeByValue(', output)
+        self.assertNotRegex(output, r'private business\w+[0-9a-f]{12}')
 
     def test_missing_definition_is_not_silently_flattened(self):
         _, _, page, _, _ = compile_page(self.CODE)

@@ -466,3 +466,74 @@ No image-model recognition is required; pixel analysis is local Pillow processin
 
 The script's final verdict is not approval of full business migration. Business actions and
 runtime scenarios continue through the separate [behavior contract](behavior-contract-v2.md).
+
+### Blank pages and missing components
+
+Use this sequence when a generated page is nearly blank, missing sections, or has
+incorrect sizes. Diagnose the first stage that loses the selected state's UI; do
+not start by adding accessibility tags or manually editing generated layouts.
+
+1. **Confirm the actual run.** Record the installed skill version/revision, exact
+   commands, page entry and selected state, source-page input, the actual
+   `--page-json` path, generation manifest, emitted `.ets`, build/install results
+   and captured page. Confirm outputs belong to this run, not a stale build.
+   The generator input must be the source-generated `version_json.json`, not a
+   runtime `page.json` or UIAutomator tree renamed to look like one.
+2. **Check source collection and state selection.** Follow the page entry's UI
+   calls, business components, slots, lists and active branches into
+   `source-page.json`. Identify expected visible sections for that state. Raw
+   source-call totals include definitions/inactive content and cannot be treated
+   as an expected runtime control count. Unknown conditions/data must remain
+   explicit diagnostics rather than silently selecting an empty state.
+3. **Check the selected JSON tree.** For each missing section, follow source
+   identity into the JSON layers. Check children, component kind, visibility,
+   sizing modes/constraints, ordered modifiers, style/default references and
+   unresolved facts. If the section was collected but vanished here, fix state
+   projection/export. Do not substitute runtime coordinates for source layout.
+4. **Check generated code.** If the JSON retains the section, trace its identity
+   through the generation manifest and corresponding builder/call. Check skipped
+   controls, unsupported APIs, slot expansion and field consumption. Repair the
+   responsible shared emitter/adapter; do not patch the generated page by hand.
+5. **Check native layout.** If code contains the section, build and install that
+   exact output and inspect runtime geometry and logs. Check zero sizes, parent
+   constraints, visibility, clipping, scroll position, resource loading and
+   exceptions. Use scripted pixel/geometry comparisons for the same page/state
+   and compatible viewport; do not diagnose a layout from a global score alone.
+6. **Regenerate and verify.** Add a focused regression at the first failing stage,
+   regenerate from source with the shared fix, then build/run and compare the
+   affected section. Record any remaining unsupported content. Successful command
+   execution or partial output is not page acceptance.
+
+Report each finding as: **section/component -> last correct artifact -> first
+incorrect artifact -> evidence -> responsible module -> repair -> verification**.
+Request only the necessary sanitized artifacts for private projects; do not ask
+users to upload private repository contents indiscriminately.
+
+#### Runtime mapping is a separate diagnosis
+
+`semantic_mapping_ratio=0` and `source_binding` unresolved records show that
+runtime nodes were not bound to source identities. They do **not**, by themselves,
+prove why target rendering is blank. Runtime evidence supplements selected values
+and verification; it is not the primary source hierarchy in this generation flow.
+Already-known source controls and layouts must not disappear solely because a
+runtime node lacks a resource ID or testTag.
+
+Check the pipeline above first. If a required runtime value or verification
+boundary genuinely cannot be matched, use a verified runtime-source map or minimal
+test instrumentation for that ambiguity. Do not guess matches from text/order or
+require blanket tagging as the first response to every blank page.
+
+#### JSON size and null fields
+
+Removing indentation outside strings preserves JSON values and does not change
+rendering. File digests/byte counts do change, so regenerate any bound manifests;
+do not hand-edit an already frozen input.
+
+Do not recursively delete every `null`: the current schema requires some keys
+even when their value is null (for example `migration.customDraw`), and unresolved
+text has an explicit null-plus-diagnostic contract. Not-applicable, explicitly
+absent, inherited/defaulted and unresolved values are different cases. A compact
+schema would need coordinated writer/reader normalization and equivalence tests.
+Null deletion is not a fix for missing UI. Keep unresolved evidence, selected
+layout/style/resource facts and source identities; diagnostic extraction is a
+separate format change, not a troubleshooting shortcut.

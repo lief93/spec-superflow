@@ -2,6 +2,26 @@
 
 ## Public Entry Points
 
+### Generated Source Names
+
+Source-backed page structs and business builders preserve the Android symbol and
+case (`ProfileScreen`, `ProfileCard`). Generated props interfaces use
+`ProfileCardProps`; fields retain references such as `title` or `label`, including
+caller-to-callee forwarding. The frontend writes small `source.property_names`
+and `source.invocation_names` hints into the single page JSON. The backend never
+reopens Kotlin source. Regenerate older JSON to gain naming information it lacks.
+
+Overloads use parameter-name suffixes, fixed-state specializations use `Variant`,
+and genuine name collisions use numeric suffixes. Keywords and invalid target
+identifier characters are legalized. Literal-only facts and implementation-only
+helpers have no original source symbol; they retain descriptive generated names.
+This is UI builder naming, not translation of all application methods or fields.
+
+The owned output file keeps its `Generated<Name>.ets` filename so existing
+regeneration ownership checks continue to work. Import the exported type recorded
+in `manifest.outputs[file].root_component`; do not infer the exported symbol from
+the filename. Existing host imports of `Generated<Name>` need that one-time update.
+
 Keep running the existing commands under `scripts/`. Copy/install the complete skill,
 not individual Python files; commands now import the adjacent `ui_migration` package.
 No new third-party dependency or CLI argument is introduced by this refactoring.
