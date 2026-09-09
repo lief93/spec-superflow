@@ -416,6 +416,9 @@ def load_lanhu_page_input(
         "source_component_tree": None,
         "layout_relationships": layout_relationships,
         "source_generated": source_generated,
+        "root_layout_context": (source_generation.get("stateProjection") or {}).get("root_layout_context")
+        if isinstance(source_generation, dict) else None,
+        "generation_warnings": source_generation.get('warnings', []) if isinstance(source_generation, dict) else [],
         "font_faces": migration_meta.get("fontFaces", []) if isinstance(migration_meta, dict) else [],
         "component_definitions": migration_meta.get('componentDefinitions', []) if isinstance(migration_meta, dict) else [],
         "required_fact_gate": required_fact_gate(list(instances.values())),

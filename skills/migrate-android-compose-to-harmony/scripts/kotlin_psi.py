@@ -16,7 +16,9 @@ class KotlinPsiError(ValueError):
 
 
 class KotlinPsiSyntaxError(KotlinPsiError):
-    pass
+    def __init__(self, message, expression=None):
+        super().__init__(message)
+        self.expression = expression
 
 
 ARTIFACTS = (
@@ -111,5 +113,5 @@ def _request(request):
             raise KotlinPsiError('Kotlin PSI process exited before returning a syntax tree')
         result = json.loads(line)
         if result.get('kind') == 'error':
-            raise KotlinPsiSyntaxError(result['message'])
+            raise KotlinPsiSyntaxError(result['message'], request if isinstance(request, str) else None)
         return result

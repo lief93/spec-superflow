@@ -314,11 +314,15 @@ public final class KotlinExpressionTree {
                     }
                     String source = request.getAsString();
                     if (source.length() > 65536) throw new IllegalArgumentException("expression exceeds 64 KiB");
-                    KtProperty property = factory.createProperty("val __expression = " + source);
-                    if (!property.getText().equals("val __expression = " + source.trim()))
+                    // Parse the entire input: comments are trivia, extra declarations are not.
+                    String normalizedSource = source.replace("\r\n", "\n").replace('\r', '\n');
+                    KtFile file = factory.createFile("val __expression = " + normalizedSource + "\n");
+                    List<KtDeclaration> declarations = file.getDeclarations();
+                    if (declarations.size() != 1 || !(declarations.get(0) instanceof KtProperty))
                         throw new IllegalArgumentException("expression contains unparsed trailing declarations");
-                    Collection<PsiErrorElement> errors = PsiTreeUtil.findChildrenOfType(property, PsiErrorElement.class);
+                    Collection<PsiErrorElement> errors = PsiTreeUtil.findChildrenOfType(file, PsiErrorElement.class);
                     if (!errors.isEmpty()) throw new IllegalArgumentException(errors.iterator().next().getErrorDescription());
+                    KtProperty property = (KtProperty) declarations.get(0);
                     System.out.println(gson.toJson(tree(property.getInitializer())));
                 } catch (RuntimeException error) {
                     System.out.println(gson.toJson(node("error", "message", error.getMessage())));

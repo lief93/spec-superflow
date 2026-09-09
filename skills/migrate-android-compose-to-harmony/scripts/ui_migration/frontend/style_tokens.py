@@ -149,6 +149,9 @@ class StyleTokenProjector:
             if semantic.get('shape'):
                 shape(parse_expression(semantic['shape']['expression']))
             for modifier in original.get('modifiers', []):
+                if modifier['name'] == 'unresolvedExpression':
+                    # Already diagnosed by modifier projection; this is not an API call.
+                    continue
                 expression = modifier.get('source_expression') or ('Modifier.' + (modifier.get('syntax_expression') or
                     f"{modifier['name']}({modifier.get('arguments') or ''})"))
                 modifiers(parse_expression(expression))
@@ -157,7 +160,7 @@ class StyleTokenProjector:
                     bind(path, parse_expression(spec['expression']))
         except KotlinPsiSyntaxError as error:
             result.setdefault('unresolved', []).append({'path': 'source.style_token_references',
-                'expression': '', 'reason': str(error)})
+                'expression': error.expression, 'reason': str(error)})
         result.setdefault('source', {})['style_token_references'] = references
         reference_paths = {'style.' + path for path in references}
         result['unresolved'] = [u for u in result.get('unresolved', []) if u.get('path') not in reference_paths]

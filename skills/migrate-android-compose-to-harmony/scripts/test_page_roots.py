@@ -152,8 +152,9 @@ import androidx.navigation.compose.composable
 
     def test_unknown_multi_root_is_not_silently_wrapped(self):
         source = source_page('@Composable fun Page() { Text("One"); Text("Two") }')
-        with self.assertRaisesRegex(ValueError, 'Text.*Page.kt'):
-            project(source)
+        selected = project(source)
+        self.assertEqual([n['type'] for n in selected['components']], ['Text', 'Text'])
+        self.assertTrue(all(n['parent_id'] is None for n in selected['components']))
 
     def test_page_nested_in_row_is_not_misidentified_as_route_host_content(self):
         source = source_page('''
@@ -165,8 +166,9 @@ import androidx.navigation.compose.composable
 @Composable fun Page() { Text("One"); Text("Two") }
 ''')
         self.assertFalse(source.get('page_host'))
-        with self.assertRaisesRegex(ValueError, 'multiple active roots'):
-            project(source)
+        selected = project(source)
+        self.assertEqual([n['type'] for n in selected['components']], ['Text', 'Text'])
+        self.assertTrue(all(n['parent_id'] is None for n in selected['components']))
 
 
 if __name__ == '__main__':

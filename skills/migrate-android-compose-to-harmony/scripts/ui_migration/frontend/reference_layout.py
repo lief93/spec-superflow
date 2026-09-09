@@ -50,16 +50,31 @@ class SourceLayout:
     def calculate(self) -> dict[str, dict[str, float]]:
         # Keep the same phase boundary as Android/Compose: measure the complete
         # source tree first, then place it. Drawing is performed by lanhu_layer.
-        self._measure(self.tree.root_id, self.viewport_width)
+        for root_id in self.tree.layout_root_ids:
+            self._measure(root_id, self.viewport_width)
+        for root_id in self.tree.layout_root_ids:
+            self._layout(root_id, 0.0, 0.0, self.viewport_width, self.viewport_height,
+                         force_size=(self.viewport_width, self.viewport_height)
+                         if self.tree.root_ids == [root_id] else None)
+        # Bounds of a business component are the union of its actual outputs,
+        # not a new measurement/placement operation around those outputs.
+        for identifier in reversed(self.tree.order):
+            if identifier not in self.tree.fragments:
+                continue
+            children = [self.frames[i] for i in self.tree.layout_children[identifier] if i in self.frames]
+            left = min((f['x'] for f in children), default=0)
+            top = min((f['y'] for f in children), default=0)
+            right = max((f['x'] + f['width'] for f in children), default=left)
+            bottom = max((f['y'] + f['height'] for f in children), default=top)
+            self.frames[identifier] = dict(x=left, y=top, width=right-left, height=bottom-top)
+            self.measured_sizes[identifier] = dict(width=right-left, height=bottom-top)
+            self.geometry_status[identifier] = 'source_inferred'
+            self.geometry_reasons[identifier].append('non-layout business boundary: union of child output bounds')
+        if self.tree.root_layout_context == 'caller_owned':
+            for root_id in self.tree.root_ids:
+                self.geometry_status[root_id] = 'unresolved'
+                self.geometry_reasons[root_id].append('caller-owned root placement; origin is a preview reference, not a source layout')
         self.measure_complete = len(self.measured_sizes) == len(self.tree.nodes)
-        self._layout(
-            self.tree.root_id,
-            0.0,
-            0.0,
-            self.viewport_width,
-            self.viewport_height,
-            force_size=(self.viewport_width, self.viewport_height),
-        )
         self.layout_complete = len(self.frames) == len(self.tree.nodes)
         return self.frames
 
@@ -148,7 +163,7 @@ class SourceLayout:
             return self._measure_cache[cache_key]
         node = self.tree.nodes[component_id]
         component_type = str(node.get("type") or "Group")
-        children = self.tree.children.get(component_id, [])
+        children = self.tree.layout_children.get(component_id, [])
         layout = style_group(node, "layout")
         padding = self.effective_padding(node)
         explicit_width, explicit_height = self._explicit_size(node)
@@ -453,7 +468,7 @@ class SourceLayout:
             status = "source_inferred"
         self.geometry_status[component_id] = status
 
-        children = self.tree.children.get(component_id, [])
+        children = self.tree.layout_children.get(component_id, [])
         if not children:
             return width, height
         padding = self.effective_padding(node)

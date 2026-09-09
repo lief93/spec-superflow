@@ -26,8 +26,10 @@ for the current PSI file/function and the last unfinished stage. No periodic hea
 Reuse an unchanged snapshot/contract pair across pages rather than repeating `--source` intake.
 Source-page JSON uses lossless same-file shared references; all readers must be
 updated together. See [JSON storage and roots](references/source-page-workflow.md#json-size-and-null-fields).
-Do not erase value-helper roots by name or wrap arbitrary multi-root functions:
-retain proven UI and use a verified external layout host.
+Do not erase value-helper roots by name or wrap arbitrary multi-root functions.
+Preserve ordered outputs and `parent_id`; business boundaries do not add layout
+containers. Unhosted outputs remain caller-owned, with non-failing context warnings;
+do not confuse successful code generation with verified placement in a caller.
 
 For blank pages or missing sections, follow the ordered
 [source-to-runtime diagnosis](references/source-page-workflow.md#blank-pages-and-missing-components).

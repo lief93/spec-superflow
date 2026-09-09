@@ -170,11 +170,14 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "label.*state.hasLabel"):
             project_source_page(payload, fixture)
 
-    def test_single_state_multiple_active_roots_need_parent_layout_fact(self) -> None:
+    def test_single_state_multiple_active_roots_preserve_caller_owned_outputs(self) -> None:
         payload, fixture = self.single_state_payload()
         fixture["values"]["state"]["showDialog"] = True
-        with self.assertRaisesRegex(ValueError, "multiple active roots.*main.*overlay"):
-            project_source_page(payload, fixture)
+        selected, report = project_source_page(payload, fixture)
+        self.assertEqual(set(report['active_root_ids']), {'main', 'overlay'})
+        self.assertIsNone(report['active_root_id'])
+        self.assertEqual(report['root_layout_context'], 'caller_owned')
+        self.assertEqual(len(SourceTree(selected).root_ids), 2)
 
     def test_single_state_no_active_root_is_explicit_failure(self) -> None:
         payload, fixture = self.single_state_payload()

@@ -1015,6 +1015,12 @@ class Renderer:
             for component in self.android_page_input["components"]
             if component["parent_id"] is None
         ]
+        if self.android_page_input.get("root_layout_context") == "caller_owned":
+            roots.sort(key=lambda component: component["sibling_index"])
+            lines = ["  @Builder", "  private renderAndroidPageSnapshot() {"]
+            for component in roots:
+                lines.extend(self.page_snapshot_component_lines(component, content_bounds, None, 4))
+            return lines + ["  }"]
         roots.sort(
             key=lambda component: (
                 0 if component["style"]["content"].get("role") == "surface" else 1,

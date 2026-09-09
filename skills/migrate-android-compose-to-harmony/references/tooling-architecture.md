@@ -5,8 +5,12 @@ writers share repeated values within one file and consumers expand at their
 input boundary. Rendering never depends on a sidecar or reopening Android code.
 Frontend `content_roles.py`, `root_selection.py` and `route_roots.py` separate
 non-visual value expressions, exact entry overload selection and verified
-navigation-host facts from component rendering. Unknown roots remain explicit
-errors, not a generic target-side Stack fallback.
+navigation-host facts from component rendering. `SourceTree` derives layout
+children from `parent_id`, passing through non-rendering business/slot boundaries
+without changing their source ownership. `SourceLayout` measures/places those
+outputs under the actual parent and records a union for business-boundary bounds.
+Multiple root outputs remain ordered and caller-owned, not an invented Stack.
+Unknown parent IDs, cycles and ambiguous entry declarations remain errors.
 
 ## Public Entry Points
 

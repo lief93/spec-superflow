@@ -774,8 +774,7 @@ def project_source_page(
                 expanded_count += 1
         return ids
 
-    # Source siblings can belong to different states. Select the state before
-    # requiring the single, layout-owned tree consumed by the renderer.
+    # Select state before preserving the ordered outputs of the entry function.
     active_roots = []
     for root_id in root_ids:
         if preview is not None and root_id != preview.root_id:
@@ -793,15 +792,9 @@ def project_source_page(
                 node['parent_id'] = host['id']
         emitted.insert(0, host)
         active_roots = [host['id']]
-    if len(active_roots) != 1:
-        by_id = {node['id']: node for node in emitted}
-        descriptions = [f"{by_id[i]['type']} ({by_id[i].get('source', {}).get('source')}:{by_id[i].get('source', {}).get('line')}, {i})"
-                        for i in active_roots]
-        raise ValueError(
-            "selected page state has multiple active roots; an explicit source parent layout "
-            f"is required: {', '.join(descriptions)}"
-        )
     emitted_by_id = {component["id"]: component for component in emitted}
+    for index, root_id in enumerate(active_roots):
+        emitted_by_id[root_id]['sibling_index'] = index
     emitted_children: dict[str, list[str]] = defaultdict(list)
     for component in emitted:
         parent_id = component.get("parent_id")
@@ -823,7 +816,9 @@ def project_source_page(
         "fixture_schema": fixture["schema"],
         "source_component_count": len(original),
         "active_component_count": len(emitted),
-        "active_root_id": active_roots[0],
+        "active_root_id": active_roots[0] if len(active_roots) == 1 else None,
+        "active_root_ids": active_roots,
+        "root_layout_context": "source_tree" if len(active_roots) == 1 else "caller_owned",
         "inactive_source_ids": sorted(set(inactive)),
         "expanded_list_instances": expanded_count,
         "deferred_component_ids": deferred,

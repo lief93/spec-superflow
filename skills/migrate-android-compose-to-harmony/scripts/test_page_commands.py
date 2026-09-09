@@ -118,6 +118,23 @@ import androidx.compose.runtime.Composable
             self.assertIn(name, log)
         self.assertTrue(Path(result['arkui']['output']).is_file())
 
+    def test_caller_owned_outputs_pass_full_command_with_a_context_warning(self):
+        (self.source/'Page.kt').write_text('''package example
+import androidx.compose.runtime.Composable
+@Composable fun Page() { Box(Modifier.size(80.dp, 40.dp)); Box(Modifier.size(80.dp, 40.dp)) }
+''')
+        args = self.full_args(); del args[:4]; args += ['--source', self.source]
+        result = self.run_tool('migrate_compose_page.py', *args)
+        self.assertEqual(result['verdict'], 'pass', result)
+        self.assertTrue(result['generation_complete'])
+        self.assertFalse(result['visual_verified'])
+        self.assertTrue(any(w['path'] == 'layout.root_host' for w in result['warnings']))
+        manifest = json.loads(Path(result['arkui']['manifest']).read_text())
+        self.assertFalse(manifest['unresolved'])
+        self.assertEqual(manifest['verdict'], 'pass')
+        self.assertTrue(any(w['path'] == 'layout.root_host' for w in manifest['warnings']))
+        self.assertEqual(Path(result['arkui']['output']).read_text().count('Stack()'), 3)
+
     def test_full_command_refuses_nested_target_before_writing(self):
         args = self.full_args(); args[args.index('--target')+1] = self.snapshot/'harmony'
         self.run_tool('migrate_compose_page.py', *args, expected=1)

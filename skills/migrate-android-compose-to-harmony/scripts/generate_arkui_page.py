@@ -145,6 +145,7 @@ def generate(
         "source_phase_consumption_gate": android_page_input.get("source_phase_consumption_gate"),
         "target_phase_consumption_gate": target_phase_gate,
         "unresolved": renderer.unresolved,
+        "warnings": android_page_input.get('generation_warnings', []),
         "outputs": {
             output_relative: {
                 "sha256": hashlib.sha256(output_bytes).hexdigest(),
@@ -229,6 +230,7 @@ def generate(
             else None
         ),
         "unresolved_count": len(renderer.unresolved),
+        "warnings": manifest['warnings'],
         "expanded_definition_count": len(renderer.reached_keys),
     }
 

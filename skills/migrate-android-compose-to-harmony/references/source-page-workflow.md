@@ -718,7 +718,25 @@ This initial recognizer accepts explicit/aliased/wildcard official imports and
 resolved page declaration identity. It does not infer a host through an
 intervening Row, arbitrary routing wrapper, deferred callback or ambiguous
 multiple route hosts. Existing Row/Column/Box business-component composition
-keeps its real parent. Unproven multiple roots remain an explicit diagnostic
-with component names, source locations and IDs, not silent node deletion or
-an arbitrary wrapper. Correct upstream modeling and regenerate; do not patch
-the output ArkTS or erase roots to pass the gate.
+keeps its real parent; route discovery is not required to support multiple outputs.
+
+`parent_id` preserves source ownership, including business-component identities.
+A business invocation or content-slot invocation is not itself a layout container.
+Reference measurement and placement traverse these boundaries to the actual
+Row/Column/Box parent, matching the backend's transparent business builders.
+Spacing counts actual emitted children. Business bounds are the union of child
+outputs, not a new Box around them.
+
+If the selected entry has multiple outputs without a known parent, they remain
+ordered roots with `parent_id=null`. `stateProjection.active_root_ids` and the
+manifest's `root_instance_ids` list them; the legacy singular ID is null for a
+forest. `root_layout_context=caller_owned` also covers a single business boundary
+emitting multiple layout roots. The generated builder emits siblings directly.
+The document's preview Stack is only a preview host, not a source layout fact.
+`layout.root_host` is a non-failing `warnings` entry, not an unresolved property.
+It propagates to the ArkUI manifest and the page command's final `result.json`.
+Legal multiple outputs can pass generation without an external parent. Their
+reference geometry still does not prove placement in a caller; generation success
+does not mean visual acceptance. Mount the component in its intended host for
+runtime acceptance. Invalid parents/cycles and ambiguous entry declarations still
+fail validation. Correct upstream modeling; do not erase nodes to pass the gate.

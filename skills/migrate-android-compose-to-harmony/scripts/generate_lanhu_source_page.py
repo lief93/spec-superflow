@@ -186,6 +186,11 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
                     })
             component["required_facts"] = build_required_facts(component)
     tree = SourceTree(source_payload)
+    if state_projection is not None or tree.root_layout_context == 'caller_owned':
+        state_projection = {**(state_projection or {}), 'active_root_ids': tree.root_ids,
+                            'active_root_id': tree.root_id if len(tree.root_ids) == 1 else None,
+                            'root_layout_context': tree.root_layout_context}
+        tree.payload['state_projection'] = state_projection
     layout = SourceLayout(tree, args.viewport_width_dp, args.viewport_height_dp)
     layout.calculate()
     # Parameter-forwarded padding is resolved during measurement; retain that
@@ -204,11 +209,15 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
     }
     page = tree.payload.get("page") or {}
     fact_gate = required_fact_gate(list(tree.nodes.values()))
-    root_layer = lanhu_layer(tree, layout, tree.root_id, args.slice_scale)
+    root_layers = [lanhu_layer(tree, layout, root_id, args.slice_scale) for root_id in tree.root_ids]
     phase_gate = build_phase_consumption_gate(layout)
     manifest = component_manifest(tree, layout)
     unresolved = [{'component_id': tree.root_id, **item}
                   for item in [*source_payload.get('source_diagnostics', []), *source_payload.get('unresolved', [])]]
+    warnings = []
+    if tree.root_layout_context == 'caller_owned':
+        warnings.append({'component_id': tree.root_id, 'path': 'layout.root_host',
+            'reason': 'caller-owned root placement; outputs are preserved, but preview origin is not a source layout fact'})
     for component in tree.nodes.values():
         for item in component.get("unresolved") or []:
             unresolved.append({"component_id": component["id"], **item})
@@ -244,6 +253,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
                 "generationComplete": generation_complete,
                 "verdict": "pass" if generation_complete else "fail",
                 "unresolved": unresolved,
+                "warnings": warnings,
                 "sourceInstanceCount": len(tree.nodes),
                 "geometrySummary": manifest["geometry_summary"],
                 "layoutRelationships": tree.payload.get("layout_relationships") or [],
@@ -272,12 +282,12 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
                 "shadows": [],
                 "blurs": [],
             },
-            "layers": [root_layer],
+            "layers": root_layers,
             "origin": "android-source",
         },
     }
     if projected_payload is not None:
-        return {'version':version_json, 'unresolved':unresolved}
+        return {'version':version_json, 'unresolved':unresolved, 'warnings':warnings}
     if catalogs:
         for catalog in catalogs:
             for variant in catalog['variants']:
@@ -286,6 +296,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
                 variant['layer'] = document['artboard']['layers'][0]
                 variant['source_generation'] = document['meta']['sourceGeneration']
                 unresolved.extend({**u, 'component_ui_state':catalog['name'] + '/' + variant['id']} for u in result['unresolved'])
+                warnings.extend({**w, 'component_ui_state':catalog['name'] + '/' + variant['id']} for w in result['warnings'])
         version_json['meta']['migration']['componentUiStates'] = catalogs
         generation_complete = not unresolved
         version_json['meta']['sourceGeneration'].update(generationComplete=generation_complete,
@@ -303,6 +314,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         "verdict": "pass" if generation_complete else "fail",
         "unresolved_count": len(unresolved),
         "unresolved": unresolved,
+        "warnings": warnings,
         "unresolved_task_count": len(worklist['tasks']),
         "unresolved_worklist": str(output_dir / 'unresolved-worklist.json'),
         "source_page": str(args.source_page.resolve()),

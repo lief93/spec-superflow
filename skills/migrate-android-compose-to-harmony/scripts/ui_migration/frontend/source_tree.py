@@ -5,7 +5,7 @@ from ui_migration.frontend.page_model import SOURCE_SCHEMA, finite_number
 
 
 class SourceTree:
-    def __init__(self, payload: dict[str, Any], *, allow_multiple_roots: bool = False) -> None:
+    def __init__(self, payload: dict[str, Any], *, allow_multiple_roots: bool = True) -> None:
         from ui_migration.contracts.source_storage import unpack_source_page
         payload = unpack_source_page(payload)
         if payload.get("schema") != SOURCE_SCHEMA:
@@ -25,7 +25,8 @@ class SourceTree:
             self.nodes[component_id] = raw
             self.order.append(component_id)
 
-        roots = [node for node in self.nodes.values() if node.get("parent_id") is None]
+        roots = sorted((node for node in self.nodes.values() if node.get("parent_id") is None),
+                       key=lambda node: finite_number(node.get("sibling_index")) or 0)
         if not roots or (len(roots) != 1 and not allow_multiple_roots):
             raise ValueError(f"source page must have exactly one root; found {len(roots)}")
         self.root_id = roots[0]["id"]
@@ -51,6 +52,20 @@ class SourceTree:
         }
         self._validate_declared_children()
         self._validate_connected()
+        # Business invocations own source nodes but do not emit layout containers.
+        self.fragments = {node['id'] for node in self.nodes.values()
+                          if (node.get('source', {}).get('custom_component') or
+                              node.get('source', {}).get('slot_invocation'))
+                          and not node.get('source', {}).get('component_reuse')}
+
+        def outputs(ids):
+            return [output for identifier in ids for output in (
+                outputs(self.children.get(identifier, [])) if identifier in self.fragments else [identifier])]
+
+        self.layout_children = {identifier: outputs(self.children.get(identifier, [])) for identifier in self.nodes}
+        self.layout_root_ids = outputs(self.root_ids)
+        self.root_layout_context = ('caller_owned' if len(self.root_ids) > 1 or len(self.layout_root_ids) > 1
+                                    else 'source_tree')
 
     def _validate_declared_children(self) -> None:
         for node in self.nodes.values():
