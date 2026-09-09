@@ -20,9 +20,9 @@ The page command's final `result.json` includes grouped `diagnosis` and a Chines
 `diagnosis.md` report with causes, affected source locations and repair actions.
 Read that summary first; do not equate an unresolved count with a proven visual cause.
 For a command that is still running, read [live progress](references/source-page-workflow.md#live-progress-and-slow-run-diagnosis):
-stderr is streamed immediately, `progress.jsonl` records stage heartbeats and
+stderr is streamed immediately, `progress.jsonl` records stage events and
 `result.json` identifies the active child and log paths. Tail the analysis stderr
-for the current PSI file/function; do not treat a heartbeat as proof of forward progress.
+for the current PSI file/function and the last unfinished stage. No periodic heartbeat is emitted.
 Reuse an unchanged snapshot/contract pair across pages rather than repeating `--source` intake.
 
 For blank pages or missing sections, follow the ordered

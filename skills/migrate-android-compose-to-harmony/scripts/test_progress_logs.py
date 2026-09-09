@@ -6,25 +6,28 @@ import threading
 import time
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from migrate_compose_page import PageRun
 from ui_migration.progress import Progress, checkpoint, phase, tracked
 
 
 class ProgressLogsTest(unittest.TestCase):
-    def test_heartbeat_reports_current_unit_without_stdout(self):
+    def test_real_progress_without_background_thread_or_idle_output(self):
         stream = io.StringIO()
-        with Progress('test', interval=0.02, stream=stream):
-            with phase('parse'):
-                checkpoint('psi-declarations', unit='Page.kt', completed=0, total=2)
-                deadline = time.monotonic() + 2
-                while 'heartbeat' not in stream.getvalue() and time.monotonic() < deadline:
-                    time.sleep(0.01)
+        with patch('threading.Thread', side_effect=AssertionError('background thread created')):
+            with Progress('test', stream=stream):
+                with phase('parse'):
+                    checkpoint('psi-declarations', unit='Page.kt', completed=0, total=2)
+                    before_idle = stream.getvalue()
+                    time.sleep(0.03)
+                    self.assertEqual(stream.getvalue(), before_idle)
         events = [json.loads(line.removeprefix('[progress] ')) for line in stream.getvalue().splitlines()]
-        heartbeat = next(event for event in events if event['event'] == 'heartbeat')
-        self.assertEqual(heartbeat['unit'], 'Page.kt')
-        self.assertEqual(heartbeat['completed'], 0)
-        self.assertGreater(heartbeat['checkpoint_age_s'], 0)
+        progress = next(event for event in events if event['phase'] == 'psi-declarations')
+        self.assertEqual(progress['unit'], 'Page.kt')
+        self.assertEqual(progress['completed'], 0)
+        self.assertFalse(any(e['event'] == 'heartbeat' or 'checkpoint_age_s' in e for e in events))
+        self.assertTrue(any(e['event'] == 'phase-start' and e['phase'] == 'parse' for e in events))
         self.assertTrue(any(e['event'] == 'phase-finished' and e['phase'] == 'parse' for e in events))
 
     def test_failed_phase_and_real_completion_counts_are_recorded(self):

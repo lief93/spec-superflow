@@ -83,8 +83,8 @@ tail stderr while the child is running, not wait for `communicate()` to finish.
 
 The page command writes these files under its new `--output-dir`:
 
-- `progress.jsonl`: parent stage start/end, reuse decision, child PID and a heartbeat
-  every 10 seconds while active. Read `elapsed_s` and `checkpoint_age_s` separately.
+- `progress.jsonl`: parent stage start/end/failure, reuse decision, child PID and
+  elapsed time (`elapsed_s`). Events are emitted on actual work, not on a timer.
 - `result.json`: atomic current status, `current_stage`, stage `status=running`, PID
   and log paths, recorded before waiting for the child. Stage exit code/time follow
   when it finishes; `seconds` here is a checkpoint value, not a live ticking timer.
@@ -109,9 +109,10 @@ python3 "$SKILL_ROOT/scripts/analyze_compose_project.py" \
 
 Records contain timestamp, process ID, phase, elapsed time, current file/function
 (`unit`) and real `completed`/`total` counts where available. Counts describe that
-specific loop, not overall migration percent. A heartbeat with unchanged counters
-means the process is still observable, not proof of forward progress or a deadlock.
-Long `checkpoint_age_s` identifies where to profile next; this change adds diagnostics,
+specific loop, not overall migration percent. There is no periodic heartbeat or
+background logging thread. When work takes a long time, inspect the last unfinished
+stage and its latest file/function checkpoint to identify where to profile next.
+Silence alone does not prove a deadlock; this change adds diagnostics,
 not a performance fix or automatic timeout. Filenames and symbol names are logged,
 not complete source bodies. Apply company log-handling policy to these files.
 
