@@ -89,6 +89,35 @@ run OCR, or copy blocked files into the snapshot. Confirm the exact `ROOT_SOURCE
 
 ## 2. Generate source-page.json without a device
 
+### Reuse project-wide styles
+
+After the initial contract analysis, extract one style file per project:
+
+```bash
+export PROJECT_STYLES="$RUN_ROOT/project-style-definitions.json"
+python3 "$SKILL_ROOT/scripts/generate_project_style_definitions.py" \
+  --contract "$CONTRACT" --output "$PROJECT_STYLES"
+```
+
+An existing file is reused without reading the contract or re-extracting styles. There is no
+hash, timestamp, or automatic invalidation. After intentionally changing the project theme,
+reanalyze the snapshot, then run the same command with `--refresh`. Do not reuse another
+project's style file. Malformed files fail explicitly rather than silently rebuilding.
+
+The file holds resolved theme colors/text styles and their source providers, including fonts,
+shapes and extended color sets. The currently supported global selection is the light theme;
+this cache does not add dark/dynamic-theme selection or resolve ambiguous providers. Missing
+facts remain unresolved. Existing component-specific defaults use the cached theme; explicit
+local values, transparent paint and selected-state overrides still take precedence. A plain
+Box with no background stays unpainted, not filled with a global surface color.
+
+This reuses global style extraction, not the entire page analysis: page trees and fixed-state
+expressions still need processing. The source page embeds the definitions; the final
+`version_json.json` carries them under `meta.migration.styleDefinitions` alongside the resolved
+node styles. ArkUI still reads that single JSON, never this cache file or Android source.
+
+### Generate a page
+
 There is currently no standalone source-only CLI for this step. This executable snippet calls
 the same library function used by real-page capture and the source-only regression harness.
 It does not invoke UIAutomator or read screenshots. `source_root` is the safe snapshot, so local
@@ -102,6 +131,7 @@ import os
 from pathlib import Path
 from init_harmony_project import load_contract, sha256_file
 from real_page_pipeline import build_source_page_spec
+from ui_migration.frontend.project_styles import load_style_definitions
 
 contract, contract_path = load_contract(Path(os.environ["CONTRACT"]))
 page = build_source_page_spec(
@@ -112,6 +142,7 @@ page = build_source_page_spec(
     os.environ["STATE_ID"],
     sha256_file(contract_path),
     Path(os.environ["SNAPSHOT"]),
+    style_definitions=load_style_definitions(Path(os.environ["PROJECT_STYLES"])),
 )
 with Path(os.environ["SOURCE_PAGE"]).open("x", encoding="utf-8") as output:
     json.dump(page, output, ensure_ascii=False, indent=2)
@@ -126,6 +157,8 @@ runtime proof of font/platform-default behavior; capture the actual page later f
 
 Alternative: `generate_real_android_page_json.py` also produces `source-page.json` when capturing
 a running page. See [the capture commands](page-snapshot.md#capture-real-pages-and-bind-runtime-nodes-to-source).
+Pass `--style-definitions "$PROJECT_STYLES"` to reuse the same project styles (created from the
+contract if absent). Without the option, the existing per-page extraction remains available.
 Use that file at step 4; do not substitute its runtime `page.json`. The alternative requires a
 live device or paired offline screenshot/UIAutomator XML. It is not the source-only path.
 
@@ -149,8 +182,155 @@ symbol values when needed; it is merged after `values`, so avoid duplicate keys.
 Kotlin execution and not a declaration of every business state. Follow the actual source
 expressions/bindings; do not invent replacement text, styles or layout facts to clear a gate.
 For another state, create another page run and matching fixture. Unresolvable branch selection
-can be fatal; an unsupported selected control/property can instead yield a partial candidate.
+produces a partial candidate: both source subtrees remain in JSON with
+`source.state_resolution.status=unresolved`. They are not selected for rendering until resolved.
 For fully static pages, omit `--state-fixture`; unresolved state is never guessed automatically.
+
+For a captured `viewModel.rows.collectAsState()` value, prefer binding the Flow receiver:
+`"values": {"viewModel": {"rows": [{"name": "Shopping"}]}}`. The bounded Compose adapter
+creates the State container; `by` or `.value` reads its value. If binding the entire call in
+`symbols` instead, supply its actual return shape, e.g.
+`"viewModel.rows.collectAsState()": {"value": [{"name": "Shopping"}]}`; a bare list is not State.
+`remember` preserves its calculation's type, including `mutableStateOf` containers.
+
+Capture business data from the selected running state rather than executing repositories,
+network calls or arbitrary business code in the layout evaluator. UIAutomator may supply mapped
+visible text/selection; hidden internal state needs an explicit fixture or a minimal test probe.
+Record the capture origin. A partial visible list is not the complete dataset, and absence from
+the runtime tree never proves a source branch is hidden. The merged scene still produces one
+page JSON for ArkUI; runtime data must not overwrite source layout or styles.
+
+### Layout expression parser setup
+
+Source layout projection uses Kotlin compiler PSI for modifier expressions, aliases, conditional
+arguments and layout alignment/arrangement. Public command arguments are unchanged. ArkUI still
+reads only the emitted `version_json.json`; it does not start PSI or reopen Android sources.
+Selected text/style values and modifiers use the same AST evaluator for if/when, operators,
+nullable members and Elvis expressions. Framework value adapters remain bounded; an unresolved
+expression cannot invoke a second string-based branch parser. This does not provide complete
+compiler symbol/type resolution. Run `test_fixed_state_value_parity` to check both entry paths.
+TextStyle aliases and nested `copy` properties are selected individually; explicit Text
+arguments override those properties. Unknown style values remain unresolved without removing
+the control. Pixel comparison and runtime geometry remain separate acceptance checks.
+
+Use JDK 17 or newer (`JAVA_HOME` with `bin/java` and `bin/javac`). The parser reads these pinned
+JARs from `GRADLE_USER_HOME/caches/modules-2/files-2.1` (default `~/.gradle`):
+
+| Maven artifact | Version |
+| --- | --- |
+| org.jetbrains.kotlin:kotlin-compiler-embeddable | 1.9.22 |
+| org.jetbrains.kotlin:kotlin-stdlib | 1.9.22 |
+| org.jetbrains.kotlin:kotlin-reflect | 1.6.10 |
+| org.jetbrains.intellij.deps:trove4j | 1.0.20200330 |
+| org.jetbrains:annotations | 13.0 |
+| com.google.code.gson:gson | 2.10.1 |
+
+For offline/internal-network machines, provision the same dependencies through your approved
+artifact mirror and set `KOTLIN_PSI_CLASSPATH` to their platform-separated absolute JAR paths.
+Nothing is downloaded automatically. Missing dependencies fail with a setup error, rather than
+silently returning to string-based branch scanning. The Java bridge compiles with `--release 17`
+into the external user cache and a process/cache is reused within each Python invocation.
+No class files, Android build outputs or source images belong in the skill repository.
+
+Regenerate `source-page.json` with the current analyzer before projecting scenes. Its raw
+`syntax_expression` fields preserve Kotlin newlines and lambda boundaries. Layout branches are
+selected before extracting dimensions/padding; an unknown condition becomes unresolved and does
+not apply either branch. Literal framework adapters remain bounded, not arbitrary Kotlin execution.
+
+### UI-only previews when business values are unavailable
+
+For UI prototyping rather than business parity, use the explicit preview projector below.
+Regenerate the source inventory/page with the current analyzer first: it preserves complete
+`if / else if / else` and supported `when` condition chains. Supply a small input file for the
+states to demonstrate; do not switch internal branches independently or enumerate their Cartesian
+product. For example, for source `if (cardUi != null) ... else if (isCardLoading) ...`:
+
+```json
+{
+  "schema": "android-to-harmony.ui-state-inputs.v1",
+  "page_id": "saving-details",
+  "common_values": {},
+  "scenes": [
+    {"id": "loaded", "values": {"cardUi": {"isPrimary": false}, "isCardLoading": false}},
+    {"id": "loading", "values": {"cardUi": null, "isCardLoading": true}},
+    {"id": "no-card", "values": {"cardUi": null, "isCardLoading": false}}
+  ]
+}
+```
+
+Supply additional source-required style/state values in the real project's input records.
+`common_values` and optional `common_symbols` are shallow-merged with each scene's `values` and
+`symbols`. Scene IDs must be unique; `page_id` must match the source page. This file belongs to
+the upstream state projector, not to the ArkUI generator's inputs.
+
+```bash
+python3 "$SKILL_ROOT/scripts/generate_ui_state_previews.py" \
+  --source-page "$SOURCE_PAGE" --states "$STATE_INPUTS" \
+  --output-dir "$PAGE_RUN/ui-previews" \
+  --viewport-width-dp "$WIDTH_DP" --viewport-height-dp "$HEIGHT_DP" \
+  --slice-scale "$SLICE_SCALE"
+```
+
+The output directory must be new. This emits `state-catalog.json`, `preview-report.json`, a
+human-readable `preview-report.md`, and a
+directory for each scene containing its projected fixture and a **single** `version_json.json`.
+Pass one scene's version file to the unchanged `generate_arkui_page.py --page-json` entry. The
+ArkUI generator never reads Android source, UIAutomator, or a second page JSON in this path.
+
+Rules and limits:
+
+- The catalog inventories source condition chains, including nested and separately invoked
+  business components. Scenes evaluate those conditions with explicit inputs and retain fixed
+  call parameters: `actionLabel=null` cannot become a visible action by preview selection.
+  If a non-null card and loading are both supplied, the source's first branch wins. Unknown
+  structural conditions remain deferred facts in a partial scene, not a generation exception.
+  No state inputs means inventory only, not automatically invented scenes or business reachability.
+- Whole-page branches, local loading/error branches and dialog branches remain source-owned.
+  Independent source roots (for example Scaffold plus Dialog) require an explicit `root_id`
+  per scene and get **separate previews** with
+  `scope=isolated-source-root`; they are not forced into an invented Stack. A dialog-only preview
+  is not a claim that the background page/window/dimming composition has been reproduced.
+- Static text and statically resolved list data are preserved. Unresolved display text uses
+  explicitly marked `Sample text`; unknown collection data retains its original item template
+  as deferred source facts, without inventing a number of items.
+  To show an empty list, supply the source collection as `[]` in a separate scene. Fixed source
+  lists remain fixed; `choices` and `collection_counts` branch/count overrides are rejected.
+- Each emitted sample is recorded in `stateProjection.ui_preview.display_data` and text facts
+  use `origin=ui_preview_sample`. To use representative values instead, edit a scene fixture's
+  `ui_preview.display_values` using exact source component IDs, then regenerate that one scene.
+  Example: `{"source-...": {"text": "123.45", "origin": "ui_preview_sample"}}`.
+- Do not invent colors, dimensions, shapes, asset references or unresolved platform defaults.
+  Those remain normal unresolved facts and continue to fail their existing gates. Unimplemented
+  custom drawing/third-party widgets remain partial output, not fake replacements.
+- `generated_count` means files were emitted. Inspect each scene's `verdict`, unresolved facts,
+  subsequent ArkUI manifest, build and same-state screenshot comparison separately. The report
+  always states `business_verified=false` and `visual_acceptance=not_verified`.
+- Preview fixtures are implementation/test inputs, not production business logic. A preview host
+  can switch generated scenes; do not add preview-state controls to the production screen.
+
+#### Optional UIAutomator display text
+
+UIAutomator is optional and supplies **text only**, never source layout coordinates. Capture the
+intended Android page/state with the existing real-page capture process. Create a binding file:
+
+```json
+{
+  "page": {"id": "home", "state": "default"},
+  "text_bindings": {"source-exact-component-id": "com.example:id/balance"}
+}
+```
+
+`page` must match `SOURCE_PAGE.page`. Add both `--uiautomator-xml /absolute/window.xml` and
+`--text-bindings /absolute/text-bindings.json` to the preview command. Each resource ID must occur
+exactly once; missing/duplicate IDs and password nodes are rejected. Do not guess correspondence
+from repeated labels or screen positions. Compose nodes without a stable resource ID/test tag
+continue to use explicit sample data. Runtime input path, resource ID and XML SHA-256 are recorded.
+The binding author must verify the actual page/state; the XML alone does not attest route identity.
+Imported strings may be reused as specimen content across scenes, not as runtime-state evidence.
+Use sanitized accounts: imported text appears in the generated JSON and UI.
+
+Do not merge this display-data policy into the strict fixture path above. Strict migration
+continues to require resolved branch values and real behavioral acceptance evidence.
 
 ## 4. Generate version_json.json
 
@@ -164,10 +344,32 @@ python3 "$SKILL_ROOT/scripts/generate_lanhu_source_page.py" \
   --output-dir "$LANHU_PAGE_DIR" > "$PAGE_RUN/lanhu-result.json"
 ```
 
-Outputs are `version_json.json`, `component-manifest.json`, `page-state-manifest.json` and the
+Outputs are `version_json.json`, `component-manifest.json`, `page-state-manifest.json`,
+`unresolved-worklist.json` and the
 captured stdout result. Inspect `generation_complete`, `verdict`, `unresolved`,
 `required_fact_gate` and `phase_consumption_gate`. The version document embeds equivalent
 diagnostics in `meta.sourceGeneration` and per-node `migration.requiredFacts`.
+
+### Resolve only unresolved facts
+
+The CLI exits 0 when it emits files, including `status=partial_generation`. An unresolved theme,
+style expression, state predicate or collection value must not discard the rest of the page.
+Malformed documents, page/state identity mismatch, broken hierarchy, invalid viewport and
+ambiguous page roots remain errors. `generation_complete=false` / `verdict=fail` means the
+candidate is incomplete, not that its JSON file is missing. Target generation retains that
+incompleteness and must not claim a visual pass.
+
+`unresolved-worklist.json` binds the exact version file SHA and groups tasks by expression,
+property and related source context. Each task provides affected component IDs, source locations,
+reasons and transitively related parameter/local bindings. It is a **diagnostic report**, not an
+AI solver queue or review gate. The CLI does not invoke a model or require a provider dependency.
+
+`has_unresolved=true` reports remaining facts; it does not dispatch a repair stage. There is no
+AI value-completion step in the migration workflow. Supported parsers, explicit fixed-state inputs
+and verified runtime facts supply values. Missing evidence remains unresolved while known output
+continues. Reusable parser/adapter defects are separate maintenance work, not per-page AI overrides.
+Do not patch the final JSON to erase diagnostics. Build, structural and screenshot checks remain
+script-driven; none is replaced by a model declaring the page correct.
 
 The final page JSON already contains the hierarchy and implementation facts. Do not insert
 an `implementation-page.json` reduction, a second runtime JSON or a source-reader fallback.

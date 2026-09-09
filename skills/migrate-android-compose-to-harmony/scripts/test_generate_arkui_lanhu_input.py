@@ -9,6 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from ui_migration.arkui.layout import LayoutPolicy
+from page_renderer_test_support import empty_renderer, layout_policy
+
 from generate_arkui_page import (
     ArkUIPageError,
     Renderer,
@@ -37,7 +40,7 @@ def empty_style() -> dict[str, dict[str, object | None]]:
 
 class GenerateArkUILanhuInputTest(unittest.TestCase):
     def test_page_json_render_does_not_execute_unused_source_translation(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.root = {"source": "Profile.kt", "composable": "ProfileScreen"}
         renderer.reached_keys = [("Profile.kt", "ProfileScreen")]
         renderer.android_page_input = {
@@ -163,58 +166,20 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
                 fallback.assert_not_called()
 
     def test_missing_page_image_fact_is_unresolved_without_source_fallback(self) -> None:
-        renderer = object.__new__(Renderer)
-        renderer.android_page_layout_mode = "source-tree"
-        renderer.android_page_by_id = {}
-        renderer.android_page_applied_component_paths = {}
-        renderer.android_page_processed_component_ids = set()
-        renderer.android_source_layout_by_subject = {}
-        renderer.android_source_tree_by_id = {}
-        renderer.tinted_vector_resources = {}
-        renderer.resource_names = set()
-        renderer.verified_font_faces = []
-        renderer.unresolved = []
-        renderer._unresolved_keys = set()
-        renderer.painter_resource_expression = Mock(
-            side_effect=AssertionError("source painter fallback executed")
-        )
-        component = {
-            "id": "missing-image",
-            "semantic_key": "MissingImage",
-            "type": "Image",
-            "parent_id": None,
-            "children_ids": [],
-            "call_ids": ["Profile.kt:1:Image:1"],
-            "sibling_index": 0,
-            "bounds_dp": {"x": 0, "y": 0, "width": 24, "height": 24},
-            "source_layout_bounds_dp": {"x": 0, "y": 0, "width": 24, "height": 24},
-            "source": {"modifiers": []},
-            "style": {
-                "layout": {"padding_dp": None},
-                "surface": {
-                    "background": None,
-                    "border": None,
-                    "corner_radius_dp": None,
-                    "shadows": None,
-                },
-                "typography": {},
-                "asset": {"resource": None, "tint": None, "content_scale": "fit"},
-                "content": {"text": None},
-            },
-        }
-        renderer.android_page_by_id[component["id"]] = component
-
-        lines = renderer.page_snapshot_component_lines(
-            component,
-            {"x": 0, "y": 0, "width": 360, "height": 800},
-            None,
-            0,
-        )
-
-        self.assertEqual(lines, [])
-        renderer.painter_resource_expression.assert_not_called()
-        self.assertEqual(renderer.unresolved[0]["kind"], "page_json_missing_fact")
-        self.assertEqual(renderer.unresolved[0]["path"], "style.asset.resource")
+        from test_generate_lanhu_source_page import source_component
+        from test_layout_mapping_contract import render_nodes
+        component = source_component('missing-image', 'Image', parent_id=None, sibling_index=0,
+                                     width_dp=24, height_dp=24)
+        component['style']['asset']['resource'] = None
+        with patch.object(Renderer, 'painter_resource_expression', create=True,
+                          side_effect=AssertionError('source painter fallback executed')) as fallback:
+            output, _, renderer = render_nodes([component])
+        self.assertIn(".id('missing-image')", output)
+        self.assertIn('.width(this.layoutPx(24))', output)
+        self.assertNotIn('Image(', output)
+        fallback.assert_not_called()
+        self.assertTrue(any(u['kind'] == 'page_json_missing_fact' and u.get('path') == 'style.asset.resource'
+                            for u in renderer.unresolved))
 
     def test_generation_manifest_proves_page_json_only_input(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -249,7 +214,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
             self.assertEqual(manifest["selected_call_count"], 0)
 
     def test_source_flow_component_type_is_not_inferred_from_coordinates(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.android_page_layout_mode = "source-tree"
         renderer.android_page_by_id = {
             "column": {
@@ -270,23 +235,23 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            renderer.page_snapshot_flow_container(
+            layout_policy(renderer).page_snapshot_layout_container(
                 renderer.android_page_by_id["column"]
             ),
             "Column",
         )
 
     def test_constraint_layout_uses_relative_container(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.android_page_layout_mode = "source-tree"
 
         self.assertEqual(
-            renderer.page_snapshot_layout_container({"type": "ConstraintLayout"}),
+            layout_policy(renderer).page_snapshot_layout_container({"type": "ConstraintLayout"}),
             "RelativeContainer",
         )
 
     def test_constraint_relationships_emit_align_rules_without_coordinates(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.android_page_layout_mode = "source-tree"
         renderer.android_page_by_id = {
             "header": {
@@ -355,10 +320,10 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
             },
         }
 
-        cover_lines = renderer.page_snapshot_constraint_alignment_lines(
+        cover_lines = layout_policy(renderer).page_snapshot_constraint_alignment_lines(
             renderer.android_page_by_id["cover"]
         )
-        panel_lines = renderer.page_snapshot_constraint_alignment_lines(
+        panel_lines = layout_policy(renderer).page_snapshot_constraint_alignment_lines(
             renderer.android_page_by_id["panel"]
         )
 
@@ -379,13 +344,13 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         renderer.android_page_by_id['header']['source'] = {'layoutRules': [{
             'kind': 'sizing', 'axes': ['width', 'height'], 'mode': 'wrap_content',
         }]}
-        wrapped_lines = renderer.page_snapshot_constraint_alignment_lines(renderer.android_page_by_id['cover'])
+        wrapped_lines = layout_policy(renderer).page_snapshot_constraint_alignment_lines(renderer.android_page_by_id['cover'])
         self.assertEqual(wrapped_lines, [
             ".alignRules({ left: { anchor: '__container__', align: HorizontalAlign.Start }, "
             "right: { anchor: '__container__', align: HorizontalAlign.End } })"
         ])
         self.assertFalse(
-            renderer.page_snapshot_requires_position(
+            layout_policy(renderer).page_snapshot_requires_position(
                 renderer.android_page_by_id["cover"],
                 {"x": 0, "y": 0, "width": 377, "height": 216},
                 renderer.android_page_by_id["header"],
@@ -394,7 +359,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         )
 
     def test_same_bounds_single_child_wrapper_does_not_use_position(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.android_page_layout_mode = "source-tree"
         parent = {
             "id": "wrapper",
@@ -410,7 +375,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
 
         self.assertFalse(
-            renderer.page_snapshot_requires_position(
+            layout_policy(renderer).page_snapshot_requires_position(
                 child,
                 child["bounds_dp"],
                 parent,
@@ -419,7 +384,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         )
 
     def test_source_tree_overlay_does_not_turn_measured_frames_into_positions(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.android_page_layout_mode = "source-tree"
         parent = {
             "id": "icon-background",
@@ -441,7 +406,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
 
         self.assertFalse(
-            renderer.page_snapshot_requires_position(
+            layout_policy(renderer).page_snapshot_requires_position(
                 child,
                 child["bounds_dp"],
                 parent,
@@ -450,7 +415,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         )
 
     def test_explicit_box_offset_is_emitted_as_local_translation(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.android_page_layout_mode = "source-tree"
         renderer._page_constraint_states = {}
         parent = {
@@ -497,7 +462,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            renderer.page_snapshot_explicit_offset_line(child, parent),
+            layout_policy(renderer).page_snapshot_explicit_offset_line(child, parent),
             ".translate({ x: this.pageConstraint0Height * 0.25, y: this.pageConstraint0Height * -0.25 })",
         )
 
@@ -555,6 +520,8 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
     def test_target_draw_gate_rejects_parsed_visual_fact_without_emitter(self) -> None:
         component = {
             "id": "avatar",
+            "type": "Image",
+            "style": {"asset": {"resource": "avatar", "content_scale": "fit"}},
             "source": {"call_id": "profile:avatar"},
             "required_facts": [
                 {
@@ -597,7 +564,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
                     "style.asset.resource",
                 }
             },
-            {"avatar": {"structure.type", "style.asset.resource"}},
+            {"avatar": {"structure.type", "style.asset.resource", "style.asset.content_scale"}},
         )
         self.assertEqual(consumed["verdict"], "pass")
 
@@ -870,8 +837,8 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
             self.assertEqual(ring["call_ids"], ["ScreenHeaderLayout.kt:70:Image:6"])
             self.assertEqual(ring["style"]["asset"]["resource"], "ic_cover_ellipse")
 
-            renderer = object.__new__(Renderer)
-            bounds, relative_x, relative_y = renderer.page_snapshot_bounds(
+            renderer = empty_renderer()
+            bounds, relative_x, relative_y = layout_policy(renderer).page_snapshot_bounds(
                 ring,
                 page["by_id"]["root"]["source_layout_bounds_dp"],
             )
@@ -880,7 +847,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
             self.assertEqual(relative_y, -34.0)
             renderer.android_page_layout_mode = "source-tree"
             self.assertFalse(
-                renderer.page_snapshot_requires_position(
+                layout_policy(renderer).page_snapshot_requires_position(
                     ring,
                     bounds,
                     page["by_id"]["root"],
@@ -978,7 +945,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
                     "target_anchor": "baseline", "target_id": "root", "target_reference": "parent",
                     "margin_dp": 0}], "unresolved": [],
             }
-            lines = renderer.page_snapshot_constraint_alignment_lines(page["by_id"]["ring"])
+            lines = layout_policy(renderer).page_snapshot_constraint_alignment_lines(page["by_id"]["ring"])
             self.assertEqual(lines, [])
             self.assertTrue(any(item.get("page_component_id") == "ring"
                                 and "baseline" in item["reason"] for item in renderer.unresolved))
@@ -1155,7 +1122,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
             self.assertNotIn(".onAreaChange(", source)
 
     def test_root_fills_host_but_matching_child_frame_does_not_imply_fill(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.android_page_input = {
             "viewport": {
                 "content_bounds_dp": {"x": 0, "y": 0, "width": 377.143, "height": 764}
@@ -1210,7 +1177,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            renderer.page_snapshot_dimension_lines(
+            layout_policy(renderer).page_snapshot_dimension_lines(
                 root,
                 root["bounds_dp"],
                 None,
@@ -1220,7 +1187,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
             [".width('100%')", ".height('100%')"],
         )
         self.assertEqual(
-            renderer.page_snapshot_dimension_lines(
+            layout_policy(renderer).page_snapshot_dimension_lines(
                 content,
                 content["bounds_dp"],
                 parent,
@@ -1240,7 +1207,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            Renderer.page_snapshot_source_layout_weight(component),
+            LayoutPolicy.page_snapshot_source_layout_weight(component),
             ".layoutWeight(1)",
         )
 
@@ -1258,12 +1225,12 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            Renderer.page_snapshot_source_layout_weight(component),
+            LayoutPolicy.page_snapshot_source_layout_weight(component),
             ".layoutWeight(2.5)",
         )
 
     def test_normalized_sizing_rules_control_generated_dimensions(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.android_page_by_id = {}
         component = {
             "id": "content",
@@ -1294,7 +1261,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            renderer.page_snapshot_dimension_lines(
+            layout_policy(renderer).page_snapshot_dimension_lines(
                 component,
                 {"width": 320.0, "height": 240.0},
                 None,
@@ -1305,7 +1272,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         )
 
     def test_wrap_content_parent_allows_single_child_to_measure_intrinsically(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         parent = {
             "id": "text-btn",
             "children_ids": ["button"],
@@ -1332,7 +1299,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         renderer.android_page_by_id = {"text-btn": parent, "button": component}
 
         self.assertEqual(
-            renderer.page_snapshot_dimension_lines(
+            layout_policy(renderer).page_snapshot_dimension_lines(
                 component,
                 {"width": 69.9, "height": 48.0},
                 parent,
@@ -1343,7 +1310,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         )
 
     def test_material_text_button_keeps_intrinsic_label_and_minimum_height(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         parent = {
             "id": "button",
             "type": "TextButton",
@@ -1384,14 +1351,14 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
         renderer.android_page_by_id = {"button": parent, "label": label}
 
-        self.assertFalse(renderer.page_snapshot_fills_parent_inner_axis(label, parent, "width"))
+        self.assertFalse(layout_policy(renderer).page_snapshot_fills_parent_inner_axis(label, parent, "width"))
         self.assertEqual(
-            renderer.page_snapshot_minimum_constraint_line(parent, parent["bounds_dp"]),
-            ".constraintSize({ minHeight: this.layoutPx(48) })",
+            layout_policy(renderer).page_snapshot_minimum_constraint_line(parent, parent["bounds_dp"]),
+            ".constraintSize({ minWidth: this.layoutPx(58), minHeight: this.layoutPx(48) })",
         )
 
     def test_project_component_internal_root_wraps_even_when_reference_frames_match(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         parent = {
             "id": "header",
             "type": "ScreenHeader",
@@ -1429,7 +1396,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         renderer.android_page_by_id = {"header": parent, "layout": child}
 
         self.assertEqual(
-            renderer.page_snapshot_dimension_lines(
+            layout_policy(renderer).page_snapshot_dimension_lines(
                 child,
                 child["bounds_dp"],
                 parent,
@@ -1446,7 +1413,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
             "source_modifier_index": 0,
         }]
         self.assertEqual(
-            renderer.page_snapshot_dimension_lines(
+            layout_policy(renderer).page_snapshot_dimension_lines(
                 child,
                 child["bounds_dp"],
                 parent,
@@ -1457,7 +1424,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         )
 
     def test_compose_box_default_alignment_and_flow_shrink_are_preserved(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         box = {
             "id": "surface",
             "type": "Box",
@@ -1485,7 +1452,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            renderer.page_snapshot_container_alignment_lines(box),
+            layout_policy(renderer).page_snapshot_container_alignment_lines(box),
             [".alignContent(Alignment.TopStart)"],
         )
         column = {
@@ -1501,23 +1468,25 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
             "style": {"layout": {"alignment": None, "horizontal_arrangement": None}},
         }
         self.assertEqual(
-            renderer.page_snapshot_container_alignment_lines(column),
+            layout_policy(renderer).page_snapshot_container_alignment_lines(column),
             [".alignItems(HorizontalAlign.Start)"],
         )
         self.assertEqual(
-            renderer.page_snapshot_container_alignment_lines(row),
+            layout_policy(renderer).page_snapshot_container_alignment_lines(row),
             [".alignItems(VerticalAlign.Top)"],
         )
         self.assertEqual(
-            renderer.page_snapshot_flow_shrink_line(fixed_child, "Column"),
+            layout_policy(renderer).page_snapshot_flow_shrink_line(fixed_child, "Column"),
             ".flexShrink(0)",
         )
+        weighted_child['parent_id'] = column['id']
+        renderer.android_page_by_id[column['id']] = column
         self.assertIsNone(
-            renderer.page_snapshot_flow_shrink_line(weighted_child, "Column")
+            layout_policy(renderer).page_snapshot_flow_shrink_line(weighted_child, "Column")
         )
 
     def test_fill_parent_child_stretches_inside_intrinsic_parent_axis(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         parent = {
             "id": "actions",
             "children_ids": ["action"],
@@ -1553,7 +1522,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         renderer.android_page_by_id = {"actions": parent, "action": component}
 
         self.assertEqual(
-            renderer.page_snapshot_dimension_lines(
+            layout_policy(renderer).page_snapshot_dimension_lines(
                 component,
                 {"width": 141.9, "height": 72.0},
                 parent,
@@ -1564,7 +1533,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         )
 
     def test_forwarded_parent_color_is_consumed_only_when_descendant_draws_same_value(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         parent = {
             "id": "text-btn",
             "children_ids": ["label"],
@@ -1609,7 +1578,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
                 load_lanhu_page_input(version_json)
 
     def test_single_button_child_uses_parent_center_instead_of_absolute_position(self) -> None:
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         renderer.android_page_layout_mode = "source-tree"
         renderer.android_page_by_id = {
             "button": {
@@ -1647,6 +1616,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         renderer.verified_font_faces = []
         renderer._page_constraint_states = {}
 
+        layout_policy(renderer)
         lines = renderer.page_snapshot_component_lines(
             renderer.android_page_by_id["label"],
             {"x": 0, "y": 0, "width": 82, "height": 48},

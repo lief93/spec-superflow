@@ -4,11 +4,13 @@ CONTROL_FAMILIES = {
     'row': ('Row', 'LazyRow'),
     'column': ('Column', 'LazyColumn'),
     'card': ('Card',),
-    'box': ('Box', 'BoxWithConstraints'),
+    'material_item': ('ListItem', 'FilterChip', 'ExtendedFloatingActionButton'),
+    'box': ('Box', 'BoxWithConstraints', 'Surface', 'AnimatedVisibility', 'AnimatedContent'),
+    'refresh': ('PullToRefreshBox',),
     'constraint': ('ConstraintLayout',),
-    'appbar': ('TopAppBar', 'CenterAlignedTopAppBar'),
+    'appbar': ('TopAppBar', 'CenterAlignedTopAppBar', 'LargeFlexibleTopAppBar', 'BottomAppBar'),
     'scaffold': ('Scaffold',),
-    'button': ('Button', 'TextButton', 'OutlinedButton', 'IconButton',
+    'button': ('Button', 'TextButton', 'OutlinedButton', 'IconButton', 'IconToggleButton',
                'FloatingActionButton', 'SmallFloatingActionButton'),
     'text': ('Text', 'BasicText', 'ClickableText'),
     'input': ('BasicTextField', 'TextField', 'OutlinedTextField'),
@@ -21,7 +23,7 @@ CONTROL_FAMILIES = {
     'internal': ('content', 'toolbar', 'ProgressRing'),
 }
 NATIVE_CONTAINERS = frozenset(
-    name for family in ('row', 'column', 'card', 'box', 'constraint', 'appbar', 'scaffold')
+    name for family in ('row', 'column', 'card', 'material_item', 'box', 'refresh', 'constraint', 'appbar', 'scaffold')
     for name in CONTROL_FAMILIES[family]
 ) | {'content', 'toolbar'}
 NATIVE_LEAVES = frozenset(
@@ -37,7 +39,7 @@ FIELD_AUDIT = {
     'layout.margin_dp': ('all', '条件', '运行测量/页面事实；Compose 没有通用 margin 参数', 'page_snapshot_component_lines'),
     'layout.layout_direction': ('all', '条件', '页面事实；CompositionLocal 的上下文解析未全覆盖', 'page_snapshot_component_lines'),
     'layout.z_index': ('all', '条件', 'zIndex 走 layoutRules；该字段来自运行/页面事实', 'page_snapshot_component_lines'),
-    'layout.alignment': ('row column box appbar', '条件', 'contentAlignment/horizontalAlignment/verticalAlignment; 枚举', 'page_snapshot_container_alignment_lines'),
+    'layout.alignment': ('row column box refresh appbar', '条件', 'contentAlignment/horizontalAlignment/verticalAlignment; 枚举', 'page_snapshot_container_alignment_lines'),
     'layout.horizontal_arrangement': ('row', '条件', 'Arrangement + 常量 spacedBy', 'page_snapshot_container_alignment_lines'),
     'layout.vertical_arrangement': ('column', '条件', 'Arrangement + 常量 spacedBy', 'page_snapshot_container_alignment_lines'),
     'layout.aspect_ratio': ('all', '已实现', 'aspectRatio 常量；不猜动态表达式', 'page_snapshot_component_lines'),
@@ -45,6 +47,7 @@ FIELD_AUDIT = {
     'layout.height_dp': ('all', '条件', 'height/size; 无显式值使用原生测量，不用参考 frame', 'page_snapshot_dimension_lines'),
     'surface.background': ('all', '条件', 'solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断', 'page_snapshot_component_lines'),
     'surface.corner_radius_dp': ('all', '条件', '四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断', 'page_snapshot_component_lines'),
+    'surface.corner_sizes': ('all', '条件', '带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析', 'page_snapshot_component_lines'),
     'surface.border': ('all', '条件', '统一 solid/dashed/dotted/none；单边、自定义 dash 阻断', 'page_snapshot_component_lines'),
     'surface.shadows': ('all', '近似', '单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断', 'page_snapshot_component_lines'),
     'surface.alpha': ('all', '已实现', 'alpha 常量 0..1', 'page_snapshot_component_lines'),
@@ -55,6 +58,11 @@ FIELD_AUDIT = {
     'typography.font_family': ('text input', '条件', '仅已校验字体资产或声明的系统字体', 'load_page_font_faces / page_snapshot_component_lines'),
     'typography.letter_spacing_sp': ('text input', '已实现', 'letterSpacing 常量 sp；支持负数', 'page_snapshot_component_lines'),
     'typography.line_height_sp': ('text input', '条件', '常量/主题；自定义 LineHeightStyle、低于自然行高未证明等价', 'page_snapshot_component_lines'),
+    'typography.include_font_padding': ('text', '条件', 'false 且 Center/None 明确行高组合；其他组合保留消费缺口', 'TypographyEmitter.emit'),
+    'typography.line_height_alignment': ('text', '条件', 'Center + Trim.None + includeFontPadding=false；其他组合未证明', 'TypographyEmitter.emit'),
+    'typography.line_height_trim': ('text', '条件', 'None 明确保留首尾行高；其他非默认组合未证明', 'TypographyEmitter.emit'),
+    'typography.line_break': ('text', '条件', 'Simple/Heading/Paragraph 映射目标换行策略；CJK严格度与自定义配置未证明等价', 'TypographyEmitter.emit'),
+    'typography.baseline_shift': ('text', '条件', '已验证字体资源的基线倍率；其他字体保留未解析', 'TypographyEmitter.emit'),
     'typography.text_align': ('text input', '已实现', 'Start/Center/End/Justify', 'page_snapshot_component_lines'),
     'typography.max_lines': ('text input', '条件', '正整数；TextInput 与多行 TextArea 不是同一控件', 'page_snapshot_component_lines'),
     'typography.overflow': ('text input', '条件', 'clip/ellipsis；visible 未支持并阻断；两类 ArkUI 签名分开', 'page_snapshot_component_lines'),
@@ -74,6 +82,7 @@ FIELD_AUDIT = {
     'transform.scale_y': ('all', '条件', 'scale 常量；不推算未知表达式', 'page_snapshot_component_lines'),
     'transform.rotation_degrees': ('all', '条件', 'rotate 常量；默认中心原点', 'page_snapshot_component_lines'),
     'state.visible': ('all', '条件', '显式布尔页面状态；消失不占位，不等于完整动画状态机', 'page_snapshot_component_lines'),
+    'state.refreshing': ('refresh', '条件', 'isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调', 'page_snapshot_component_lines'),
     'state.enabled': ('all', '已实现', '显式布尔优先于默认值；动态未知值不填 true', 'page_snapshot_component_lines'),
     'state.selected': ('selection', '条件', 'RadioButton 的明确选中态；不代表任意容器都有选中样式', 'page_snapshot_component_lines'),
     'state.checked': ('selection', '条件', 'Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断', 'page_snapshot_component_lines'),
@@ -94,16 +103,18 @@ FIELD_AUDIT = {
     'control.minimum': ('range progress', '条件', 'Slider valueRange 或明确默认 0；进度固定 0..1', 'page_snapshot_component_lines'),
     'control.maximum': ('range progress', '条件', 'Slider valueRange 或明确默认 1；上限必须大于下限', 'page_snapshot_component_lines'),
     'control.steps': ('range', '条件', '离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断', 'page_snapshot_component_lines'),
-    'control.active_color': ('progress divider', '条件', '显式 color 常量，作用于轨迹/分隔线而非文字', 'page_snapshot_component_lines'),
-    'control.inactive_color': ('progress', '条件', '显式 trackColor 常量', 'page_snapshot_component_lines'),
+    'control.active_color': ('progress divider refresh', '条件', '显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字', 'page_snapshot_component_lines'),
+    'control.inactive_color': ('progress refresh', '条件', '显式 trackColor 常量或刷新指示器主题背景', 'page_snapshot_component_lines'),
     'control.stroke_width_dp': ('progress divider', '条件', '常量 thickness/strokeWidth；分隔线默认1dp', 'page_snapshot_component_lines'),
 }
 
 FAMILY_BOUNDARIES = {
+    'material_item': 'Material3 ListItem named slots and FilterChip fixed-state layout; callbacks remain a business boundary',
     'row': '原生 Row；LazyRow 为展开后的滚动树，不包含惰性复用策略',
     'column': '原生 Column；LazyColumn 为展开后的滚动树',
     'card': 'Material Card 的 Column 内容布局、静态填充/圆角/裁剪；非零 elevation 仍需单独验证，不能删除子树',
     'box': 'Stack + 原有子树；BoxWithConstraints 限已解析约束表达式',
+    'refresh': 'Box 内容子树、尺寸、weight、对齐，刷新指示器叠加而不挤动内容；固定 UI 状态，手势回调与自定义 indicator/state 另行接入',
     'constraint': 'RelativeContainer；只接受已实现的 anchor 关系，不猜坐标',
     'appbar': '当前小型栏骨架；导航/actions slot 和复杂 appbar 默认样式未全覆盖',
     'scaffold': '保留 topBar/content/bottomBar 槽位；内容 padding 消费原生测量栏高；浮动按钮/snackbar 定位未覆盖',

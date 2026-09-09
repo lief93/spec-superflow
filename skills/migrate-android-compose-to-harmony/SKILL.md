@@ -5,6 +5,46 @@ description: Migrate local Android Jetpack Compose or Android Views/XML applicat
 
 # Migrate Android UI to HarmonyOS
 
+For tooling maintenance, read [tooling-architecture.md](references/tooling-architecture.md).
+Commands keep their existing names; install the complete skill, including `scripts/ui_migration/`.
+
+For multiple pages of one project, extract and reuse `project-style-definitions.json` as described
+in [source-page-workflow.md](references/source-page-workflow.md#reuse-project-wide-styles).
+Refresh explicitly after theme changes; do not add hash-based invalidation. Each page embeds its
+definitions in the single Lanhu JSON consumed by ArkUI.
+For per-component style overrides, add `componentDefaults` to that same style file;
+see [project component defaults](references/project-api-adapters.md#project-component-defaults).
+Explicit source settings win over project overrides, which win over framework defaults.
+See [Material defaults coverage](references/material-defaults.md) for the integrated
+baseline controls and remaining state/version boundaries; do not claim full-library coverage.
+For paired Android/Harmony design libraries, configure
+[style token references](references/style-token-references.md) in the same style definitions.
+Preserve references alongside resolved values; the generator still consumes only one page JSON.
+
+For any scrollable page, follow [long-page-verification.md](references/long-page-verification.md).
+Use `check_long_page.py` with a page/state inventory and explicit per-device capture
+profile. Verify vertical and nested horizontal streams, full component coverage,
+component-local pixels/sizes and inter-component gaps. First-viewport SSIM is never
+whole-long-page acceptance. Missing/partial components or uncovered streams fail the
+gate; capture success is not visual success. Keep fixed system/sticky regions separate.
+
+For project-specific image/font/background/size API variants, use
+[project-api-adapters.md](references/project-api-adapters.md). Scan the selected
+page first, add a tested capability adapter through an explicit hash-pinned manifest,
+and keep the ArkUI backend on its single page-JSON input. Do not use adapters to
+hide missing source hierarchy or custom-drawing support.
+
+For explicitly UI-only multi-state prototypes, use the scoped preview procedure in
+[source-page-workflow.md](references/source-page-workflow.md#ui-only-previews-when-business-values-are-unavailable).
+It evaluates explicit scene inputs through source conditions and marks sample or UIAutomator
+display text. Unknown local facts do not block JSON output: undecided branches and list
+templates remain explicitly deferred until inputs resolve them, never independent branch switches.
+Keep the generated `unresolved-worklist.json` as a diagnostic report, not an AI task queue.
+Do not add an AI value-completion or AI review stage to the migration flow. Continue known output
+with unresolved facts reported; use supported parsers, explicit scene inputs and verified runtime
+facts. Repair shared rules as a separate maintenance task when requested. This does not bypass
+scripted completeness/build/visual checks or prove business parity. ArkUI consumes one scene JSON.
+
 Build an auditable migration in vertical slices. Preserve the Android source as read-only, expose
 only an audited text snapshot to the model, copy approved assets through local hash-checked tools,
 and call a slice complete only after its behavior and build gates pass.

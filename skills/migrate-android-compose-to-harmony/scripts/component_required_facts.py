@@ -22,6 +22,7 @@ BUTTON_TYPES = {
     "TextButton",
     "OutlinedButton",
     "IconButton",
+    "IconToggleButton",
     "FloatingActionButton",
     "SmallFloatingActionButton",
 }
@@ -94,7 +95,7 @@ def constant_color(expression: str) -> str | None:
 
 
 def constant_linear_gradient(expression: str) -> dict[str, Any] | None:
-    match = re.fullmatch(r'Brush\.(horizontalGradient|verticalGradient)\((.*)\)', expression.strip(), re.S)
+    match = re.fullmatch(r'Brush\.(horizontalGradient|verticalGradient|linearGradient)\((.*)\)', expression.strip(), re.S)
     if not match:
         return None
     positional, named = parsed_arguments(match[2])
@@ -107,8 +108,9 @@ def constant_linear_gradient(expression: str) -> dict[str, Any] | None:
     colors = [constant_color(value) for value in split_top_level_arguments(colors_match[1])]
     if len(colors) < 2 or None in colors:
         return None
-    return {'type': 'linear_gradient', 'colors': colors,
-            'angle_degrees': 90 if match[1] == 'horizontalGradient' else 180, 'tile_mode': 'clamp'}
+    direction = {'direction': 'right_bottom'} if match[1] == 'linearGradient' else {
+        'angle_degrees': 90 if match[1] == 'horizontalGradient' else 180}
+    return {'type': 'linear_gradient', 'colors': colors, **direction, 'tile_mode': 'clamp'}
 
 
 def constant_corner_radius(expression: str, direction: str | None = None) -> dict[str, float] | None:
@@ -249,12 +251,46 @@ def nested_modifier_calls(expression: str) -> list[tuple[str, str]]:
     return result
 
 
-def size_arguments(expression: str) -> tuple[float | None, float | None]:
+def bind_dimension_expression(
+    expression: str, bindings: dict[str, str], seen: frozenset[str] = frozenset(),
+) -> str:
+    value = expression.strip()
+    reference = re.fullmatch(r"([A-Za-z_]\w*)(?:\.(width|height))?", value)
+    if reference and reference.group(1) in bindings and reference.group(1) not in seen:
+        name, member = reference.groups()
+        resolved = bind_dimension_expression(str(bindings[name]), bindings, seen | {name})
+        if member is None:
+            return resolved
+        constructor = re.fullmatch(r"(?:androidx\.compose\.ui\.unit\.)?DpSize\s*\((.*)\)", resolved, re.S)
+        if constructor:
+            positional, named = parsed_arguments(constructor.group(1))
+            index = 0 if member == 'width' else 1
+            selected = named.get(member) or (positional[index] if len(positional) > index else '')
+            return bind_dimension_expression(selected, bindings, seen | {name})
+        return value
+    constructor = re.fullmatch(r"((?:androidx\.compose\.ui\.unit\.)?DpSize)\s*\((.*)\)", value, re.S)
+    if constructor:
+        positional, named = parsed_arguments(constructor.group(2))
+        args = [bind_dimension_expression(item, bindings, seen) for item in positional]
+        args.extend(f'{name} = {bind_dimension_expression(item, bindings, seen)}' for name, item in named.items())
+        return constructor.group(1) + '(' + ', '.join(args) + ')'
+    return value
+
+
+def size_arguments(expression: str, bindings: dict[str, str] | None = None) -> tuple[float | None, float | None]:
+    bindings = bindings or {}
     positional, named = parsed_arguments(expression)
     common = named.get("size") or (positional[0] if len(positional) == 1 else None)
-    width = named.get("width") or (positional[0] if len(positional) > 1 else common)
+    common = bind_dimension_expression(common, bindings) if common else None
+    dp_size = re.fullmatch(r"(?:androidx\.compose\.ui\.unit\.)?DpSize\s*\((.*)\)", common or "", re.S)
+    if dp_size:
+        positional, named = parsed_arguments(dp_size.group(1))
+        if len(positional) > 2 or set(named) - {"width", "height"}:
+            return None, None
+        common = None
+    width = named.get("width") or (positional[0] if len(positional) > 1 or dp_size and positional else common)
     height = named.get("height") or (positional[1] if len(positional) > 1 else common)
-    return (number_expression(width or "", "dp"), number_expression(height or "", "dp"))
+    return tuple(number_expression(bind_dimension_expression(value or '', bindings), 'dp') for value in (width, height))
 
 
 def normalized_layout_rules(component: dict[str, Any]) -> list[dict[str, Any]]:
@@ -562,8 +598,21 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
     }
     from page_component_catalog import NATIVE_CONTAINERS, NATIVE_LEAVES, NATIVE_BUTTONS
     from page_native_controls import CONTROL_TYPES, PROGRESS_TYPES, SELECTION_FIELDS, arguments_for, parse_argument
+    if component_type == 'PullToRefreshBox':
+        expression = semantic_expression(component, 'isRefreshing')
+        value = (component.get('style', {}).get('state') or {}).get('refreshing')
+        result.append(explicit_fact(component, 'style.state.refreshing', 'semantic_argument',
+                                    'isRefreshing', expression))
+        if not isinstance(value, bool):
+            result.append(fact('style.state.refreshing', 'unresolved', 'semantic_argument',
+                'isRefreshing', expression, 'refresh state is required; content remains available in preview'))
+        for name in ('indicator', 'state'):
+            expression = semantic_expression(component, name)
+            if expression is not None:
+                result.append(fact('source.arguments.' + name, 'unresolved', 'semantic_argument', name,
+                    expression, 'custom refresh indicator/pull distance requires a separate visual mapping'))
     if component_type in CONTROL_TYPES:
-        for name in arguments_for(component_type):
+        for name in sorted(arguments_for(component_type)):
             expression = semantic_expression(component, name)
             if expression is None:
                 continue
@@ -696,12 +745,18 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
         expression = semantic_expression(component, name)
         if component_type in CONTROL_TYPES and name == 'color':
             continue
+        if component_type == 'Surface' and name == 'color':
+            path = 'style.surface.background'
         if expression is not None and not (
             name in {"placeholder", "label"}
             and is_preview_only_placeholder_expression(expression)
         ):
             result.append(explicit_fact(component, path, "semantic_argument", name, expression))
 
+    if component_type == 'Surface':
+        expression = semantic_expression(component, 'contentColor')
+        if expression is not None:
+            result.append(explicit_fact(component, 'style.typography.color', 'semantic_argument', 'contentColor', expression))
     description = semantic_expression(component, "contentDescription")
     if description is not None:
         result.append(
@@ -759,7 +814,8 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
         expected: Any = None
         expected_known = False
         if name == "size":
-            for axis, size in zip(("width", "height"), size_arguments(expression)):
+            bindings = {**(component.get('parameter_bindings') or {}), **(component.get('local_values') or {})}
+            for axis, size in zip(("width", "height"), size_arguments(expression, bindings)):
                 result.append(
                     explicit_fact(
                         component,
@@ -867,6 +923,9 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
                     expected_known=expected_known,
                 )
             )
+        elif name == 'alignBy' and (component.get('source') or {}).get('baseline_alignment'):
+            result.append(fact('source.modifiers.alignby', 'resolved', 'modifier', name,
+                               expression, 'source baseline relationship retained'))
         elif name not in {"clickable", "selectable", "testTag", "semantics", "onGloballyPositioned"}:
             result.append(fact(f"source.modifiers.{name.lower()}", "unresolved", "modifier", name,
                                expression or name, "modifier has no declared page-layout mapping"))
@@ -880,10 +939,6 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
             if not any(item["path"] == path for item in result):
                 status = "default_resolved" if nested_value(component, path) is not None else "symbolic"
                 result.append(fact(path, status, "component_default", component_type, default, "framework default is explicit"))
-    if component_type in IMAGE_TYPES and not any(
-        item["path"] == "style.asset.content_scale" for item in result
-    ):
-        result.append(fact("style.asset.content_scale", "default_resolved", "component_default", component_type, "ContentScale.Fit", "framework image default is explicit"))
     if component_type in BUTTON_TYPES:
         result.append(
             fact(
@@ -895,7 +950,8 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
                 "button semantics provide the click boundary",
             )
         )
-    return result
+    from ui_migration.contracts.requirements import merge_requirement_facts
+    return merge_requirement_facts({**component, 'required_facts': result})
 
 
 def normalize_required_facts(value: Any, label: str) -> list[dict[str, str | None]]:
@@ -923,12 +979,14 @@ def normalize_required_facts(value: Any, label: str) -> list[dict[str, str | Non
 
 
 def required_fact_gate(components: list[dict[str, Any]]) -> dict[str, Any]:
+    from ui_migration.contracts.requirements import merge_requirement_facts, requirement_context
+    nodes = {component.get('id'): component for component in components}
     facts = [
-        {"component_id": component.get("id"), **item}
+        {"component_id": component.get("id"), 'context': requirement_context(component, nodes), **item}
         for component in components
-        for item in component.get("required_facts") or []
+        for item in merge_requirement_facts(component, nodes)
     ]
-    failures = [item for item in facts if item["status"] == "unresolved"]
+    failures = [item for item in facts if item["status"] in {"unresolved", "symbolic"}]
     counts = {
         status: sum(item["status"] == status for item in facts)
         for status in sorted(FACT_STATUSES)

@@ -9,6 +9,25 @@ from real_page_pipeline import static_style_for_call
 
 
 class SourceThemeResolutionTest(unittest.TestCase):
+    def test_theme_styles_resolve_in_declaration_scope_and_keep_aliases(self):
+        from analyze_compose_project import extract_compose_theme_tokens
+        from ui_migration.frontend.theme import selected_theme_text_styles, resolve_theme_environment
+        from ui_migration.frontend.values import evaluate_expression
+        inventory = extract_compose_theme_tokens({'Type.kt': '''
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
+val base = TextStyle(fontSize = 12.sp)
+val typography = Typography(titleMedium = base.copy(fontSize = 18.sp))
+@Composable fun Theme(content: @Composable () -> Unit) {
+    MaterialTheme(typography = typography, content = content)
+}
+'''})
+        payload = {'source_text_styles': selected_theme_text_styles(inventory)}
+        values, styles = resolve_theme_environment(payload, {})
+        self.assertIn('fontSize = 18.sp', styles['titleMedium']['expression'])
+        resolved = evaluate_expression('type.titleMedium', {'type': values['MaterialTheme.typography']})
+        self.assertEqual(resolved['properties']['fontSize'], '18.sp')
+
     def test_unparsed_canvas_is_explicitly_unresolved(self) -> None:
         call = {
             "source": "Progress.kt",

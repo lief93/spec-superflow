@@ -55,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--target", required=True, type=Path)
     parser.add_argument("--module", default="entry")
+    parser.add_argument('--page-json', type=Path, help='Use the selected page asset SHA to disambiguate same-name module resources')
     parser.add_argument(
         "--name",
         action="append",
@@ -137,10 +138,26 @@ def run_tool(script: Path, arguments: list[str]) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {"ok": False, "stderr": "tool JSON was not an object"}
 
 
+def page_asset_hashes(path: Path) -> dict[str, str]:
+    result = {}
+    def visit(node):
+        asset = node.get('migration', {}).get('style', {}).get('asset', {})
+        resource, digest = asset.get('resource'), asset.get('sha256')
+        if isinstance(resource, str) and RESOURCE_NAME_PATTERN.fullmatch(resource) and digest:
+            if resource in result and result[resource] != digest:
+                raise MaterializeDrawablesError('same page uses different resources with the same name: ' + resource)
+            result[resource] = digest
+        for child in node.get('layers', []):
+            visit(child)
+    visit(json.loads(path.read_text())['artboard'])
+    return result
+
+
 def main() -> int:
     args = parse_args()
     try:
         manifest = load_manifest(args.manifest)
+        selected_hashes = page_asset_hashes(args.page_json) if args.page_json else {}
         target = Path(os.path.abspath(os.path.expanduser(str(args.target)))).resolve()
         if target.is_symlink() or not target.is_dir():
             raise MaterializeDrawablesError("target must be an existing regular directory")
@@ -164,6 +181,8 @@ def main() -> int:
                 skipped += 1
                 continue
             asset_path, name, suffix = candidate
+            if name in selected_hashes and asset.get('sha256') != selected_hashes[name]:
+                continue
             if selected_names and name not in selected_names:
                 skipped += 1
                 continue
@@ -171,6 +190,10 @@ def main() -> int:
                 candidates_by_name[name] = []
                 name_order.append(name)
             candidates_by_name[name].append(candidate)
+
+        for name in set(selected_hashes) & (selected_names or set(selected_hashes)):
+            if name not in candidates_by_name:
+                raise MaterializeDrawablesError('selected page asset SHA has no manifest candidate: ' + name)
 
         for name in name_order:
             name_candidates = sorted(

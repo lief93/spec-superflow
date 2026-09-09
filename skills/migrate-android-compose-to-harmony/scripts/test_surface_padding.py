@@ -7,6 +7,27 @@ from test_layout_mapping_contract import render_nodes
 
 
 class SurfacePaddingTest(unittest.TestCase):
+    def test_toggle_icon_keeps_child_and_external_padding(self):
+        output, _, renderer = self.render('''IconToggleButton(checked = false,
+            onCheckedChange = {}, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {}''',
+            node_type='IconToggleButton')
+        self.assertIn("Text('Proceed')", output)
+        button = next(n for n in renderer.android_page_by_id.values() if n['type'] == 'IconToggleButton')
+        self.assertEqual(button['style']['layout']['padding_dp'], None)
+        self.assertIn('minWidth: this.layoutPx(48)', output)
+
+    def test_image_padding_precedes_size_and_named_clip(self):
+        _, _, renderer = self.render('''Image(painterResource(R.drawable.cover), null,
+            modifier = Modifier.padding(16.dp).size(40.dp, 40.dp)
+                .clip(shape = RoundedCornerShape(4.dp)))''', node_type='Image')
+        nodes = renderer.android_page_by_id
+        image = next(n for n in nodes.values() if n['type'] == 'Image')
+        self.assertTrue(image['style']['surface']['clip'])
+        self.assertEqual(image['style']['surface']['corner_radius_dp']['top_left'], 4)
+        parent = nodes[image['parent_id']]
+        self.assertEqual(parent['style']['layout']['width_dp'], 40)
+        self.assertEqual(nodes[parent['parent_id']]['style']['layout']['padding_dp']['left'], 16)
+
     def render(self, body, bindings=None, node_type='Button'):
         call = extract_semantic_ui_calls('Page.kt', body, 'Page', body, 0, set(), {}, {})[0]
         root = source_component('root', 'Column', parent_id=None, sibling_index=0, children_ids=['item'])

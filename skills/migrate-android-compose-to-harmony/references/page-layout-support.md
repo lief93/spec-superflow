@@ -21,15 +21,18 @@ claim that every Compose modifier combination is equivalent.
 | --- | --- | --- | --- |
 | Row/Column | source hierarchy, child order | `page_snapshot_component_lines` | native Row/Column; no screen-position fallback |
 | Box/BoxWithConstraints | contentAlignment, children | `page_snapshot_container_alignment_lines` | Stack with nine-way content alignment |
+| Surface / AnimatedVisibility | explicit surface color/contentColor/shape; selected visible state | native Stack with retained children | settled UI only; unknown theme/content colors remain unresolved, no transition animation parity claim |
+| PullToRefreshBox | isRefreshing, contentAlignment, modifier and content children | `static_style_for_call`, `page_snapshot_component_lines` | Box/Stack with an overlaid native loading indicator; fixed-state UI only, preserves weight and child alignment; spinner animation is approximate, not pixel-identical Material chrome; custom indicator/state remain unresolved without deleting content |
 | Project component | expanded internal tree and slot ownership | `page_snapshot_component_lines` | retain the expanded children; unsupported composition remains unresolved, not a blanket one-child rule |
 | ConstraintLayout | normalized link/center relationships | `page_snapshot_constraint_alignment_lines` | only declared supported anchors; no guessed positions |
-| size(width,height) | `size_arguments`, `static_style_for_call` | `page_snapshot_dimension_lines` | positional/named constant dp values |
+| size(width,height), size(DpSize) | `size_arguments`, `static_style_for_call`, component parameter binding | `page_snapshot_dimension_lines` | positional/named constant dp values; official DpSize constructors, local aliases, width/height members, defaults and caller overrides through project components (including forwarded Modifier.size); unresolved calls/Unspecified remain flagged |
 | image intrinsic size | `style.asset.width_dp/height_dp`, separate from modifier sizes in `style.layout` | `page_snapshot_intrinsic_image_lines` | Fit/Inside uses native bounded measurement and aspect ratio; explicit sizes/fill still take precedence; unverified intrinsic scaling modes fail |
 | fillMaxWidth/Height/Size | `normalized_layout_rules` | `page_snapshot_dimension_lines` | constant fractions; unknown fraction remains unresolved |
 | wrapContent/intrinsic | `normalized_layout_rules` | `page_snapshot_dimension_lines`, `page_snapshot_stretched_axis` | native content measurement and full cross-axis stretch, including single-root project wrappers; unsupported intrinsic fill axes/fractions fail |
 | weight | ratio and fill in layoutRules | `page_snapshot_source_layout_weight` | native layoutWeight for fill=true; fill=false fails explicitly |
 | widthIn/heightIn/sizeIn | min/max constraints in layoutRules | constraintSize branch | constant nonnegative bounds; min must not exceed max |
-| child align | Alignment enum in layoutRules | alignSelf/align branch | Row/Column cross-axis or Stack nine-way alignment |
+| child align | Alignment enum in layoutRules | alignSelf/layoutGravity branch | Row/Column cross-axis; Stack uses nine-way LocalizedAlignment layoutGravity (API 20), not the child's internal content alignment; invalid scope remains unresolved |
+| fixed-state layout expressions | Kotlin PSI + instance parameter/local scopes | selected modifier chain and layout arguments | nested if/when, aliases, then, scalar arithmetic, DpSize members; unknown branches do not apply either branch |
 | explicit offset | normalized offset layoutRules | `page_snapshot_explicit_offset_line` | constants use declared dp; parent fractions use the bounded BoxWithConstraints scope's target onSizeChange, not reference rectangles; wrap/unbounded scope fails |
 | arrangement | alignment and spacedBy | `page_snapshot_arrangement_space`, `page_snapshot_container_alignment_lines` | includes spacing plus main-axis alignment |
 | padding/margin | edge values and ordered layout wrappers | padding/margin branches | supported prefix outer padding wraps native/explicit surfaces separately from contentPadding; repeated outer padding retained; general interleaved drawing/duplicate axis sizes remain unsupported |
@@ -42,6 +45,22 @@ claim that every Compose modifier combination is equivalent.
 | unsupported type/modifier | required fact or unresolved entry | final gate | must fail, never implicit Stack or source fallback |
 
 ## Common Primitive Scope
+
+`PullToRefreshBox` is the AndroidX Material3 container, not a third-party widget.
+The source step records `isRefreshing` as `migration.style.state.refreshing` in the
+single `version_json.json`. Select its boolean value in the scene inputs, including
+an explicit symbol binding when it comes from remembered local state. An unknown
+value remains unresolved; the preview keeps the content but does not invent a
+refreshing state. The generated Stack keeps all Compose BoxScope children in
+source order and applies content alignment there. Do not substitute ArkUI `Refresh`:
+its default refreshing state moves the content by 64vp, unlike Compose's overlay.
+At the settled refreshing state, Material3 uses a 40dp indicator container, a 16dp
+spinner, and an 80dp threshold (container top = 40dp). The target uses a native
+`LoadingProgress` overlay with these sizes and resolved theme colors; its animation
+and shadow are not claimed pixel-identical. No network callback, refresh gesture,
+timer, or fake completion is generated.
+Business refresh handling must be connected separately. Custom `indicator` and
+pull-distance `state` require separate mappings and do not pass the visual gate.
 
 The single-JSON path additionally accepts Checkbox, Switch, RadioButton, discrete Slider,
 determinate LinearProgressIndicator/CircularProgressIndicator, and horizontal/vertical Divider.
@@ -108,15 +127,76 @@ runtime test must verify bounds, scrolling, font resources and screenshots. A
 Pillow/SSIM comparison may still fail after all field gates pass. Geometry marked
 `source_inferred` or `unresolved` is not promoted to measured runtime geometry.
 
+### Stability Checks
+
+Keep syntax selection separate from framework API adapters. `evaluate_expression`
+and modifier projection share `LayoutExpressions` over Kotlin PSI for references,
+if/when, operators, nullable access and selected state. `evaluate_value_leaf` only
+handles bounded literals/framework calls; it must not reintroduce a second
+string-based control-flow evaluator. Unknown branches stay unresolved, not false.
+This is not full Kotlin compiler symbol/type analysis or arbitrary function execution.
+
+TextStyle constructors, selected theme styles and nested `copy` calls project each
+property through the same scoped resolver. Direct Text parameters take precedence.
+An unknown property must retain a field-level diagnostic without discarding the
+Text node or unrelated known properties. Test both selected branches and unknown
+values; verify the generated color at the native text region, not only in JSON.
+
+Run `test_fixed_state_value_parity` to compare value and modifier paths using the
+same state, nested parameters and equivalent syntax. Run `test_material_home_containers`
+for container preservation and measured-layout emitter regressions. Those Python
+tests prove parsing/emission, **not** target layout correctness.
+
+For a renderer change, also regenerate unchanged real-page inputs in the affected
+project and at least one previous project. Install the new output and capture its
+runtime tree at a bound viewport/font scale. Assert component presence, sibling
+geometry and source padding, not just screenshot count or emitted API names.
+Record emulator and physical-device evidence separately; never label an emulator
+run as a physical-device pass. Do not hand-adjust generated page layouts.
+
+Example regression: a default vertical Divider in a Row with IntrinsicSize.Min
+must contribute zero to the initial cross-axis measurement, then stretch to the
+content height. ArkUI `height('auto')` still fills the available constraint here;
+use zero height plus Stretch only for this cross-axis context. Explicit divider
+sizes must remain unchanged. The device assertion compares divider top/bottom to
+the actual sibling content and verifies the Row's source padding. A loose height
+threshold alone is not sufficient. Horizontal scrolling content must likewise
+wrap its cross-axis height rather than receive an unconditional 100% height.
+On the scrolling axis, Compose fillMaxWidth/Height is a no-op when the incoming
+maximum is unbounded. Walk the source ancestor constraints rather than using the
+viewport as that maximum. An intervening explicit size or maximum constraint
+restores a finite limit; test that path separately. This must not alter Box
+matchParentSize, which has a different measurement contract.
+
 Reference frames must not become fixed/minimum dimensions for content-sized Text,
 Row/Column or project wrappers. Explicit source sizes and constraints are retained;
 absent Text dimensions use native text measurement. A wrapper forwards declared
 fill/weight rules structurally, not by matching its reference frame to its child.
-Material button touch minimum (48dp) and small app-bar content height (64dp) are
+Material3 button minimum width (58dp), touch minimum (48dp), and small app-bar content height (64dp) are
 framework defaults, not frame-derived estimates. RelativeContainer wrap uses
 native auto sizing; a redundant zero origin anchor is omitted only when there is
 no opposite/center anchor in that axis. This does not cover every ConstraintLayout
 cycle or intrinsic modifier combination.
+
+## Layout Expression Projection
+
+`kotlin_psi.py` invokes the pinned Kotlin compiler PSI parser, without loading or executing
+application classes. `layout_expressions.py` resolves per-instance parameters and aliases,
+selects fixed-state branches, then produces one ordered modifier chain. Both style extraction
+and layout-rule normalization consume that selected chain. Row/Column/Box alignment and
+arrangement arguments use the same scope and expression tree. `syntax_expression` and local
+bindings retain original newlines; display-normalized summaries are not reparsed as Kotlin.
+Named project slots are serialized explicitly and keep their expanded native children, even
+when the owning component also contains unsupported drawing.
+
+This is expression-level syntax parsing, not a complete Kotlin project/type/overload resolver.
+The existing component inventory, framework API adapters and page-state catalog still have
+their documented boundaries. Unknown extension functions, unresolved values/cycles, and
+unsupported modifier operations remain recorded; no source fallback runs in ArkUI. In
+particular, selecting a drawing expression does not implement its Canvas output. Passing
+expression/consumption tests does not imply complete visual acceptance.
+
+See [setup and dependency versions](source-page-workflow.md#layout-expression-parser-setup).
 
 Image resource dimensions are preferences, not fixed control dimensions. Modifier
 `size`/`width`/`height` facts belong to `style.layout`, even for Image/Icon/AsyncImage.

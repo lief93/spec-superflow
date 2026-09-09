@@ -11,6 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from component_required_facts import build_required_facts, normalized_layout_rules
+from ui_migration.arkui.layout import LayoutPolicy
+from page_renderer_test_support import empty_renderer, layout_policy
+
 from generate_arkui_page import ArkUIPageError, Renderer, build_target_phase_consumption_gate, load_lanhu_page_input, derive_page_root, load_page_font_faces
 from generate_lanhu_source_page import SourceLayout, SourceTree, resolved_alignment, page_font_faces, non_rendering_argument_calls, generate as generate_source
 from real_page_pipeline import static_style_for_call
@@ -38,6 +41,11 @@ def render_nodes(nodes, width=300, height=200, perturb_reference_frames=False, r
             'page': {'id': 'layout', 'state': 'default'},
             'root': {'source': 'app/src/main/java/example/HomeScreen.kt', 'composable': 'HomeScreen'},
             'components': nodes,
+            'component_definitions': list({node['definition_id']: {
+                'id': node['definition_id'], 'type': node['type'], 'component_kind': 'project_component',
+                'parameters': [], 'ui_template': {'stage': 'before-state-projection', 'calls': []},
+                'identity': {'source': 'Layout.kt', 'symbol': node['type']},
+            } for node in nodes if node.get('definition_id') and node['source'].get('custom_component')}.values()),
         }))
         generate_source(argparse.Namespace(source_page=source, state_fixture=None,
             output_dir=root / 'page', viewport_width_dp=width, viewport_height_dp=height,
@@ -53,11 +61,22 @@ def render_nodes(nodes, width=300, height=200, perturb_reference_frames=False, r
         renderer.verified_font_faces = font_faces or []
         output = renderer.render()
         gate = build_target_phase_consumption_gate(page, renderer.android_page_processed_component_ids,
-            set(), {}, renderer.android_page_applied_component_paths)
+            set(), {}, renderer.android_page_applied_component_paths,
+            getattr(renderer, 'android_page_layout_decisions', []))
         return output, gate, renderer
 
 
 class LayoutMappingContractTest(unittest.TestCase):
+    def test_explicit_untrimmed_line_height_is_applied_to_first_and_last_lines(self):
+        text = source_component('text', 'Text', parent_id=None, sibling_index=0, text='Example', font_size_sp=16)
+        text['style']['typography'].update(font_family='Body', font_weight=400, line_height_sp=24,
+            include_font_padding=False, line_height_alignment='center', line_height_trim='none', color='#FF222222')
+        faces = [{'alias': 'Body400', 'match_names': ['body'], 'weight': 400, 'rawfile': 'body.ttf'}]
+        output, gate, _ = render_nodes([text], font_faces=faces)
+        self.assertIn('.lineHeight(24)', output)
+        self.assertNotIn('.lineSpacing(', output)
+        self.assertEqual(gate['verdict'], 'pass', gate['failures'])
+
     def test_compose_border_is_draw_only_not_parent_measure(self):
         root = source_component('root', 'Box', parent_id=None, sibling_index=0, width_dp=100, height_dp=40)
         root['style']['surface']['border'] = {'width_dp': 1, 'color': '#FF123456', 'style': 'solid'}
@@ -92,6 +111,17 @@ class LayoutMappingContractTest(unittest.TestCase):
         self.assertIn('.height(this.layoutPx(10))', output)
         self.assertNotIn('.constraintSize({ minHeight: this.nativeLineHeight', output)
 
+    def test_baseline_offset_is_not_duplicated_in_line_height(self):
+        text = source_component('text', 'Text', parent_id=None, sibling_index=0, text='Amount', font_size_sp=30)
+        text['style']['typography'].update(font_family='Body', font_weight=800, baseline_shift=0.075, color='#FF000000')
+        faces = [{'alias': 'Body800', 'match_names': ['body'], 'weight': 800, 'rawfile': 'body.ttf'}]
+        output, gate, _ = render_nodes([text], font_faces=faces)
+        self.assertEqual(gate['verdict'], 'pass', gate['failures'])
+        self.assertIn(".lineHeight(this.nativeShiftedLineHeight($rawfile('body.ttf'), 30, 0.075))", output)
+        self.assertIn(".constraintSize({ minHeight: this.nativeLineHeight($rawfile('body.ttf'), 30, 0.075) })", output)
+        self.assertIn("return this.nativeLinePixels(file, size) + 'px'", output)
+        self.assertIn("return this.nativeBaselinePixels(file, size, shift) + 'px'", output)
+
     def test_layout_pixels_use_runtime_density_not_reference_density(self):
         root = source_component('root', 'Box', parent_id=None, sibling_index=0,
                                 width_dp=48, height_dp=48)
@@ -101,6 +131,29 @@ class LayoutMappingContractTest(unittest.TestCase):
         self.assertIn('.width(this.layoutPx(48))', output)
         self.assertIn('.padding(this.layoutPx(4))', output)
         self.assertIn("Math.round(this.getUIContext().vp2px(value)) + 'px'", output)
+
+    def test_trailing_main_axis_fill_uses_remaining_space_not_whole_parent(self):
+        for kind, modifier in [('Column','fillMaxHeight'),('Row','fillMaxWidth')]:
+            with self.subTest(kind=kind):
+                root = source_component('root',kind,parent_id=None,sibling_index=0,width_dp=300,height_dp=200)
+                header = source_component('header','Box',parent_id='root',sibling_index=0,width_dp=40,height_dp=40)
+                body = source_component('body','Box',parent_id='root',sibling_index=1)
+                body['modifiers'] = [{'name':modifier,'arguments':''}]
+                output,gate,_ = render_nodes([root,header,body])
+                self.assertEqual(gate['verdict'],'pass',gate['failures'])
+                self.assertIn('.layoutWeight(1)',output)
+                changed,_,_ = render_nodes([root,header,body],perturb_reference_frames=True)
+                self.assertEqual(output,changed)
+
+    def test_remaining_space_mapping_is_not_applied_to_fraction_or_unbounded_scroll(self):
+        for fraction, scroll in [('0.5f',False),('',True)]:
+            root = source_component('root','Column',parent_id=None,sibling_index=0,width_dp=300,height_dp=200)
+            root['modifiers'] = [{'name':'verticalScroll','arguments':'rememberScrollState()'}] if scroll else []
+            header = source_component('header','Box',parent_id='root',sibling_index=0,width_dp=40,height_dp=40)
+            body = source_component('body','Box',parent_id='root',sibling_index=1)
+            body['modifiers'] = [{'name':'fillMaxHeight','arguments':fraction}]
+            output,_,_ = render_nodes([root,header,body])
+            self.assertNotIn('.layoutWeight(1)',output)
 
     def test_async_image_uses_model_url_without_preview_fallback(self):
         image = source_component('avatar', 'AsyncImage', parent_id=None, sibling_index=0,
@@ -129,6 +182,43 @@ class LayoutMappingContractTest(unittest.TestCase):
         root['style']['surface']['clip'] = False
         output, _, _ = render_nodes([root])
         self.assertNotIn('.clip(true)', output)
+
+    def test_unresolved_image_keeps_node_layout_surface_and_siblings(self):
+        for kind in ('Image', 'Icon', 'AsyncImage'):
+            for resource in (None, 'missing_asset'):
+                with self.subTest(kind=kind, resource=resource):
+                    root = source_component('root', 'Column', parent_id=None, sibling_index=0)
+                    image = source_component('avatar', kind, parent_id='root', sibling_index=0,
+                                             width_dp=150, height_dp=150)
+                    image['style']['asset'].update(resource=resource, content_scale='fit', tint='#FFFF0000')
+                    image['style']['surface'].update(background={'type':'solid', 'color':'#FFBCC3FF'},
+                        clip=True, corner_radius_dp=dict.fromkeys(['top_left','top_right','bottom_left','bottom_right'],75))
+                    label = source_component('label', 'Text', parent_id='root', sibling_index=1, text='Contact')
+                    output, _, renderer = render_nodes([root,image,label])
+                    self.assertIn(".id('avatar')", output)
+                    self.assertIn('.width(this.layoutPx(150))', output)
+                    self.assertIn('.height(this.layoutPx(150))', output)
+                    self.assertIn(".backgroundColor('#FFBCC3FF')", output)
+                    self.assertIn('.borderRadius(75)', output)
+                    self.assertIn('.clip(true)', output)
+                    self.assertIn("Text('Contact')", output)
+                    self.assertLess(output.index(".id('avatar')"), output.index("Text('Contact')"))
+                    self.assertNotIn('.objectFit(', output)
+                    self.assertNotIn('Image(', output)
+                    self.assertTrue(any(u.get('path')=='style.asset.resource' for u in renderer.unresolved))
+                    self.assertIn('avatar', renderer.android_page_processed_component_ids)
+
+    def test_image_alpha_and_visibility_do_not_depend_on_asset_resolution(self):
+        image = source_component('avatar', 'Image', parent_id=None, sibling_index=0, width_dp=150, height_dp=150)
+        image['style']['asset']['resource'] = None
+        image['style']['surface']['alpha'] = 0
+        output, _, _ = render_nodes([image])
+        self.assertIn(".id('avatar')", output)
+        self.assertIn('.opacity(0)', output)
+        self.assertNotIn('.visibility(', output)
+        image['style']['state']['visible'] = False
+        output, _, _ = render_nodes([image])
+        self.assertIn('.visibility(Visibility.None)', output)
 
     def test_shadow_dp_fields_convert_to_runtime_pixels(self):
         root = source_component('root', 'Box', parent_id=None, sibling_index=0,
@@ -187,6 +277,18 @@ class LayoutMappingContractTest(unittest.TestCase):
         self.assertIn('.height(this.layoutPx(24))', output)
         self.assertNotIn('maxWidth: 200', output)
 
+    def test_intrinsic_icon_includes_padding_without_changing_explicit_size(self):
+        root = source_component('root', 'Box', parent_id=None, sibling_index=0, children_ids=['icon'])
+        icon = source_component('icon', 'Icon', parent_id='root', sibling_index=0)
+        icon['style']['asset'].update(resource='circle', width_dp=32, height_dp=32, content_scale='fit')
+        icon['style']['layout']['padding_dp'] = {'left': 8, 'right': 8, 'top': 8, 'bottom': 8}
+        output, _, _ = render_nodes([root, icon], resources={'media:circle'})
+        self.assertIn('.constraintSize({ maxWidth: 48, maxHeight: 48 })', output)
+        icon['style']['layout'].update(width_dp=40, height_dp=40)
+        output, _, _ = render_nodes([root, icon], resources={'media:circle'})
+        self.assertIn('.width(this.layoutPx(40))', output)
+        self.assertNotIn('maxWidth: 48', output)
+
     def test_legacy_image_size_facts_require_regeneration(self):
         root = source_component('root', 'Box', parent_id=None, sibling_index=0, children_ids=['image'])
         image = source_component('image', 'Image', parent_id='root', sibling_index=0)
@@ -194,7 +296,7 @@ class LayoutMappingContractTest(unittest.TestCase):
         _, _, renderer = render_nodes([root, image], resources={'media:circle'})
         component = renderer.android_page_by_id['image']
         component['required_facts'] = [{'path': 'style.asset.width_dp', 'origin': 'modifier', 'status': 'resolved'}]
-        self.assertEqual(renderer.page_snapshot_intrinsic_image_lines(component), [])
+        self.assertEqual(layout_policy(renderer).page_snapshot_intrinsic_image_lines(component), [])
         self.assertTrue(any('legacy image JSON' in item['reason'] for item in renderer.unresolved))
 
     def test_unsupported_intrinsic_scale_does_not_silently_use_fit(self):
@@ -240,6 +342,7 @@ class LayoutMappingContractTest(unittest.TestCase):
     def test_button_children_do_not_reintroduce_reference_size(self):
         root = source_component('root', 'Column', parent_id=None, sibling_index=0, children_ids=['button'])
         button = source_component('button', 'TextButton', parent_id='root', sibling_index=0, children_ids=['first', 'last'])
+        button['style']['surface']['background'] = {'type': 'solid', 'color': '#00000000'}
         nodes = [root, button]
         for index, name in enumerate(('first', 'last')):
             text = source_component(name, 'Text', parent_id='button', sibling_index=index, text=name, font_size_sp=14)
@@ -249,7 +352,35 @@ class LayoutMappingContractTest(unittest.TestCase):
         changed, _, _ = render_nodes(nodes, perturb_reference_frames=True)
         self.assertEqual(gate['verdict'], 'pass', gate['failures'])
         self.assertEqual(output, changed)
+        self.assertIn('.constraintSize({ minWidth: this.layoutPx(58), minHeight: this.layoutPx(40) })', output)
         self.assertIn('.constraintSize({ minHeight: this.layoutPx(48) })', output)
+
+    def test_material_button_min_width_is_not_used_for_explicit_width(self):
+        button = source_component('button', 'TextButton', parent_id=None, sibling_index=0,
+                                  width_dp=32, children_ids=['label'])
+        label = source_component('label', 'Text', parent_id='button', sibling_index=0,
+                                 text='Edit', font_size_sp=14)
+        output, _, _ = render_nodes([button, label])
+        self.assertNotIn('minWidth: this.layoutPx(58)', output)
+        self.assertIn('.width(this.layoutPx(32))', output)
+
+    def test_material_button_minimum_axes_are_independent(self):
+        button = source_component('button', 'TextButton', parent_id=None, sibling_index=0,
+                                  height_dp=40, children_ids=['label'])
+        label = source_component('label', 'Text', parent_id='button', sibling_index=0,
+                                 text='Edit', font_size_sp=14)
+        output, _, _ = render_nodes([button, label])
+        self.assertIn('.constraintSize({ minWidth: this.layoutPx(58) })', output)
+        self.assertNotIn('minHeight: this.layoutPx(48)', output)
+
+    def test_text_button_min_width_does_not_change_floating_action_buttons(self):
+        for kind in ('FloatingActionButton', 'SmallFloatingActionButton'):
+            button = source_component('button', kind, parent_id=None, sibling_index=0,
+                                      children_ids=['label'])
+            label = source_component('label', 'Text', parent_id='button', sibling_index=0,
+                                     text='+', font_size_sp=14)
+            output, _, _ = render_nodes([button, label])
+            self.assertNotIn('minWidth: this.layoutPx(58)', output)
 
     def test_custom_wrapper_forwards_width_rule_not_reference_frame(self):
         root = source_component('root', 'Column', parent_id=None, sibling_index=0, children_ids=['card'])
@@ -381,20 +512,20 @@ class LayoutMappingContractTest(unittest.TestCase):
         self.assertEqual(gate['verdict'], 'fail')
 
     def test_spaced_by_alignment_is_not_silently_dropped(self):
-        renderer = object.__new__(Renderer)
+        renderer = empty_renderer()
         c = {'id': 'column', 'type': 'Column', 'style': {'layout': {
             'alignment': 'Start',
             'vertical_arrangement': 'Arrangement.spacedBy(8.dp, Alignment.CenterVertically)',
         }}}
-        self.assertEqual(renderer.page_snapshot_arrangement_space(c), '8')
-        self.assertIn('.justifyContent(FlexAlign.Center)', renderer.page_snapshot_container_alignment_lines(c))
+        self.assertEqual(layout_policy(renderer).page_snapshot_arrangement_space(c), '8')
+        self.assertIn('.justifyContent(FlexAlign.Center)', layout_policy(renderer).page_snapshot_container_alignment_lines(c))
 
     def test_weight_fill_flag_is_preserved_for_target(self):
         c = {'id': 'box', 'type': 'Box', 'source': {'layoutRules': [{
             'kind': 'weight', 'value': 1, 'fill': False, 'source_modifier_index': 0,
         }]}}
         # A fill=false child must not itself become a forced-size weighted node.
-        self.assertIsNone(Renderer.page_snapshot_source_layout_weight(c))
+        self.assertIsNone(LayoutPolicy.page_snapshot_source_layout_weight(c))
 
     def test_nested_scroll_has_required_fact_and_actual_scroll_container(self):
         root = source_component('root', 'Column', parent_id=None, sibling_index=0, children_ids=['row'])
@@ -457,6 +588,10 @@ class LayoutMappingContractTest(unittest.TestCase):
             'expression': 'FontFamily(Font(R.font.example, FontWeight.SemiBold))'}]}
         faces = page_font_faces(source)
         self.assertEqual(faces, [{'family': 'primaryFontFamily', 'resource': 'example', 'weight': 600}])
+        source['source_tokens'][0]['expression'] = 'FontFamily(Font(resId = R.font.regular), Font(R.font.medium, weight = FontWeight.W500))'
+        self.assertEqual(page_font_faces(source), [
+            {'family': 'primaryFontFamily', 'resource': 'regular', 'weight': 400},
+            {'family': 'primaryFontFamily', 'resource': 'medium', 'weight': 500}])
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             relative = 'entry/src/main/resources/rawfile/fonts/example.ttf'
@@ -542,9 +677,28 @@ class LayoutMappingContractTest(unittest.TestCase):
                 self.assertEqual(output, changed)
                 self.assertEqual(gate['verdict'], 'pass', gate['failures'])
                 self.assertIn('.alignContent(Alignment.' + target_alignment + ')', output)
-                self.assertIn('.align(Alignment.BottomEnd)', output)
+                self.assertIn('.layoutGravity(LocalizedAlignment.BOTTOM_END)', output)
                 self.assertNotIn('.position(', output)
                 self.assertNotIn('.translate(', output)
+
+    def test_column_self_alignment_is_independent_of_its_content_alignment(self):
+        root = source_component('root', 'Box', parent_id=None, sibling_index=0,
+                                width_dp=300, height_dp=200, children_ids=['column', 'sibling'])
+        root['style']['layout']['alignment'] = 'TopStart'
+        column = source_component('column', 'Column', parent_id='root', sibling_index=0,
+                                  width_dp=80, height_dp=100, children_ids=['label'])
+        column['modifiers'] = [{'name': 'align', 'arguments': 'Alignment.CenterEnd'}]
+        column['style']['layout']['alignment'] = 'End'
+        label = source_component('label', 'Text', parent_id='column', sibling_index=0, text='Expiry')
+        label['style']['typography'].update(font_size_sp=16, font_weight=400, color='#FF000000')
+        sibling = source_component('sibling', 'Box', parent_id='root', sibling_index=1,
+                                   width_dp=20, height_dp=20)
+        output, gate, _ = render_nodes([root, column, label, sibling])
+        self.assertEqual(gate['verdict'], 'pass', gate['failures'])
+        self.assertIn('.layoutGravity(LocalizedAlignment.END)', output)
+        self.assertIn('.alignItems(HorizontalAlign.End)', output)
+        self.assertIn('.alignContent(Alignment.TopStart)', output)
+        self.assertEqual(output.count('.layoutGravity('), 1)
 
     def test_constant_offset_uses_rule_not_component_bbox(self):
         root = source_component('root', 'Box', parent_id=None, sibling_index=0,

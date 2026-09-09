@@ -8,6 +8,33 @@ from generate_lanhu_source_page import project_source_page
 
 
 class NativePageCompositionTest(unittest.TestCase):
+    def test_local_modifier_variable_keeps_size_and_width_constraints(self):
+        from test_ui_state_semantics import UiStateSemanticsTest
+        page = UiStateSemanticsTest().source('''val picture = Modifier.heightIn(min = 180.dp).fillMaxWidth()
+            Image(painter = painterResource(R.drawable.icon), contentDescription = null, modifier = picture)''')
+        image = next(n for n in page['components'] if n['type'] == 'Image')
+        self.assertEqual([m['name'] for m in image['modifiers']], ['heightIn', 'fillMaxWidth'])
+
+    def test_comments_between_arguments_do_not_hide_modifier_or_text(self):
+        body = '''Image(painter = painterResource(R.drawable.photo),
+            contentDescription = null, // decorative
+            modifier = Modifier.size(40.dp) // fixed image
+                .padding(4.dp),
+        )'''
+        calls = extract_semantic_ui_calls('Page.kt', body, 'Page', body, 0, set(), {}, {})
+        image = next(c for c in calls if c['component'] == 'Image')
+        self.assertEqual([m['name'] for m in image['ordered_modifier_chain']], ['size', 'padding'])
+        self.assertEqual(image['positional_arguments'], [])
+        from analyze_compose_project import normalize_expression, split_named_argument
+        self.assertEqual(split_named_argument('/* note */ text = "https://test/a"'), ('text', '"https://test/a"'))
+        normalized = normalize_expression('Modifier.size(40.dp) // note\n .padding(4.dp)')
+        self.assertNotIn('// note', normalized)
+        self.assertIn('\n', normalized)
+        from kotlin_psi import parse_expression
+        from ui_migration.semantics.syntax import call_from
+        self.assertEqual(call_from(parse_expression(normalized)).name, 'padding')
+        self.assertEqual(normalize_expression('"https://test/a"'), '"https://test/a"')
+
     def test_parameter_member_access_survives_forwarding(self):
         self.assertEqual(bind_source_expression('card.value', {'card': 'state.card'}), 'state.card.value')
         self.assertEqual(bind_source_expression('value', {'value': 'card.value', 'card': 'state.card'}), 'state.card.value')

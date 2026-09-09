@@ -52,6 +52,10 @@ VerticalDivider(thickness = 2.dp)'''
             for value in ('true', 'false'):
                 with self.subTest(kind=kind, value=value):
                     node = self.node(kind, **{field: value})
+                    from ui_migration.frontend.material_defaults import project_material_defaults
+                    from generate_harmony_theme_resources import MATERIAL3_LIGHT_COLOR_DEFAULTS
+                    project_material_defaults(node, {'MaterialTheme.colorScheme.' + key: color
+                        for key, color in MATERIAL3_LIGHT_COLOR_DEFAULTS.items()})
                     output, gate, renderer = render_nodes([node])
                     self.assertEqual(renderer.unresolved, [])
                     self.assertEqual(gate['verdict'], 'pass', gate['failures'])

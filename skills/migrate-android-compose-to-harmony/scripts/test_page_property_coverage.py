@@ -19,6 +19,17 @@ class PagePropertyCoverageTest(unittest.TestCase):
                                 width_dp=180, height_dp=60)
         if kind == 'Text':
             node['style']['typography'].update(font_size_sp=16, font_weight=400, color='#FF222222')
+        if kind in {'BasicTextField', 'TextField', 'OutlinedTextField'}:
+            node['style']['typography'].update(font_size_sp=16, font_weight=400, color='#FF222222')
+            node['style']['input'] = dict(single_line=False, read_only=False, password=False,
+                                         keyboard_type='text', ime_action='default')
+        if kind in {'TopAppBar', 'CenterAlignedTopAppBar', 'Button', 'TextButton', 'OutlinedButton',
+                    'FloatingActionButton', 'SmallFloatingActionButton', 'TextField', 'OutlinedTextField'}:
+            node['style']['surface']['background'] = {'type': 'solid', 'color': '#FFEEEEEE'}
+        if kind == 'IconToggleButton':
+            node['style']['state']['checked'] = False
+        if kind in {'Divider', 'HorizontalDivider', 'VerticalDivider'}:
+            node['style']['control'] = dict(active_color='#FFCCCCCC', stroke_width_dp=1)
         return node
 
     def test_source_generates_explicit_font_and_state_values(self):
@@ -95,7 +106,7 @@ class PagePropertyCoverageTest(unittest.TestCase):
         self.assertEqual(style['transform']['rotation_degrees'], 30)
         node = self.node('Box')
         node.update(style=style, modifiers=call['ordered_modifier_chain'])
-        self.assertTrue(all(f['status'] == 'resolved' for f in build_required_facts(node)))
+        self.assertTrue(all(f['status'] in {'resolved', 'not_applicable'} for f in build_required_facts(node)))
         self.assertEqual(unresolved, [])
 
     def test_simple_fields_are_emitted_not_only_marked(self):
@@ -119,6 +130,7 @@ class PagePropertyCoverageTest(unittest.TestCase):
 
     def test_input_value_placeholder_and_overflow_use_input_api(self):
         node = self.node('BasicTextField')
+        node['style']['input']['single_line'] = True
         node['style']['content'].update(text='Typed', placeholder='Enter name')
         node['style']['typography']['overflow'] = 'ellipsis'
         output, gate, _ = render_nodes([node])
@@ -179,7 +191,7 @@ class PagePropertyCoverageTest(unittest.TestCase):
         names = [name for family in CONTROL_FAMILIES.values() for name in family]
         self.assertEqual(len(names), len(set(names)))
         self.assertEqual(set(names), NATIVE_CONTAINERS | NATIVE_LEAVES | NATIVE_BUTTONS)
-        self.assertEqual(len(set(names) - set(CONTROL_FAMILIES['internal'])), 36)
+        self.assertEqual(len(set(names) - set(CONTROL_FAMILIES['internal'])), 42)
 
     def test_text_measurement_fields_are_not_misclassified_as_paint_only(self):
         from generate_arkui_page import target_fact_phase
@@ -205,10 +217,14 @@ class PagePropertyCoverageTest(unittest.TestCase):
                         node['style']['asset'].update(resource='sample_icon', content_scale='fit')
                     if family == 'selection':
                         node['style']['state']['selected' if kind == 'RadioButton' else 'checked'] = True
+                    if family == 'refresh':
+                        node['style']['state']['refreshing'] = False
                     if family in {'range', 'progress'}:
                         node['style'].setdefault('control', {}).update(value=.5, minimum=0, maximum=1)
                     if family == 'range':
                         node['style']['control']['steps'] = 3
+                    if kind in {'Card', 'Surface', 'Scaffold', 'BottomAppBar'}:
+                        node['style']['surface']['background'] = {'type': 'solid', 'color': '#FFEEEEEE'}
                     node['style']['state']['enabled'] = False
                     node['style']['surface']['alpha'] = .5
                     node['style']['layout']['padding_dp'] = dict.fromkeys(('left', 'right', 'top', 'bottom'), 8)

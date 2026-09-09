@@ -237,7 +237,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "label.*shown"):
                     project_source_page(payload, fixture)
 
-    def test_single_state_cli_cannot_skip_dynamic_selection_without_fixture(self) -> None:
+    def test_single_state_cli_keeps_unresolved_selection_without_guessing_visibility(self) -> None:
         payload, _ = self.single_state_payload()
         payload["components"] = payload["components"][2:]
         payload["components"][1]["visibility_condition"] = {"expression": "state.hasLabel"}
@@ -246,9 +246,14 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
             source = root / "source.json"
             source.write_text(json.dumps(payload), encoding="utf-8")
             result = self.run_generator(source, root / "out")
-            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("state.hasLabel", result.stdout)
-            self.assertFalse((root / "out/version_json.json").exists())
+            version = json.loads((root / "out/version_json.json").read_text())
+            self.assertFalse(version['meta']['sourceGeneration']['generationComplete'])
+            self.assertEqual(version['meta']['sourceGeneration']['verdict'], 'fail')
+            label = version['artboard']['layers'][0]['layers'][0]
+            self.assertEqual(label['id'], 'label')
+            self.assertEqual(label['migration']['source']['state_resolution']['status'], 'unresolved')
 
     def test_single_state_cli_only_emits_selected_tree(self) -> None:
         payload, fixture = self.single_state_payload()
@@ -1116,6 +1121,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
                 height_dp=48,
             ),
         ]
+        next(c for c in components if c['id'] == 'header')['style']['typography'].update(font_weight=400, color='#FF222222')
         source_page.write_text(
             json.dumps(
                 {
@@ -1192,6 +1198,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
             {
                 "schema": "android-to-harmony.lanhu-document.v1",
                 "fontFaces": [],
+                "componentDefinitions": json.loads(source_page.read_text()).get('component_definitions') or [],
                     "page": {"id": "home", "state": "default"},
                 },
             )

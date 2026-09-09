@@ -14,6 +14,7 @@ from pathlib import Path
 
 from init_harmony_project import load_contract, sha256_file
 from page_snapshot import png_dimensions
+from ui_migration.frontend.project_styles import prepare_style_definitions
 from real_page_pipeline import (
     RealPageError,
     build_runtime_page_snapshot,
@@ -35,6 +36,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state-id", required=True)
     parser.add_argument("--package", required=True)
     parser.add_argument("--source-root", type=Path)
+    parser.add_argument("--style-definitions", type=Path,
+                        help="Reuse project styles; create from contract if missing. Refresh with generate_project_style_definitions.py.")
     parser.add_argument("--runtime-source-map", type=Path)
     parser.add_argument("--serial")
     parser.add_argument("--adb", default="adb")
@@ -175,6 +178,8 @@ def main() -> int:
             args.state_id,
             sha256_file(contract_path),
             Path(os.path.abspath(os.path.expanduser(str(args.source_root)))) if args.source_root else None,
+            style_definitions=prepare_style_definitions(contract_path, args.style_definitions)
+            if args.style_definitions else None,
         )
         source_ms = (time.perf_counter() - source_start) * 1000
         runtime_start = time.perf_counter()

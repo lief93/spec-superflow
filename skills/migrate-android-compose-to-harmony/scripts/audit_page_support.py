@@ -10,21 +10,37 @@ from pathlib import Path
 
 from page_component_catalog import CONTROL_FAMILIES, FIELD_AUDIT, FAMILY_BOUNDARIES
 from page_snapshot import STYLE_SECTIONS
-from generate_arkui_page import target_fact_phase
+from ui_migration.contracts.consumption import target_fact_phase
 
 
 @lru_cache(maxsize=None)
 def function_lines(filename: str) -> dict[str, int]:
     script = Path(__file__).resolve().parent / filename
     tree = ast.parse(script.read_text(encoding='utf-8'))
-    return {node.name: node.lineno for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    result = {node.name: node.lineno for node in ast.walk(tree)
+              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            result.update({f'{node.name}.{method.name}': method.lineno for method in node.body
+                           if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))})
+    return result
+
+
+@lru_cache(maxsize=None)
+def implementation_owner(function: str) -> str:
+    scripts = Path(__file__).resolve().parent
+    candidates = [path.relative_to(scripts).as_posix() for path in (scripts / 'ui_migration').rglob('*.py')
+                  if function in function_lines(path.relative_to(scripts).as_posix())]
+    if len(candidates) != 1:
+        raise ValueError(f'Implementation owner must be unique for {function}: {candidates}')
+    return candidates[0]
 
 
 def code_link(filename: str, function: str) -> str:
     line = function_lines(filename).get(function)
     if line is None:
-        raise ValueError(f'Missing implementation function: {filename}:{function}')
+        filename = implementation_owner(function)
+        line = function_lines(filename)[function]
     return f'[{function}](../scripts/{filename}#L{line})'
 
 
@@ -67,6 +83,10 @@ def build_report() -> tuple[str, list[list[str]]]:
         '| 字段 | 适用类别 | 首要阶段 | 状态 | 源码生成/支持边界 | 目标消费逻辑 |',
         '| --- | --- | --- | --- | --- | --- |'])
     for path, (families, status, source, target) in FIELD_AUDIT.items():
+        if path.startswith('surface.'):
+            target = 'SurfaceEmitter.emit'
+        elif path.startswith('typography.'):
+            target = 'TypographyEmitter.emit'
         links = ' / '.join(code_link('generate_arkui_page.py', fn) for fn in target.split(' / '))
         lines.append(f'| `{path}` | {families} | {target_fact_phase("style." + path)} | {status} | {source} | {links} |')
     lines.extend(['', '## 结构与布局操作', '',

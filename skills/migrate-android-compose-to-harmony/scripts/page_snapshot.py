@@ -30,11 +30,13 @@ STYLE_SECTIONS: dict[str, tuple[str, ...]] = {
         "horizontal_arrangement", "vertical_arrangement", "aspect_ratio",
         "width_dp", "height_dp",
     ),
-    "surface": ("background", "corner_radius_dp", "border", "shadows", "alpha", "clip"),
+    "surface": ("background", "corner_radius_dp", "corner_sizes", "border", "shadows", "alpha", "clip"),
     "typography": (
         "font_size_sp", "font_weight", "font_style", "font_family", "letter_spacing_sp",
         "line_height_sp", "text_align", "max_lines", "overflow", "color", "decoration",
-        "soft_wrap", "min_lines",
+        "soft_wrap", "min_lines", "baseline_shift",
+        "include_font_padding", "line_height_alignment", "line_height_trim",
+        "line_break",
     ),
     "asset": (
         "resource", "sha256", "width_px", "height_px", "width_dp", "height_dp",
@@ -43,7 +45,7 @@ STYLE_SECTIONS: dict[str, tuple[str, ...]] = {
     "transform": (
         "translation_x_dp", "translation_y_dp", "scale_x", "scale_y", "rotation_degrees",
     ),
-    "state": ("visible", "enabled", "selected", "checked", "clickable"),
+    "state": ("visible", "enabled", "selected", "checked", "clickable", "refreshing"),
     "content": ("text", "placeholder", "content_description", "role", "locale"),
     "input": ("single_line", "read_only", "password", "keyboard_type", "ime_action"),
     "control": ("value", "minimum", "maximum", "steps", "active_color", "inactive_color", "stroke_width_dp"),
@@ -175,7 +177,7 @@ def normalize_background(value: Any, label: str) -> dict[str, Any] | None:
         return None
     allowed = {
         "type", "color", "colors", "stops", "angle_degrees", "center", "radius_dp",
-        "resource", "tile_mode",
+        "resource", "tile_mode", "direction",
     }
     if not isinstance(value, dict) or "type" not in value or not set(value).issubset(allowed):
         raise PageSnapshotError(f"{label} is malformed")
@@ -202,6 +204,10 @@ def normalize_background(value: Any, label: str) -> dict[str, Any] | None:
             raise PageSnapshotError(f"{label}.stops must be between 0 and 1")
     if "angle_degrees" in value:
         result["angle_degrees"] = optional_number(value["angle_degrees"], f"{label}.angle_degrees")
+    if 'direction' in value:
+        result['direction'] = optional_enum(value['direction'], f'{label}.direction', {'right_bottom'})
+        if 'angle_degrees' in value:
+            raise PageSnapshotError(f'{label} cannot mix gradient direction and angle')
     if "center" in value:
         result["center"] = normalize_point(value["center"], f"{label}.center")
     if "radius_dp" in value:
@@ -299,13 +305,27 @@ def normalize_style(value: Any, label: str) -> dict[str, dict[str, Any]]:
                 target[field] = normalize_edges(raw, path)
             elif field == "corner_radius_dp":
                 target[field] = normalize_corner_radius(raw, path)
+            elif field == 'corner_sizes':
+                if raw is None:
+                    continue
+                if not isinstance(raw, dict) or set(raw) != {'top_left', 'top_right', 'bottom_right', 'bottom_left'}:
+                    raise PageSnapshotError(f'{path} must contain four physical corners')
+                corners = {}
+                for name, size in raw.items():
+                    if not isinstance(size, dict) or set(size) != {'unit', 'value'} or size['unit'] not in {'dp', 'px', 'percent'}:
+                        raise PageSnapshotError(f'{path}.{name} has an invalid corner unit')
+                    number = finite_number(size['value'], f'{path}.{name}.value', 0)
+                    if size['unit'] == 'percent' and number > 100:
+                        raise PageSnapshotError(f'{path}.{name} percent exceeds 100')
+                    corners[name] = {'unit': size['unit'], 'value': number}
+                target[field] = corners
             elif field == "background":
                 target[field] = normalize_background(raw, path)
             elif field == "border":
                 target[field] = normalize_border(raw, path)
             elif field == "shadows":
                 target[field] = normalize_shadows(raw, path)
-            elif field in {"visible", "enabled", "selected", "checked", "clickable", "clip", "single_line", "read_only", "password", "soft_wrap"}:
+            elif field in {"visible", "enabled", "selected", "checked", "clickable", "refreshing", "clip", "single_line", "read_only", "password", "soft_wrap", "include_font_padding"}:
                 if raw is not None and type(raw) is not bool:
                     raise PageSnapshotError(f"{path} must be a boolean")
                 target[field] = raw
@@ -328,6 +348,12 @@ def normalize_style(value: Any, label: str) -> dict[str, dict[str, Any]]:
                 target[field] = optional_enum(raw, path, {'default', 'none', 'go', 'search', 'send', 'next', 'done', 'previous'})
             elif field in {"font_style"}:
                 target[field] = optional_enum(raw, path, {"normal", "italic"})
+            elif field == 'line_height_alignment':
+                target[field] = optional_enum(raw, path, {'center', 'top', 'bottom', 'proportional'})
+            elif field == 'line_height_trim':
+                target[field] = optional_enum(raw, path, {'none', 'both', 'first_line_top', 'last_line_bottom'})
+            elif field == 'line_break':
+                target[field] = optional_enum(raw, path, {'simple', 'heading', 'paragraph'})
             elif field in {"text_align"}:
                 target[field] = optional_enum(raw, path, {"start", "center", "end", "justify"})
             elif field in {"overflow"}:
@@ -389,7 +415,7 @@ def normalize_provenance(value: Any, label: str) -> list[dict[str, Any]]:
             raise PageSnapshotError(f"{label}[{index}].paths is malformed")
         origin = optional_enum(
             item["origin"], f"{label}[{index}].origin",
-            {"runtime", "source_resolved", "source_expression", "pixel_sampled", "manual_verified"},
+            {"runtime", "source_resolved", "source_expression", "pixel_sampled", "manual_verified", "ui_preview_sample"},
         )
         result.append(
             {
@@ -408,10 +434,13 @@ def normalize_unresolved(value: Any, label: str) -> list[dict[str, str]]:
     for index, item in enumerate(value):
         if not isinstance(item, dict) or set(item) != {"path", "expression", "reason"}:
             raise PageSnapshotError(f"{label}[{index}] is malformed")
+        expression = display_string(item['expression'], f'{label}[{index}].expression')
+        if not expression or any(ord(c) < 32 and c not in '\r\n\t' for c in expression):
+            raise PageSnapshotError(f'{label}[{index}].expression must be non-empty source text')
         result.append(
             {
                 "path": bounded_string(item["path"], f"{label}[{index}].path", 240),
-                "expression": bounded_string(item["expression"], f"{label}[{index}].expression"),
+                "expression": expression,
                 "reason": bounded_string(item["reason"], f"{label}[{index}].reason"),
             }
         )

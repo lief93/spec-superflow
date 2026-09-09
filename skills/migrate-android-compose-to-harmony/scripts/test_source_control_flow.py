@@ -14,6 +14,13 @@ from analyze_compose_project import (
 
 
 class SourceControlFlowTest(unittest.TestCase):
+    def test_indexed_loop_preserves_receiver_index_and_element(self):
+        for invocation in ('rows.forEachIndexed { index, item -> Text(item) }',
+                           'rows.forEachIndexed(action = { index, item -> Text(item) })'):
+            calls = extract_semantic_ui_calls('Page.kt', invocation, 'Page', invocation, 0, set(), {}, {})
+            self.assertEqual(next(c for c in calls if c['component']=='Text')['list_item_context'],
+                {'collection':'rows', 'item_parameter':'item', 'index_parameter':'index'})
+
     def test_nested_if_else_and_implicit_foreach_context_are_preserved(self) -> None:
         body = """
 Column {
@@ -71,7 +78,7 @@ Column {
         self.assertIn("model", UI_SEMANTIC_ARGUMENTS)
         self.assertEqual(
             local_value_expressions(body, lexical_code_mask(body))["imageRequest"],
-            "ImageRequest.Builder(context) .data(item.imageUrl) .crossfade(true) .build()",
+            "ImageRequest.Builder(context)\n        .data(item.imageUrl)\n        .crossfade(true)\n        .build()",
         )
 
     def test_when_type_branches_inside_foreach_are_preserved(self) -> None:

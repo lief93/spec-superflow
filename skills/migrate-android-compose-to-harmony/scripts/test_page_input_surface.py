@@ -14,6 +14,8 @@ from test_layout_mapping_contract import render_nodes
 
 class InputSurfaceTest(unittest.TestCase):
     def source(self, kind='BasicTextField', arguments=None, modifiers=None):
+        if kind in {'BasicTextField', 'TextField', 'OutlinedTextField'}:
+            arguments = {'textStyle': 'TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal, color = Color.Black)', **(arguments or {})}
         call = {'source': 'Sample.kt', 'line': 1, 'component': kind,
                 'semantic_arguments': {k: {'expression': v} for k, v in (arguments or {}).items()},
                 'ordered_modifier_chain': modifiers or []}

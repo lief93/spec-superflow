@@ -15,6 +15,7 @@ Row,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测量�
 Row,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Row,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Row,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Row,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Row,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Row,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Row,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -44,6 +45,7 @@ Row,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义原
 Row,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Row,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Row,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Row,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Row,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Row,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Row,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -64,8 +66,8 @@ Row,style.control.value,no,不适用,明确 value/progress；不使用样例数�
 Row,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Row,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Row,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Row,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Row,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Row,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Row,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Row,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 LazyRow,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 LazyRow,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -83,6 +85,7 @@ LazyRow,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测
 LazyRow,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 LazyRow,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 LazyRow,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+LazyRow,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 LazyRow,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 LazyRow,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 LazyRow,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -112,6 +115,7 @@ LazyRow,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定�
 LazyRow,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 LazyRow,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 LazyRow,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+LazyRow,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 LazyRow,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 LazyRow,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 LazyRow,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -132,8 +136,8 @@ LazyRow,style.control.value,no,不适用,明确 value/progress；不使用样例
 LazyRow,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 LazyRow,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 LazyRow,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-LazyRow,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-LazyRow,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+LazyRow,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+LazyRow,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 LazyRow,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Column,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Column,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -151,6 +155,7 @@ Column,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测�
 Column,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Column,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Column,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Column,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Column,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Column,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Column,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -180,6 +185,7 @@ Column,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义
 Column,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Column,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Column,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Column,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Column,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Column,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Column,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -200,8 +206,8 @@ Column,style.control.value,no,不适用,明确 value/progress；不使用样例�
 Column,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Column,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Column,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Column,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Column,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Column,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Column,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Column,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 LazyColumn,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 LazyColumn,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -219,6 +225,7 @@ LazyColumn,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生
 LazyColumn,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 LazyColumn,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 LazyColumn,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+LazyColumn,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 LazyColumn,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 LazyColumn,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 LazyColumn,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -248,6 +255,7 @@ LazyColumn,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自�
 LazyColumn,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 LazyColumn,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 LazyColumn,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+LazyColumn,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 LazyColumn,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 LazyColumn,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 LazyColumn,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -268,9 +276,79 @@ LazyColumn,style.control.value,no,不适用,明确 value/progress；不使用样
 LazyColumn,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 LazyColumn,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 LazyColumn,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-LazyColumn,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-LazyColumn,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+LazyColumn,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+LazyColumn,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 LazyColumn,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
+Card,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Card,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Card,structure.children_ids,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Card,structure.sibling_index,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Card,style.layout.padding_dp,yes,条件,expand_ordered_layout_modifiers 保留纯常量 padding/size/width/height 嵌套；交织绘制/重复同轴尺寸阻断,page_snapshot_component_lines
+Card,style.layout.margin_dp,yes,条件,运行测量/页面事实；Compose 没有通用 margin 参数,page_snapshot_component_lines
+Card,style.layout.layout_direction,yes,条件,页面事实；CompositionLocal 的上下文解析未全覆盖,page_snapshot_component_lines
+Card,style.layout.z_index,yes,条件,zIndex 走 layoutRules；该字段来自运行/页面事实,page_snapshot_component_lines
+Card,style.layout.alignment,no,不适用,contentAlignment/horizontalAlignment/verticalAlignment; 枚举,page_snapshot_container_alignment_lines
+Card,style.layout.horizontal_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+Card,style.layout.vertical_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+Card,style.layout.aspect_ratio,yes,已实现,aspectRatio 常量；不猜动态表达式,page_snapshot_component_lines
+Card,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+Card,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+Card,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
+Card,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Card,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
+Card,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
+Card,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
+Card,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
+Card,style.surface.clip,yes,条件,矩形/圆角；自定义 Path 未支持,page_snapshot_component_lines
+Card,style.typography.font_size_sp,no,不适用,Text/TextStyle 常量或已解析主题；字体缩放由运行平台消费,page_snapshot_component_lines
+Card,style.typography.font_weight,no,不适用,FontWeight 常量/已解析主题,page_snapshot_component_lines
+Card,style.typography.font_style,no,不适用,FontStyle.Normal/Italic; 未知值 unresolved,page_snapshot_component_lines
+Card,style.typography.font_family,no,不适用,仅已校验字体资产或声明的系统字体,load_page_font_faces / page_snapshot_component_lines
+Card,style.typography.letter_spacing_sp,no,不适用,letterSpacing 常量 sp；支持负数,page_snapshot_component_lines
+Card,style.typography.line_height_sp,no,不适用,常量/主题；自定义 LineHeightStyle、低于自然行高未证明等价,page_snapshot_component_lines
+Card,style.typography.text_align,no,不适用,Start/Center/End/Justify,page_snapshot_component_lines
+Card,style.typography.max_lines,no,不适用,正整数；TextInput 与多行 TextArea 不是同一控件,page_snapshot_component_lines
+Card,style.typography.overflow,no,不适用,clip/ellipsis；visible 未支持并阻断；两类 ArkUI 签名分开,page_snapshot_component_lines
+Card,style.typography.color,no,不适用,明确颜色或已解析主题；容器颜色需实际下传到文字,page_snapshot_component_lines
+Card,style.typography.decoration,no,不适用,none/underline/line_through,page_snapshot_component_lines
+Card,style.asset.resource,no,不适用,本地资源或 AsyncImage HTTP(S)；无预览图回退,page_snapshot_component_lines
+Card,style.asset.sha256,no,不适用,资源提取记录；格式转换后由资源 provenance 验证，不是绘制属性,build_target_phase_consumption_gate
+Card,style.asset.width_px,no,不适用,可记录源像素尺寸；单输入渲染必须有逻辑尺寸，不能直接按 px 布局,build_target_phase_consumption_gate
+Card,style.asset.height_px,no,不适用,可记录源像素尺寸；不能当作 dp 使用,build_target_phase_consumption_gate
+Card,style.asset.width_dp,no,不适用,资源本征尺寸，不是控件硬宽度,page_snapshot_intrinsic_image_lines
+Card,style.asset.height_dp,no,不适用,资源本征尺寸，不是控件硬高度,page_snapshot_intrinsic_image_lines
+Card,style.asset.content_scale,no,不适用,fit/crop/fill/inside/none; 未指定尺寸时需可验证本征测量,page_snapshot_intrinsic_image_lines / page_snapshot_component_lines
+Card,style.asset.tint,no,不适用,显式 tint/ColorFilter.tint；仅支持当前颜色滤镜映射,page_snapshot_component_lines
+Card,style.transform.translation_x_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+Card,style.transform.translation_y_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+Card,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义原点/顺序组合未支持,page_snapshot_component_lines
+Card,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
+Card,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
+Card,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Card,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
+Card,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
+Card,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
+Card,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
+Card,style.state.clickable,yes,业务边界,只记录入口元数据；UI 渲染不产生业务 onClick，另走 behavior contract,build_target_phase_consumption_gate
+Card,style.content.text,no,不适用,text/value/已解析资源；Button 文本在子 Text 实际消费,page_snapshot_component_lines
+Card,style.content.placeholder,no,不适用,纯文字提示；复杂 slot/浮动 label 不等同 placeholder,page_snapshot_component_lines
+Card,style.content.content_description,yes,已实现,contentDescription; 显式 null 不设置,page_snapshot_component_lines
+Card,style.content.role,yes,证据,用于页面语义匹配，不代表已实现对应业务,build_target_phase_consumption_gate
+Card,style.content.locale,no,不适用,可存储/采集；未单独消费，非空时阻断,build_target_phase_consumption_gate
+Card,style.input.single_line,no,不适用,显式布尔；源码省略按 Compose 多行默认；TextInput/TextArea 原生分流,page_snapshot_component_lines
+Card,style.input.read_only,no,不适用,显式布尔；禁止软键盘及内容修改，保留选中；API 20+,page_snapshot_component_lines
+Card,style.input.password,no,不适用,标准 PasswordVisualTransformation/None；多行密码、自定义字符变换阻断,page_snapshot_component_lines
+Card,style.input.keyboard_type,no,不适用,Text/Number/Phone/Email/Uri/Decimal/Password/NumberPassword；不等同内容校验,page_snapshot_component_lines
+Card,style.input.ime_action,no,不适用,键盘动作枚举；Previous/单行 None 阻断；业务提交回调另走 contract,page_snapshot_component_lines
+Card,style.typography.soft_wrap,no,不适用,显式布尔；false 支持不含硬换行的单段文字，硬换行逐段渲染未支持,page_snapshot_component_lines
+Card,style.typography.min_lines,no,不适用,1 为原生默认；多行 Text 使用已验证字体运行时 metrics，复杂约束/输入框多行最低行数阻断,page_snapshot_component_lines
+Card,style.control.value,no,不适用,明确 value/progress；不使用样例数值；UI 当前态不等同业务订阅,page_snapshot_component_lines
+Card,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
+Card,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
+Card,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
+Card,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Card,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
+Card,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Box,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Box,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Box,structure.children_ids,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -287,6 +365,7 @@ Box,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测量�
 Box,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Box,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Box,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Box,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Box,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Box,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Box,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -316,6 +395,7 @@ Box,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义原
 Box,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Box,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Box,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Box,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Box,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Box,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Box,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -336,8 +416,8 @@ Box,style.control.value,no,不适用,明确 value/progress；不使用样例数�
 Box,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Box,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Box,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Box,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Box,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Box,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Box,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Box,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 BoxWithConstraints,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 BoxWithConstraints,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -355,6 +435,7 @@ BoxWithConstraints,style.layout.width_dp,yes,条件,width/size; 无显式值使�
 BoxWithConstraints,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 BoxWithConstraints,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 BoxWithConstraints,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+BoxWithConstraints,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 BoxWithConstraints,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 BoxWithConstraints,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 BoxWithConstraints,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -384,6 +465,7 @@ BoxWithConstraints,style.transform.scale_x,yes,条件,scale 常量；graphicsLay
 BoxWithConstraints,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 BoxWithConstraints,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 BoxWithConstraints,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+BoxWithConstraints,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 BoxWithConstraints,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 BoxWithConstraints,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 BoxWithConstraints,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -404,9 +486,219 @@ BoxWithConstraints,style.control.value,no,不适用,明确 value/progress；不�
 BoxWithConstraints,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 BoxWithConstraints,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 BoxWithConstraints,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-BoxWithConstraints,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-BoxWithConstraints,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+BoxWithConstraints,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+BoxWithConstraints,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 BoxWithConstraints,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
+Surface,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Surface,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Surface,structure.children_ids,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Surface,structure.sibling_index,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Surface,style.layout.padding_dp,yes,条件,expand_ordered_layout_modifiers 保留纯常量 padding/size/width/height 嵌套；交织绘制/重复同轴尺寸阻断,page_snapshot_component_lines
+Surface,style.layout.margin_dp,yes,条件,运行测量/页面事实；Compose 没有通用 margin 参数,page_snapshot_component_lines
+Surface,style.layout.layout_direction,yes,条件,页面事实；CompositionLocal 的上下文解析未全覆盖,page_snapshot_component_lines
+Surface,style.layout.z_index,yes,条件,zIndex 走 layoutRules；该字段来自运行/页面事实,page_snapshot_component_lines
+Surface,style.layout.alignment,yes,条件,contentAlignment/horizontalAlignment/verticalAlignment; 枚举,page_snapshot_container_alignment_lines
+Surface,style.layout.horizontal_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+Surface,style.layout.vertical_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+Surface,style.layout.aspect_ratio,yes,已实现,aspectRatio 常量；不猜动态表达式,page_snapshot_component_lines
+Surface,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+Surface,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+Surface,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
+Surface,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Surface,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
+Surface,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
+Surface,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
+Surface,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
+Surface,style.surface.clip,yes,条件,矩形/圆角；自定义 Path 未支持,page_snapshot_component_lines
+Surface,style.typography.font_size_sp,no,不适用,Text/TextStyle 常量或已解析主题；字体缩放由运行平台消费,page_snapshot_component_lines
+Surface,style.typography.font_weight,no,不适用,FontWeight 常量/已解析主题,page_snapshot_component_lines
+Surface,style.typography.font_style,no,不适用,FontStyle.Normal/Italic; 未知值 unresolved,page_snapshot_component_lines
+Surface,style.typography.font_family,no,不适用,仅已校验字体资产或声明的系统字体,load_page_font_faces / page_snapshot_component_lines
+Surface,style.typography.letter_spacing_sp,no,不适用,letterSpacing 常量 sp；支持负数,page_snapshot_component_lines
+Surface,style.typography.line_height_sp,no,不适用,常量/主题；自定义 LineHeightStyle、低于自然行高未证明等价,page_snapshot_component_lines
+Surface,style.typography.text_align,no,不适用,Start/Center/End/Justify,page_snapshot_component_lines
+Surface,style.typography.max_lines,no,不适用,正整数；TextInput 与多行 TextArea 不是同一控件,page_snapshot_component_lines
+Surface,style.typography.overflow,no,不适用,clip/ellipsis；visible 未支持并阻断；两类 ArkUI 签名分开,page_snapshot_component_lines
+Surface,style.typography.color,no,不适用,明确颜色或已解析主题；容器颜色需实际下传到文字,page_snapshot_component_lines
+Surface,style.typography.decoration,no,不适用,none/underline/line_through,page_snapshot_component_lines
+Surface,style.asset.resource,no,不适用,本地资源或 AsyncImage HTTP(S)；无预览图回退,page_snapshot_component_lines
+Surface,style.asset.sha256,no,不适用,资源提取记录；格式转换后由资源 provenance 验证，不是绘制属性,build_target_phase_consumption_gate
+Surface,style.asset.width_px,no,不适用,可记录源像素尺寸；单输入渲染必须有逻辑尺寸，不能直接按 px 布局,build_target_phase_consumption_gate
+Surface,style.asset.height_px,no,不适用,可记录源像素尺寸；不能当作 dp 使用,build_target_phase_consumption_gate
+Surface,style.asset.width_dp,no,不适用,资源本征尺寸，不是控件硬宽度,page_snapshot_intrinsic_image_lines
+Surface,style.asset.height_dp,no,不适用,资源本征尺寸，不是控件硬高度,page_snapshot_intrinsic_image_lines
+Surface,style.asset.content_scale,no,不适用,fit/crop/fill/inside/none; 未指定尺寸时需可验证本征测量,page_snapshot_intrinsic_image_lines / page_snapshot_component_lines
+Surface,style.asset.tint,no,不适用,显式 tint/ColorFilter.tint；仅支持当前颜色滤镜映射,page_snapshot_component_lines
+Surface,style.transform.translation_x_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+Surface,style.transform.translation_y_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+Surface,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义原点/顺序组合未支持,page_snapshot_component_lines
+Surface,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
+Surface,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
+Surface,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Surface,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
+Surface,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
+Surface,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
+Surface,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
+Surface,style.state.clickable,yes,业务边界,只记录入口元数据；UI 渲染不产生业务 onClick，另走 behavior contract,build_target_phase_consumption_gate
+Surface,style.content.text,no,不适用,text/value/已解析资源；Button 文本在子 Text 实际消费,page_snapshot_component_lines
+Surface,style.content.placeholder,no,不适用,纯文字提示；复杂 slot/浮动 label 不等同 placeholder,page_snapshot_component_lines
+Surface,style.content.content_description,yes,已实现,contentDescription; 显式 null 不设置,page_snapshot_component_lines
+Surface,style.content.role,yes,证据,用于页面语义匹配，不代表已实现对应业务,build_target_phase_consumption_gate
+Surface,style.content.locale,no,不适用,可存储/采集；未单独消费，非空时阻断,build_target_phase_consumption_gate
+Surface,style.input.single_line,no,不适用,显式布尔；源码省略按 Compose 多行默认；TextInput/TextArea 原生分流,page_snapshot_component_lines
+Surface,style.input.read_only,no,不适用,显式布尔；禁止软键盘及内容修改，保留选中；API 20+,page_snapshot_component_lines
+Surface,style.input.password,no,不适用,标准 PasswordVisualTransformation/None；多行密码、自定义字符变换阻断,page_snapshot_component_lines
+Surface,style.input.keyboard_type,no,不适用,Text/Number/Phone/Email/Uri/Decimal/Password/NumberPassword；不等同内容校验,page_snapshot_component_lines
+Surface,style.input.ime_action,no,不适用,键盘动作枚举；Previous/单行 None 阻断；业务提交回调另走 contract,page_snapshot_component_lines
+Surface,style.typography.soft_wrap,no,不适用,显式布尔；false 支持不含硬换行的单段文字，硬换行逐段渲染未支持,page_snapshot_component_lines
+Surface,style.typography.min_lines,no,不适用,1 为原生默认；多行 Text 使用已验证字体运行时 metrics，复杂约束/输入框多行最低行数阻断,page_snapshot_component_lines
+Surface,style.control.value,no,不适用,明确 value/progress；不使用样例数值；UI 当前态不等同业务订阅,page_snapshot_component_lines
+Surface,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
+Surface,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
+Surface,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
+Surface,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Surface,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
+Surface,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
+AnimatedVisibility,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+AnimatedVisibility,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+AnimatedVisibility,structure.children_ids,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+AnimatedVisibility,structure.sibling_index,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+AnimatedVisibility,style.layout.padding_dp,yes,条件,expand_ordered_layout_modifiers 保留纯常量 padding/size/width/height 嵌套；交织绘制/重复同轴尺寸阻断,page_snapshot_component_lines
+AnimatedVisibility,style.layout.margin_dp,yes,条件,运行测量/页面事实；Compose 没有通用 margin 参数,page_snapshot_component_lines
+AnimatedVisibility,style.layout.layout_direction,yes,条件,页面事实；CompositionLocal 的上下文解析未全覆盖,page_snapshot_component_lines
+AnimatedVisibility,style.layout.z_index,yes,条件,zIndex 走 layoutRules；该字段来自运行/页面事实,page_snapshot_component_lines
+AnimatedVisibility,style.layout.alignment,yes,条件,contentAlignment/horizontalAlignment/verticalAlignment; 枚举,page_snapshot_container_alignment_lines
+AnimatedVisibility,style.layout.horizontal_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+AnimatedVisibility,style.layout.vertical_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+AnimatedVisibility,style.layout.aspect_ratio,yes,已实现,aspectRatio 常量；不猜动态表达式,page_snapshot_component_lines
+AnimatedVisibility,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+AnimatedVisibility,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+AnimatedVisibility,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
+AnimatedVisibility,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+AnimatedVisibility,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
+AnimatedVisibility,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
+AnimatedVisibility,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
+AnimatedVisibility,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
+AnimatedVisibility,style.surface.clip,yes,条件,矩形/圆角；自定义 Path 未支持,page_snapshot_component_lines
+AnimatedVisibility,style.typography.font_size_sp,no,不适用,Text/TextStyle 常量或已解析主题；字体缩放由运行平台消费,page_snapshot_component_lines
+AnimatedVisibility,style.typography.font_weight,no,不适用,FontWeight 常量/已解析主题,page_snapshot_component_lines
+AnimatedVisibility,style.typography.font_style,no,不适用,FontStyle.Normal/Italic; 未知值 unresolved,page_snapshot_component_lines
+AnimatedVisibility,style.typography.font_family,no,不适用,仅已校验字体资产或声明的系统字体,load_page_font_faces / page_snapshot_component_lines
+AnimatedVisibility,style.typography.letter_spacing_sp,no,不适用,letterSpacing 常量 sp；支持负数,page_snapshot_component_lines
+AnimatedVisibility,style.typography.line_height_sp,no,不适用,常量/主题；自定义 LineHeightStyle、低于自然行高未证明等价,page_snapshot_component_lines
+AnimatedVisibility,style.typography.text_align,no,不适用,Start/Center/End/Justify,page_snapshot_component_lines
+AnimatedVisibility,style.typography.max_lines,no,不适用,正整数；TextInput 与多行 TextArea 不是同一控件,page_snapshot_component_lines
+AnimatedVisibility,style.typography.overflow,no,不适用,clip/ellipsis；visible 未支持并阻断；两类 ArkUI 签名分开,page_snapshot_component_lines
+AnimatedVisibility,style.typography.color,no,不适用,明确颜色或已解析主题；容器颜色需实际下传到文字,page_snapshot_component_lines
+AnimatedVisibility,style.typography.decoration,no,不适用,none/underline/line_through,page_snapshot_component_lines
+AnimatedVisibility,style.asset.resource,no,不适用,本地资源或 AsyncImage HTTP(S)；无预览图回退,page_snapshot_component_lines
+AnimatedVisibility,style.asset.sha256,no,不适用,资源提取记录；格式转换后由资源 provenance 验证，不是绘制属性,build_target_phase_consumption_gate
+AnimatedVisibility,style.asset.width_px,no,不适用,可记录源像素尺寸；单输入渲染必须有逻辑尺寸，不能直接按 px 布局,build_target_phase_consumption_gate
+AnimatedVisibility,style.asset.height_px,no,不适用,可记录源像素尺寸；不能当作 dp 使用,build_target_phase_consumption_gate
+AnimatedVisibility,style.asset.width_dp,no,不适用,资源本征尺寸，不是控件硬宽度,page_snapshot_intrinsic_image_lines
+AnimatedVisibility,style.asset.height_dp,no,不适用,资源本征尺寸，不是控件硬高度,page_snapshot_intrinsic_image_lines
+AnimatedVisibility,style.asset.content_scale,no,不适用,fit/crop/fill/inside/none; 未指定尺寸时需可验证本征测量,page_snapshot_intrinsic_image_lines / page_snapshot_component_lines
+AnimatedVisibility,style.asset.tint,no,不适用,显式 tint/ColorFilter.tint；仅支持当前颜色滤镜映射,page_snapshot_component_lines
+AnimatedVisibility,style.transform.translation_x_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+AnimatedVisibility,style.transform.translation_y_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+AnimatedVisibility,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义原点/顺序组合未支持,page_snapshot_component_lines
+AnimatedVisibility,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
+AnimatedVisibility,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
+AnimatedVisibility,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+AnimatedVisibility,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
+AnimatedVisibility,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
+AnimatedVisibility,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
+AnimatedVisibility,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
+AnimatedVisibility,style.state.clickable,yes,业务边界,只记录入口元数据；UI 渲染不产生业务 onClick，另走 behavior contract,build_target_phase_consumption_gate
+AnimatedVisibility,style.content.text,no,不适用,text/value/已解析资源；Button 文本在子 Text 实际消费,page_snapshot_component_lines
+AnimatedVisibility,style.content.placeholder,no,不适用,纯文字提示；复杂 slot/浮动 label 不等同 placeholder,page_snapshot_component_lines
+AnimatedVisibility,style.content.content_description,yes,已实现,contentDescription; 显式 null 不设置,page_snapshot_component_lines
+AnimatedVisibility,style.content.role,yes,证据,用于页面语义匹配，不代表已实现对应业务,build_target_phase_consumption_gate
+AnimatedVisibility,style.content.locale,no,不适用,可存储/采集；未单独消费，非空时阻断,build_target_phase_consumption_gate
+AnimatedVisibility,style.input.single_line,no,不适用,显式布尔；源码省略按 Compose 多行默认；TextInput/TextArea 原生分流,page_snapshot_component_lines
+AnimatedVisibility,style.input.read_only,no,不适用,显式布尔；禁止软键盘及内容修改，保留选中；API 20+,page_snapshot_component_lines
+AnimatedVisibility,style.input.password,no,不适用,标准 PasswordVisualTransformation/None；多行密码、自定义字符变换阻断,page_snapshot_component_lines
+AnimatedVisibility,style.input.keyboard_type,no,不适用,Text/Number/Phone/Email/Uri/Decimal/Password/NumberPassword；不等同内容校验,page_snapshot_component_lines
+AnimatedVisibility,style.input.ime_action,no,不适用,键盘动作枚举；Previous/单行 None 阻断；业务提交回调另走 contract,page_snapshot_component_lines
+AnimatedVisibility,style.typography.soft_wrap,no,不适用,显式布尔；false 支持不含硬换行的单段文字，硬换行逐段渲染未支持,page_snapshot_component_lines
+AnimatedVisibility,style.typography.min_lines,no,不适用,1 为原生默认；多行 Text 使用已验证字体运行时 metrics，复杂约束/输入框多行最低行数阻断,page_snapshot_component_lines
+AnimatedVisibility,style.control.value,no,不适用,明确 value/progress；不使用样例数值；UI 当前态不等同业务订阅,page_snapshot_component_lines
+AnimatedVisibility,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
+AnimatedVisibility,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
+AnimatedVisibility,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
+AnimatedVisibility,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+AnimatedVisibility,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
+AnimatedVisibility,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
+PullToRefreshBox,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+PullToRefreshBox,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+PullToRefreshBox,structure.children_ids,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+PullToRefreshBox,structure.sibling_index,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+PullToRefreshBox,style.layout.padding_dp,yes,条件,expand_ordered_layout_modifiers 保留纯常量 padding/size/width/height 嵌套；交织绘制/重复同轴尺寸阻断,page_snapshot_component_lines
+PullToRefreshBox,style.layout.margin_dp,yes,条件,运行测量/页面事实；Compose 没有通用 margin 参数,page_snapshot_component_lines
+PullToRefreshBox,style.layout.layout_direction,yes,条件,页面事实；CompositionLocal 的上下文解析未全覆盖,page_snapshot_component_lines
+PullToRefreshBox,style.layout.z_index,yes,条件,zIndex 走 layoutRules；该字段来自运行/页面事实,page_snapshot_component_lines
+PullToRefreshBox,style.layout.alignment,yes,条件,contentAlignment/horizontalAlignment/verticalAlignment; 枚举,page_snapshot_container_alignment_lines
+PullToRefreshBox,style.layout.horizontal_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+PullToRefreshBox,style.layout.vertical_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+PullToRefreshBox,style.layout.aspect_ratio,yes,已实现,aspectRatio 常量；不猜动态表达式,page_snapshot_component_lines
+PullToRefreshBox,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+PullToRefreshBox,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+PullToRefreshBox,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
+PullToRefreshBox,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+PullToRefreshBox,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
+PullToRefreshBox,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
+PullToRefreshBox,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
+PullToRefreshBox,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
+PullToRefreshBox,style.surface.clip,yes,条件,矩形/圆角；自定义 Path 未支持,page_snapshot_component_lines
+PullToRefreshBox,style.typography.font_size_sp,no,不适用,Text/TextStyle 常量或已解析主题；字体缩放由运行平台消费,page_snapshot_component_lines
+PullToRefreshBox,style.typography.font_weight,no,不适用,FontWeight 常量/已解析主题,page_snapshot_component_lines
+PullToRefreshBox,style.typography.font_style,no,不适用,FontStyle.Normal/Italic; 未知值 unresolved,page_snapshot_component_lines
+PullToRefreshBox,style.typography.font_family,no,不适用,仅已校验字体资产或声明的系统字体,load_page_font_faces / page_snapshot_component_lines
+PullToRefreshBox,style.typography.letter_spacing_sp,no,不适用,letterSpacing 常量 sp；支持负数,page_snapshot_component_lines
+PullToRefreshBox,style.typography.line_height_sp,no,不适用,常量/主题；自定义 LineHeightStyle、低于自然行高未证明等价,page_snapshot_component_lines
+PullToRefreshBox,style.typography.text_align,no,不适用,Start/Center/End/Justify,page_snapshot_component_lines
+PullToRefreshBox,style.typography.max_lines,no,不适用,正整数；TextInput 与多行 TextArea 不是同一控件,page_snapshot_component_lines
+PullToRefreshBox,style.typography.overflow,no,不适用,clip/ellipsis；visible 未支持并阻断；两类 ArkUI 签名分开,page_snapshot_component_lines
+PullToRefreshBox,style.typography.color,no,不适用,明确颜色或已解析主题；容器颜色需实际下传到文字,page_snapshot_component_lines
+PullToRefreshBox,style.typography.decoration,no,不适用,none/underline/line_through,page_snapshot_component_lines
+PullToRefreshBox,style.asset.resource,no,不适用,本地资源或 AsyncImage HTTP(S)；无预览图回退,page_snapshot_component_lines
+PullToRefreshBox,style.asset.sha256,no,不适用,资源提取记录；格式转换后由资源 provenance 验证，不是绘制属性,build_target_phase_consumption_gate
+PullToRefreshBox,style.asset.width_px,no,不适用,可记录源像素尺寸；单输入渲染必须有逻辑尺寸，不能直接按 px 布局,build_target_phase_consumption_gate
+PullToRefreshBox,style.asset.height_px,no,不适用,可记录源像素尺寸；不能当作 dp 使用,build_target_phase_consumption_gate
+PullToRefreshBox,style.asset.width_dp,no,不适用,资源本征尺寸，不是控件硬宽度,page_snapshot_intrinsic_image_lines
+PullToRefreshBox,style.asset.height_dp,no,不适用,资源本征尺寸，不是控件硬高度,page_snapshot_intrinsic_image_lines
+PullToRefreshBox,style.asset.content_scale,no,不适用,fit/crop/fill/inside/none; 未指定尺寸时需可验证本征测量,page_snapshot_intrinsic_image_lines / page_snapshot_component_lines
+PullToRefreshBox,style.asset.tint,no,不适用,显式 tint/ColorFilter.tint；仅支持当前颜色滤镜映射,page_snapshot_component_lines
+PullToRefreshBox,style.transform.translation_x_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+PullToRefreshBox,style.transform.translation_y_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+PullToRefreshBox,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义原点/顺序组合未支持,page_snapshot_component_lines
+PullToRefreshBox,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
+PullToRefreshBox,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
+PullToRefreshBox,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+PullToRefreshBox,style.state.refreshing,yes,条件,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
+PullToRefreshBox,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
+PullToRefreshBox,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
+PullToRefreshBox,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
+PullToRefreshBox,style.state.clickable,yes,业务边界,只记录入口元数据；UI 渲染不产生业务 onClick，另走 behavior contract,build_target_phase_consumption_gate
+PullToRefreshBox,style.content.text,no,不适用,text/value/已解析资源；Button 文本在子 Text 实际消费,page_snapshot_component_lines
+PullToRefreshBox,style.content.placeholder,no,不适用,纯文字提示；复杂 slot/浮动 label 不等同 placeholder,page_snapshot_component_lines
+PullToRefreshBox,style.content.content_description,yes,已实现,contentDescription; 显式 null 不设置,page_snapshot_component_lines
+PullToRefreshBox,style.content.role,yes,证据,用于页面语义匹配，不代表已实现对应业务,build_target_phase_consumption_gate
+PullToRefreshBox,style.content.locale,no,不适用,可存储/采集；未单独消费，非空时阻断,build_target_phase_consumption_gate
+PullToRefreshBox,style.input.single_line,no,不适用,显式布尔；源码省略按 Compose 多行默认；TextInput/TextArea 原生分流,page_snapshot_component_lines
+PullToRefreshBox,style.input.read_only,no,不适用,显式布尔；禁止软键盘及内容修改，保留选中；API 20+,page_snapshot_component_lines
+PullToRefreshBox,style.input.password,no,不适用,标准 PasswordVisualTransformation/None；多行密码、自定义字符变换阻断,page_snapshot_component_lines
+PullToRefreshBox,style.input.keyboard_type,no,不适用,Text/Number/Phone/Email/Uri/Decimal/Password/NumberPassword；不等同内容校验,page_snapshot_component_lines
+PullToRefreshBox,style.input.ime_action,no,不适用,键盘动作枚举；Previous/单行 None 阻断；业务提交回调另走 contract,page_snapshot_component_lines
+PullToRefreshBox,style.typography.soft_wrap,no,不适用,显式布尔；false 支持不含硬换行的单段文字，硬换行逐段渲染未支持,page_snapshot_component_lines
+PullToRefreshBox,style.typography.min_lines,no,不适用,1 为原生默认；多行 Text 使用已验证字体运行时 metrics，复杂约束/输入框多行最低行数阻断,page_snapshot_component_lines
+PullToRefreshBox,style.control.value,no,不适用,明确 value/progress；不使用样例数值；UI 当前态不等同业务订阅,page_snapshot_component_lines
+PullToRefreshBox,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
+PullToRefreshBox,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
+PullToRefreshBox,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
+PullToRefreshBox,style.control.active_color,yes,条件,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+PullToRefreshBox,style.control.inactive_color,yes,条件,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
+PullToRefreshBox,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 ConstraintLayout,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 ConstraintLayout,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 ConstraintLayout,structure.children_ids,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -423,6 +715,7 @@ ConstraintLayout,style.layout.width_dp,yes,条件,width/size; 无显式值使用
 ConstraintLayout,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 ConstraintLayout,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 ConstraintLayout,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+ConstraintLayout,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 ConstraintLayout,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 ConstraintLayout,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 ConstraintLayout,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -452,6 +745,7 @@ ConstraintLayout,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer
 ConstraintLayout,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 ConstraintLayout,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 ConstraintLayout,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+ConstraintLayout,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 ConstraintLayout,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 ConstraintLayout,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 ConstraintLayout,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -472,8 +766,8 @@ ConstraintLayout,style.control.value,no,不适用,明确 value/progress；不使
 ConstraintLayout,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 ConstraintLayout,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 ConstraintLayout,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-ConstraintLayout,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-ConstraintLayout,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+ConstraintLayout,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+ConstraintLayout,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 ConstraintLayout,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 TopAppBar,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 TopAppBar,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -491,6 +785,7 @@ TopAppBar,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生�
 TopAppBar,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 TopAppBar,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 TopAppBar,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+TopAppBar,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 TopAppBar,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 TopAppBar,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 TopAppBar,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -520,6 +815,7 @@ TopAppBar,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定
 TopAppBar,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 TopAppBar,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 TopAppBar,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+TopAppBar,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 TopAppBar,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 TopAppBar,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 TopAppBar,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -540,8 +836,8 @@ TopAppBar,style.control.value,no,不适用,明确 value/progress；不使用样�
 TopAppBar,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 TopAppBar,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 TopAppBar,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-TopAppBar,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-TopAppBar,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+TopAppBar,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+TopAppBar,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 TopAppBar,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 CenterAlignedTopAppBar,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 CenterAlignedTopAppBar,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -559,6 +855,7 @@ CenterAlignedTopAppBar,style.layout.width_dp,yes,条件,width/size; 无显式值
 CenterAlignedTopAppBar,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 CenterAlignedTopAppBar,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+CenterAlignedTopAppBar,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -588,6 +885,7 @@ CenterAlignedTopAppBar,style.transform.scale_x,yes,条件,scale 常量；graphic
 CenterAlignedTopAppBar,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+CenterAlignedTopAppBar,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -608,9 +906,79 @@ CenterAlignedTopAppBar,style.control.value,no,不适用,明确 value/progress；
 CenterAlignedTopAppBar,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-CenterAlignedTopAppBar,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-CenterAlignedTopAppBar,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+CenterAlignedTopAppBar,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+CenterAlignedTopAppBar,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 CenterAlignedTopAppBar,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
+Scaffold,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Scaffold,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Scaffold,structure.children_ids,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Scaffold,structure.sibling_index,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
+Scaffold,style.layout.padding_dp,yes,条件,expand_ordered_layout_modifiers 保留纯常量 padding/size/width/height 嵌套；交织绘制/重复同轴尺寸阻断,page_snapshot_component_lines
+Scaffold,style.layout.margin_dp,yes,条件,运行测量/页面事实；Compose 没有通用 margin 参数,page_snapshot_component_lines
+Scaffold,style.layout.layout_direction,yes,条件,页面事实；CompositionLocal 的上下文解析未全覆盖,page_snapshot_component_lines
+Scaffold,style.layout.z_index,yes,条件,zIndex 走 layoutRules；该字段来自运行/页面事实,page_snapshot_component_lines
+Scaffold,style.layout.alignment,no,不适用,contentAlignment/horizontalAlignment/verticalAlignment; 枚举,page_snapshot_container_alignment_lines
+Scaffold,style.layout.horizontal_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+Scaffold,style.layout.vertical_arrangement,no,不适用,Arrangement + 常量 spacedBy,page_snapshot_container_alignment_lines
+Scaffold,style.layout.aspect_ratio,yes,已实现,aspectRatio 常量；不猜动态表达式,page_snapshot_component_lines
+Scaffold,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+Scaffold,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
+Scaffold,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
+Scaffold,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Scaffold,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
+Scaffold,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
+Scaffold,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
+Scaffold,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
+Scaffold,style.surface.clip,yes,条件,矩形/圆角；自定义 Path 未支持,page_snapshot_component_lines
+Scaffold,style.typography.font_size_sp,no,不适用,Text/TextStyle 常量或已解析主题；字体缩放由运行平台消费,page_snapshot_component_lines
+Scaffold,style.typography.font_weight,no,不适用,FontWeight 常量/已解析主题,page_snapshot_component_lines
+Scaffold,style.typography.font_style,no,不适用,FontStyle.Normal/Italic; 未知值 unresolved,page_snapshot_component_lines
+Scaffold,style.typography.font_family,no,不适用,仅已校验字体资产或声明的系统字体,load_page_font_faces / page_snapshot_component_lines
+Scaffold,style.typography.letter_spacing_sp,no,不适用,letterSpacing 常量 sp；支持负数,page_snapshot_component_lines
+Scaffold,style.typography.line_height_sp,no,不适用,常量/主题；自定义 LineHeightStyle、低于自然行高未证明等价,page_snapshot_component_lines
+Scaffold,style.typography.text_align,no,不适用,Start/Center/End/Justify,page_snapshot_component_lines
+Scaffold,style.typography.max_lines,no,不适用,正整数；TextInput 与多行 TextArea 不是同一控件,page_snapshot_component_lines
+Scaffold,style.typography.overflow,no,不适用,clip/ellipsis；visible 未支持并阻断；两类 ArkUI 签名分开,page_snapshot_component_lines
+Scaffold,style.typography.color,no,不适用,明确颜色或已解析主题；容器颜色需实际下传到文字,page_snapshot_component_lines
+Scaffold,style.typography.decoration,no,不适用,none/underline/line_through,page_snapshot_component_lines
+Scaffold,style.asset.resource,no,不适用,本地资源或 AsyncImage HTTP(S)；无预览图回退,page_snapshot_component_lines
+Scaffold,style.asset.sha256,no,不适用,资源提取记录；格式转换后由资源 provenance 验证，不是绘制属性,build_target_phase_consumption_gate
+Scaffold,style.asset.width_px,no,不适用,可记录源像素尺寸；单输入渲染必须有逻辑尺寸，不能直接按 px 布局,build_target_phase_consumption_gate
+Scaffold,style.asset.height_px,no,不适用,可记录源像素尺寸；不能当作 dp 使用,build_target_phase_consumption_gate
+Scaffold,style.asset.width_dp,no,不适用,资源本征尺寸，不是控件硬宽度,page_snapshot_intrinsic_image_lines
+Scaffold,style.asset.height_dp,no,不适用,资源本征尺寸，不是控件硬高度,page_snapshot_intrinsic_image_lines
+Scaffold,style.asset.content_scale,no,不适用,fit/crop/fill/inside/none; 未指定尺寸时需可验证本征测量,page_snapshot_intrinsic_image_lines / page_snapshot_component_lines
+Scaffold,style.asset.tint,no,不适用,显式 tint/ColorFilter.tint；仅支持当前颜色滤镜映射,page_snapshot_component_lines
+Scaffold,style.transform.translation_x_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+Scaffold,style.transform.translation_y_dp,yes,条件,运行/页面事实；源码 offset 单独走 layoutRules，混合变换阻断,page_snapshot_component_lines
+Scaffold,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义原点/顺序组合未支持,page_snapshot_component_lines
+Scaffold,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
+Scaffold,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
+Scaffold,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Scaffold,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
+Scaffold,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
+Scaffold,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
+Scaffold,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
+Scaffold,style.state.clickable,yes,业务边界,只记录入口元数据；UI 渲染不产生业务 onClick，另走 behavior contract,build_target_phase_consumption_gate
+Scaffold,style.content.text,no,不适用,text/value/已解析资源；Button 文本在子 Text 实际消费,page_snapshot_component_lines
+Scaffold,style.content.placeholder,no,不适用,纯文字提示；复杂 slot/浮动 label 不等同 placeholder,page_snapshot_component_lines
+Scaffold,style.content.content_description,yes,已实现,contentDescription; 显式 null 不设置,page_snapshot_component_lines
+Scaffold,style.content.role,yes,证据,用于页面语义匹配，不代表已实现对应业务,build_target_phase_consumption_gate
+Scaffold,style.content.locale,no,不适用,可存储/采集；未单独消费，非空时阻断,build_target_phase_consumption_gate
+Scaffold,style.input.single_line,no,不适用,显式布尔；源码省略按 Compose 多行默认；TextInput/TextArea 原生分流,page_snapshot_component_lines
+Scaffold,style.input.read_only,no,不适用,显式布尔；禁止软键盘及内容修改，保留选中；API 20+,page_snapshot_component_lines
+Scaffold,style.input.password,no,不适用,标准 PasswordVisualTransformation/None；多行密码、自定义字符变换阻断,page_snapshot_component_lines
+Scaffold,style.input.keyboard_type,no,不适用,Text/Number/Phone/Email/Uri/Decimal/Password/NumberPassword；不等同内容校验,page_snapshot_component_lines
+Scaffold,style.input.ime_action,no,不适用,键盘动作枚举；Previous/单行 None 阻断；业务提交回调另走 contract,page_snapshot_component_lines
+Scaffold,style.typography.soft_wrap,no,不适用,显式布尔；false 支持不含硬换行的单段文字，硬换行逐段渲染未支持,page_snapshot_component_lines
+Scaffold,style.typography.min_lines,no,不适用,1 为原生默认；多行 Text 使用已验证字体运行时 metrics，复杂约束/输入框多行最低行数阻断,page_snapshot_component_lines
+Scaffold,style.control.value,no,不适用,明确 value/progress；不使用样例数值；UI 当前态不等同业务订阅,page_snapshot_component_lines
+Scaffold,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
+Scaffold,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
+Scaffold,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
+Scaffold,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Scaffold,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
+Scaffold,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Button,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Button,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Button,structure.children_ids,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -627,6 +995,7 @@ Button,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测�
 Button,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Button,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Button,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Button,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Button,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Button,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Button,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -656,6 +1025,7 @@ Button,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义
 Button,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Button,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Button,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Button,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Button,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Button,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Button,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -676,8 +1046,8 @@ Button,style.control.value,no,不适用,明确 value/progress；不使用样例�
 Button,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Button,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Button,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Button,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Button,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Button,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Button,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Button,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 TextButton,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 TextButton,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -695,6 +1065,7 @@ TextButton,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生
 TextButton,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 TextButton,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 TextButton,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+TextButton,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 TextButton,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 TextButton,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 TextButton,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -724,6 +1095,7 @@ TextButton,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自�
 TextButton,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 TextButton,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 TextButton,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+TextButton,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 TextButton,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 TextButton,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 TextButton,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -744,8 +1116,8 @@ TextButton,style.control.value,no,不适用,明确 value/progress；不使用样
 TextButton,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 TextButton,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 TextButton,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-TextButton,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-TextButton,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+TextButton,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+TextButton,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 TextButton,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 OutlinedButton,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 OutlinedButton,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -763,6 +1135,7 @@ OutlinedButton,style.layout.width_dp,yes,条件,width/size; 无显式值使用�
 OutlinedButton,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 OutlinedButton,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 OutlinedButton,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+OutlinedButton,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 OutlinedButton,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 OutlinedButton,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 OutlinedButton,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -792,6 +1165,7 @@ OutlinedButton,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/�
 OutlinedButton,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 OutlinedButton,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 OutlinedButton,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+OutlinedButton,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 OutlinedButton,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 OutlinedButton,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 OutlinedButton,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -812,8 +1186,8 @@ OutlinedButton,style.control.value,no,不适用,明确 value/progress；不使�
 OutlinedButton,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 OutlinedButton,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 OutlinedButton,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-OutlinedButton,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-OutlinedButton,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+OutlinedButton,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+OutlinedButton,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 OutlinedButton,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 IconButton,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 IconButton,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -831,6 +1205,7 @@ IconButton,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生
 IconButton,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 IconButton,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 IconButton,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+IconButton,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 IconButton,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 IconButton,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 IconButton,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -860,6 +1235,7 @@ IconButton,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自�
 IconButton,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 IconButton,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 IconButton,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+IconButton,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 IconButton,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 IconButton,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 IconButton,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -880,8 +1256,8 @@ IconButton,style.control.value,no,不适用,明确 value/progress；不使用样
 IconButton,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 IconButton,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 IconButton,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-IconButton,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-IconButton,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+IconButton,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+IconButton,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 IconButton,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 FloatingActionButton,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 FloatingActionButton,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -899,6 +1275,7 @@ FloatingActionButton,style.layout.width_dp,yes,条件,width/size; 无显式值�
 FloatingActionButton,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 FloatingActionButton,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 FloatingActionButton,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+FloatingActionButton,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 FloatingActionButton,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 FloatingActionButton,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 FloatingActionButton,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -928,6 +1305,7 @@ FloatingActionButton,style.transform.scale_x,yes,条件,scale 常量；graphicsL
 FloatingActionButton,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 FloatingActionButton,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 FloatingActionButton,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+FloatingActionButton,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 FloatingActionButton,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 FloatingActionButton,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 FloatingActionButton,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -948,8 +1326,8 @@ FloatingActionButton,style.control.value,no,不适用,明确 value/progress；�
 FloatingActionButton,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 FloatingActionButton,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 FloatingActionButton,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-FloatingActionButton,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-FloatingActionButton,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+FloatingActionButton,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+FloatingActionButton,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 FloatingActionButton,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 SmallFloatingActionButton,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 SmallFloatingActionButton,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -967,6 +1345,7 @@ SmallFloatingActionButton,style.layout.width_dp,yes,条件,width/size; 无显式
 SmallFloatingActionButton,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 SmallFloatingActionButton,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 SmallFloatingActionButton,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+SmallFloatingActionButton,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 SmallFloatingActionButton,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 SmallFloatingActionButton,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 SmallFloatingActionButton,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -996,6 +1375,7 @@ SmallFloatingActionButton,style.transform.scale_x,yes,条件,scale 常量；grap
 SmallFloatingActionButton,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 SmallFloatingActionButton,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 SmallFloatingActionButton,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+SmallFloatingActionButton,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 SmallFloatingActionButton,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 SmallFloatingActionButton,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 SmallFloatingActionButton,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1016,8 +1396,8 @@ SmallFloatingActionButton,style.control.value,no,不适用,明确 value/progress
 SmallFloatingActionButton,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 SmallFloatingActionButton,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 SmallFloatingActionButton,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-SmallFloatingActionButton,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-SmallFloatingActionButton,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+SmallFloatingActionButton,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+SmallFloatingActionButton,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 SmallFloatingActionButton,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Text,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Text,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1035,6 +1415,7 @@ Text,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测量
 Text,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Text,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Text,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Text,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Text,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Text,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Text,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1064,6 +1445,7 @@ Text,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义�
 Text,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Text,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Text,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Text,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Text,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Text,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Text,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1084,8 +1466,8 @@ Text,style.control.value,no,不适用,明确 value/progress；不使用样例数
 Text,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Text,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Text,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Text,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Text,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Text,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Text,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Text,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 BasicText,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 BasicText,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1103,6 +1485,7 @@ BasicText,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生�
 BasicText,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 BasicText,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 BasicText,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+BasicText,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 BasicText,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 BasicText,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 BasicText,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1132,6 +1515,7 @@ BasicText,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定
 BasicText,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 BasicText,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 BasicText,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+BasicText,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 BasicText,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 BasicText,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 BasicText,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1152,8 +1536,8 @@ BasicText,style.control.value,no,不适用,明确 value/progress；不使用样�
 BasicText,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 BasicText,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 BasicText,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-BasicText,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-BasicText,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+BasicText,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+BasicText,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 BasicText,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 ClickableText,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 ClickableText,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1171,6 +1555,7 @@ ClickableText,style.layout.width_dp,yes,条件,width/size; 无显式值使用原
 ClickableText,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 ClickableText,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 ClickableText,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+ClickableText,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 ClickableText,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 ClickableText,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 ClickableText,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1200,6 +1585,7 @@ ClickableText,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/�
 ClickableText,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 ClickableText,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 ClickableText,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+ClickableText,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 ClickableText,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 ClickableText,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 ClickableText,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1220,8 +1606,8 @@ ClickableText,style.control.value,no,不适用,明确 value/progress；不使用
 ClickableText,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 ClickableText,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 ClickableText,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-ClickableText,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-ClickableText,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+ClickableText,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+ClickableText,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 ClickableText,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 BasicTextField,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 BasicTextField,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1239,6 +1625,7 @@ BasicTextField,style.layout.width_dp,yes,条件,width/size; 无显式值使用�
 BasicTextField,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 BasicTextField,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 BasicTextField,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+BasicTextField,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 BasicTextField,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 BasicTextField,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 BasicTextField,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1268,6 +1655,7 @@ BasicTextField,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/�
 BasicTextField,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 BasicTextField,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 BasicTextField,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+BasicTextField,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 BasicTextField,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 BasicTextField,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 BasicTextField,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1288,8 +1676,8 @@ BasicTextField,style.control.value,no,不适用,明确 value/progress；不使�
 BasicTextField,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 BasicTextField,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 BasicTextField,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-BasicTextField,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-BasicTextField,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+BasicTextField,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+BasicTextField,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 BasicTextField,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 TextField,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 TextField,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1307,6 +1695,7 @@ TextField,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生�
 TextField,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 TextField,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 TextField,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+TextField,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 TextField,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 TextField,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 TextField,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1336,6 +1725,7 @@ TextField,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定
 TextField,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 TextField,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 TextField,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+TextField,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 TextField,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 TextField,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 TextField,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1356,8 +1746,8 @@ TextField,style.control.value,no,不适用,明确 value/progress；不使用样�
 TextField,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 TextField,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 TextField,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-TextField,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-TextField,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+TextField,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+TextField,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 TextField,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 OutlinedTextField,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 OutlinedTextField,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1375,6 +1765,7 @@ OutlinedTextField,style.layout.width_dp,yes,条件,width/size; 无显式值使�
 OutlinedTextField,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 OutlinedTextField,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 OutlinedTextField,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+OutlinedTextField,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 OutlinedTextField,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 OutlinedTextField,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 OutlinedTextField,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1404,6 +1795,7 @@ OutlinedTextField,style.transform.scale_x,yes,条件,scale 常量；graphicsLaye
 OutlinedTextField,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 OutlinedTextField,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 OutlinedTextField,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+OutlinedTextField,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 OutlinedTextField,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 OutlinedTextField,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 OutlinedTextField,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1424,8 +1816,8 @@ OutlinedTextField,style.control.value,no,不适用,明确 value/progress；不�
 OutlinedTextField,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 OutlinedTextField,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 OutlinedTextField,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-OutlinedTextField,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-OutlinedTextField,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+OutlinedTextField,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+OutlinedTextField,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 OutlinedTextField,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Image,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Image,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1443,6 +1835,7 @@ Image,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测�
 Image,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Image,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Image,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Image,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Image,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Image,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Image,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1472,6 +1865,7 @@ Image,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义�
 Image,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Image,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Image,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Image,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Image,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Image,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Image,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1492,8 +1886,8 @@ Image,style.control.value,no,不适用,明确 value/progress；不使用样例�
 Image,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Image,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Image,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Image,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Image,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Image,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Image,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Image,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Icon,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Icon,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1511,6 +1905,7 @@ Icon,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测量
 Icon,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Icon,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Icon,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Icon,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Icon,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Icon,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Icon,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1540,6 +1935,7 @@ Icon,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义�
 Icon,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Icon,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Icon,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Icon,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Icon,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Icon,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Icon,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1560,8 +1956,8 @@ Icon,style.control.value,no,不适用,明确 value/progress；不使用样例数
 Icon,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Icon,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Icon,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Icon,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Icon,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Icon,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Icon,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Icon,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 AsyncImage,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 AsyncImage,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1579,6 +1975,7 @@ AsyncImage,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生
 AsyncImage,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 AsyncImage,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 AsyncImage,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+AsyncImage,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 AsyncImage,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 AsyncImage,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 AsyncImage,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1608,6 +2005,7 @@ AsyncImage,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自�
 AsyncImage,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 AsyncImage,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 AsyncImage,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+AsyncImage,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 AsyncImage,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 AsyncImage,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 AsyncImage,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1628,8 +2026,8 @@ AsyncImage,style.control.value,no,不适用,明确 value/progress；不使用样
 AsyncImage,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 AsyncImage,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 AsyncImage,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-AsyncImage,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-AsyncImage,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+AsyncImage,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+AsyncImage,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 AsyncImage,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Spacer,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Spacer,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1647,6 +2045,7 @@ Spacer,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测�
 Spacer,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Spacer,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Spacer,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Spacer,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Spacer,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Spacer,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Spacer,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1676,6 +2075,7 @@ Spacer,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义
 Spacer,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Spacer,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Spacer,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Spacer,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Spacer,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Spacer,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Spacer,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1696,8 +2096,8 @@ Spacer,style.control.value,no,不适用,明确 value/progress；不使用样例�
 Spacer,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Spacer,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Spacer,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Spacer,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Spacer,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Spacer,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Spacer,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Spacer,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Checkbox,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Checkbox,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1715,6 +2115,7 @@ Checkbox,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生�
 Checkbox,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Checkbox,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Checkbox,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Checkbox,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Checkbox,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Checkbox,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Checkbox,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1744,6 +2145,7 @@ Checkbox,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定�
 Checkbox,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Checkbox,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Checkbox,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Checkbox,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Checkbox,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Checkbox,style.state.selected,yes,条件,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Checkbox,style.state.checked,yes,条件,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1764,8 +2166,8 @@ Checkbox,style.control.value,no,不适用,明确 value/progress；不使用样�
 Checkbox,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Checkbox,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Checkbox,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Checkbox,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Checkbox,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Checkbox,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Checkbox,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Checkbox,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Switch,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Switch,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1783,6 +2185,7 @@ Switch,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测�
 Switch,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Switch,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Switch,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Switch,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Switch,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Switch,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Switch,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1812,6 +2215,7 @@ Switch,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义
 Switch,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Switch,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Switch,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Switch,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Switch,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Switch,style.state.selected,yes,条件,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Switch,style.state.checked,yes,条件,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1832,8 +2236,8 @@ Switch,style.control.value,no,不适用,明确 value/progress；不使用样例�
 Switch,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Switch,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Switch,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Switch,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Switch,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Switch,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Switch,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Switch,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 RadioButton,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 RadioButton,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1851,6 +2255,7 @@ RadioButton,style.layout.width_dp,yes,条件,width/size; 无显式值使用原�
 RadioButton,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 RadioButton,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 RadioButton,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+RadioButton,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 RadioButton,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 RadioButton,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 RadioButton,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1880,6 +2285,7 @@ RadioButton,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自�
 RadioButton,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 RadioButton,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 RadioButton,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+RadioButton,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 RadioButton,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 RadioButton,style.state.selected,yes,条件,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 RadioButton,style.state.checked,yes,条件,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1900,8 +2306,8 @@ RadioButton,style.control.value,no,不适用,明确 value/progress；不使用�
 RadioButton,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 RadioButton,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 RadioButton,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-RadioButton,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-RadioButton,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+RadioButton,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+RadioButton,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 RadioButton,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Slider,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Slider,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1919,6 +2325,7 @@ Slider,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测�
 Slider,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Slider,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Slider,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Slider,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Slider,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Slider,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Slider,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -1948,6 +2355,7 @@ Slider,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定义
 Slider,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Slider,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Slider,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Slider,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Slider,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Slider,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Slider,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -1968,8 +2376,8 @@ Slider,style.control.value,yes,条件,明确 value/progress；不使用样例数
 Slider,style.control.minimum,yes,条件,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Slider,style.control.maximum,yes,条件,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Slider,style.control.steps,yes,条件,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Slider,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Slider,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Slider,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Slider,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Slider,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 LinearProgressIndicator,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 LinearProgressIndicator,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -1987,6 +2395,7 @@ LinearProgressIndicator,style.layout.width_dp,yes,条件,width/size; 无显式�
 LinearProgressIndicator,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 LinearProgressIndicator,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 LinearProgressIndicator,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+LinearProgressIndicator,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 LinearProgressIndicator,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 LinearProgressIndicator,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 LinearProgressIndicator,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -2016,6 +2425,7 @@ LinearProgressIndicator,style.transform.scale_x,yes,条件,scale 常量；graphi
 LinearProgressIndicator,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 LinearProgressIndicator,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 LinearProgressIndicator,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+LinearProgressIndicator,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 LinearProgressIndicator,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 LinearProgressIndicator,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 LinearProgressIndicator,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -2036,8 +2446,8 @@ LinearProgressIndicator,style.control.value,yes,条件,明确 value/progress；�
 LinearProgressIndicator,style.control.minimum,yes,条件,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 LinearProgressIndicator,style.control.maximum,yes,条件,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 LinearProgressIndicator,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-LinearProgressIndicator,style.control.active_color,yes,条件,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-LinearProgressIndicator,style.control.inactive_color,yes,条件,显式 trackColor 常量,page_snapshot_component_lines
+LinearProgressIndicator,style.control.active_color,yes,条件,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+LinearProgressIndicator,style.control.inactive_color,yes,条件,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 LinearProgressIndicator,style.control.stroke_width_dp,yes,条件,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 CircularProgressIndicator,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 CircularProgressIndicator,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -2055,6 +2465,7 @@ CircularProgressIndicator,style.layout.width_dp,yes,条件,width/size; 无显式
 CircularProgressIndicator,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 CircularProgressIndicator,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 CircularProgressIndicator,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+CircularProgressIndicator,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 CircularProgressIndicator,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 CircularProgressIndicator,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 CircularProgressIndicator,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -2084,6 +2495,7 @@ CircularProgressIndicator,style.transform.scale_x,yes,条件,scale 常量；grap
 CircularProgressIndicator,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 CircularProgressIndicator,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 CircularProgressIndicator,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+CircularProgressIndicator,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 CircularProgressIndicator,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 CircularProgressIndicator,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 CircularProgressIndicator,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -2104,8 +2516,8 @@ CircularProgressIndicator,style.control.value,yes,条件,明确 value/progress�
 CircularProgressIndicator,style.control.minimum,yes,条件,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 CircularProgressIndicator,style.control.maximum,yes,条件,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 CircularProgressIndicator,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-CircularProgressIndicator,style.control.active_color,yes,条件,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-CircularProgressIndicator,style.control.inactive_color,yes,条件,显式 trackColor 常量,page_snapshot_component_lines
+CircularProgressIndicator,style.control.active_color,yes,条件,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+CircularProgressIndicator,style.control.inactive_color,yes,条件,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 CircularProgressIndicator,style.control.stroke_width_dp,yes,条件,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 Divider,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 Divider,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -2123,6 +2535,7 @@ Divider,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测
 Divider,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 Divider,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 Divider,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+Divider,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 Divider,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 Divider,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 Divider,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -2152,6 +2565,7 @@ Divider,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定�
 Divider,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 Divider,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 Divider,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+Divider,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 Divider,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 Divider,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 Divider,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -2172,8 +2586,8 @@ Divider,style.control.value,no,不适用,明确 value/progress；不使用样例
 Divider,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 Divider,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 Divider,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-Divider,style.control.active_color,yes,条件,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-Divider,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+Divider,style.control.active_color,yes,条件,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+Divider,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 Divider,style.control.stroke_width_dp,yes,条件,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 HorizontalDivider,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 HorizontalDivider,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -2191,6 +2605,7 @@ HorizontalDivider,style.layout.width_dp,yes,条件,width/size; 无显式值使�
 HorizontalDivider,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 HorizontalDivider,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 HorizontalDivider,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+HorizontalDivider,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 HorizontalDivider,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 HorizontalDivider,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 HorizontalDivider,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -2220,6 +2635,7 @@ HorizontalDivider,style.transform.scale_x,yes,条件,scale 常量；graphicsLaye
 HorizontalDivider,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 HorizontalDivider,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 HorizontalDivider,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+HorizontalDivider,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 HorizontalDivider,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 HorizontalDivider,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 HorizontalDivider,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -2240,8 +2656,8 @@ HorizontalDivider,style.control.value,no,不适用,明确 value/progress；不�
 HorizontalDivider,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 HorizontalDivider,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 HorizontalDivider,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-HorizontalDivider,style.control.active_color,yes,条件,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-HorizontalDivider,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+HorizontalDivider,style.control.active_color,yes,条件,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+HorizontalDivider,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 HorizontalDivider,style.control.stroke_width_dp,yes,条件,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 VerticalDivider,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 VerticalDivider,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -2259,6 +2675,7 @@ VerticalDivider,style.layout.width_dp,yes,条件,width/size; 无显式值使用�
 VerticalDivider,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 VerticalDivider,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 VerticalDivider,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+VerticalDivider,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 VerticalDivider,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 VerticalDivider,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 VerticalDivider,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -2288,6 +2705,7 @@ VerticalDivider,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/
 VerticalDivider,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 VerticalDivider,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 VerticalDivider,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+VerticalDivider,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 VerticalDivider,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 VerticalDivider,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 VerticalDivider,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -2308,8 +2726,8 @@ VerticalDivider,style.control.value,no,不适用,明确 value/progress；不使�
 VerticalDivider,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 VerticalDivider,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 VerticalDivider,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-VerticalDivider,style.control.active_color,yes,条件,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-VerticalDivider,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+VerticalDivider,style.control.active_color,yes,条件,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+VerticalDivider,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 VerticalDivider,style.control.stroke_width_dp,yes,条件,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 content,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 content,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -2327,6 +2745,7 @@ content,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测
 content,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 content,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 content,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+content,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 content,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 content,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 content,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -2356,6 +2775,7 @@ content,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定�
 content,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 content,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 content,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+content,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 content,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 content,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 content,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -2376,8 +2796,8 @@ content,style.control.value,no,不适用,明确 value/progress；不使用样例
 content,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 content,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 content,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-content,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-content,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+content,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+content,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 content,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 toolbar,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 toolbar,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -2395,6 +2815,7 @@ toolbar,style.layout.width_dp,yes,条件,width/size; 无显式值使用原生测
 toolbar,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 toolbar,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 toolbar,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+toolbar,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 toolbar,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 toolbar,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 toolbar,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -2424,6 +2845,7 @@ toolbar,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自定�
 toolbar,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 toolbar,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 toolbar,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+toolbar,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 toolbar,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 toolbar,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 toolbar,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -2444,8 +2866,8 @@ toolbar,style.control.value,no,不适用,明确 value/progress；不使用样例
 toolbar,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 toolbar,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 toolbar,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-toolbar,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-toolbar,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+toolbar,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+toolbar,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 toolbar,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines
 ProgressRing,structure.type,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
 ProgressRing,structure.parent_id,yes,已实现,SourceTree/lanhu_layer,page_snapshot_component_lines
@@ -2463,6 +2885,7 @@ ProgressRing,style.layout.width_dp,yes,条件,width/size; 无显式值使用原�
 ProgressRing,style.layout.height_dp,yes,条件,height/size; 无显式值使用原生测量，不用参考 frame,page_snapshot_dimension_lines
 ProgressRing,style.surface.background,yes,条件,solid/null、水平/垂直 Clamp 渐变；未知端点/径向/图片背景阻断,page_snapshot_component_lines
 ProgressRing,style.surface.corner_radius_dp,yes,条件,四角事实；AbsoluteRoundedCornerShape、统一圆角；方向未知的非对称 Start/End 阻断,page_snapshot_component_lines
+ProgressRing,style.surface.corner_sizes,yes,条件,带单位四角：dp/px/percent；百分比依赖原生测量的较短边；方向未知的非对称 Start/End 未解析,page_snapshot_component_lines
 ProgressRing,style.surface.border,yes,条件,统一 solid/dashed/dotted/none；单边、自定义 dash 阻断,page_snapshot_component_lines
 ProgressRing,style.surface.shadows,yes,近似,单阴影且 spread=0；Android elevation 转换仍是近似；多阴影阻断,page_snapshot_component_lines
 ProgressRing,style.surface.alpha,yes,已实现,alpha 常量 0..1,page_snapshot_component_lines
@@ -2492,6 +2915,7 @@ ProgressRing,style.transform.scale_x,yes,条件,scale 常量；graphicsLayer/自
 ProgressRing,style.transform.scale_y,yes,条件,scale 常量；不推算未知表达式,page_snapshot_component_lines
 ProgressRing,style.transform.rotation_degrees,yes,条件,rotate 常量；默认中心原点,page_snapshot_component_lines
 ProgressRing,style.state.visible,yes,条件,显式布尔页面状态；消失不占位，不等于完整动画状态机,page_snapshot_component_lines
+ProgressRing,style.state.refreshing,no,不适用,isRefreshing 固定布尔状态；Box 叠加原生 LoadingProgress，动画外观近似，不包含刷新业务回调,page_snapshot_component_lines
 ProgressRing,style.state.enabled,yes,已实现,显式布尔优先于默认值；动态未知值不填 true,page_snapshot_component_lines
 ProgressRing,style.state.selected,no,不适用,RadioButton 的明确选中态；不代表任意容器都有选中样式,page_snapshot_component_lines
 ProgressRing,style.state.checked,no,不适用,Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断,page_snapshot_component_lines
@@ -2512,6 +2936,6 @@ ProgressRing,style.control.value,no,不适用,明确 value/progress；不使用�
 ProgressRing,style.control.minimum,no,不适用,Slider valueRange 或明确默认 0；进度固定 0..1,page_snapshot_component_lines
 ProgressRing,style.control.maximum,no,不适用,Slider valueRange 或明确默认 1；上限必须大于下限,page_snapshot_component_lines
 ProgressRing,style.control.steps,no,不适用,离散 steps 转 (max-min)/(steps+1)；连续型与小于平台最小步长阻断,page_snapshot_component_lines
-ProgressRing,style.control.active_color,no,不适用,显式 color 常量，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
-ProgressRing,style.control.inactive_color,no,不适用,显式 trackColor 常量,page_snapshot_component_lines
+ProgressRing,style.control.active_color,no,不适用,显式 color 常量或刷新指示器主题色，作用于轨迹/分隔线而非文字,page_snapshot_component_lines
+ProgressRing,style.control.inactive_color,no,不适用,显式 trackColor 常量或刷新指示器主题背景,page_snapshot_component_lines
 ProgressRing,style.control.stroke_width_dp,no,不适用,常量 thickness/strokeWidth；分隔线默认1dp,page_snapshot_component_lines

@@ -847,7 +847,8 @@ class RealPagePipelineTest(unittest.TestCase):
 
         facts = build_required_facts(component)
 
-        self.assertFalse(any(item["path"] == "style.surface.background" for item in facts))
+        self.assertEqual(style['surface']['background'], {'type': 'solid', 'color': '#00000000'})
+        self.assertTrue(any(item['path'] == 'style.surface.background' and item['status'] == 'resolved' for item in facts))
         self.assertEqual(required_fact_gate([{**component, "required_facts": facts}])["verdict"], "pass")
 
     def test_required_facts_distinguish_symbolic_from_missing_constant(self) -> None:
@@ -1628,6 +1629,11 @@ class RealPagePipelineTest(unittest.TestCase):
                 "decoration": None,
                 "soft_wrap": None,
                 "min_lines": None,
+                "baseline_shift": None,
+                "include_font_padding": None,
+                "line_height_alignment": None,
+                "line_height_trim": None,
+                "line_break": None,
             },
         )
 
@@ -1832,8 +1838,8 @@ class RealPagePipelineTest(unittest.TestCase):
         self.assertEqual(metrics["checks"]["exact_text_matches"], 2)
         self.assertEqual(metrics["checks"]["stable_runtime_id_matches"], 1)
         self.assertEqual(metrics["checks"]["exact_content_description_matches"], 0)
-        self.assertEqual(metrics["source"]["unresolved_required_visual_fact_count"], 0)
-        self.assertTrue(metrics["claims"]["all_visual_styles_resolved"])
+        self.assertGreater(metrics["source"]["unresolved_required_visual_fact_count"], 0)
+        self.assertFalse(metrics["claims"]["all_visual_styles_resolved"])
         self.assertEqual(metrics["timings_ms"]["total"], 55.5)
         mapped = [item for item in snapshot["components"] if item.get("source")]
         self.assertEqual(len(mapped), 5)

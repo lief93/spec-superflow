@@ -448,6 +448,7 @@ def convert_vector(
             child,
             {"pathData"},
             {
+                "name",
                 "fillAlpha",
                 "fillColor",
                 "fillType",

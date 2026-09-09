@@ -408,6 +408,31 @@ empty, error, dialog, selected, keyboard-open, or scrolled states.
 
 ## Use the source-generated Lanhu page as generation input
 
+For an isolated component whose surrounding application supplies a theme object, the selected
+state input may contain `source_bindings`, mapping ambient names to bounded source expressions
+(for example `"UI.typo": "ThemeFactory.typography()"`). The referenced declarations must be in
+the safe source inventory. This evaluates the actual provider, not a per-node style override.
+Unknown provider members remain unresolved independently. `remember` only evaluates supported
+pure initializer expressions in the fixed state; it never executes application callbacks or
+network operations. Forwarded parameters retain their caller's import scope.
+
+Material `Icons.*` references need real target assets, not only a resource name in the page.
+Import the matching AndroidX dependency version's source JARs before generation:
+
+```bash
+python3 "$SKILL_ROOT/scripts/materialize_compose_icons.py" \
+  --source-jar "$MATERIAL_CORE_SOURCES_JAR" \
+  --source-jar "$MATERIAL_EXTENDED_SOURCES_JAR" \
+  --target "$TARGET" --icon Icons.Rounded.Search
+```
+
+The importer uses Kotlin PSI to copy supported Material path commands to SVG, keeps source and
+output SHA-256 in `.migration/compose-material-icons.json`, and fails explicitly on unsupported
+path commands. It does not substitute another platform's icon. Standard Material icons keep
+their 24dp intrinsic size even when no `Modifier.size` is present. Automatic RTL mirroring and
+nonstandard vector factories are not certified by this importer; verify those states separately.
+No source JAR or downloaded resource is bundled into the tool repository.
+
 After generating the source-derived Lanhu-compatible page JSON for one deterministic route/state,
 pass that single page-fact input to the ArkUI generator:
 

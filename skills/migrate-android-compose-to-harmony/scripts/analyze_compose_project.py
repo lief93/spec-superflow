@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from validate_ai_safe_tree import validate as validate_ai_safe_tree
+from ui_migration.frontend.ui_declarations import NATIVE_SLOTS
+from ui_migration.frontend.source_symbols import SourceSymbolIndex, resolve_functions, function_identity
 
 
 PRIMITIVE_MAPPING_CATALOG_PATH = (
@@ -35,8 +37,10 @@ COMPOSE_COMPONENTS = (
     "AnimatedVisibility",
     "BasicText",
     "BasicTextField",
+    "BottomAppBar",
     "Box",
     "BoxWithConstraints",
+    "PullToRefreshBox",
     "Button",
     "Canvas",
     "Card",
@@ -56,8 +60,11 @@ COMPOSE_COMPONENTS = (
     "ElevatedCard",
     "ExposedDropdownMenuBox",
     "FilterChip",
+    "ListItem",
+    "LargeFlexibleTopAppBar",
     "FloatingActionButton",
     "SmallFloatingActionButton",
+    "ExtendedFloatingActionButton",
     "FlowRow",
     "HorizontalPager",
     "HorizontalDivider",
@@ -340,6 +347,7 @@ UI_SEMANTIC_ARGUMENTS = {
     "itemCount",
     "itemVerticalAlignment",
     "isError",
+    "isRefreshing",
     "keyboardActions",
     "keyboardOptions",
     "leadingIcon",
@@ -389,6 +397,7 @@ UI_SEMANTIC_ARGUMENTS = {
     "suffix",
     "supportingText",
     "targetState",
+    "contentWindowInsets",
     "text",
     "textAlign",
     "textDecoration",
@@ -599,7 +608,8 @@ def load_text_files(snapshot: Path, manifest: dict[str, Any]) -> dict[str, str]:
         actual_hash = hashlib.sha256(content).hexdigest()
         if actual_hash != expected_hash:
             raise AnalysisError(f"snapshot file changed after audit: {relative}")
-        result[relative] = content.decode("utf-8")
+        # PSI expects normalized document newlines, as Path.read_text does elsewhere.
+        result[relative] = content.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
     return result
 
 
@@ -950,7 +960,7 @@ def split_named_argument(argument: str) -> tuple[str, str] | None:
             opener = pairs[character]
             depths[opener] = max(0, depths[opener] - 1)
         elif character == "=" and not any(depths.values()):
-            name = argument[:index].strip()
+            name = code[:index].strip()
             if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) is not None:
                 return name, trim_with_code_mask(argument[index + 1 :], code[index + 1 :])
             return None
@@ -958,7 +968,9 @@ def split_named_argument(argument: str) -> tuple[str, str] | None:
 
 
 def normalize_expression(expression: str) -> str:
-    return re.sub(r"\s+", " ", expression.strip())[:1000]
+    # Kotlin newlines separate when branches/statements; string whitespace is data.
+    # Keep executable expressions intact instead of turning them into log summaries.
+    return lexical_code_mask(expression, mask_strings=False).strip()
 
 
 def expression_semantics(expression: str) -> dict[str, Any]:
@@ -1493,6 +1505,7 @@ def extract_compose_theme_tokens(files: dict[str, str]) -> dict[str, Any]:
     tokens: list[dict[str, Any]] = []
     color_schemes: list[dict[str, Any]] = []
     extended_color_sets: list[dict[str, Any]] = []
+    color_accessors: list[dict[str, str]] = []
     typography_sets: list[dict[str, Any]] = []
     shape_sets: list[dict[str, Any]] = []
     theme_applications: list[dict[str, Any]] = []
@@ -1526,6 +1539,10 @@ def extract_compose_theme_tokens(files: dict[str, str]) -> dict[str, Any]:
     for relative, text in sorted(files.items()):
         if not relative.endswith((".kt", ".kts")):
             continue
+        for accessor in re.finditer(r'\bval\s+MaterialTheme\.(\w+)\s*:\s*(\w+)\s+@Composable\s+get\(\)\s*=\s*(\w+)\.current', lexical_code_mask(text)):
+            if accessor.group(2) in color_data_classes:
+                color_accessors.append({'source': relative, 'expression': 'MaterialTheme.' + accessor.group(1),
+                                        'type': accessor.group(2), 'composition_local': accessor.group(3)})
         declarations = extract_kotlin_val_declarations(relative, text)
         conditional_bindings = [
             parsed
@@ -1634,9 +1651,15 @@ def extract_compose_theme_tokens(files: dict[str, str]) -> dict[str, Any]:
                         }
                     )
             elif callee == "Typography":
+                from kotlin_psi import parse_declarations
+                syntax = parse_declarations(text)
+                scope = {'source': relative, 'imports': syntax['imports'],
+                         'bindings': {p['name']: p['expression'] for p in syntax['globalProperties']
+                                      if p.get('owner') is None}}
                 styles: dict[str, Any] = {}
                 for role, value in sorted(arguments.items()):
                     style = expression_semantics(value)
+                    style['source_scope'] = scope
                     nested = call_named_arguments(value)
                     if nested is not None and nested[0] == "TextStyle":
                         style["properties"] = {
@@ -1805,6 +1828,7 @@ def extract_compose_theme_tokens(files: dict[str, str]) -> dict[str, Any]:
             key=lambda item: (item["source"], item["line"], item["name"]),
         ),
         "extended_color_set_count": len(extended_color_sets),
+        "color_accessors": color_accessors,
         "extended_color_sets": sorted(
             extended_color_sets,
             key=lambda item: (item["source"], item["line"], item["name"]),
@@ -1870,6 +1894,9 @@ def ordered_modifier_chain(expression: str) -> list[dict[str, Any]]:
                         if lambda_closing is not None:
                             item["trailing_lambda"] = normalize_expression(expression[next_index : lambda_closing + 1])
                             next_index = lambda_closing + 1
+                    # Display-normalized expressions cannot be reparsed safely: newlines
+                    # separate Kotlin statements and string contents must stay intact.
+                    item["syntax_expression"] = expression[index + 1 : next_index].strip()
                     result.append(item)
                     index = next_index
                     continue
@@ -1887,6 +1914,7 @@ def ordered_modifier_chain(expression: str) -> list[dict[str, Any]]:
                         {
                             "name": match.group(1),
                             "arguments": semantics.pop("expression"),
+                            "syntax_expression": expression[index + 1 : closing + 1].strip(),
                             **semantics,
                         }
                     )
@@ -1896,19 +1924,25 @@ def ordered_modifier_chain(expression: str) -> list[dict[str, Any]]:
     return result
 
 
-def local_value_expressions(body: str, body_code: str) -> dict[str, str]:
+def local_value_expressions(body: str, body_code: str, top_level_only: bool = False) -> dict[str, str]:
     values: dict[str, str] = {}
     end_code = lexical_code_mask(body, mask_strings=False)
     for match in re.finditer(r"\b(?:val|var)\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*[^=\n]+)?\s*=", body_code):
+        prefix = body_code[:match.start()]
+        if top_level_only and (prefix.count('{') != prefix.count('}') or prefix.count('(') != prefix.count(')')):
+            continue
         expression_start = match.end()
         expression_end = local_value_expression_end(end_code, expression_start)
-        expression = normalize_expression(body[expression_start:expression_end])
+        expression = body[expression_start:expression_end].strip()
         if expression:
             values[match.group(1)] = expression
     for match in re.finditer(r"\b(?:val|var)\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*[^=\n]+)?\s+by\s+", body_code):
+        prefix = body_code[:match.start()]
+        if top_level_only and (prefix.count('{') != prefix.count('}') or prefix.count('(') != prefix.count(')')):
+            continue
         expression_start = match.end()
         expression_end = local_value_expression_end(end_code, expression_start)
-        expression = normalize_expression(body[expression_start:expression_end])
+        expression = body[expression_start:expression_end].strip()
         if expression:
             values[match.group(1)] = expression
     return values
@@ -1991,6 +2025,16 @@ def receiver_expression_before_member_call(body: str, body_code: str, dot_index:
     while end > 0 and body_code[end - 1].isspace():
         end -= 1
     start = end
+    call_receiver = start > 0 and body_code[start - 1] == ")"
+    if call_receiver:
+        depth = 1
+        start -= 1
+        while start > 0 and depth:
+            start -= 1
+            depth += (body_code[start] == ")") - (body_code[start] == "(")
+        if depth:
+            return None
+    name_end = start
     while start > 0:
         char = body_code[start - 1]
         if char.isalnum() or char in {"_", ".", "?"}:
@@ -2000,7 +2044,8 @@ def receiver_expression_before_member_call(body: str, body_code: str, dot_index:
     receiver = body[start:end].strip()
     if receiver.endswith("?"):
         receiver = receiver[:-1].strip()
-    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:(?:\?\.|\.)[A-Za-z_][A-Za-z0-9_]*)*", receiver):
+    name = body[start:name_end] if call_receiver else receiver
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:(?:\?\.|\.)[A-Za-z_][A-Za-z0-9_]*)*", name):
         return None
     return normalize_expression(receiver)
 
@@ -2061,51 +2106,58 @@ def rewrite_implicit_it_member_access(expression: str, scope: dict[str, Any]) ->
 
 def enclosing_if_conditions(body: str, body_code: str) -> list[dict[str, Any]]:
     conditions: list[dict[str, Any]] = []
-    for match in re.finditer(r"\bif\s*\(", body_code):
-        condition_open = body_code.find("(", match.start())
-        if condition_open < 0:
-            continue
+    chain_members: set[int] = set()
+
+    def next_token(index: int) -> int:
+        while index < len(body_code) and body_code[index].isspace():
+            index += 1
+        return index
+
+    def read_branch(start: int) -> tuple[str, int, int] | None:
+        condition_open = body_code.find("(", start)
         condition_close = balanced_closing(body_code, condition_open, "(", ")")
         if condition_close is None:
-            continue
-        block_open = condition_close + 1
-        while block_open < len(body_code) and body_code[block_open].isspace():
-            block_open += 1
+            return None
+        block_open = next_token(condition_close + 1)
         if block_open >= len(body_code) or body_code[block_open] != "{":
-            continue
+            return None
         block_close = balanced_closing(body_code, block_open, "{", "}")
         if block_close is None:
-            continue
+            return None
         condition = body[condition_open + 1 : condition_close].strip()
-        if not condition:
+        return (condition, block_open + 1, block_close) if condition else None
+
+    for match in re.finditer(r"\bif\s*\(", body_code):
+        if match.start() in chain_members:
             continue
-        conditions.append(
-            {
-                "start": block_open + 1,
-                "end": block_close,
-                "condition": condition,
-            }
-        )
-        else_start = block_close + 1
-        while else_start < len(body_code) and body_code[else_start].isspace():
-            else_start += 1
-        if not body_code.startswith("else", else_start):
-            continue
-        else_open = else_start + len("else")
-        while else_open < len(body_code) and body_code[else_open].isspace():
-            else_open += 1
-        if else_open >= len(body_code) or body_code[else_open] != "{":
-            continue
-        else_close = balanced_closing(body_code, else_open, "{", "}")
-        if else_close is None:
-            continue
-        conditions.append(
-            {
-                "start": else_open + 1,
-                "end": else_close,
-                "condition": f"!({condition})",
-            }
-        )
+        branch_start = match.start()
+        prior: list[str] = []
+        chain: list[dict[str, Any]] = []
+        while (branch := read_branch(branch_start)) is not None:
+            condition, start, end = branch
+            expression = " && ".join([*(f"!({item})" for item in prior), f"({condition})"]) if prior else condition
+            chain.append({'start': start, 'end': end, 'condition': expression,
+                          'branch_id': 'then' if not prior else f'else-if-{len(prior)}'})
+            prior.append(condition)
+            else_start = next_token(end + 1)
+            if not body_code.startswith('else', else_start):
+                break
+            else_open = next_token(else_start + 4)
+            if re.match(r'if\s*\(', body_code[else_open:]):
+                chain_members.add(else_open)
+                branch_start = else_open
+                continue
+            if else_open < len(body_code) and body_code[else_open] == '{':
+                else_close = balanced_closing(body_code, else_open, '{', '}')
+                if else_close is not None:
+                    chain.append({'start': else_open + 1, 'end': else_close,
+                                  'condition': ' && '.join(f'!({item})' for item in prior),
+                                  'branch_id': 'else'})
+            break
+        branches = [item['branch_id'] for item in chain]
+        if chain and 'else' not in branches:
+            branches.append('else')
+        conditions.extend({**item, 'group_id': f'if:{match.start()}', 'branches': branches} for item in chain)
     return conditions
 
 
@@ -2135,11 +2187,11 @@ def enclosing_when_conditions(body: str, body_code: str) -> list[dict[str, Any]]
         branch_offset = block_open + 1
         prior_conditions: list[str] = []
         branches = []
-        for branch in re.finditer(r"(?m)^[ \t]*(.+?)\s*->", branch_code):
+        for branch in re.finditer(r"(?m)^([^\n]*?)->", branch_code):
             prefix = branch_code[: branch.start()]
             if prefix.count("{") != prefix.count("}"):
                 continue
-            label = normalize_expression(branch.group(1))
+            label = normalize_expression(body[branch_offset + branch.start(1) : branch_offset + branch.end(1)])
             if not label:
                 continue
             branches.append((branch, label))
@@ -2183,6 +2235,9 @@ def enclosing_when_conditions(body: str, body_code: str) -> list[dict[str, Any]]
                     "start": range_start,
                     "end": branch_end,
                     "condition": condition,
+                    "group_id": f"when:{match.start()}",
+                    "branch_id": label,
+                    "branches": [item[1] for item in branches],
                 }
             )
     return conditions
@@ -2190,7 +2245,7 @@ def enclosing_when_conditions(body: str, body_code: str) -> list[dict[str, Any]]
 
 def lazy_items_scopes(body: str, body_code: str) -> list[dict[str, Any]]:
     scopes: list[dict[str, Any]] = []
-    for match in re.finditer(r"\bitems\s*\(", body_code):
+    for match in re.finditer(r"\b(items|itemsIndexed)\s*\(", body_code):
         opening = body_code.find("(", match.start())
         if opening < 0:
             continue
@@ -2217,40 +2272,45 @@ def lazy_items_scopes(body: str, body_code: str) -> list[dict[str, Any]]:
         if lambda_end is None:
             continue
         raw_lambda_body = body[lambda_opening + 1 : lambda_end]
-        parameters = trailing_lambda_parameter_names(raw_lambda_body)
-        if len(parameters) != 1:
+        from kotlin_psi import parse_expression
+        parameters = parse_expression('{' + raw_lambda_body + '}').get('parameterPatterns') or ['it']
+        indexed = match.group(1) == 'itemsIndexed'
+        if len(parameters) != (2 if indexed else 1):
             continue
         scopes.append(
             {
                 "start": lambda_opening + 1,
                 "end": lambda_end,
                 "collection": normalize_expression(collection_expression),
-                "item_parameter": parameters[0],
+                "item_parameter": parameters[-1],
+                **({'index_parameter': parameters[0]} if indexed else {}),
             }
         )
     return scopes
 
 
 def for_each_scopes(body: str, body_code: str) -> list[dict[str, Any]]:
+    from kotlin_psi import parse_declarations
     scopes: list[dict[str, Any]] = []
-    for match in re.finditer(r"\.forEach\s*\{", body_code):
-        receiver = receiver_expression_before_member_call(body, body_code, match.start())
-        if receiver is None:
+    if 'forEach' not in body_code:
+        return scopes
+    prefix = 'fun scopedContent() {\n'
+    syntax = parse_declarations(prefix + body + '\n}')
+    for call in syntax.get('qualifiedCalls', []):
+        if call.get('callee') not in {'forEach', 'forEachIndexed'} or len(call.get('lambdaScopes', [])) != 1:
             continue
-        opening = match.end() - 1
-        closing = balanced_closing(body_code, opening, "{", "}")
-        if closing is None:
-            continue
-        raw_lambda_body = body[opening + 1 : closing]
-        parameters = trailing_lambda_parameter_names(raw_lambda_body)
-        if len(parameters) > 1:
+        scope = call['lambdaScopes'][0]
+        parameters = scope['expression'].get('parameterPatterns') or ['it']
+        indexed = call['callee']=='forEachIndexed'
+        if len(parameters) != (2 if indexed else 1):
             continue
         scopes.append(
             {
-                "start": opening + 1,
-                "end": closing,
-                "collection": receiver,
-                "item_parameter": parameters[0] if parameters else "it",
+                "start": scope['start'] - len(prefix),
+                "end": scope['end'] - len(prefix),
+                "collection": call['receiver'],
+                "item_parameter": parameters[-1],
+                **({'index_parameter':parameters[0]} if indexed else {}),
             }
         )
     return scopes
@@ -2268,18 +2328,55 @@ def extract_semantic_ui_calls(
     slot_parameter_names: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     body_code = lexical_code_mask(body)
-    local_values = local_value_expressions(body, body_code)
+    from kotlin_psi import parse_declarations
+    scope_prefix = 'fun __scope() {'
+    scope_syntax = parse_declarations(scope_prefix + body + '}')
+    scoped_bindings = scope_syntax['localBindings']
+    from ui_migration.frontend.callable_inventory import callable_field_names
+    from kotlin_psi import parse_expression
+    callable_names = callable_field_names(parse_declarations(source_text))
+    stored_lambdas = []
+    def collect_lambdas(node):
+        if isinstance(node, dict):
+            if node.get('kind')=='lambda':
+                stored_lambdas.append(node)
+            for value in node.values():
+                collect_lambdas(value)
+        elif isinstance(node, list):
+            for value in node:
+                collect_lambdas(value)
+    for binding in scoped_bindings:
+        expression = parse_expression(binding['expression'])
+        collect_lambdas(expression)
+        def has_callable(node):
+            if isinstance(node, dict):
+                return node.get('kind') in ('lambda','callable_reference') or any(has_callable(v) for v in node.values())
+            return isinstance(node, list) and any(has_callable(v) for v in node)
+        if has_callable(expression):
+            callable_names.add(binding['name'])
+    qualified_calls = {call['start'] - len(scope_prefix): call['name'] for call in scope_syntax['qualifiedCalls']}
+    file_values = local_value_expressions(source_text, lexical_code_mask(source_text), top_level_only=True)
     let_scopes = implicit_it_let_scopes(body, body_code)
     if_conditions = enclosing_if_conditions(body, body_code)
     when_conditions = enclosing_when_conditions(body, body_code)
     item_scopes = lazy_items_scopes(body, body_code)
     item_scopes.extend(for_each_scopes(body, body_code))
+    item_scopes.extend({**scope, 'start': scope['start'] - len(scope_prefix),
+                        'end': scope['end'] - len(scope_prefix)}
+                       for scope in scope_syntax.get('forLoops', []))
     slot_parameter_names = slot_parameter_names or set()
     candidates: list[dict[str, Any]] = []
     for match in re.finditer(
         r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(\(|\{)",
         body_code,
     ):
+        local_values = {}
+        for binding in sorted(scoped_bindings, key=lambda entry: entry['start']):
+            if binding['start'] <= match.start() + len(scope_prefix) < binding['end']:
+                expression = binding['expression']
+                if binding.get('delegated'):
+                    expression = 'run { val ' + binding['name'] + ' by ' + expression + '; ' + binding['name'] + ' }'
+                local_values[binding['name']] = expression
         opening = match.end() - 1
         delimiter = match.group(2)
         if delimiter == "(":
@@ -2315,11 +2412,17 @@ def extract_semantic_ui_calls(
                 continue
             positional_arguments.append(expression_semantics(candidate))
         component = match.group(1)
+        callable_invocation = component in callable_names or component == 'invoke'
+        definition_name = qualified_calls.get(match.start(), component)
+        if definition_name not in resolved_custom_composables:
+            definition_name = component
         known_component = (
             component in COMPOSE_COMPONENTS
+            or component in NATIVE_SLOTS
             or component in associated_custom_images
-            or component in resolved_custom_composables
+            or definition_name in resolved_custom_composables
             or component in slot_parameter_names
+            or callable_invocation
         )
         if component[:1].islower() and not known_component:
             continue
@@ -2345,7 +2448,7 @@ def extract_semantic_ui_calls(
                 raw_lambda_body = body[lambda_opening + 1 : lambda_end]
                 raw_trailing_lambda_body = raw_lambda_body
                 trailing_lambda_parameters = trailing_lambda_parameter_names(raw_lambda_body)
-                lambda_body = re.sub(r"\s+", " ", raw_lambda_body.strip())
+                lambda_body = normalize_expression(raw_lambda_body)
                 trailing_lambda_expression = "{}" if not lambda_body else f"{{ {lambda_body} }}"
                 trailing_lambda_span = (lambda_opening + 1, lambda_end)
         line = source_text.count("\n", 0, body_opening + match.start()) + 1
@@ -2455,13 +2558,10 @@ def extract_semantic_ui_calls(
             r'\bOutlinedTextFieldDefaults\s*\.\s*$', body_code[:match.start()]
         ):
             candidate['decoration_kind'] = 'material3-outlined'
-        native_slots = {
-            'Scaffold': {'topBar', 'bottomBar', 'content', 'snackbarHost', 'floatingActionButton'},
-            'TopAppBar': {'title', 'navigationIcon', 'actions'},
-            'CenterAlignedTopAppBar': {'title', 'navigationIcon', 'actions'},
-            'DecorationBox': {'leadingIcon', 'trailingIcon', 'placeholder', 'label', 'supportingText', 'container', 'innerTextField'},
-        }.get(component, set())
+        native_slots = NATIVE_SLOTS.get(component, set()) if definition_name not in resolved_custom_composables else set()
         if native_slots:
+            candidate['native_slot_arguments'] = {name: expression for name, expression in named_arguments.items()
+                                                  if name in native_slots}
             spans = []
             for chunk, chunk_start, chunk_end in argument_spans:
                 named = split_named_argument(chunk)
@@ -2472,27 +2572,46 @@ def extract_semantic_ui_calls(
                 spans.append({'name': 'content', 'start': trailing_lambda_span[0],
                               'end': trailing_lambda_span[1]})
             candidate['_slot_argument_spans'] = spans
-        if component in slot_parameter_names:
-            candidate["slot_invocation"] = {"name": component}
+        if component in slot_parameter_names or callable_invocation:
+            candidate["slot_invocation"] = {
+                "name": component,
+                **({'expression':qualified_calls.get(match.start(), component)} if callable_invocation else {}),
+                "arguments": [normalize_expression(chunk) for chunk in argument_chunks],
+            }
         if component == "Canvas" and raw_trailing_lambda_body is not None:
             commands = canvas_draw_commands(raw_trailing_lambda_body)
             if commands:
                 candidate["custom_draw_commands"] = commands
         if local_values:
             candidate["local_values"] = local_values
+        if file_values:
+            candidate["file_values"] = file_values
         if visibility_condition is not None:
             candidate["visibility_condition"] = expression_semantics(visibility_condition)
+            candidate["ui_state_path"] = [
+                {key: condition[key] for key in ("group_id", "branch_id", "branches", "condition")}
+                for condition in sorted(if_conditions + when_conditions,
+                                        key=lambda item: (item["start"], -item["end"]))
+                if condition["start"] <= match.start() < condition["end"]
+            ]
         if item_scope is not None:
             candidate["list_item_context"] = {
                 "collection": item_scope["collection"],
                 "item_parameter": item_scope["item_parameter"],
+                **({'index_parameter':item_scope['index_parameter']} if 'index_parameter' in item_scope else {}),
             }
-        definitions = resolved_custom_composables.get(component)
+            candidate['list_item_contexts'] = [
+                {'scope_id': f'{relative}:{composable}:{scope["start"]}',
+                 **{key: scope[key] for key in ('collection', 'item_parameter', 'index_parameter') if key in scope}}
+                for scope in sorted(item_scopes, key=lambda scope: (scope['start'], -scope['end']))
+                if scope['start'] <= match.start() < scope['end']
+            ]
+        definitions = resolved_custom_composables.get(definition_name)
         if definitions is not None:
             invocation_arguments: list[dict[str, Any]] = []
             supplied_names: set[str] = set()
             slot_argument_spans: list[dict[str, Any]] = []
-            parameters = resolved_custom_composable_parameters.get(component) or []
+            parameters = resolved_custom_composable_parameters.get(definition_name) or []
             slot_parameter_names_for_component = {
                 parameter["name"]
                 for parameter in parameters
@@ -2547,7 +2666,6 @@ def extract_semantic_ui_calls(
                     isinstance(last_name, str)
                     and last_name not in supplied_names
                     and "->" in last_type
-                    and "@Composable" not in last_type
                 ):
                     invocation_arguments.append(
                         {
@@ -2564,6 +2682,7 @@ def extract_semantic_ui_calls(
                 candidate["_slot_argument_spans"] = slot_argument_spans
         candidates.append(candidate)
     for ordinal, candidate in enumerate(candidates, start=1):
+        candidate['source_order'] = ordinal
         candidate["call_id"] = (
             f"{relative}:{candidate['line']}:{candidate['component']}:{ordinal}"
         )
@@ -2593,6 +2712,11 @@ def extract_semantic_ui_calls(
                 candidate["slot_argument_name"] = span["name"]
                 break
     for candidate in candidates:
+        if candidate.get('parent_call_id') is None and any(
+                entry['expression'] in stored_lambdas
+                and entry['start']-len(scope_prefix)<=candidate['_start']<entry['end']-len(scope_prefix)
+                for entry in scope_syntax.get('lambdas', [])):
+            candidate['callable_definition_only'] = True
         candidate.pop("_start")
         candidate.pop("_end")
         candidate.pop("_slot_argument_spans", None)
@@ -2745,7 +2869,7 @@ def collect_custom_image_associations(
                 imports[relative][local_name] = imported
         for annotation in re.finditer(r"@Composable\b", code):
             function_match = re.search(
-                r"\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*",
+                r"\bfun\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()",
                 code[annotation.end() : annotation.end() + 1200],
             )
             if function_match is None:
@@ -2771,12 +2895,11 @@ def collect_custom_image_associations(
 def collect_composable_associations(
     files: dict[str, str],
 ) -> dict[str, dict[str, Any]]:
+    index = SourceSymbolIndex(files)
+    from ui_migration.frontend.callable_inventory import lambda_functions
+    ui_functions = {source:[*index.ui_functions(source), *lambda_functions(index, source)] for source in index.syntax}
     packages: dict[str, str] = {}
     imports: dict[str, dict[str, str]] = collections.defaultdict(dict)
-    definitions_by_fq_name: dict[str, list[dict[str, str]]] = collections.defaultdict(list)
-    definitions_by_source: dict[str, dict[str, list[dict[str, str]]]] = (
-        collections.defaultdict(lambda: collections.defaultdict(list))
-    )
     parameters_by_source: dict[str, dict[str, list[dict[str, str]]]] = (
         collections.defaultdict(dict)
     )
@@ -2784,76 +2907,30 @@ def collect_composable_associations(
     for relative, text in files.items():
         if not relative.endswith((".kt", ".kts")):
             continue
-        code = lexical_code_mask(text)
-        package_match = re.search(
-            r"(?m)^\s*package\s+([A-Za-z_][A-Za-z0-9_.]*)\s*$",
-            code,
-        )
-        package_name = package_match.group(1) if package_match is not None else ""
-        packages[relative] = package_name
-        for match in re.finditer(
-            r"(?m)^\s*import\s+([A-Za-z_][A-Za-z0-9_.]*)"
-            r"(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?\s*$",
-            code,
-        ):
-            imported = match.group(1)
-            local_name = match.group(2) or imported.rsplit(".", 1)[-1]
-            imports[relative][local_name] = imported
+        syntax = index.syntax[relative]
+        packages[relative] = syntax['package']
+        imports[relative] = syntax['imports']
 
-        for annotation in re.finditer(r"@Composable\b", code):
-            function_match = re.search(
-                r"\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*",
-                code[annotation.end() : annotation.end() + 1200],
-            )
-            if function_match is None:
-                continue
-            function_name = function_match.group(1)
-            if function_name in COMPOSE_COMPONENTS:
-                continue
-            absolute_start = annotation.end() + function_match.start()
-            absolute_end = annotation.end() + function_match.end()
-            absolute_match = re.match(
-                r"\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*",
-                text[absolute_start:absolute_end],
-            )
-            if absolute_match is None:
-                continue
-            parameters = compact_parameters(
-                extract_function_parameters(text, _OffsetMatch(absolute_match, absolute_start))
-            )
-            fq_name = f"{package_name}.{function_name}" if package_name else function_name
-            definition = {"source": relative, "composable": function_name}
-            if definition not in definitions_by_fq_name[fq_name]:
-                definitions_by_fq_name[fq_name].append(definition)
-            if definition not in definitions_by_source[relative][function_name]:
-                definitions_by_source[relative][function_name].append(definition)
+        for function in ui_functions[relative]:
+            function_name = function['name']
+            parameters = compact_parameters(function['parameters_text'][1:-1])
             parameters_by_source[relative][function_name] = parameters
 
     resolved: dict[str, dict[str, list[dict[str, str]]]] = collections.defaultdict(dict)
     for relative in packages:
-        package_name = packages[relative]
-        candidate_names = set(definitions_by_source.get(relative, {})) | set(
-            imports.get(relative, {})
-        )
-        for fq_name in definitions_by_fq_name:
-            if package_name and fq_name.rsplit(".", 1)[0] == package_name:
-                candidate_names.add(fq_name.rsplit(".", 1)[-1])
-        for local_name in candidate_names:
-            imported_fq_name = imports.get(relative, {}).get(local_name)
-            if imported_fq_name is not None:
-                definitions = definitions_by_fq_name.get(imported_fq_name, [])
-            elif local_name in definitions_by_source.get(relative, {}):
-                definitions = definitions_by_source[relative][local_name]
-            else:
-                fq_name = f"{package_name}.{local_name}" if package_name else local_name
-                definitions = definitions_by_fq_name.get(fq_name, [])
-            if definitions:
-                resolved[relative][local_name] = sorted(
-                    definitions,
-                    key=lambda item: (item["source"], item["composable"]),
-                )
+        syntax = index.syntax[relative]
+        names = {f['name'] for f in index.functions} | set(syntax['imports'])
+        names.update(c['name'] for c in syntax['qualifiedCalls'])
+        for name in names:
+            targets = resolve_functions(index.functions, name, source=relative, imports=syntax['imports'],
+                                        package=syntax['package'], wildcards=syntax['wildcardImports'])
+            targets = [f for f in targets if index.roles[function_identity(f)]=='content']
+            if targets:
+                resolved[relative][name] = [{'source':f['source'], 'composable':f['name']}
+                                            for f in targets]
 
     return {
+        "ui_functions": ui_functions,
         "imports": {
             relative: dict(sorted(values.items()))
             for relative, values in sorted(imports.items())
@@ -2893,40 +2970,15 @@ def extract_composables(
         resolved_custom_composable_parameters[component_name] = (
             parameter_inventory.get(definition["source"], {}).get(definition["composable"], [])
         )
-    for annotation in re.finditer(r"@Composable\b", code):
-        function_match = re.search(
-            r"\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*",
-            code[annotation.end() : annotation.end() + 1200],
-        )
-        if function_match is None:
-            continue
-        absolute_start = annotation.end() + function_match.start()
-        absolute_end = annotation.end() + function_match.end()
-        function_name = function_match.group(1)
-        absolute_match = re.match(
-            r"\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*",
-            text[absolute_start:absolute_end],
-        )
-        if absolute_match is None:
-            continue
-        parameters = extract_function_parameters(text, _OffsetMatch(absolute_match, absolute_start))
-        body_opening = find_function_body_opening(
-            text,
-            _OffsetMatch(absolute_match, absolute_start),
-        )
-        if body_opening >= 0:
-            body = extract_balanced_block(text, body_opening)
-        else:
-            expression_span = find_function_expression_body_span(
-                text,
-                _OffsetMatch(absolute_match, absolute_start),
-            )
-            if expression_span is None:
-                body = ""
-                body_opening = absolute_start
-            else:
-                body_opening, body_end = expression_span
-                body = text[body_opening:body_end]
+    inventory = (composable_associations or {}).get('ui_functions', {})
+    functions = inventory.get(relative)
+    if functions is None:
+        functions = SourceSymbolIndex({relative:text}).ui_functions(relative)
+    for function in functions:
+        function_name = function['name']
+        parameters = function['parameters_text'][1:-1]
+        body_opening = function['body_start']
+        body = function['body']['text']
         body_code = lexical_code_mask(body)
         component_counts = {
             component: len(re.findall(rf"\b{re.escape(component)}\s*\(", body_code))
@@ -3002,6 +3054,8 @@ def extract_composables(
             {
                 "source": relative,
                 "name": function_name,
+                "declaration_id": function_identity(function),
+                "callable_expression": function.get('callable_expression'),
                 "parameters": parameter_items,
                 "components": {
                     key: value for key, value in component_counts.items() if value > 0
@@ -3027,10 +3081,7 @@ def extract_composables(
                 ),
             }
         )
-    deduplicated: dict[tuple[str, str], dict[str, Any]] = {}
-    for item in results:
-        deduplicated[(item["source"], item["name"])] = item
-    return list(deduplicated.values())
+    return results
 
 
 class _OffsetMatch:
@@ -4422,7 +4473,8 @@ def analyze(snapshot: Path, manifest: dict[str, Any], files: dict[str, str]) -> 
     semantic_ui_calls: list[dict[str, Any]] = []
     rejected_suffix_only_image_call_count = 0
     for composable in composables:
-        semantic_ui_calls.extend(composable.pop("semantic_ui_calls"))
+        semantic_ui_calls.extend({**call, 'declaration_id': composable.get('declaration_id')}
+                                 for call in composable.pop("semantic_ui_calls"))
         component_totals.update(composable["components"])
         modifier_totals.update(composable["modifiers"])
         rejected_suffix_only_image_call_count += composable[

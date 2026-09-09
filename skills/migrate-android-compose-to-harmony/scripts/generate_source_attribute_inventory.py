@@ -13,9 +13,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from generate_arkui_page import (
+from ui_migration.common import named_arguments
+from ui_migration.contracts.identity import (
     canonical_sha256,
-    named_arguments,
     require_contract_ui,
     require_safe_relative_source,
 )
