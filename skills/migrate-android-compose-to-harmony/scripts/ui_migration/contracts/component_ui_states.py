@@ -4,6 +4,18 @@ import copy
 from ui_migration.common import ArkUIPageError
 
 
+def variant_source_generation(source):
+    """Keep the variant decoder's inputs; errors are aggregated on the main document."""
+    projection = source.get('stateProjection')
+    return {
+        'layoutRelationships': source['layoutRelationships'],
+        'stateProjection': ({'root_layout_context': projection.get('root_layout_context')}
+                            if isinstance(projection, dict) else None),
+        'warnings': source.get('warnings', []),
+        'phaseConsumptionGate': source.get('phaseConsumptionGate'),
+    }
+
+
 def decode_catalogs(version, decode):
     catalogs = version.get('meta', {}).get('migration', {}).get('componentUiStates', [])
     definitions = {d['id']:d for d in version.get('meta', {}).get('migration', {}).get('componentDefinitions', [])}
@@ -36,10 +48,14 @@ def decode_catalogs(version, decode):
                 if isinstance(value, list):
                     return [rename(v) for v in value]
                 return value
-            document = {'meta':copy.deepcopy(version['meta']), 'assets':copy.deepcopy(version['assets']),
-                        'artboard':copy.deepcopy(version['artboard'])}
-            document['meta']['migration'].pop('componentUiStates', None)
-            document['meta']['sourceGeneration'] = rename(variant['source_generation'])
+            # Exclude sibling catalogs and main layers before copying, not afterwards.
+            meta = {k:copy.deepcopy(v) for k,v in version['meta'].items()
+                    if k not in {'migration', 'sourceGeneration'}}
+            meta['migration'] = {k:copy.deepcopy(v) for k,v in version['meta']['migration'].items()
+                                 if k != 'componentUiStates'}
+            meta['sourceGeneration'] = rename(variant['source_generation'])
+            document = {'meta':meta, 'assets':copy.deepcopy(version['assets']),
+                        'artboard':{k:copy.deepcopy(v) for k,v in version['artboard'].items() if k != 'layers'}}
             document['artboard']['layers'] = [rename(layer)]
             page = decode(document)
             roots = [n for n in page['components'] if n['parent_id'] is None]

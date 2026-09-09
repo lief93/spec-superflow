@@ -234,7 +234,8 @@ class PageRun:
         from materialize_static_drawables import drawable_candidate
 
         self.stage = 'resources'
-        document = json.loads(version.read_text())
+        from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
+        document = unpack_lanhu_document(json.loads(version.read_text()))
         manifest = json.loads((snapshot/'.android-to-harmony-safe.json').read_text())
         available = {candidate[1] for asset in manifest['local_only_assets']
                      if (candidate := drawable_candidate(asset)) is not None}

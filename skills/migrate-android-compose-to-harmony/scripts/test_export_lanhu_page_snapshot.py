@@ -208,6 +208,16 @@ class ExportLanhuPageSnapshotTest(unittest.TestCase):
                 payload["input_hashes"]["screenshot_role"],
                 "evidence_binding_only",
             )
+            from ui_migration.contracts.lanhu_storage import pack_lanhu_document
+            document = json.loads(version_json.read_text())
+            repeated = {'detail':'diagnostic '*40}
+            document['meta']['diagnostics'] = [repeated, repeated]
+            version_json.write_text(json.dumps(pack_lanhu_document(document)))
+            packed_result = subprocess.run(result.args, text=True, capture_output=True, check=False)
+            self.assertEqual(packed_result.returncode, 0, packed_result.stderr)
+            packed_payload = json.loads(output.read_text())
+            self.assertEqual(packed_payload['components'], payload['components'])
+            self.assertEqual(packed_payload['viewport'], payload['viewport'])
 
 
 if __name__ == "__main__":

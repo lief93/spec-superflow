@@ -119,7 +119,8 @@ class ProjectStyleDefinitionsTest(unittest.TestCase):
                        '--viewport-width-dp', '360', '--viewport-height-dp', '800']
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            version = json.loads((root / 'page/version_json.json').read_text())
+            from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
+            version = unpack_lanhu_document(json.loads((root / 'page/version_json.json').read_text()))
             self.assertEqual(version['meta']['migration']['styleDefinitions'], source['style_definitions'])
 
 

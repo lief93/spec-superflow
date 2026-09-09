@@ -138,7 +138,8 @@ def first_call_id(instance: dict[str, Any]) -> str:
 def export(args: argparse.Namespace) -> dict[str, Any]:
     density = require_positive(args.density, "density")
     font_scale = require_positive(args.font_scale, "font scale")
-    version = read_object(args.version_json)
+    from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
+    version = unpack_lanhu_document(read_object(args.version_json))
     if set(version) != VERSION_KEYS:
         raise ValueError("version_json must contain exactly meta/assets/artboard")
     meta = version.get("meta")

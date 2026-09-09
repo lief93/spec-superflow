@@ -4,6 +4,8 @@ from component_required_facts import build_required_facts
 from component_required_facts import required_fact_gate
 from pathlib import Path
 from typing import Any
+from ui_migration.contracts.component_ui_states import variant_source_generation
+from ui_migration.contracts.lanhu_storage import pack_lanhu_document
 from ui_migration.frontend.fixed_state import evaluate_expression
 from ui_migration.frontend.fixed_state import evaluate_static_call
 from ui_migration.frontend.fixed_state import evaluate_value_leaf
@@ -294,7 +296,8 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
                 result = generate(args, projected_payload=variant.pop('payload'))
                 document = result['version']
                 variant['layer'] = document['artboard']['layers'][0]
-                variant['source_generation'] = document['meta']['sourceGeneration']
+                variant['source_generation'] = variant_source_generation(document['meta']['sourceGeneration'])
+                variant.pop('projection', None)
                 unresolved.extend({**u, 'component_ui_state':catalog['name'] + '/' + variant['id']} for u in result['unresolved'])
                 warnings.extend({**w, 'component_ui_state':catalog['name'] + '/' + variant['id']} for w in result['warnings'])
         version_json['meta']['migration']['componentUiStates'] = catalogs
@@ -302,11 +305,14 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         version_json['meta']['sourceGeneration'].update(generationComplete=generation_complete,
             verdict='pass' if generation_complete else 'fail', unresolved=unresolved)
     output_dir = args.output_dir.resolve()
-    write_json(output_dir / "version_json.json", version_json)
+    stored_version = pack_lanhu_document(version_json)
+    write_json(output_dir / "version_json.json", stored_version)
     write_json(output_dir / "component-manifest.json", manifest)
     write_json(output_dir / "page-state-manifest.json", state_manifest(tree))
     from ui_migration.frontend.unresolved_worklist import build_worklist
     worklist = build_worklist(version_json, tree, unresolved)
+    from init_harmony_project import sha256_file
+    worklist['version_json_sha256'] = sha256_file(output_dir / 'version_json.json')
     write_json(output_dir / 'unresolved-worklist.json', worklist)
     return {
         "status": "generated_requires_screenshot_validation" if generation_complete else "partial_generation",

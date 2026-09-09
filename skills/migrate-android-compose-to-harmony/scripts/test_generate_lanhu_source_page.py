@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from generate_lanhu_source_page import (
@@ -251,7 +252,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
             result = self.run_generator(source, root / "out")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("state.hasLabel", result.stdout)
-            version = json.loads((root / "out/version_json.json").read_text())
+            version = unpack_lanhu_document(json.loads((root / "out/version_json.json").read_text()))
             self.assertFalse(version['meta']['sourceGeneration']['generationComplete'])
             self.assertEqual(version['meta']['sourceGeneration']['verdict'], 'fail')
             label = version['artboard']['layers'][0]['layers'][0]
@@ -267,7 +268,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
             state.write_text(json.dumps(fixture), encoding="utf-8")
             result = self.run_generator(source, root / "out", state)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            version = json.loads((root / "out/version_json.json").read_text())
+            version = unpack_lanhu_document(json.loads((root / "out/version_json.json").read_text()))
             layer = version["artboard"]["layers"][0]
             self.assertEqual(layer["id"], "main")
             self.assertEqual([n["id"] for n in layer["layers"]], ["label"])
@@ -1193,7 +1194,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
             result = self.run_generator(source_page, output_dir)
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            version_json = json.loads((output_dir / "version_json.json").read_text())
+            version_json = unpack_lanhu_document(json.loads((output_dir / "version_json.json").read_text()))
             self.assertEqual(set(version_json), {"meta", "assets", "artboard"})
             self.assertEqual(version_json["meta"]["sliceScale"], 2)
             self.assertEqual(
@@ -1319,7 +1320,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
                                 and item["path"] == "style.typography.max_lines"
                                 and item["expression"] == "1"
                                 for item in report["unresolved"]))
-            document = json.loads((output_dir / "version_json.json").read_text())
+            document = unpack_lanhu_document(json.loads((output_dir / "version_json.json").read_text()))
             generation = document["meta"]["sourceGeneration"]
             self.assertFalse(generation["generationComplete"])
             self.assertEqual(generation["unresolved"], report["unresolved"])
@@ -1475,7 +1476,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
             self.assertEqual(frames["header"]["height"], 140)
             self.assertEqual(frames["panel"]["y"], 80)
             self.assertEqual(frames["following"]["y"], 140)
-            version_json = json.loads((output_dir / "version_json.json").read_text())
+            version_json = unpack_lanhu_document(json.loads((output_dir / "version_json.json").read_text()))
             relationships = version_json["meta"]["sourceGeneration"]["layoutRelationships"]
             self.assertEqual(len(relationships), 2)
             self.assertEqual(relationships[0]["container_id"], "header")
@@ -1769,7 +1770,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
             })
             self.assertEqual(instances["item"]["frame_dp"]["x"], 12)
             self.assertEqual(instances["item"]["frame_dp"]["y"], 16)
-            version_json = json.loads((output_dir / "version_json.json").read_text())
+            version_json = unpack_lanhu_document(json.loads((output_dir / "version_json.json").read_text()))
             internal_row = version_json["artboard"]["layers"][0]["layers"][0]["layers"][0]
             self.assertEqual(
                 internal_row["migration"]["style"]["layout"]["padding_dp"],
@@ -2028,7 +2029,7 @@ class GenerateLanhuSourcePageTest(unittest.TestCase):
             result = self.run_generator(source_page, output_dir, fixture)
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            version_json = json.loads((output_dir / "version_json.json").read_text())
+            version_json = unpack_lanhu_document(json.loads((output_dir / "version_json.json").read_text()))
             root_layer = version_json["artboard"]["layers"][0]
             self.assertEqual(
                 [layer["id"] for layer in root_layer["layers"]],

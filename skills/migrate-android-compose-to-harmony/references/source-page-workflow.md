@@ -673,10 +673,40 @@ page = unpack_source_page(json.loads(path.read_text(encoding="utf-8")))
 ```
 
 No separate file, hash cache or Android source lookup is needed to expand the
-table. Dangling/cyclic references fail explicitly. `version_json.json` remains
-the same Lanhu layout format and the ArkUI generator still has one page input.
+table. Dangling/cyclic references fail explicitly. After reference expansion,
+`version_json.json` retains the same Lanhu layout model and the ArkUI generator
+still has one page input.
 This reduces repeated data, not unique source inventories; it is not a claim
 that every two-million-line company document shrinks to a particular size.
+
+Business UI variants in `version_json.json` retain only decoder-consumed
+`source_generation` fields: `layoutRelationships`, the `stateProjection` root
+layout context, `warnings` and `phaseConsumptionGate`. Full projection reports,
+duplicate required-fact summaries and duplicate unresolved lists are not embedded
+in every variant. Variant failures remain in top-level
+`meta.sourceGeneration.unresolved`, tagged with `component_ui_state`, and still
+affect the final verdict even for unselected states. Layer facts, IDs, parameters
+and state alternatives are unchanged. Legacy variants with full metadata remain
+readable; no new CLI flag or external file is needed by the code generator.
+
+Generated `version_json.json` also shares identical large values at the top level
+in `lanhu_storage.shared`, with `{"$lanhuRef":"v123"}` at each occurrence.
+The storage schema is `android-to-harmony.lanhu-storage.v1`. Repeated styles,
+definition data, state metadata and diagnostic facts are shared by exact content,
+not by component name. Small values remain inline when a reference would add
+overhead. IDs, parameters, parent/child order and distinct instance values are
+preserved; expanded instances do not share mutable objects.
+
+Update the complete script set together. Legacy inline Lanhu documents still
+work, but older tools that directly traverse JSON must normalize references first:
+
+```python
+from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
+version = unpack_lanhu_document(json.loads(path.read_text(encoding="utf-8")))
+```
+
+The page generator, drawable/font collection and screenshot export normalize
+automatically. File hashes describe the stored bytes, not the expanded document.
 
 Removing indentation outside strings preserves JSON values and does not change
 rendering. File digests/byte counts do change, so regenerate any bound manifests;

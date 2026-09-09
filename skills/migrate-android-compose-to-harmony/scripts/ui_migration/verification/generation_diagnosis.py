@@ -76,7 +76,9 @@ def classify(reason, path):
 def diagnose(worklist=None, manifest=None, source_page=None, failure=None, version_page=None):
     worklist, manifest, source_page = worklist or {}, manifest or {}, source_page or {}
     from ui_migration.contracts.source_storage import unpack_source_page
+    from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
     source_page = unpack_source_page(source_page)
+    version_page = unpack_lanhu_document(version_page or {})
     nodes = {n['id']:n for n in source_page.get('components', [])}
     pending = [(version_page or {}).get('artboard', {})]
     while pending:

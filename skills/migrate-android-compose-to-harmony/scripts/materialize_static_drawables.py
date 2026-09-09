@@ -149,7 +149,8 @@ def page_asset_hashes(path: Path) -> dict[str, str]:
             result[resource] = digest
         for child in node.get('layers', []):
             visit(child)
-    visit(json.loads(path.read_text())['artboard'])
+    from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
+    visit(unpack_lanhu_document(json.loads(path.read_text()))['artboard'])
     return result
 
 

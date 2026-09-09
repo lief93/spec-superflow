@@ -24,7 +24,7 @@ stderr is streamed immediately, `progress.jsonl` records stage events and
 `result.json` identifies the active child and log paths. Tail the analysis stderr
 for the current PSI file/function and the last unfinished stage. No periodic heartbeat is emitted.
 Reuse an unchanged snapshot/contract pair across pages rather than repeating `--source` intake.
-Source-page JSON uses lossless same-file shared references; all readers must be
+Source-page and generated Lanhu JSON use lossless same-file shared references; all readers must be
 updated together. See [JSON storage and roots](references/source-page-workflow.md#json-size-and-null-fields).
 Do not erase value-helper roots by name or wrap arbitrary multi-root functions.
 Preserve ordered outputs and `parent_id`; business boundaries do not add layout

@@ -2,6 +2,7 @@ import argparse
 import json
 import tempfile
 import unittest
+from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
 from pathlib import Path
 
 from analyze_compose_project import analyze
@@ -38,7 +39,7 @@ def compile_states(code=SOURCE):
         result = generate(argparse.Namespace(source_page=path, state_fixture=None,
             output_dir=root/'output', viewport_width_dp=360, viewport_height_dp=740,
             slice_scale=2, device='component-state-test', preserve_component_ui_states=True))
-        version = json.loads((root/'output/version_json.json').read_text())
+        version = unpack_lanhu_document(json.loads((root/'output/version_json.json').read_text()))
         (root/'Page.kt').unlink()
         path.unlink()
         page = load_lanhu_page_input(root/'output/version_json.json')

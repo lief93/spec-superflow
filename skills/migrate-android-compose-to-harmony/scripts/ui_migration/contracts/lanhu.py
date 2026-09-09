@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from ui_migration.common import ArkUIPageError, LANHU_COMPONENT_MANIFEST_SCHEMA, PAGE_SNAPSHOT_COLUMN_COMPONENTS, PAGE_SNAPSHOT_ROW_COMPONENTS
 from ui_migration.contracts.identity import canonical_sha256, require_safe_relative_source
+from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
 from ui_migration.contracts.validation import apply_lanhu_visual_style, load_bounded_json_object, normalize_lanhu_layout_relationships, require_lanhu_frame, require_lanhu_number, validate_lanhu_version_document
 
 
@@ -20,6 +21,10 @@ def load_lanhu_page_input(
         version, version_path, version_bytes = load_bounded_json_object(version_json_path, "Lanhu version_json")
     else:
         version, version_path, version_bytes = _version, version_json_path, 0
+    try:
+        version = unpack_lanhu_document(version)
+    except ValueError as error:
+        raise ArkUIPageError(str(error)) from error
     validate_lanhu_version_document(version)
     manifest: dict[str, Any] | None = None
     manifest_path: Path | None = None

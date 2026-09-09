@@ -22,7 +22,8 @@ def compile_page(code):
         generate(argparse.Namespace(source_page=path, state_fixture=None,
             output_dir=root / 'page', viewport_width_dp=360, viewport_height_dp=740,
             slice_scale=2, device='component-test'))
-        version = json.loads((root / 'page/version_json.json').read_text())
+        from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
+        version = unpack_lanhu_document(json.loads((root / 'page/version_json.json').read_text()))
         (root / 'Page.kt').unlink()
         path.unlink()
         page = load_lanhu_page_input(root / 'page/version_json.json')

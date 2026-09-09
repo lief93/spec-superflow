@@ -124,7 +124,8 @@ Image(painter = painterResource(unknownIcon), contentDescription = null)
             generate(Namespace(source_page=source, state_fixture=fixture, output_dir=root / 'out',
                                viewport_width_dp=360, viewport_height_dp=760, slice_scale=2, device='test'))
             version = root / 'out/version_json.json'
-            final = json.loads(version.read_text())
+            from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
+            final = unpack_lanhu_document(json.loads(version.read_text()))
             self.assertTrue(final['meta']['sourceGeneration']['stateProjection']['ui_preview'])
             single = load_lanhu_page_input(version)
             self.assertTrue(any((n['style']['content'].get('text') or '').startswith('Sample')
