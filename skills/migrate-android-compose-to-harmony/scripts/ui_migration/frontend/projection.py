@@ -48,6 +48,11 @@ def selected_modifiers(modifiers, resolver):
             operations = resolver.chain(tree)
             names.update(m['name'] for m in operations)
             output.extend(operations)
+            for item in operations:
+                if item['name'] in {'statusBarsPadding', 'navigationBarsPadding'} and not item.get('consumed_insets_dp'):
+                    failures.append({'path': 'source.modifiers.' + item['name'].lower(),
+                        'expression': item['name'] + '()',
+                        'reason': 'window insets require runtime/fixture values; padding is not assumed zero'})
         except (LayoutExpressionError, KotlinPsiSyntaxError) as error:
             output.append({'name': 'unresolvedExpression', 'arguments': expression})
             failures.append({'path': 'source.modifiers.unresolvedexpression', 'expression': expression, 'reason': str(error)})

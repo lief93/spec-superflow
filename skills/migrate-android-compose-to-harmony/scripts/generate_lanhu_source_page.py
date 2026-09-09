@@ -110,6 +110,7 @@ def write_json(path: Path, value: Any) -> None:
 
 
 def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, Any]:
+    from ui_migration.contracts.source_storage import unpack_source_page
     from layout_expressions import needs_layout_projection
     from ui_migration.frontend.material_defaults import DEFAULT_CONTROL_TYPES
     from ui_migration.controls.registry import CONTROLS
@@ -118,6 +119,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
     if args.slice_scale <= 0:
         raise ValueError("slice scale must be positive")
     source_payload = copy.deepcopy(projected_payload) if projected_payload is not None else read_json(args.source_page)
+    source_payload = unpack_source_page(source_payload)
     raw_payload = copy.deepcopy(source_payload)
     from ui_migration.frontend.api_adapters.loader import load_adapters
     from ui_migration.frontend.api_adapters.builtins import BUILTIN_ADAPTERS
@@ -129,7 +131,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         source_payload, state_projection = project_source_page(
             source_payload, read_json(args.state_fixture), allow_unresolved=True, api_registry=registry
         )
-    elif (source_payload.get('style_definitions') or {}).get('tokenMappings') or (source_payload.get('style_definitions') or {}).get('componentDefaults') or getattr(args, 'api_adapters', None) is not None or any(
+    elif source_payload.get('page_host') or (source_payload.get('style_definitions') or {}).get('tokenMappings') or (source_payload.get('style_definitions') or {}).get('componentDefaults') or getattr(args, 'api_adapters', None) is not None or any(
         isinstance(node, dict) and (node.get("visibility_condition") or node.get("list_item_context")
                                    or node.get('component_kind') == 'project_component'
                                    or node.get('type') in CONTROLS.names

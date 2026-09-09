@@ -9,9 +9,11 @@ import hashlib
 import json
 import re
 import xml.etree.ElementTree as ET
+from ui_migration.contracts.source_storage import pack_source_page, unpack_source_page
 
 
 def build_catalog(payload, state_inputs=None):
+    payload = unpack_source_page(payload)
     paths = node_paths(payload)
     nodes = {node['id']: node for node in payload['components']}
     owners = {}
@@ -117,7 +119,7 @@ def import_runtime_text(payload, xml_path, binding):
 
 def generate_previews(args):
     from generate_lanhu_source_page import generate
-    payload = json.loads(args.source_page.read_text())
+    payload = unpack_source_page(json.loads(args.source_page.read_text()))
     catalog = build_catalog(payload, json.loads(args.states.read_text()))
     root = args.output_dir.resolve()
     root.mkdir(parents=True, exist_ok=False)
@@ -133,7 +135,7 @@ def generate_previews(args):
         page['page']['state'] = scene['id']
         source = directory / 'source-page.json'
         fixture = directory / 'state-fixture.json'
-        source.write_text(json.dumps(page, ensure_ascii=False, indent=2) + '\n')
+        source.write_text(json.dumps(pack_source_page(page), ensure_ascii=False, indent=2) + '\n')
         fixture.write_text(json.dumps(preview_fixture(page, scene, values), ensure_ascii=False, indent=2) + '\n')
         try:
             result = generate(argparse.Namespace(

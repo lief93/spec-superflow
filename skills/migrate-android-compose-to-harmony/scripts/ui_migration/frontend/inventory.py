@@ -59,6 +59,8 @@ def build_source_page_spec(
         if isinstance(item, dict)
     }
     dependency_index = SourceSymbolIndex.from_root(source_root) if source_root is not None else None
+    from ui_migration.frontend.root_selection import select_root_declaration
+    root_declaration = select_root_declaration(dependency_index, root_source, root_composable) if dependency_index else None
     functions = source_functions(source_root, dependency_index)
     from ui_migration.frontend.callable_inventory import lambda_functions
     raw_composables = ui.get('composables') or []
@@ -86,6 +88,13 @@ def build_source_page_spec(
         '__source_imports': f.get('imports', {})} for f in functions}
     modifier_definitions = {(f['source'], f['name']) for f in functions
                             if f.get('receiver') == 'Modifier' and f.get('return_type') == 'Modifier'}
+    non_ui_definitions = set(modifier_definitions)
+    if dependency_index:
+        declarations = defaultdict(list)
+        for function in dependency_index.functions:
+            declarations[(function['source'], function['name'])].append(function)
+        non_ui_definitions.update(key for key, targets in declarations.items()
+            if all(dependency_index.roles[function_identity(t)] in {'value', 'modifier'} for t in targets))
     non_ui_calls = []
     calls_by_definition: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     selected_calls: list[dict[str, Any]] = []
@@ -96,9 +105,9 @@ def build_source_page_spec(
         if key not in reached_keys:
             continue
         targets = (call.get('custom_composable') or {}).get('definitions', [])
-        if targets and all((t.get('source'), t.get('composable')) in modifier_definitions for t in targets):
+        if targets and all((t.get('source'), t.get('composable')) in non_ui_definitions for t in targets):
             non_ui_calls.append({'call_id': call['call_id'], 'source': call['source'], 'line': call['line'],
-                                 'reason': 'PSI declaration returns Modifier; evaluated as a property, not a UI node'})
+                                 'reason': 'PSI declaration produces a value/Modifier, not visual content'})
             continue
         calls_by_definition[key].append(call)
         selected_calls.append(call)
@@ -434,10 +443,12 @@ def build_source_page_spec(
             if len(ids) == 1
         }
 
+    root_parameters = root_declaration['parameters'] if root_declaration else parameters_by_definition.get((root_source, root_composable), [])
     root_defaults = {p['name']: p['default']
-                     for p in parameters_by_definition.get((root_source, root_composable), [])
+                     for p in root_parameters
                      if isinstance(p.get('default'), str)}
-    expand_definition((root_source, root_composable), None, "root", (), root_defaults)
+    root_id = function_identity(root_declaration) if root_declaration else None
+    expand_definition((root_source, root_composable), None, "root", (), root_defaults, declaration_id=root_id)
     active_count = len(components)
     callable_templates = []
     for function in callable_definitions:
@@ -509,12 +520,16 @@ def build_source_page_spec(
         if isinstance(component.get("source"), dict)
         and isinstance(component["source"].get("call_id"), str)
     }
+    from ui_migration.frontend.route_roots import find_page_host
+    page_host = find_page_host(dependency_index, root_source, root_composable, root_id) if dependency_index else None
     return {
         "schema": SOURCE_PAGE_SCHEMA,
         "status": "candidate_requires_runtime_verification",
         "authoritative": False,
         "page": {"id": page_id, "state": state_id},
         "root": {"source": root_source, "composable": root_composable},
+        **({'root_declaration_id': root_id} if root_id else {}),
+        **({'page_host': page_host} if page_host else {}),
         "contract_sha256": contract_sha256,
         "style_definitions": definitions,
         "source_tokens": copy.deepcopy(theme_tokens or []),

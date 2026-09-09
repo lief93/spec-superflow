@@ -6,6 +6,8 @@ from ui_migration.frontend.page_model import SOURCE_SCHEMA, finite_number
 
 class SourceTree:
     def __init__(self, payload: dict[str, Any], *, allow_multiple_roots: bool = False) -> None:
+        from ui_migration.contracts.source_storage import unpack_source_page
+        payload = unpack_source_page(payload)
         if payload.get("schema") != SOURCE_SCHEMA:
             raise ValueError(f"unsupported source page schema: {payload.get('schema')!r}")
         raw_components = payload.get("components")

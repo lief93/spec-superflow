@@ -638,6 +638,29 @@ require blanket tagging as the first response to every blank page.
 
 #### JSON size and null fields
 
+Source-page writers now deduplicate repeated analysis values in the same file.
+Large repeated scopes, imports, function bodies and style structures are stored
+once in `source_page_storage.shared`; occurrences use `{"$sourceRef":"v123"}`.
+This is lossless storage, not a new layout model: nulls, node order, types,
+source identities, diagnostics and UI alternatives are retained. The storage
+descriptor is `android-to-harmony.source-page-storage.v1`.
+
+Existing commands automatically expand references before analysis/projection.
+Install the complete updated skill: older readers do not understand these
+references. Inline legacy source JSON remains accepted. For a custom Python
+consumer, normalize once with:
+
+```python
+from ui_migration.contracts.source_storage import unpack_source_page
+page = unpack_source_page(json.loads(path.read_text(encoding="utf-8")))
+```
+
+No separate file, hash cache or Android source lookup is needed to expand the
+table. Dangling/cyclic references fail explicitly. `version_json.json` remains
+the same Lanhu layout format and the ArkUI generator still has one page input.
+This reduces repeated data, not unique source inventories; it is not a claim
+that every two-million-line company document shrinks to a particular size.
+
 Removing indentation outside strings preserves JSON values and does not change
 rendering. File digests/byte counts do change, so regenerate any bound manifests;
 do not hand-edit an already frozen input.
@@ -650,3 +673,35 @@ schema would need coordinated writer/reader normalization and equivalence tests.
 Null deletion is not a fix for missing UI. Keep unresolved evidence, selected
 layout/style/resource facts and source identities; diagnostic extraction is a
 separate format change, not a troubleshooting shortcut.
+
+#### Page roots and non-visual Composables
+
+`@Composable` is not itself proof of visual output. Proven value/Modifier
+declarations and expression-bodied callback/reference factories do not become
+UI roots. They remain in the source value inventory. An expression-bodied UI
+call such as `fun Header() = Text("Title")` is still content. The analyzer does
+not classify by `get`/`on` name prefixes or delete all assigned calls.
+
+Same-file overloads are not concatenated into one page. A unique declaration
+is selected by source identity; when one overload delegates to another, the
+unique outer caller is the entry and the callee remains its child. The chosen
+identity is recorded as `root_declaration_id`. Independent ambiguous overloads
+are reported with signatures/locations and need an unambiguous entry wrapper.
+
+For multiple real UI roots, the selected function alone does not imply Column
+or Box. PSI can verify a **direct** selected-page invocation in the content of
+an official `androidx.navigation.compose.composable` inside `NavHost`. That
+external destination host is recorded in `page_host` and projected as an
+overlay Box, preserving sibling order, NavHost modifier and content alignment.
+Insets still need supported runtime/fixture facts; no fixed status-bar height
+is invented. Navigation transitions and back-stack behavior are not migrated
+by this static host mapping.
+
+This initial recognizer accepts explicit/aliased/wildcard official imports and
+resolved page declaration identity. It does not infer a host through an
+intervening Row, arbitrary routing wrapper, deferred callback or ambiguous
+multiple route hosts. Existing Row/Column/Box business-component composition
+keeps its real parent. Unproven multiple roots remain an explicit diagnostic
+with component names, source locations and IDs, not silent node deletion or
+an arbitrary wrapper. Correct upstream modeling and regenerate; do not patch
+the output ArkTS or erase roots to pass the gate.

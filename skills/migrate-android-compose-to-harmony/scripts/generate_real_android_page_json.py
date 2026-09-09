@@ -215,7 +215,8 @@ def main() -> int:
             runtime_source_map_sha256=runtime_source_map_sha256,
             runtime_tree_sha256=runtime_tree_sha256,
         )
-        atomic_json(output / "source-page.json", source_spec)
+        from ui_migration.contracts.source_storage import pack_source_page
+        atomic_json(output / "source-page.json", pack_source_page(source_spec))
         atomic_json(output / "page.json", snapshot)
         metrics["pixel_sampling"] = pixel_sampling
         atomic_json(output / "metrics.json", metrics)

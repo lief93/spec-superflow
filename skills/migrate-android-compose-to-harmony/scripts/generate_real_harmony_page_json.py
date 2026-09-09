@@ -211,7 +211,8 @@ def main() -> int:
             "screenshot_sha256": snapshot["capture"]["screenshot"]["sha256"],
             "uitest_layout_sha256": hashlib.sha256(layout_path.read_bytes()).hexdigest(),
         }
-        atomic_json(output / "source-page.json", source_spec)
+        from ui_migration.contracts.source_storage import pack_source_page
+        atomic_json(output / "source-page.json", pack_source_page(source_spec))
         atomic_json(output / "runtime-tree.json", {
             "schema": "android-to-harmony.runtime-tree.v1",
             "platform": "harmony",

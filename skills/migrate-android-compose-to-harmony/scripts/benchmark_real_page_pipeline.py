@@ -176,6 +176,8 @@ def semantic_key_from_runtime(component: dict[str, Any]) -> str | None:
 def semantic_mapping_evidence(
     source_page: dict[str, Any], runtime_tree: dict[str, Any], page: dict[str, Any]
 ) -> dict[str, Any]:
+    from ui_migration.contracts.source_storage import unpack_source_page
+    source_page = unpack_source_page(source_page)
     source_by_key = {
         item["semantic_key"]: item
         for item in source_page.get("components", [])

@@ -166,6 +166,9 @@ class SourceSymbolIndex:
             return 'modifier'
         if result and result!='Unit':
             return 'value'
+        from .content_roles import returns_only_value
+        if returns_only_value(function['body']):
+            return 'value'
         annotations = {self._type(a, function['source']).rsplit('.',1)[-1] for a in function['annotations']}
         if 'Composable' in annotations or receiver.rsplit('.',1)[-1] in {
             'LazyListScope','LazyGridScope','LazyStaggeredGridScope'}:

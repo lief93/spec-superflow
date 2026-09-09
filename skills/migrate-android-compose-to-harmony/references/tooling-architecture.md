@@ -1,5 +1,13 @@
 # UI Migration Tool Architecture
 
+Source-page storage normalization lives in `contracts/source_storage.py`;
+writers share repeated values within one file and consumers expand at their
+input boundary. Rendering never depends on a sidecar or reopening Android code.
+Frontend `content_roles.py`, `root_selection.py` and `route_roots.py` separate
+non-visual value expressions, exact entry overload selection and verified
+navigation-host facts from component rendering. Unknown roots remain explicit
+errors, not a generic target-side Stack fallback.
+
 ## Public Entry Points
 
 ### Generated Source Names

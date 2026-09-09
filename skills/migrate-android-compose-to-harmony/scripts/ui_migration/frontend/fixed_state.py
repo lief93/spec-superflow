@@ -138,6 +138,10 @@ def resolve_input_decoration(node: dict[str, Any], environment: dict[str, Any]) 
 def project_source_page(
     payload: dict[str, Any], fixture: dict[str, Any], *, allow_unresolved: bool = False, api_registry=None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    from ui_migration.contracts.source_storage import unpack_source_page
+    payload = unpack_source_page(payload)
+    from ui_migration.frontend.route_roots import attach_page_host
+    payload = attach_page_host(payload)
     from analyze_compose_project import ordered_modifier_chain
     from ui_migration.frontend.model import MATERIAL3_TYPOGRAPHY
     from ui_migration.frontend.styles import static_style_for_call
@@ -215,8 +219,10 @@ def project_source_page(
     base_environment['__source_value_inventory'] = payload.get('source_value_inventory') or {}
     base_environment['__source_functions'] = payload.get('source_functions') or []
     base_environment['__source_properties'] = payload.get('source_properties') or []
+    from ui_migration.frontend.source_symbols import function_identity
     root_function = next((function for function in base_environment['__source_functions']
                           if function.get('source') == payload.get('root', {}).get('source')
+                          and (not payload.get('root_declaration_id') or function_identity(function) == payload['root_declaration_id'])
                           and function.get('name') == payload.get('root', {}).get('composable')), None)
     if root_function:
         base_environment.update(__source_file=root_function['source'],
@@ -788,9 +794,12 @@ def project_source_page(
         emitted.insert(0, host)
         active_roots = [host['id']]
     if len(active_roots) != 1:
+        by_id = {node['id']: node for node in emitted}
+        descriptions = [f"{by_id[i]['type']} ({by_id[i].get('source', {}).get('source')}:{by_id[i].get('source', {}).get('line')}, {i})"
+                        for i in active_roots]
         raise ValueError(
             "selected page state has multiple active roots; an explicit source parent layout "
-            f"is required: {', '.join(active_roots)}"
+            f"is required: {', '.join(descriptions)}"
         )
     emitted_by_id = {component["id"]: component for component in emitted}
     emitted_children: dict[str, list[str]] = defaultdict(list)

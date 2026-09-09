@@ -11,6 +11,7 @@ from init_harmony_project import load_contract, sha256_file
 from real_page_pipeline import build_source_page_spec
 from ui_migration.frontend.project_styles import load_style_definitions
 from ui_migration.progress import Progress, step, checkpoint
+from ui_migration.contracts.source_storage import pack_source_page
 
 
 def generate(args):
@@ -43,7 +44,7 @@ def generate(args):
     output.parent.mkdir(parents=True, exist_ok=True)
     checkpoint('write-source-page', components=len(page['components']), output=str(output))
     with output.open('x', encoding='utf-8') as stream:
-        json.dump(page, stream, ensure_ascii=False, indent=2)
+        json.dump(pack_source_page(page), stream, ensure_ascii=False, indent=2)
         stream.write('\n')
     return {'ok':True, 'output':str(output), 'root':page['root'], 'page':page['page'],
         'component_count':len(page['components']), 'seconds':time.monotonic()-started,

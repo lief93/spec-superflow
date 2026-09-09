@@ -25,6 +25,8 @@ def calls_in(node):
 
 
 def scan_source_page(page):
+    from ui_migration.contracts.source_storage import unpack_source_page
+    page = unpack_source_page(page)
     functions = {(f['source'], f['name']): f for f in page.get('source_functions', [])}
     source_symbols = {'.'.join(p for p in (f.get('package'), f.get('owner'), f['name']) if p)
                       for f in functions.values()}
