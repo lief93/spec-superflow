@@ -21,6 +21,25 @@ class SourceValues:
     }
 
 
+    def coalesce(self, left, right, context, seen):
+        from ui_migration.contracts.resource_values import is_resource_value, validate_resource_value
+        if not is_resource_value(left):
+            return UNRESOLVED
+        spec = validate_resource_value(left)
+        if 'fallback' in spec:
+            return left
+        fallback = context.value(right, seen)
+        if isinstance(fallback, LayoutDimension):
+            if fallback.unit != spec.get('sourceUnit'):
+                raise LayoutExpressionError('resource fallback dimension unit mismatch')
+            fallback = fallback.value
+        result = {**left, 'reference': {**spec, 'fallback': fallback}}
+        try:
+            validate_resource_value(result)
+        except ValueError as error:
+            raise LayoutExpressionError(str(error)) from error
+        return result
+
     def evaluate_node(self, node, context, seen):
         path = qualified_name(node)
         parts = (path or '').split('.')
@@ -33,6 +52,11 @@ class SourceValues:
             return {'kind': 'image_vector_reference', 'expression': icon_path}
         if path in self.CONSTANTS:
             return self.CONSTANTS[path]
+        registry = context.values.get('__api_registry', BUILTIN_REGISTRY)
+        if path:
+            value = registry.property_value(path, context, seen)
+            if value is not UNRESOLVED:
+                return value
         if path and context.values.get('__source_properties'):
             value = source_property_value(path, context, seen)
             if value is not UNRESOLVED:
@@ -43,7 +67,6 @@ class SourceValues:
         call = call_from(node)
         if call is None:
             return UNRESOLVED
-        registry = context.values.get('__api_registry', BUILTIN_REGISTRY)
         match = registry.resolve(call, context, seen)
         if match:
             return registry.evaluate(node, context, seen, match)
@@ -116,7 +139,7 @@ SOURCE_VALUES = SourceValues()
 def value_resolver(bindings, values, serialize_modifier=None):
     return LayoutExpressions(bindings, values, None, UNRESOLVED, serialize_modifier,
                              evaluate_node=SOURCE_VALUES.evaluate_node, expand_chain=SOURCE_VALUES.expand_modifier,
-                             value_syntax=SOURCE_VALUES.value_syntax)
+                             value_syntax=SOURCE_VALUES.value_syntax, coalesce_value=SOURCE_VALUES.coalesce)
 
 
 def evaluate_expression(expression, environment, *, preserve_units=False):

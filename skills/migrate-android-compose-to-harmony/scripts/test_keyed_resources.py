@@ -36,7 +36,7 @@ ADAPTERS = [Colors("company.color", ("company.Colors.get",), "color").declaratio
 
 
 class KeyedResourcesTest(unittest.TestCase):
-    def generate(self, body, declarations='', extension=EXTENSION):
+    def generate(self, body, declarations='', extension=EXTENSION, *, extra_files=None, source_imports=''):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -44,9 +44,11 @@ class KeyedResourcesTest(unittest.TestCase):
 import androidx.compose.runtime.Composable
 import company.Colors as Palette
 import company.Copy
-@Composable fun Page() { ''' + body + ' }\n' + declarations
-        (root/'Page.kt').write_text(source)
-        contract = analyze(root, {}, {'Page.kt':source})
+''' + source_imports + '\n@Composable fun Page() { ' + body + ' }\n' + declarations
+        files = {'Page.kt': source, **(extra_files or {})}
+        for name, content in files.items():
+            (root/name).write_text(content)
+        contract = analyze(root, {}, files)
         styles = build_style_definitions(style_helpers.ProjectStyleDefinitionsTest().contract())
         page = build_source_page_spec(contract, 'Page.kt', 'Page', 'page', 'default', 'test', root,
                                       style_definitions=styles)

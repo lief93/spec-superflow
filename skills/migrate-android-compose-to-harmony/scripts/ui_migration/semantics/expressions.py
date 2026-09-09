@@ -50,7 +50,7 @@ def needs_layout_projection(node):
 
 
 class LayoutExpressions:
-    def __init__(self, bindings, values, evaluate_leaf, unresolved, serialize_modifier=None, *, evaluate_node=None, expand_chain=None, value_syntax=None):
+    def __init__(self, bindings, values, evaluate_leaf, unresolved, serialize_modifier=None, *, evaluate_node=None, expand_chain=None, value_syntax=None, coalesce_value=None):
         self.bindings = bindings
         self.values = values
         self.evaluate_leaf = evaluate_leaf
@@ -60,6 +60,7 @@ class LayoutExpressions:
         self.evaluate_node = evaluate_node
         self.expand_chain = expand_chain
         self.value_syntax = value_syntax
+        self.coalesce_value = coalesce_value
 
     def leaf(self, node, seen):
         if self.evaluate_node is not None:
@@ -69,7 +70,8 @@ class LayoutExpressions:
     def scoped(self, values, bindings=None):
         result = LayoutExpressions(self.bindings if bindings is None else bindings, values,
                                  self.evaluate_leaf, self.unresolved, self.serialize_modifier,
-                                 evaluate_node=self.evaluate_node, expand_chain=self.expand_chain, value_syntax=self.value_syntax)
+                                 evaluate_node=self.evaluate_node, expand_chain=self.expand_chain, value_syntax=self.value_syntax,
+                                 coalesce_value=self.coalesce_value)
         result.modifier_receivers = dict(self.modifier_receivers)
         return result
 
@@ -169,6 +171,10 @@ class LayoutExpressions:
             if op == '||' and left is True:
                 return True
             if op == '?:':
+                if self.coalesce_value:
+                    result = self.coalesce_value(left, node['right'], self, seen)
+                    if result is not self.unresolved:
+                        return result
                 return left if left is not None else self.value(node['right'], seen)
             right = self.value(node['right'], seen)
             if op == 'to':

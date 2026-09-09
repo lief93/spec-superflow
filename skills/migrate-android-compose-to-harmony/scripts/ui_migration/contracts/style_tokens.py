@@ -15,6 +15,9 @@ PROPERTY_TYPES = {
     'typography.font_family': ('string', None, None),
     'surface.background': ('color', None, None),
     'surface.corner_radius_dp': ('dimension', 'dp', 'vp'),
+    'asset.tint': ('color', None, None),
+    'control.active_color': ('color', None, None),
+    'control.inactive_color': ('color', None, None),
 }
 
 
@@ -69,8 +72,18 @@ def validate_token_mappings(mappings):
         if not isinstance(spec, dict) or spec.get('kind') not in {'color', 'dimension', 'number', 'string'}:
             raise ValueError(f'{name}: unsupported token kind')
         expected = {'kind', 'target'} | ({'sourceUnit', 'targetUnit'} if spec['kind'] == 'dimension' else set())
-        if set(spec) != expected:
+        if set(spec) - {'fallback'} != expected:
             raise ValueError(f'{name}: invalid token fields')
+        if 'fallback' in spec:
+            fallback = spec['fallback']
+            if spec['kind'] == 'string':
+                valid = isinstance(fallback, str)
+            elif spec['kind'] == 'color':
+                valid = isinstance(fallback, str) and re.fullmatch(r'#[0-9A-Fa-f]{8}', fallback)
+            else:
+                valid = type(fallback) in (int, float) and math.isfinite(fallback)
+            if not valid:
+                raise ValueError(f'{name}: resource fallback must match token type')
         if spec['kind'] == 'dimension' and (spec.get('sourceUnit'), spec.get('targetUnit')) not in {('sp', 'fp'), ('dp', 'vp')}:
             raise ValueError(f'{name}: only sp/fp and dp/vp numeric token pairs are supported')
         validate_target(spec['target'])

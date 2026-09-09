@@ -14,6 +14,14 @@ def matches_source_type(value, name):
     if value is None:
         return name.endswith('?')
     name = name.removesuffix('?')
+    from ui_migration.contracts.resource_values import is_resource_value, validate_resource_value
+    if is_resource_value(value):
+        spec = validate_resource_value(value)
+        expected = {'Color': ('color', None), 'String': ('string', None),
+                    'Dp': ('dimension', 'dp'), 'TextUnit': ('dimension', 'sp'),
+                    'Int': ('number', None), 'Long': ('number', None),
+                    'Float': ('number', None), 'Double': ('number', None)}
+        return expected.get(name) == (spec['kind'], spec.get('sourceUnit'))
     checks = {
         'Int': lambda v: type(v) is int, 'Long': lambda v: type(v) is int,
         'Float': lambda v: type(v) in (int, float), 'Double': lambda v: type(v) in (int, float),
@@ -143,7 +151,7 @@ def source_property_value(name, context, seen):
         local.pop(candidate['name'], None)
     local.update(__source_file=property['source'], __source_owner=property.get('owner'),
                  __source_imports=property.get('imports', {}))
-    return context.scoped(local, {}).value(parse_expression(property['expression']), seen+(identity,))
+    return context.scoped(local, {}).value(property.get('value_syntax') or parse_expression(property['expression']), seen+(identity,))
 
 
 def source_call_value(call, context, seen):

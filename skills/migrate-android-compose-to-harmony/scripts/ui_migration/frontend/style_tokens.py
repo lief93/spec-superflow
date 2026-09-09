@@ -140,6 +140,13 @@ class StyleTokenProjector:
                     bind('typography.' + field, parse_expression(spec.get('original_expression') or spec['expression']))
             if original['type'] == 'Surface' and semantic.get('color'):
                 bind('surface.background', parse_expression(semantic['color']['expression']))
+            if original['type'] in {'Icon', 'Image', 'AsyncImage'} and semantic.get('tint'):
+                bind('asset.tint', parse_expression(semantic['tint']['expression']))
+            if original['type'] in {'CircularProgressIndicator', 'LinearProgressIndicator',
+                                    'Divider', 'HorizontalDivider', 'VerticalDivider'}:
+                for argument, field in [('color', 'active_color'), ('trackColor', 'inactive_color')]:
+                    if semantic.get(argument):
+                        bind('control.' + field, parse_expression(semantic[argument]['expression']))
             if semantic.get('colors') and original['type'] in {'Button', 'TextButton', 'OutlinedButton', 'Card'}:
                 call = call_from(select(parse_expression(semantic['colors']['expression'])))
                 enabled = result['style']['state'].get('enabled')

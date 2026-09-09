@@ -7,7 +7,7 @@ from collections.abc import Mapping
 
 from ui_migration.frontend.page_model import UNRESOLVED
 from ui_migration.semantics.expressions import LayoutDimension, LayoutExpressionError
-from ui_migration.semantics.syntax import call_from
+from ui_migration.semantics.syntax import Call, call_from
 
 
 class AdapterConflict(ValueError):
@@ -25,6 +25,7 @@ class ApiAdapter:
     evaluate: Callable
     aliases: tuple[str, ...] = ()
     receiver_kind: str | None = None
+    access: str = 'call'
 
 
 def frozen(value):
@@ -96,13 +97,25 @@ class AdapterRegistry:
         self.identities = tuple(identities)
         self.component_adapters = tuple(component_adapters)
         self._symbols, self._aliases, self._members, ids = {}, {}, {}, set()
+        self._resource_owners = {}
         for adapter in self.adapters:
             if not isinstance(adapter, ApiAdapter) or adapter.capability not in CAPABILITIES or not callable(adapter.evaluate):
                 raise ValueError('invalid API adapter declaration')
             if not adapter.id or adapter.id in ids or not adapter.symbols:
                 raise AdapterConflict('duplicate/empty adapter id or symbols: ' + adapter.id)
             ids.add(adapter.id)
+            if adapter.access not in {'call', 'resource'}:
+                raise ValueError('invalid API access kind')
+            if adapter.access == 'resource':
+                if adapter.aliases or adapter.receiver_kind:
+                    raise ValueError('resource adapters require qualified symbols')
             for symbol in adapter.symbols:
+                if adapter.access == 'resource' and symbol.endswith('.*'):
+                    owner = symbol[:-2]
+                    if owner in self._resource_owners:
+                        raise AdapterConflict('duplicate resource owner: ' + owner)
+                    self._resource_owners[owner] = adapter
+                    continue
                 if adapter.receiver_kind:
                     key = (adapter.receiver_kind, symbol)
                     if key in self._members:
@@ -115,18 +128,36 @@ class AdapterRegistry:
             for alias in adapter.aliases:
                 self._aliases.setdefault(alias, []).append(adapter)
 
-    def select(self, name, imports):
+    @staticmethod
+    def qualified_symbol(name, imports):
         first, separator, suffix = name.partition('.')
-        resolved = imports.get(first, first) + (separator + suffix if separator else '')
+        return imports.get(first, first) + (separator + suffix if separator else '')
+
+    def select(self, name, imports):
+        first = name.partition('.')[0]
+        resolved = self.qualified_symbol(name, imports)
+        exact = self._symbols.get(resolved)
+        owner = self._resource_owners.get(resolved.rpartition('.')[0])
+        if exact and owner and exact is not owner:
+            raise AdapterConflict('ambiguous resource symbol: ' + resolved)
+        if exact or owner:
+            return exact or owner
         if first in imports:
-            return self._symbols.get(resolved)
-        exact = self._symbols.get(name)
-        if exact:
-            return exact
+            return None
         candidates = self._aliases.get(name, [])
         if len(candidates) > 1:
             raise AdapterConflict('ambiguous API alias: ' + name)
         return candidates[0] if candidates else None
+
+    def property_value(self, name, context, seen):
+        imports = context.values.get('__source_imports') or {}
+        adapter = self.select(name, imports)
+        if adapter is None or adapter.access != 'resource':
+            return UNRESOLVED
+        restricted = AdapterContext(ReadOnlyValues(context.values), context.value, context.render)
+        result = adapter.evaluate(Call(self.qualified_symbol(name, imports), (), reference=True), restricted, seen)
+        validate_value(result)
+        return result
 
     def resolve(self, call, context, seen):
         adapter = self.select(call.qualified_name, context.values.get('__source_imports') or {}) if call else None
@@ -149,10 +180,14 @@ class AdapterRegistry:
             return UNRESOLVED
         restricted = AdapterContext(ReadOnlyValues(context.values), context.value, context.render,
                                     receiver=match.receiver)
+        if match.adapter.access == 'resource':
+            call = Call(self.qualified_symbol(call.qualified_name, context.values.get('__source_imports') or {}),
+                        call.arguments, safe=call.safe)
         result = match.adapter.evaluate(call, restricted, seen)
         validate_value(result)
         return result
 
     def inventory(self):
         return [{'id': a.id, 'capability': a.capability, 'symbols': list(a.symbols),
-                 'aliases': list(a.aliases), 'receiver_kind': a.receiver_kind} for a in self.adapters]
+                 'aliases': list(a.aliases), 'receiver_kind': a.receiver_kind,
+                 **({'access': a.access} if a.access != 'call' else {})} for a in self.adapters]

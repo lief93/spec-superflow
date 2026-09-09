@@ -298,8 +298,10 @@ class NativeLeafEmitter:
         shape = 'Linear' if component_type == 'LinearProgressIndicator' else 'Ring'
         lines = [f'{prefix}Progress({{ value: {page_number(max(0, min(1, value)))}, total: 1, type: ProgressType.{shape} }})']
         for field, method in [('active_color', 'color'), ('inactive_color', 'backgroundColor')]:
-            if control.get(field):
-                lines.append(f'{prefix}  .{method}({arkts_string(control[field])})')
+            reference = self.tokens.expression(component, 'control.' + field) if self.tokens else None
+            if reference is not None or control.get(field):
+                color = reference or arkts_string(control[field])
+                lines.append(f'{prefix}  .{method}({color})')
                 emitted_phase_paths.add('style.control.' + field)
         if control.get('stroke_width_dp') is not None:
             lines.append(f"{prefix}  .style({{ strokeWidth: {page_number(control['stroke_width_dp'])} }})")
@@ -338,8 +340,10 @@ class NativeLeafEmitter:
         if control.get('stroke_width_dp') is not None:
             lines.append(f"{prefix}  .strokeWidth({page_number(control['stroke_width_dp'])})")
             emitted_phase_paths.add('style.control.stroke_width_dp')
-        if control.get('active_color'):
-            lines.append(f"{prefix}  .color({arkts_string(control['active_color'])})")
+        reference = self.tokens.expression(component, 'control.active_color') if self.tokens else None
+        if reference is not None or control.get('active_color'):
+            color = reference or arkts_string(control['active_color'])
+            lines.append(f"{prefix}  .color({color})")
             emitted_phase_paths.add('style.control.active_color')
 
         return LeafResult(lines, emitted_phase_paths)

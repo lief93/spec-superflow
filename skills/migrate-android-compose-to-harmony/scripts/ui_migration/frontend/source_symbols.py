@@ -218,7 +218,7 @@ class SourceSymbolIndex:
                     continue
                 seen.add(identity)
                 yield property
-                pending.append((property, parse_expression(property['expression'])))
+                pending.append((property, property.get('value_syntax') or parse_expression(property['expression'])))
 
     def global_values(self, function):
         key = (function['source'], function.get('owner'))

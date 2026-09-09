@@ -214,13 +214,16 @@ public final class KotlinExpressionTree {
             if (property.getGetter() != null && property.getGetter().getBodyExpression() != null)
                 propertyGetters.add(tree(property.getGetter().getBodyExpression()));
             KtExpression propertyValue = property.getInitializer() != null ? property.getInitializer() : property.getDelegateExpression();
+            boolean getterValue = property.getGetter() != null && property.getGetter().getBodyExpression() != null;
+            if (getterValue) propertyValue = property.getGetter().getBodyExpression();
             if (!property.isLocal() && !property.isVar() && propertyValue != null && property.getName() != null) {
                 KtClassOrObject owner = PsiTreeUtil.getParentOfType(property, KtClassOrObject.class);
                 if (owner != null && owner.getName() == null) continue;
                 if (owner instanceof KtObjectDeclaration && ((KtObjectDeclaration) owner).isCompanion())
                     owner = PsiTreeUtil.getParentOfType(owner, KtClassOrObject.class);
                 globalProperties.add(node("property", "name", property.getName(),
-                    "owner", owner == null ? null : owner.getName(), "expression", propertyValue.getText()));
+                    "owner", owner == null ? null : owner.getName(), "expression", propertyValue.getText(),
+                    "value_syntax", getterValue ? tree(propertyValue) : null));
             }
             if (!property.isLocal() || property.getName() == null) continue;
             KtBlockExpression block = PsiTreeUtil.getParentOfType(property, KtBlockExpression.class);

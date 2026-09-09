@@ -14,9 +14,14 @@ class StyleTokenEmitter:
         if reference is None:
             return None
         validate_token_reference(reference, path)
-        target = reference['target']
         self.consumed.add((component['id'], path))
-        return self.target_expression(target)
+        return self.reference_expression(reference)
+
+    def reference_expression(self, reference):
+        expression = self.target_expression(reference['target'])
+        if 'fallback' in reference:
+            expression = '(' + expression + ' ?? ' + self.value(reference['fallback']) + ')'
+        return expression
 
     def target_expression(self, target):
         from ui_migration.contracts.style_tokens import validate_target
@@ -33,7 +38,7 @@ class StyleTokenEmitter:
         from ui_migration.contracts.resource_values import is_resource_value, validate_resource_value
         from ui_migration.arkui.component_interfaces import literal
         if is_resource_value(value):
-            return self.target_expression(validate_resource_value(value)['target'])
+            return self.reference_expression(validate_resource_value(value))
         if isinstance(value, list):
             return '[' + ', '.join(self.value(item) for item in value) + ']'
         return literal(value)

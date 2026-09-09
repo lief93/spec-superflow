@@ -138,9 +138,76 @@ Declarations, export names and actual types must pass the target native build.
 
 ## Supported References
 
+### One Resource Adapter Interface
+
+Use the same `KeyedResourceAdapter` for source calls and properties. Implement
+`resolve(reference)` and register the source symbols it owns; no property-specific
+base class or access-mode choice is needed. One instance can own both forms:
+
+```python
+from ui_migration.frontend.api_adapters.keyed_resources import KeyedResourceAdapter
+
+class ThemeColors(KeyedResourceAdapter):
+    def resolve(self, reference):
+        key = reference.key
+        if key is None:
+            return None
+        # Translate key here if the Harmony library uses a different identifier.
+        return {"key": key, "target": {
+            "module": "@company/design", "export": "ThemeBridge",
+            "member": "color", "arguments": [key]}}
+
+ADAPTERS = [ThemeColors("project.theme-colors",
+    ("company.DeclarativeTheme.colors.*", "company.getColor"), "color").declaration()]
+```
+
+Load this module with the existing `--api-adapters` manifest. `reference` contains:
+
+- `symbol`: the full source symbol after resolving explicit imports/aliases.
+- `kind`: the declared expected resource type (`color`, `string`, `dimension`, `number`).
+- `key`: a suggested key, from the configured call key parameter or the direct
+  property name. This is not assumed to be the library's final canonical key.
+- `arguments`: read-only evaluated arguments, including the key argument. Named
+  arguments retain their names; positional arguments use `key_parameter` and
+  `parameters`, with remaining positions identified by their zero-based index string.
+
+The project can use `symbol` and `arguments` to return its own normalized `key` and
+`target`. `target` is a validated expression description (import/member/call arguments),
+not arbitrary ArkTS source text. For example, both `colors.primary` and
+`getColor("primary")` can return a call using the normalized key `palette.primary`.
+
+The `.*` registration matches only direct members of the exact owner; it is not a
+recursive or fuzzy name search. A different owner with a same-named property does
+not match. Duplicate owner registrations and conflicting matches fail explicitly.
+The adapter may return `None` for an unsupported reference. The target module must be
+available to the generated ArkTS project; it is not copied or executed by Python.
+
+Existing `harmony_target(key, arguments)` overrides remain compatible on this same
+class; their `arguments` excludes the key as before. New implementations should
+override `resolve(reference)` when they need full source identity or custom key extraction.
+
+The PSI-backed source path follows pure helper returns, constructor fields and
+immutable property getters (including block getters) to the registered library
+boundary. For example `secondaryButtonStyle().loadingTint -> Tokens.spinner ->
+DeclarativeTheme.colors.compButtonColorSecondarySpinner` preserves the final
+`compButtonColorSecondarySpinner` key, not the business field `loadingTint`.
+Library implementations need not be scanned once this boundary is explicitly mapped.
+Ambiguous, cyclic, unknown-state and unavailable source wrappers remain unresolved.
+
+Kotlin `library.property ?: Color.Black` retains a typed `fallback` in the reference
+and emits `(ThemeBridge.color(key) ?? "#FF000000")`. Unknown source values are not
+treated as null. Current fallbacks are type-compatible scalar literals (color,
+string, number, or a dimension with matching units); arbitrary fallback expressions
+or a second unresolved resource call are not silently discarded. A target that never
+returns null/undefined can implement its own equivalent defaults instead.
+
+After updating scripts (including the PSI Java helper), regenerate source-page and
+version JSON. Existing call-based `KeyedResourceAdapter` implementations are unchanged.
+
 | JSON property | Token kind | Unit contract |
 | --- | --- | --- |
 | content.text | string | target runtime string, plain text controls |
+| content.placeholder / content.content_description | string | input placeholder / accessibility text |
 | typography.font_size_sp | dimension | numeric sp -> fp |
 | typography.line_height_sp | dimension | numeric sp -> fp |
 | typography.letter_spacing_sp | dimension | numeric sp -> fp |
@@ -149,6 +216,8 @@ Declarations, export names and actual types must pass the target native build.
 | typography.color | color | target-compatible color value |
 | surface.background | color | solid fill |
 | surface.corner_radius_dp | dimension | numeric dp -> vp, uniform corners |
+| asset.tint | color | Image/Icon/AsyncImage template tint |
+| control.active_color / control.inactive_color | color | progress color/track; divider active color |
 
 Supported source owners include explicit text/input arguments, named fields of a
 `TextStyle(...)`, `Surface(color=...)`, `Modifier.background(...)`, a single-dimension
@@ -187,3 +256,4 @@ calls and resource-object dimensions require additional typed adapters.
 Tests: `python3 -m unittest test_style_token_references.StyleTokenReferencesTest -q`
 from the skill's `scripts` directory.
 Keyed API integration tests: `python3 -m unittest test_keyed_resources -q`.
+Property API integration tests: `python3 -m unittest test_property_resources -q`.

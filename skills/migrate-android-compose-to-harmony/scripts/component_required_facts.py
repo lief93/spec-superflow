@@ -641,6 +641,12 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
             expression = semantic_expression(component, name)
             if expression is None:
                 continue
+            from ui_migration.contracts.style_tokens import has_token_reference
+            color_field = {'color': 'active_color', 'trackColor': 'inactive_color'}.get(name)
+            if color_field and has_token_reference(component, 'control.' + color_field):
+                result.append(explicit_fact(component, 'style.control.' + color_field,
+                    'semantic_argument', name, expression))
+                continue
             parsed = parse_argument(name, expression)
             if parsed is None:
                 result.append(fact('source.arguments.' + name.lower(), 'unresolved', 'semantic_argument', name,

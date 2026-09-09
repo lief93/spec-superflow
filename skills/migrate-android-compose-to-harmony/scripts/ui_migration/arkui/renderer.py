@@ -871,10 +871,11 @@ class Renderer:
                 lines.append(f"{prefix}  .objectFit({content_scale})")
                 emitted_phase_paths.add("style.asset.content_scale")
             tint = style["asset"].get("tint")
-            if isinstance(tint, str) and not page_tint_baked:
+            tint_reference = self.style_tokens.expression(component, 'asset.tint')
+            if (tint_reference is not None or isinstance(tint, str)) and not page_tint_baked:
                 lines.extend(
                     f"{prefix}  {line}"
-                    for line in self.image_tint_lines(arkts_string(tint))
+                    for line in self.image_tint_lines(tint_reference or arkts_string(tint))
                 )
                 emitted_phase_paths.add("style.asset.tint")
         elif component_type == "ProgressRing":
