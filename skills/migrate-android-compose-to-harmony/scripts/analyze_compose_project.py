@@ -17,7 +17,8 @@ from typing import Any, Iterable
 
 from validate_ai_safe_tree import validate as validate_ai_safe_tree
 from ui_migration.frontend.ui_declarations import NATIVE_SLOTS
-from ui_migration.frontend.source_symbols import SourceSymbolIndex, resolve_functions, function_identity
+from ui_migration.frontend.source_symbols import SourceSymbolIndex, resolve_functions, function_identity, function_fq_name
+from ui_migration.frontend.declaration_lookup import DeclarationLookup
 from ui_migration.progress import Progress, checkpoint, step, tracked
 
 
@@ -2934,12 +2935,14 @@ def collect_composable_associations(
             parameters_by_source[relative][function_name] = parameters
 
     resolved: dict[str, dict[str, list[dict[str, str]]]] = collections.defaultdict(dict)
+    function_lookup = DeclarationLookup(index.functions, function_fq_name)
+    function_names = {f['name'] for f in index.functions}
     for relative in tracked(packages, 'cross-file-symbols'):
         syntax = index.syntax[relative]
-        names = {f['name'] for f in index.functions} | set(syntax['imports'])
+        names = function_names | set(syntax['imports'])
         names.update(c['name'] for c in syntax['qualifiedCalls'])
         for name in tracked(sorted(names), 'symbol-resolution', lambda name: relative + ':' + name):
-            targets = resolve_functions(index.functions, name, source=relative, imports=syntax['imports'],
+            targets = resolve_functions(function_lookup, name, source=relative, imports=syntax['imports'],
                                         package=syntax['package'], wildcards=syntax['wildcardImports'])
             targets = [f for f in targets if index.roles[function_identity(f)]=='content']
             if targets:

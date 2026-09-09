@@ -116,6 +116,23 @@ Silence alone does not prove a deadlock; this change adds diagnostics,
 not a performance fix or automatic timeout. Filenames and symbol names are logged,
 not complete source bodies. Apply company log-handling policy to these files.
 
+For source-page generation, `function-dependencies` reports `indexed_functions`
+(all declarations), `analyzed_functions` (dependencies processed so far), and
+`pending_functions` (queued candidates, potentially including duplicates). It follows
+the selected page's transitive dependencies, including defaults and property
+initializers; it no longer constructs edges for every unrelated function first.
+PSI parsing still covers the snapshot for cross-file resolution. Whole-project
+`analyze_compose_project.py` still analyzes all functions, so reuse its snapshot and
+contract when generating additional pages from unchanged sources. No new CLI option
+or periodic heartbeat is introduced.
+
+`analysis` / `symbol-resolution` is a different phase: it builds the contract's
+cross-file name associations, before page JSON or ArkUI generation. The analyzer
+now uses a name index instead of scanning every declaration for each query. It still
+visits every snapshot file, including test files present in that snapshot; its local
+symbol counter is not the overall migration percentage. `elapsed_s` measures the
+operation since start, not the current symbol alone. Existing commands are unchanged.
+
 ### Reuse snapshot and contract across pages
 
 `snapshot` is a directory of approved Android text sources, not a screenshot or a

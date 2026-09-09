@@ -7,7 +7,8 @@ from collections import defaultdict, Counter
 from kotlin_psi import parse_declarations, parse_expression
 from page_component_catalog import CONTROL_FAMILIES
 from ui_migration.semantics.syntax import call_from, qualified_name
-from ui_migration.progress import tracked, checkpoint
+from ui_migration.progress import tracked
+from ui_migration.frontend.declaration_lookup import DeclarationLookup
 
 
 def function_identity(function):
@@ -20,6 +21,8 @@ def function_fq_name(function):
 
 def resolve_functions(functions, name, source=None, imports=None, package=None, wildcards=(), owner=None):
     imports = imports or {}
+    if isinstance(functions, DeclarationLookup):
+        functions = functions.candidates(name, imports, package)
     prefix, dot, suffix = name.partition('.')
     imported = imports.get(prefix)
     target = imported + ('.' + suffix if dot else '') if imported else None
@@ -96,12 +99,12 @@ def matches_argument_shape(function, call):
 
 class SourceSymbolIndex:
     @classmethod
-    def from_root(cls, root):
+    def from_root(cls, root, *, roots=None):
         return cls({path.relative_to(root).as_posix(): path.read_text(encoding='utf-8')
                     for path in sorted(root.rglob('*.kt'))
-                    if not {'build', '.gradle', '.git'}.intersection(path.relative_to(root).parts)})
+                    if not {'build', '.gradle', '.git'}.intersection(path.relative_to(root).parts)}, roots=roots)
 
-    def __init__(self, files):
+    def __init__(self, files, *, roots=None):
         self.syntax = {path: parse_declarations(text) for path, text in
                        tracked(list(files.items()), 'psi-declarations', lambda item: item[0])
                        if path.endswith(('.kt', '.kts'))}
@@ -118,33 +121,19 @@ class SourceSymbolIndex:
         self.by_source = defaultdict(list)
         for function in self.functions:
             self.by_source[function['source']].append(function)
-        self.edges = {}
+        self._function_lookup = DeclarationLookup(self.functions, function_fq_name)
+        self._property_lookup = DeclarationLookup(self.properties, function_fq_name)
+        self._visible_properties = {}
+        self._global_values = {}
+        self._property_names = {p['name'] for p in self.properties}
         self.roles = {function_identity(f): self._initial_role(f)
                       for f in tracked(self.functions, 'function-roles', function_identity)}
-        for function in tracked(self.functions, 'function-dependencies', function_identity):
-            edges = []
-            for call in expression_calls(function['body']):
-                targets = self.resolve(call, function)
-                edges.append((call, targets))
-            for property in self.referenced_properties(function):
-                for call in expression_calls(parse_expression(property['expression'])):
-                    edges.append((call, self.resolve(call, property)))
-            self.edges[function_identity(function)] = edges
-        # Helpers that emit content inherit its role; value factories never become UI.
-        changed = True
-        iteration = 0
-        while changed:
-            iteration += 1
-            checkpoint('content-role-propagation', iteration=iteration, total=len(self.functions))
-            changed = False
-            for function in self.functions:
-                identity = function_identity(function)
-                if self.roles[identity] != 'unknown':
-                    continue
-                if any(self.roles[function_identity(t)]=='content'
-                       for _, targets in self.edges[identity] for t in targets):
-                    self.roles[identity] = 'content'
-                    changed = True
+        from .dependency_graph import DependencyGraph
+        self._dependencies = DependencyGraph(self)
+        self.edges = self._dependencies.edges
+        selected = None if roots is None else set(roots)
+        self._dependencies.ensure(self.functions if selected is None else
+            [f for f in self.functions if (f['source'], f['name']) in selected])
 
     def _type(self, text, source, seen=()):
         if not text or text in seen:
@@ -191,23 +180,30 @@ class SourceSymbolIndex:
                      wildcards=syntax['wildcardImports'], owner=function.get('owner'))
         targets = []
         if call.receiver:
-            targets = resolve_functions(self.functions, call.qualified_name, **scope)
+            targets = resolve_functions(self._function_lookup, call.qualified_name, **scope)
             if not targets:
-                targets = [f for f in resolve_functions(self.functions, call.name, **scope) if f.get('receiver')]
+                targets = [f for f in resolve_functions(self._function_lookup, call.name, **scope) if f.get('receiver')]
         else:
-            targets = resolve_functions(self.functions, call.name, **scope)
+            targets = resolve_functions(self._function_lookup, call.name, **scope)
         targets = [f for f in targets if call.reference or matches_argument_shape(f, call)]
         self._resolved[key] = targets
         return targets
 
     def visible_properties(self, function, name):
+        key = (function['source'], function.get('owner'), name)
+        if key in self._visible_properties:
+            return list(self._visible_properties[key])
         syntax = self.syntax[function['source']]
-        return resolve_functions(self.properties, name, source=function['source'], imports=syntax['imports'],
-                                 package=syntax['package'], wildcards=syntax['wildcardImports'],
-                                 owner=function.get('owner'))
+        result = resolve_functions(self._property_lookup, name, source=function['source'], imports=syntax['imports'],
+                                   package=syntax['package'], wildcards=syntax['wildcardImports'],
+                                   owner=function.get('owner'))
+        self._visible_properties[key] = result
+        return list(result)
 
     def referenced_properties(self, function):
         pending = [(function, function['body'])]
+        pending.extend((function, parse_expression(p['default'])) for p in function.get('parameters', [])
+                       if isinstance(p.get('default'), str))
         seen = set()
         while pending:
             scope, expression = pending.pop()
@@ -225,19 +221,24 @@ class SourceSymbolIndex:
                 pending.append((property, parse_expression(property['expression'])))
 
     def global_values(self, function):
-        names = {p['name'] for p in self.properties} | set(self.syntax[function['source']]['imports'])
+        key = (function['source'], function.get('owner'))
+        if key in self._global_values:
+            return dict(self._global_values[key])
+        names = self._property_names | set(self.syntax[function['source']]['imports'])
         values = {}
         for name in names:
             candidates = self.visible_properties(function, name)
             if len(candidates)==1:
                 values[name] = candidates[0]['expression']
-        return values
+        self._global_values[key] = values
+        return dict(values)
 
     def ui_functions(self, source):
         return [f for f in self.by_source[source] if self.roles[function_identity(f)]=='content']
 
     def trace(self, source, name):
         pending = [f for f in self.by_source[source] if f['name']==name]
+        self._dependencies.ensure(pending)
         visited, edges, unresolved = {}, [], []
         while pending:
             function = pending.pop()

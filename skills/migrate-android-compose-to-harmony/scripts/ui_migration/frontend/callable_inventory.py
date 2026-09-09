@@ -1,14 +1,17 @@
 """PSI-backed content templates, kept out of the active page until invocation."""
-from ui_migration.frontend.source_symbols import expression_calls
+from ui_migration.frontend.source_symbols import expression_calls, function_identity
 from page_component_catalog import CONTROL_FAMILIES
 
 
-def lambda_functions(index, source):
+def lambda_functions(index, source, *, within=None):
     result = []
     native = {name for names in CONTROL_FAMILIES.values() for name in names}
     content = {f['name'] for f in index.functions
                if index.roles.get(f"{f['source']}:{f['start']}:{f['name']}")=='content'}
     for entry in index.syntax[source].get('lambdas', []):
+        if within is not None and not any(function_identity(f) in within and f['start'] <= entry['start'] < f['end']
+                                         for f in index.by_source[source]):
+            continue
         syntax = entry['expression']
         if not any(call.name in native or call.name in content for call in expression_calls(syntax['body'])):
             continue

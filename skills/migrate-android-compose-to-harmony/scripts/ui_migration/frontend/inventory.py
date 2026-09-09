@@ -58,7 +58,7 @@ def build_source_page_spec(
         for item in reached
         if isinstance(item, dict)
     }
-    dependency_index = SourceSymbolIndex.from_root(source_root) if source_root is not None else None
+    dependency_index = SourceSymbolIndex.from_root(source_root, roots=[(root_source, root_composable)]) if source_root is not None else None
     from ui_migration.frontend.root_selection import select_root_declaration
     root_declaration = select_root_declaration(dependency_index, root_source, root_composable) if dependency_index else None
     functions = source_functions(source_root, dependency_index)
@@ -70,8 +70,11 @@ def build_source_page_spec(
     if source_root is not None:
         dependency_trace = dependency_index.trace(root_source, root_composable)
         traced = {item['id'] for item in dependency_trace['definitions']}
+        traced_sources = {item['source'] for item in dependency_trace['definitions']}
         for source in dependency_index.syntax:
-            for function in lambda_functions(dependency_index, source):
+            if source not in traced_sources:
+                continue
+            for function in lambda_functions(dependency_index, source, within=traced):
                 if any(function_identity(f) in traced and f['start']<=function['start']<f['end']
                        for f in dependency_index.by_source[source]):
                     functions.append(function)

@@ -92,6 +92,36 @@ share lexical symbol resolution: declaration file/owner, explicit imports and al
 same-package definitions, then wildcard imports. Multiple candidates stay explicit;
 argument names/arity can narrow the dependency trace but are not compiler type proof.
 
+`frontend/declaration_lookup.py` narrows function/property candidates by simple and
+fully qualified name before applying those same lexical rules. Candidate order and
+ambiguity are preserved. Visible properties (including misses) and global values are
+cached per declaration file/owner within one `SourceSymbolIndex`; callers receive
+their own collection copies. A new index always reads the supplied source again,
+so changing branches cannot reuse another index's cached values. No disk cache or
+additional CLI argument is introduced.
+
+The contract analyzer's `collect_composable_associations` uses the same declaration
+lookup for its `symbol-resolution` loop. It builds the lookup and global name set
+once, then applies the unchanged file/import/package rules to matching candidates.
+It still queries the full name inventory for every file to preserve the association
+contract, but each query no longer linearly scans every project function. Keep this
+contract-stage path covered separately from source-page dependency benchmarks.
+
+Snapshot/contract reuse skips project intake, not all source-page analysis. Each
+source-page command still parses PSI declarations across the snapshot, including
+their syntax bodies. `frontend/dependency_graph.py` materializes dependency edges
+only from the requested page root(s) and their transitive closure: calls, parameter
+defaults, referenced property initializers and callable references. Ambiguous targets
+are all retained, cycles terminate, and a later trace extends the same graph on demand.
+Lambda content inspection is limited to reached declarations. Files are not excluded
+merely because their path contains `test`, `androidTest` or a sample module.
+
+Whole-project analysis keeps full dependency construction when no roots are supplied.
+The page CLI supplies roots automatically; no new argument is needed. This is not
+cross-command index reuse or a header-only Kotlin parser. Global declaration scanning
+and source-value inventory still have a cost; the optimization removes unrelated deep
+dependency analysis without pruning the source-page data inventory.
+
 The index identifies content builders (including lazy scope aliases and scope
 parameters), Modifier helpers and value functions, and follows calls from the selected
 page entry. Referenced global initializers are traced and evaluated in their declaration
