@@ -91,9 +91,10 @@ def validate_value(value):
 
 
 class AdapterRegistry:
-    def __init__(self, adapters, identities=()):
+    def __init__(self, adapters, identities=(), component_adapters=()):
         self.adapters = tuple(adapters)
         self.identities = tuple(identities)
+        self.component_adapters = tuple(component_adapters)
         self._symbols, self._aliases, self._members, ids = {}, {}, {}, set()
         for adapter in self.adapters:
             if not isinstance(adapter, ApiAdapter) or adapter.capability not in CAPABILITIES or not callable(adapter.evaluate):

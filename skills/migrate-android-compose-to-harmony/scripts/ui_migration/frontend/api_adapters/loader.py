@@ -30,6 +30,7 @@ def load_adapters(manifest: Path | None, builtins=()):
         identities.append({'path': str(relative), 'sha256': digest})
         modules.append((path, digest, raw))
     adapters = list(builtins)
+    component_adapters = []
     # Verify every file before executing any trusted extension.
     for path, digest, raw in modules:
         module = ModuleType('ui_project_adapter_' + digest)
@@ -39,4 +40,8 @@ def load_adapters(manifest: Path | None, builtins=()):
         if not isinstance(declared, (tuple, list)):
             raise ValueError('extension must export an ADAPTERS list')
         adapters.extend(declared)
-    return AdapterRegistry(adapters, identities)
+        components = getattr(module, 'COMPONENT_ADAPTERS', [])
+        if not isinstance(components, (tuple, list)):
+            raise ValueError('COMPONENT_ADAPTERS must be a list')
+        component_adapters.extend(components)
+    return AdapterRegistry(adapters, identities, component_adapters)

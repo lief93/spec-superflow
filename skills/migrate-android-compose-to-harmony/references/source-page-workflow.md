@@ -2,8 +2,77 @@
 
 This is the implementation-stage recipe used inside the migration workflow. It is not a
 second planning entry point: normal runs still start/resume through `migration_agent.py`.
-The examples below use the existing scripts and one existing Python library function.
-They do not require a new source-page CLI that does not exist.
+The page-level commands below wrap the existing parser, state projection and ArkUI
+generator. They do not add another translation implementation.
+
+## One command for one page
+
+With an existing snapshot, analysis contract and project style configuration:
+
+```bash
+python3 "$SKILL_ROOT/scripts/migrate_compose_page.py" \
+  --snapshot "/path/to/run/snapshot" \
+  --contract "/path/to/run/migration-contract.json" \
+  --style-definitions "/path/to/run/project-style-definitions.json" \
+  --root-source "app/src/main/java/example/HomeScreen.kt" \
+  --root-composable HomeScreen --page-id home --state-id loaded \
+  --state-fixture "/path/to/home-loaded.json" \
+  --viewport-width-dp 360 --viewport-height-dp 760 \
+  --output-dir "/path/to/new-home-attempt" \
+  --target "/path/to/harmony-project"
+```
+
+Replace `--snapshot ... --contract ...` with `--source /path/to/android-project`
+to create a fresh snapshot and analysis under the new output directory. The
+explicit style file must already exist in either mode; use
+`generate_project_style_definitions.py` to prepare it once. Missing styles never
+silently fall back to re-extraction. Add `--project-name`, `--bundle-name` and
+`--sdk-version` when creating a new target; an existing target must satisfy the
+normal project/asset ownership checks. New targets use module `entry`; existing
+targets may select `--module`.
+
+`--root-source` and `--root-composable` are required. There is no automatic entry
+selection. `--state-fixture` is optional only when source values suffice; omitted
+state does not invent loaded data. `--api-adapters /absolute/manifest.json` passes
+explicit project API adapters to state projection. PSI still uses the documented
+`JAVA_HOME` / `KOTLIN_PSI_CLASSPATH` environment, not a guessed project JDK.
+
+The command emits `source-page.json`, `lanhu/version_json.json`, per-stage command,
+stdout/stderr and elapsed-time records, plus `result.json` containing the emitted
+ArkUI path and manifest. It prepares theme resources, selected manifest-backed
+drawables and unambiguous local font files using the existing verified tools.
+External images, Material icon source archives and company Harmony token libraries
+are not downloaded or invented; prepare unsupported/external target dependencies
+through their documented adapters/resource tools. Resource integrity errors stop
+the run with their failed stage and logs.
+
+This ends at **generated page code**, not build/install/visual acceptance and not
+automatic production navigation registration. Import the exported root type from
+the generated manifest into the desired host/route. Existing project files are
+not replaced. `--force` only permits the existing owned-page regeneration checks;
+it never overwrites the run directory or reinitializes an existing target.
+Theme resources use the existing regeneration guard, which checks that previously
+generated files are unchanged before writing; user-edited theme files cause a
+stage error rather than being overwritten.
+
+Exit 0 means output was produced. `status=partial_generation`, `verdict=fail` and
+`generation_complete=false` retain unresolved facts and are not acceptance.
+Fatal errors exit 1, set `failed_stage`, and preserve intermediate artifacts/logs.
+The final stdout/result JSON also contains `diagnosis`: grouped generation problems,
+affected components and source lines, property paths, failed expressions, available
+parameter bindings, original reasons and suggested repairs. `diagnosis_report`
+points to the Chinese `diagnosis.md` with the same details, so start there instead
+of manually joining stage logs. It distinguishes command interruption from partial
+code generation and preserves the original verdict. Preflight errors before a new
+run directory exists return diagnosis on stdout only; previous runs are untouched.
+Diagnosis uses current-run worklist/manifest evidence, not AI or screenshot analysis.
+`root_cause_confirmed=false` means the failing step is identified but the complete
+upstream cause is not proven. Unknown errors remain explicit, and evidence-read
+errors appear in `collection_errors`; neither is treated as success. Group ordering
+does not prove which issue caused a blank rendered page. This report does not replace
+build or visual verification.
+Use a new `--output-dir` for each attempt. Paths containing spaces are supported;
+quote each argument normally, without embedding Python or setting `PYTHONPATH`.
 
 ## Inputs and outputs
 
@@ -11,7 +80,7 @@ They do not require a new source-page CLI that does not exist.
 read-only Android project
   -> validated safe snapshot
   -> analyze_compose_project.py -> migration-contract.json
-  -> build_source_page_spec(...) -> source-page.json
+  -> generate_source_page.py -> source-page.json
   -> one explicit state fixture
   -> generate_lanhu_source_page.py -> version_json.json
   -> generate_arkui_page.py -> generated ArkUI + generation manifest
@@ -22,7 +91,7 @@ running Android/Harmony pages -> screenshots + runtime page.json -> comparison
 | File | Producer / purpose | Implementation input? |
 | --- | --- | --- |
 | `migration-contract.json` | Source analyzer; source calls, definitions, resources and candidate business inventory | Only upstream of the page JSON |
-| `source-page.json` | `real_page_pipeline.build_source_page_spec`; expanded source component tree and expressions | Input to the Lanhu generator |
+| `source-page.json` | `generate_source_page.py` calls `build_source_page_spec`; expanded source component tree and expressions | Input to the Lanhu generator |
 | `state-fixture.json` | Author supplies one source-reachable state's values | Input to state projection, not a second ArkUI input |
 | `version_json.json` | Lanhu generator; hierarchy, layout/style facts, migration metadata and unresolved facts | **The only page-fact input to ArkUI** |
 | `component-manifest.json`, `page-state-manifest.json` | Lanhu generator; component/geometry/state diagnostics | No sidecar required by ArkUI |
@@ -118,36 +187,18 @@ node styles. ArkUI still reads that single JSON, never this cache file or Androi
 
 ### Generate a page
 
-There is currently no standalone source-only CLI for this step. This executable snippet calls
-the same library function used by real-page capture and the source-only regression harness.
-It does not invoke UIAutomator or read screenshots. `source_root` is the safe snapshot, so local
-source values and approved asset metadata can be resolved without reopening the original tree.
+Use the standalone CLI. It calls the same library function used by real-page capture
+and the source-only regression harness; it does not invoke UIAutomator or read screenshots.
+The snapshot and contract must belong to the same source inventory. The explicit
+style file is loaded into the document, not discovered from the working directory.
 
 ```bash
-mkdir -p "$PAGE_RUN"
-PYTHONPATH="$SKILL_ROOT/scripts${PYTHONPATH:+:$PYTHONPATH}" python3 -B - <<'PY'
-import json
-import os
-from pathlib import Path
-from init_harmony_project import load_contract, sha256_file
-from real_page_pipeline import build_source_page_spec
-from ui_migration.frontend.project_styles import load_style_definitions
-
-contract, contract_path = load_contract(Path(os.environ["CONTRACT"]))
-page = build_source_page_spec(
-    contract,
-    os.environ["ROOT_SOURCE"],
-    os.environ["ROOT_COMPOSABLE"],
-    os.environ["PAGE_ID"],
-    os.environ["STATE_ID"],
-    sha256_file(contract_path),
-    Path(os.environ["SNAPSHOT"]),
-    style_definitions=load_style_definitions(Path(os.environ["PROJECT_STYLES"])),
-)
-with Path(os.environ["SOURCE_PAGE"]).open("x", encoding="utf-8") as output:
-    json.dump(page, output, ensure_ascii=False, indent=2)
-    output.write("\n")
-PY
+python3 "$SKILL_ROOT/scripts/generate_source_page.py" \
+  --snapshot "$SNAPSHOT" --contract "$CONTRACT" \
+  --style-definitions "$PROJECT_STYLES" \
+  --root-source "$ROOT_SOURCE" --root-composable "$ROOT_COMPOSABLE" \
+  --page-id "$PAGE_ID" --state-id "$STATE_ID" \
+  --output "$SOURCE_PAGE"
 ```
 
 The source tree preserves project-component expansion, parents/children, sibling order,

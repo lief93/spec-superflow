@@ -138,6 +138,7 @@ def generate(
         "selected_call_count": len(renderer.selected_calls),
         "verified_font_assets": renderer.verified_font_faces,
         "business_components": renderer.business_components.report(),
+        "reused_business_components": renderer.component_reuse.instances,
         "generation_complete": generation_complete,
         "verdict": "pass" if generation_complete else "fail",
         "required_fact_gate": required_gate,

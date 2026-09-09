@@ -19,8 +19,6 @@ class StyleTokenProjector:
         self.defaults = definitions.get('componentDefaults', {})
 
     def apply(self, original, result, environment):
-        if not self.mappings:
-            return
         bindings = {**original.get('file_values', {}), **original.get('parameter_bindings', {}),
                     **original.get('local_values', {})}
         imports = environment.get('__source_imports') or {}
@@ -43,6 +41,28 @@ class StyleTokenProjector:
             references.pop(path, None)
             tree = select(tree)
             name = qualified_name(tree)
+            try:
+                value = resolver.value(tree)
+            except LayoutExpressionError:
+                value = None
+            if isinstance(value, dict) and value.get('kind') == 'platform_resource_reference':
+                group, field = path.split('.', 1)
+                result['style'][group][field] = None
+                call = call_from(tree)
+                name = name or (call.qualified_name if call else 'resource')
+                head, *tail = name.split('.')
+                if isinstance(imports.get(head), str):
+                    name = '.'.join([imports[head], *tail])
+                spec = value['reference']
+                try:
+                    validate_token_mappings({name:spec})
+                    validate_property_token(path, spec)
+                except ValueError as error:
+                    result.setdefault('unresolved', []).append({'path':'style.' + path,
+                        'expression':tree.get('text', ''), 'reason':str(error)})
+                    return
+                references[path] = {'android':name, 'key':value['key'], **copy.deepcopy(spec)}
+                return
             if not name:
                 def contains_mapping(value):
                     if isinstance(value, dict):
@@ -97,6 +117,11 @@ class StyleTokenProjector:
 
         semantic = (original.get('arguments') or {}).get('semantic') or {}
         try:
+            if original['type'] in {'Text', 'BasicText', 'ClickableText'}:
+                positional = (original.get('arguments') or {}).get('positional') or []
+                spec = semantic.get('text') or (positional[0] if positional else None)
+                if spec:
+                    bind('content.text', parse_expression(spec.get('original_expression') or spec['expression']))
             for name in ('style', 'textStyle'):
                 if not semantic.get(name):
                     continue
@@ -134,3 +159,5 @@ class StyleTokenProjector:
             result.setdefault('unresolved', []).append({'path': 'source.style_token_references',
                 'expression': '', 'reason': str(error)})
         result.setdefault('source', {})['style_token_references'] = references
+        reference_paths = {'style.' + path for path in references}
+        result['unresolved'] = [u for u in result.get('unresolved', []) if u.get('path') not in reference_paths]

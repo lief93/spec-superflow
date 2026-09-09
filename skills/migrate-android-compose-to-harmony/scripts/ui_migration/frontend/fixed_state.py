@@ -150,6 +150,10 @@ def project_source_page(
     component_defaults = ComponentStyleDefaults(payload.get('style_definitions') or {})
     from ui_migration.frontend.style_tokens import StyleTokenProjector
     style_tokens = StyleTokenProjector(payload.get('style_definitions') or {})
+    from ui_migration.frontend.component_reuse import ComponentReuse
+    component_reuse = ComponentReuse(getattr(api_registry, 'component_adapters', ()),
+                                     payload.get('component_definitions', []))
+    from ui_migration.frontend.component_interfaces import project_interface
     if fixture.get("schema") != "android-to-harmony.page-state-fixture.v1":
         raise ValueError(f"unsupported state fixture schema: {fixture.get('schema')!r}")
     if fixture.get("page") != payload.get("page"):
@@ -553,8 +557,33 @@ def project_source_page(
             raise ValueError(
                 f"state condition requires a resolved boolean for {component_id}: {expression}"
             )
-        node = resolve_node(source, local)
-        if preview is not None:
+        reuse_error = None
+        try:
+            def reuse_argument(name, expression, arguments):
+                metadata = source.get('source') or {}
+                scoped = {**local, **metadata.get('invocation_scopes', {}).get(name, {})}
+                if name in metadata.get('invocation_defaults', []):
+                    scoped.update(arguments)
+                return evaluate_expression(expression, scoped, preserve_units=True)
+            reuse = component_reuse.resolve(source, reuse_argument)
+        except ValueError as error:
+            reuse, reuse_error = None, str(error)
+        if reuse is not None:
+            node = copy.deepcopy(source)
+            node['source']['component_reuse'] = reuse
+            # The selected target library owns the internals; do not replay its
+            # Android implementation or infer target sizes from that implementation.
+            node['style'], node['modifiers'], node['unresolved'] = {}, [], []
+            node['required_facts'] = build_required_facts(node)
+        else:
+            node = resolve_node(source, local)
+            definition = component_reuse.definitions.get(source.get('definition_id'), {})
+            if definition.get('component_kind') == 'project_component':
+                node['source']['component_interface'] = project_interface(source, definition, reuse_argument)
+            if reuse_error:
+                node['unresolved'].append({'path': 'source.component_reuse',
+                    'expression': source.get('type'), 'reason': reuse_error})
+        if preview is not None and reuse is None:
             preview.content(node, suffix)
             node['required_facts'] = build_required_facts(node)
         new_id = component_id + suffix
@@ -576,6 +605,14 @@ def project_source_page(
         node["children_ids"] = []
         node["sibling_index"] = 0
         emitted.append(node)
+        if reuse is not None:
+            for name, roots in reuse['slots'].items():
+                reuse['slots'][name] = emit_children(roots, new_id, local, suffix)
+                for child_id in reuse['slots'][name]:
+                    child = next(item for item in emitted if item['id'] == child_id)
+                    child.pop('slot_argument_name', None)
+                    child.get('source', {}).pop('slot_argument_name', None)
+            return new_id
         consumed_insets = dict(local.get('__consumed_window_insets', {}))
         for modifier in node.get('modifiers', []):
             for edge, value in modifier.get('consumed_insets_dp', {}).items():
@@ -590,6 +627,21 @@ def project_source_page(
         if source['type'] == 'Scaffold':
             parameters = (source.get('source') or {}).get('trailing_lambda_parameters') or ['it']
             local = {**local, parameters[0]: {'__scaffold_padding_owner': new_id}}
+        from ui_migration.frontend.pager import PAGER_TYPES, project_pager
+        if source['type'] in PAGER_TYPES:
+            pager = project_pager(node, local)
+            node['required_facts'] = build_required_facts(node)
+            if pager is None:
+                for child in children.get(component_id, []):
+                    emit_deferred(child, new_id, local, suffix, {'status': 'unresolved',
+                        'kind': 'pager', 'expression': semantic_expression(source, 'state'), 'owner_id': new_id})
+                return new_id
+            parameters = source.get('source', {}).get('trailing_lambda_parameters') or ['it']
+            for page in range(pager['page_count']):
+                roots = emit_children(children.get(component_id, []), new_id,
+                    {**local, parameters[0]: page}, suffix + '__page' + str(page))
+                pager['pages'].append(roots)
+            return new_id
         invocation = source.get('slot_invocation') or {}
         if invocation and (invocation.get('expression') or not children.get(component_id)):
             from ui_migration.frontend.callable_expansion import select_template

@@ -13,7 +13,17 @@ def reference_name(expression):
     return name.rsplit('.', 1)[-1] if name else None
 
 
-def property_name_hints(node):
+def direct_reference_name(expression):
+    if not isinstance(expression, str):
+        return None
+    try:
+        syntax = parse_expression(expression)
+    except KotlinPsiSyntaxError:
+        return None
+    return syntax.get('name') if syntax.get('kind') == 'name' else None
+
+
+def property_name_hints(node, direct_only=False):
     arguments = node.get('arguments') or {}
     semantic = arguments.get('semantic') or {}
     positional = arguments.get('positional') or []
@@ -29,7 +39,7 @@ def property_name_hints(node):
         if not isinstance(argument, dict):
             continue
         expression = argument.get('original_expression') or argument.get('expression')
-        name = reference_name(expression)
+        name = direct_reference_name(expression) if direct_only else reference_name(expression)
         if name:
             hints[path] = name
     return hints

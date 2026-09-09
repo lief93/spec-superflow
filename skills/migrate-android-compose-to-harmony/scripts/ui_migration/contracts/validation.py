@@ -261,6 +261,7 @@ def validate_lanhu_version_document(version: dict[str, Any]) -> None:
             raise ArkUIPageError(f"Lanhu layer {layer_id} paths/layers must be lists")
         validate_lanhu_style(layer["style"], f"Lanhu layer {layer_id}.style")
         migration = layer.get("migration")
+        from ui_migration.contracts.style_tokens import has_token_reference, validate_token_reference
         if layer["type"] == "text" and not isinstance(layer.get("text"), str):
             unresolved_text = (
                 isinstance(meta.get("sourceGeneration"), dict)
@@ -270,7 +271,8 @@ def validate_lanhu_version_document(version: dict[str, Any]) -> None:
                 and any(isinstance(item, dict) and item.get("path") == "style.content.text"
                         for item in migration["unresolved"])
             )
-            if not unresolved_text:
+            reference_text = isinstance(migration, dict) and has_token_reference(migration, 'content.text')
+            if not unresolved_text and not reference_text:
                 raise ArkUIPageError(f"Lanhu text layer {layer_id} must contain text or an explicit unresolved fact")
         if layer["hasExportImage"] and (
             not isinstance(layer.get("exportImageUrl"), str)
@@ -302,6 +304,17 @@ def validate_lanhu_version_document(version: dict[str, Any]) -> None:
             if migration.get("schema") != "android-to-harmony.lanhu-node.v1":
                 raise ArkUIPageError(f"Lanhu layer {layer_id}.migration schema is unsupported")
             try:
+                reuse = (migration.get('source') or {}).get('component_reuse')
+                if reuse is not None:
+                    from ui_migration.contracts.component_reuse import validate_reuse
+                    validate_reuse(reuse)
+                    if reuse['definition_id'] != migration.get('definitionId'):
+                        raise ValueError('component reuse definition identity mismatch')
+                references = (migration.get('source') or {}).get('style_token_references', {})
+                if not isinstance(references, dict):
+                    raise ValueError('style_token_references must be an object')
+                for path, reference in references.items():
+                    validate_token_reference(reference, path)
                 require_token(
                     migration.get("componentType"),
                     f"Lanhu layer {layer_id}.migration componentType",

@@ -8,6 +8,16 @@ description: Migrate local Android Jetpack Compose or Android Views/XML applicat
 For tooling maintenance, read [tooling-architecture.md](references/tooling-architecture.md).
 Commands keep their existing names; install the complete skill, including `scripts/ui_migration/`.
 
+For one selected Compose page, use the
+[page-level command](references/source-page-workflow.md#one-command-for-one-page)
+`migrate_compose_page.py`; for source JSON alone use `generate_source_page.py`.
+Both require the exact page function and explicit project style configuration.
+Do not reconstruct these steps using ad hoc inline Python. Generated code is not
+build/runtime acceptance; the project-wide agent workflow remains separate.
+The page command's final `result.json` includes grouped `diagnosis` and a Chinese
+`diagnosis.md` report with causes, affected source locations and repair actions.
+Read that summary first; do not equate an unresolved count with a proven visual cause.
+
 For blank pages or missing sections, follow the ordered
 [source-to-runtime diagnosis](references/source-page-workflow.md#blank-pages-and-missing-components).
 Locate the first stage that loses UI before changing adapters or adding testTags;
@@ -25,8 +35,29 @@ baseline controls and remaining state/version boundaries; do not claim full-libr
 For paired Android/Harmony design libraries, configure
 [style token references](references/style-token-references.md) in the same style definitions.
 Preserve references alongside resolved values; the generator still consumes only one page JSON.
+For different Android/Harmony resource APIs sharing a key, use code-polymorphic
+`KeyedResourceAdapter.harmony_target`, registered through `--api-adapters`. Do not
+require a final literal color/text if a validated target call is available. Native
+library/build and visual checks remain separate from reference completeness.
+For an existing Harmony business-component library, register explicit
+[`COMPONENT_ADAPTERS`](references/business-component-reuse.md) through that same
+manifest. Match resolved Android definition identity and map parameters/content slots;
+never reuse by simple name alone. Unmapped components keep source-body translation.
+Generated local component interfaces preserve source parameter names/order and declared
+types, including unused business/state parameters. See
+[generated interface boundaries](references/business-component-reuse.md#generated-component-interfaces).
+Do not claim that private rendered-fact Props or unresolved domain types are an equivalent
+business API, or that fixed-state UI generation ports callback implementations.
+For a fixed-state page whose business components must retain other UI alternatives, add
+`--preserve-component-ui-states` to `migrate_compose_page.py` (or the Lanhu generation
+step). Read [business UI alternatives](references/business-component-reuse.md#business-ui-alternatives).
+This preserves supported component branches with a component-local auxiliary selector;
+it does not create page states or translate the conditions' business logic.
 
 For any scrollable page, follow [long-page-verification.md](references/long-page-verification.md).
+For Compose Foundation pagers, see [pager mapping](references/pager-mapping.md):
+the normal pipeline expands resolved pages and emits native Swiper from the single JSON.
+Do not equate the declarative primitive catalog with the implemented rendering boundary.
 Use `check_long_page.py` with a page/state inventory and explicit per-device capture
 profile. Verify vertical and nested horizontal streams, full component coverage,
 component-local pixels/sizes and inter-component gaps. First-viewport SSIM is never

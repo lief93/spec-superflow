@@ -52,6 +52,14 @@ class Renderer:
         self.reached_keys: list[tuple[str, str]] = []
         self.selected_calls: list[dict[str, Any]] = []
         self.android_page_by_id = android_page_input["by_id"]
+        self.component_ui_catalogs = android_page_input.get('component_ui_states', {})
+        state_components = []
+        for catalog in self.component_ui_catalogs.values():
+            for variant in catalog['variants']:
+                if variant['id'] == catalog['selected']:
+                    continue
+                self.android_page_by_id.update(variant['page']['by_id'])
+                state_components.extend(variant['page']['components'])
         self._page_constraint_states: dict[str, dict[str, Any]] = {}
         if android_page_input["components"] and all(
             component.get("parent_mapping") == "source-semantic-ancestor"
@@ -63,7 +71,7 @@ class Renderer:
             relationship["subject_id"]: relationship
             for relationship in android_page_input.get("layout_relationships") or []
         }
-        for component in android_page_input["components"]:
+        for component in [*android_page_input["components"], *state_components]:
             for fact in component.get("required_facts") or []:
                 if fact["status"] in {"unresolved", "symbolic"}:
                     self.add_unresolved(
@@ -93,7 +101,8 @@ class Renderer:
             )
         self._page_match_parent_sizes = {}
         self.lengths = LayoutLengths()
-        self.business_components = BusinessComponents(android_page_input.get('component_definitions') or [], root['composable'])
+        self.business_components = BusinessComponents(android_page_input.get('component_definitions') or [], root['composable'],
+                                                      self.add_page_json_unresolved)
         self.layout = LayoutPolicy(LayoutContext(
             self.android_page_by_id, self.android_page_layout_mode,
             self.android_source_layout_by_subject, self._page_constraint_states,
@@ -104,7 +113,7 @@ class Renderer:
         self.surface = SurfaceEmitter(self.add_page_json_unresolved, self.style_tokens)
         self.leaves = NativeLeafEmitter(self.resource_names, self.tinted_vector_resources,
                                        self.layout, self.add_page_json_unresolved, self.business_components.bind,
-                                       self.image_tint_lines)
+                                       self.image_tint_lines, self.style_tokens)
 
     def add_unresolved(
         self,
@@ -338,6 +347,40 @@ class Renderer:
                 'source branch/list template is preserved in JSON; state input is required before rendering it')
             return []
         children = [self.android_page_by_id[child_id] for child_id in component["children_ids"]]
+        catalog = self.component_ui_catalogs.get(component['id'])
+        if catalog is not None:
+            def render_variant(variant):
+                if variant['id'] == catalog['selected']:
+                    roots = children
+                else:
+                    roots = [variant['page']['by_id'][node_id] for node_id in variant['root']['children_ids']]
+                lines = [line for child in roots for line in self.page_snapshot_component_lines(child, parent_bounds, parent_type, 4)]
+                expected, pending = set(), list(roots)
+                while pending:
+                    child = pending.pop()
+                    expected.add(child['id'])
+                    pending.extend(self.android_page_by_id[n] for n in child['children_ids'])
+                missing = sorted(expected - self.android_page_processed_component_ids)
+                self.business_components.ui_states.coverage.append({'name':catalog['name'],
+                    'instance_id':component['id'], 'state':variant['id'],
+                    'component_count':len(expected), 'missing_component_ids':missing})
+                if missing:
+                    self.add_page_json_unresolved(component, 'source.component_ui_states.' + variant['id'],
+                        'UI variant contains unrendered components: ' + ', '.join(missing))
+                return lines
+            lines = self.business_components.ui_states.render(component, catalog, render_variant, indent)
+            self.android_page_processed_component_ids.add(component['id'])
+            self.android_page_applied_component_paths[component['id']].update({
+                'structure.type', 'structure.parent_id', 'structure.children_ids', 'structure.sibling_index'})
+            return lines
+        if component.get('source', {}).get('component_reuse') is not None:
+            lines = self.component_reuse.render(component, children, lambda child, level:
+                self.page_snapshot_component_lines(child, parent_bounds, None, level), indent)
+            self.android_page_processed_component_ids.add(component['id'])
+            self.android_page_applied_component_paths[component['id']].update({
+                'structure.type', 'structure.parent_id', 'structure.children_ids',
+                'structure.sibling_index', 'source.component_reuse'})
+            return lines
         native_containers = NATIVE_CONTAINERS
         native_leaves = NATIVE_LEAVES
         project_wrapper = (component.get("source") or {}).get("custom_component") is True
@@ -376,7 +419,8 @@ class Renderer:
         bounds, relative_x, relative_y = self.layout.page_snapshot_bounds(component, parent_bounds)
         is_text = component_type in {"Text", "BasicText", "ClickableText"}
         is_text_field = component_type in {"BasicTextField", "TextField", "OutlinedTextField"}
-        if (is_text or is_text_field) and not isinstance(component["style"]["content"].get("text"), str):
+        from ui_migration.contracts.style_tokens import has_token_reference
+        if (is_text or is_text_field) and not has_token_reference(component, 'content.text') and not isinstance(component["style"]["content"].get("text"), str):
             self.add_page_json_unresolved(component, "style.content.text", "dynamic content is unresolved; native control and static styles are retained without invented text")
         decoration = next((child for child in children if child['type'] == 'DecorationBox'), None)
         if is_text_field and decoration is not None:
@@ -498,6 +542,10 @@ class Renderer:
                     emitted_phase_paths.add('source.appbar')
             else:
                 lines.append(f'{prefix}  .alignContent(Alignment.TopStart)')
+        elif component_type in {'HorizontalPager', 'VerticalPager'}:
+            from ui_migration.arkui.pager import pager_lines
+            lines, consumed = pager_lines(self, component, bounds, indent)
+            emitted_phase_paths.update(consumed)
         elif component_type == 'PullToRefreshBox':
             refreshing = component['style']['state'].get('refreshing')
             if not isinstance(refreshing, bool):
@@ -963,9 +1011,11 @@ class Renderer:
         return lines
 
     def render(self) -> str:
+        from ui_migration.arkui.component_reuse import ComponentReuseEmitter
         self.style_tokens.modules.clear()
         self.style_tokens.consumed.clear()
         self.business_components.clear()
+        self.component_reuse = ComponentReuseEmitter(self.root['composable'], self.business_components)
         self.lengths.used = False
         self.surface.builders.clear()
         self._page_constraint_states.clear()
@@ -988,5 +1038,5 @@ class Renderer:
             self.lengths.used,
             business_interfaces, business_methods,
             self._material_item_states,
-            self.style_tokens.imports(),
+            self.style_tokens.imports() + self.component_reuse.imports(),
         ).render()

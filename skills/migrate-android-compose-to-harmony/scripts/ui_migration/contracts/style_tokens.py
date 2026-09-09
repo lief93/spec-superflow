@@ -1,8 +1,10 @@
 """Typed, declarative cross-platform style references, not executable snippets."""
 import re
+import math
 
 
 PROPERTY_TYPES = {
+    'content.text': ('string', None, None),
     'typography.font_size_sp': ('dimension', 'sp', 'fp'),
     'typography.line_height_sp': ('dimension', 'sp', 'fp'),
     'typography.letter_spacing_sp': ('dimension', 'sp', 'fp'),
@@ -12,6 +14,46 @@ PROPERTY_TYPES = {
     'surface.background': ('color', None, None),
     'surface.corner_radius_dp': ('dimension', 'dp', 'vp'),
 }
+
+
+def validate_target(target):
+    identifier = r'[A-Za-z_][A-Za-z_0-9]*'
+    member = identifier + r'(?:\.' + identifier + r')*'
+    if not isinstance(target, dict) or set(target) not in (
+        {'module', 'export', 'member'}, {'module', 'export', 'member', 'arguments'}):
+        raise ValueError('target requires module/export/member and optional call arguments')
+    for field, pattern in [('export', identifier), ('member', member), ('module', r'[@A-Za-z0-9_./-]+')]:
+        if not isinstance(target[field], str) or not re.fullmatch(pattern, target[field]):
+            raise ValueError(f'unsafe or invalid target {field}')
+    if 'arguments' in target:
+        if not isinstance(target['arguments'], list):
+            raise ValueError('target arguments must be a list of literal values')
+        for value in target['arguments']:
+            if value is not None and type(value) not in (str, bool, int, float):
+                raise ValueError('target arguments must be literal values, not code')
+            if type(value) is float and not math.isfinite(value):
+                raise ValueError('target arguments must be finite')
+
+
+def validate_token_reference(reference, path):
+    if not isinstance(reference, dict):
+        raise ValueError('token reference must be an object')
+    if 'key' in reference and (not isinstance(reference['key'], str) or not reference['key']):
+        raise ValueError('resource key must be a nonempty string')
+    spec = {k:v for k,v in reference.items() if k not in {'android', 'key'}}
+    validate_token_mappings({reference.get('android', ''): spec})
+    validate_property_token(path, spec)
+
+
+def has_token_reference(component, path):
+    reference = (component.get('source') or {}).get('style_token_references', {}).get(path.removeprefix('style.'))
+    if reference is None:
+        return False
+    try:
+        validate_token_reference(reference, path.removeprefix('style.'))
+    except (ValueError, KeyError, TypeError):
+        return False
+    return True
 
 
 def validate_token_mappings(mappings):
@@ -29,12 +71,7 @@ def validate_token_mappings(mappings):
             raise ValueError(f'{name}: invalid token fields')
         if spec['kind'] == 'dimension' and (spec.get('sourceUnit'), spec.get('targetUnit')) not in {('sp', 'fp'), ('dp', 'vp')}:
             raise ValueError(f'{name}: only sp/fp and dp/vp numeric token pairs are supported')
-        target = spec['target']
-        if not isinstance(target, dict) or set(target) != {'module', 'export', 'member'}:
-            raise ValueError(f'{name}: target requires module/export/member')
-        for field, pattern in [('export', identifier), ('member', member), ('module', r'[@A-Za-z0-9_./-]+')]:
-            if not isinstance(target[field], str) or not re.fullmatch(pattern, target[field]):
-                raise ValueError(f'{name}: unsafe or invalid target {field}')
+        validate_target(spec['target'])
     return mappings
 
 

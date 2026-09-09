@@ -1,5 +1,63 @@
 # Preserve Design-Library Token References
 
+## Code Adapters For Keyed APIs
+
+For `AndroidColors.get(key)` -> `AppColors.resolve(key)`, implement a
+`KeyedResourceAdapter`, rather than a table of final color values. One implementation
+handles a key namespace, not one adapter per key. It extracts the source call's key
+and declared parameters with PSI/shared evaluation; it does not read the resource's
+final color or text. The target library still owns theme, locale and brand behavior.
+
+```python
+from ui_migration.frontend.api_adapters.keyed_resources import KeyedResourceAdapter
+
+class CompanyColors(KeyedResourceAdapter):
+    def harmony_target(self, key, arguments):
+        return {
+            'module': '@company/design', 'export': 'AppColors',
+            'member': 'resolve', 'arguments': [key],
+        }
+
+class CompanyText(KeyedResourceAdapter):
+    def harmony_target(self, key, arguments):
+        return {
+            'module': '@company/i18n', 'export': 'AppText',
+            'member': 'read', 'arguments': [key, arguments['name']],
+        }
+
+ADAPTERS = [
+    CompanyColors('company.colors', ('company.android.AndroidColors.get',),
+                  'color').declaration(),
+    CompanyText('company.text', ('company.android.text',), 'string',
+                parameters=('name',)).declaration(),
+]
+```
+
+Register the reviewed Python file using the existing `--api-adapters` manifest
+described in [project-api-adapters.md](project-api-adapters.md). The manifest only
+selects trusted code; it is not a key/value mapping table. `harmony_target` is the
+polymorphic extension point. Return `None` for unsupported keys; do not guess a
+fallback color. A different library can implement the method differently, reorder
+arguments or choose a different export/member without changing the generator.
+
+The single page JSON preserves the key, kind and structured target call in
+`source.style_token_references`. For example, the generator emits
+`.fontColor(StyleToken0.resolve('text.primary'))`, with a deduplicated import, even
+when `style.typography.color` is null. That null means no literal comparison value,
+not a missing target expression. The backend never loads the Python extension or
+reopens source/style/resource files. Raw ArkTS snippets are not accepted.
+
+Supported keys are nonempty strings resolved from literals, known aliases/parameters
+or selected branches. Additional declared arguments currently accept finite scalar
+values/null; missing inputs, undeclared arguments and unsupported transformations
+stay unresolved. String references currently target plain `Text`, `BasicText` and
+`ClickableText` content, not rich-text spans or arbitrary input label slots.
+Color and numeric references support the property table below; dimensions declare
+`source_unit='sp', target_unit='fp'` or `dp`/`vp` on the adapter. Image sources,
+composite brushes and arbitrary object-valued expressions are separate capabilities.
+
+## Existing Member Mappings
+
 Configure `tokenMappings` once in `project-style-definitions.json`. Existing style
 extraction/reuse commands are unchanged. Explicit refresh preserves this configuration.
 AI may draft the mappings from the two libraries' declarations; no AI completion step
@@ -59,6 +117,7 @@ Declarations, export names and actual types must pass the target native build.
 
 | JSON property | Token kind | Unit contract |
 | --- | --- | --- |
+| content.text | string | target runtime string, plain text controls |
 | typography.font_size_sp | dimension | numeric sp -> fp |
 | typography.line_height_sp | dimension | numeric sp -> fp |
 | typography.letter_spacing_sp | dimension | numeric sp -> fp |
@@ -87,8 +146,11 @@ calls and resource-object dimensions require additional typed adapters.
 - Numeric unit pairs are explicit: only sp/fp and dp/vp are currently supported.
   A dimension used for the wrong property reports a type/unit problem. There is no
   implicit px conversion, arbitrary target-code evaluation or string-code injection.
-- An unknown current value stays unresolved even if the target reference is known.
-  Generating compilable code does not certify a comparison value or visual parity.
+- A validated, typed and consumed target reference satisfies code generation without
+  a final literal. Do not mark it unresolved merely because the Android value is unknown.
+  Unknown keys, invalid type/unit/target declarations and unconsumed references still
+  fail completeness. This does not certify a comparison value, library export/type,
+  native build or visual parity; these require their own checks.
 - A reference which reaches an unsupported consumer, including an unhandled inherited
   content-color provider, is reported as unconsumed. Container content-color references
   are not yet a general replacement for Compose's `LocalContentColor` propagation;
@@ -101,3 +163,4 @@ calls and resource-object dimensions require additional typed adapters.
 
 Tests: `python3 -m unittest test_style_token_references.StyleTokenReferencesTest -q`
 from the skill's `scripts` directory.
+Keyed API integration tests: `python3 -m unittest test_keyed_resources -q`.

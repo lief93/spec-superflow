@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from page_component_catalog import CONTROL_FAMILIES
+from ui_migration.contracts.style_tokens import has_token_reference
 
 KNOWN_TYPES = frozenset(name for names in CONTROL_FAMILIES.values() for name in names)
 
@@ -92,7 +93,7 @@ def requirement_facts(node: dict[str, Any], nodes: dict | None = None) -> list[d
 
     def add(path, reason, *, absent_allowed=False, invalid=False):
         value = value_at(node, path)
-        missing = value is None
+        missing = value is None and not has_token_reference(node, path)
         status = 'unresolved' if invalid or (missing and not absent_allowed) else (
             'not_applicable' if missing else 'resolved')
         default = DEFAULT_EXPRESSIONS.get((kind, path))
@@ -145,6 +146,9 @@ def merge_requirement_facts(node, nodes=None):
     original = [dict(f) for f in node.get('required_facts') or [] if f.get('origin') != 'semantic_contract']
     for fact in original:
         path = fact['path']
+        if has_token_reference(node, path):
+            fact.update(status='resolved', reason='typed target reference is available; no final literal required for generation')
+            continue
         explicit_null = (path == 'style.content.content_description' and fact.get('expression') == 'null') or (
             path == 'style.asset.tint' and fact.get('expression') == 'Color.Unspecified')
         if path.startswith('style.') and fact['status'] in {'resolved', 'default_resolved'} and value_at(node, path) is None and not explicit_null:

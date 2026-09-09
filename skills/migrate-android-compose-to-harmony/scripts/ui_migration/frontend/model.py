@@ -69,6 +69,8 @@ SOURCE_LAYOUT_PRIMITIVES = {
     "LazyColumn",
     "LazyHorizontalGrid",
     "LazyRow",
+    "HorizontalPager",
+    "VerticalPager",
     "LazyVerticalGrid",
     "ListItem",
     "Row",

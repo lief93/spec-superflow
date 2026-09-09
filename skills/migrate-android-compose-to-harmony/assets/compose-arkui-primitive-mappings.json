@@ -1306,6 +1306,17 @@
       "version_resolution_required": true
     },
     {
+      "id": "compose.foundation.vertical-pager",
+      "source_components": ["VerticalPager"],
+      "source_family": "Compose Foundation Pager",
+      "target_components": ["Swiper"],
+      "target_strategy": "vertical_swiper_with_preserved_page_groups_and_explicit_unsupported_behavior_diagnostics",
+      "required_semantics": ["state", "contentPadding", "pageSize", "pageSpacing", "horizontalAlignment", "userScrollEnabled", "reverseLayout", "key", "content"],
+      "states": ["initial", "dragging", "settling", "page_changed"],
+      "geometry_contract": ["viewport_bounds", "page_bounds", "page_spacing", "content_padding"],
+      "version_resolution_required": true
+    },
+    {
       "id": "compose.material.snackbar-host",
       "source_components": ["SnackbarHost"],
       "source_family": "Compose Material 2 or Material 3",

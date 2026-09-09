@@ -7,6 +7,7 @@ CONTROL_FAMILIES = {
     'material_item': ('ListItem', 'FilterChip', 'ExtendedFloatingActionButton'),
     'box': ('Box', 'BoxWithConstraints', 'Surface', 'AnimatedVisibility', 'AnimatedContent'),
     'refresh': ('PullToRefreshBox',),
+    'pager': ('HorizontalPager', 'VerticalPager'),
     'constraint': ('ConstraintLayout',),
     'appbar': ('TopAppBar', 'CenterAlignedTopAppBar', 'LargeFlexibleTopAppBar', 'BottomAppBar'),
     'scaffold': ('Scaffold',),
@@ -23,7 +24,7 @@ CONTROL_FAMILIES = {
     'internal': ('content', 'toolbar', 'ProgressRing'),
 }
 NATIVE_CONTAINERS = frozenset(
-    name for family in ('row', 'column', 'card', 'material_item', 'box', 'refresh', 'constraint', 'appbar', 'scaffold')
+    name for family in ('row', 'column', 'card', 'material_item', 'box', 'refresh', 'pager', 'constraint', 'appbar', 'scaffold')
     for name in CONTROL_FAMILIES[family]
 ) | {'content', 'toolbar'}
 NATIVE_LEAVES = frozenset(
@@ -109,6 +110,7 @@ FIELD_AUDIT = {
 }
 
 FAMILY_BOUNDARIES = {
+    'pager': 'Compose Foundation pager: resolved finite pages, initial index, Fill size, spacing, padding, cross-axis alignment, native swipe; custom fling/reverse/fixed-size unresolved',
     'material_item': 'Material3 ListItem named slots and FilterChip fixed-state layout; callbacks remain a business boundary',
     'row': '原生 Row；LazyRow 为展开后的滚动树，不包含惰性复用策略',
     'column': '原生 Column；LazyColumn 为展开后的滚动树',

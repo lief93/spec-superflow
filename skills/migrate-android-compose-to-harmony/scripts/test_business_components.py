@@ -80,8 +80,8 @@ class BusinessComponentsTest(unittest.TestCase):
         self.assertEqual(report['instance_count'], 2)
         self.assertEqual(report['builder_count'], 1, report)
         self.assertEqual(output.count('Text('), 1, output)
-        self.assertIn("'One'", output)
-        self.assertIn("'Two'", output)
+        self.assertIn('this.Caption("One")', output)
+        self.assertIn('this.Caption("Two")', output)
         self.assertIn('Text(props.', output)
 
     def test_nested_components_and_multiple_roots_are_not_wrapped_in_stacks(self):
@@ -113,8 +113,8 @@ class BusinessComponentsTest(unittest.TestCase):
     def test_source_names_survive_single_json_without_numbered_fields(self):
         _, _, _, _, output = compile_page(self.CODE)
         self.assertIn('export struct Page', output)
-        self.assertIn('interface CaptionProps', output)
-        self.assertIn('private Caption(props: CaptionProps)', output)
+        self.assertIn('interface renderCaptionProps', output)
+        self.assertIn('private Caption(label: string)', output)
         self.assertIn('label: string', output)
         self.assertIn('Text(props.label)', output)
         self.assertNotRegex(output, r'\bv\d+\b|businessCaption[0-9a-f]{12}')
@@ -127,8 +127,8 @@ class BusinessComponentsTest(unittest.TestCase):
 ''')
         self.assertIn('title: string', output)
         self.assertIn('subtitle: string', output)
-        self.assertIn('label: props.title', output)
-        self.assertIn('label: props.subtitle', output)
+        self.assertIn('this.Caption(props.title)', output)
+        self.assertIn('this.Caption(props.subtitle)', output)
 
     def test_same_property_used_twice_does_not_create_duplicate_fields(self):
         _, _, _, _, output = compile_page('''

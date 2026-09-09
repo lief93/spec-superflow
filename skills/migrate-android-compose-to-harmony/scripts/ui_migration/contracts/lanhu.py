@@ -14,10 +14,12 @@ from ui_migration.contracts.validation import apply_lanhu_visual_style, load_bou
 def load_lanhu_page_input(
     version_json_path: Path,
     component_manifest_path: Path | None = None,
+    *, _version: dict | None = None,
 ) -> dict[str, Any]:
-    version, version_path, version_bytes = load_bounded_json_object(
-        version_json_path, "Lanhu version_json"
-    )
+    if _version is None:
+        version, version_path, version_bytes = load_bounded_json_object(version_json_path, "Lanhu version_json")
+    else:
+        version, version_path, version_bytes = _version, version_json_path, 0
     validate_lanhu_version_document(version)
     manifest: dict[str, Any] | None = None
     manifest_path: Path | None = None
@@ -291,9 +293,13 @@ def load_lanhu_page_input(
             )
         except PageSnapshotError as error:
             raise ArkUIPageError(str(error)) from error
-        visual_paths = apply_lanhu_visual_style(
-            style, layers_by_id[component_id], scale
-        )
+        if isinstance(source, dict) and source.get('custom_component') is True:
+            # A business call is not a visual container. Preserve its explicit
+            # source facts, but do not invent surface/state overrides from
+            # artboard export defaults. This also applies to external reuse.
+            visual_paths = []
+        else:
+            visual_paths = apply_lanhu_visual_style(style, layers_by_id[component_id], scale)
         if visual_paths:
             provenance.append({
                 "paths": sorted(set(visual_paths)),
@@ -421,6 +427,9 @@ def load_lanhu_page_input(
             "file": manifest_path.name,
             "sha256": sha256_file(manifest_path),
         }
+    from ui_migration.contracts.component_ui_states import decode_catalogs
+    result['component_ui_states'] = decode_catalogs(version,
+        lambda document: load_lanhu_page_input(version_json_path, _version=document))
     return result
 
 

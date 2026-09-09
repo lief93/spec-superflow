@@ -1,7 +1,7 @@
 import unittest
 
 from ui_migration.naming import NameScope, source_identifier
-from ui_migration.frontend.source_names import property_name_hints, reference_name
+from ui_migration.frontend.source_names import property_name_hints, reference_name, direct_reference_name
 
 
 class SourceNamesTest(unittest.TestCase):
@@ -29,6 +29,14 @@ class SourceNamesTest(unittest.TestCase):
         hints = property_name_hints({'type':'Text', 'arguments':{
             'semantic':{'text':{'expression':'"First"', 'original_expression':'title'}}}})
         self.assertEqual(hints, {'style.content.text':'title'})
+
+    def test_display_name_is_not_proof_of_parameter_binding(self):
+        self.assertEqual(direct_reference_name('title'), 'title')
+        self.assertIsNone(direct_reference_name('account.title'))
+        node = {'type':'Text', 'arguments':{'semantic':{'text':{
+            'expression':'"Account title"', 'original_expression':'account.title'}}}}
+        self.assertEqual(property_name_hints(node), {'style.content.text':'title'})
+        self.assertEqual(property_name_hints(node, direct_only=True), {})
 
 
 if __name__ == '__main__':

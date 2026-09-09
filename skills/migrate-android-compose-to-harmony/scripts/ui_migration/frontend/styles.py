@@ -441,9 +441,13 @@ def static_style_for_call(
         "Button", "IconButton", "IconToggleButton", "FloatingActionButton", "SmallFloatingActionButton"
     } or semantic_expression(call, "onClick") is not None
     state["clickable"] = clickable
-    state["enabled"] = True
+    # A business function call has no native enabled state of its own.
+    # An explicit enabled argument is still resolved below and forwarded.
+    state["enabled"] = None if call.get('custom_composable') else True
     state["visible"] = True
-    provenance_paths.extend(("style.state.clickable", "style.state.enabled", "style.state.visible"))
+    provenance_paths.extend(("style.state.clickable", "style.state.visible"))
+    if state['enabled'] is not None:
+        provenance_paths.append('style.state.enabled')
     state_arguments = {field: field for field in ("enabled", "visible", "selected", "checked")}
     if component == 'PullToRefreshBox':
         state_arguments['refreshing'] = 'isRefreshing'
@@ -607,7 +611,7 @@ def static_style_for_call(
         if isinstance(semantic_arguments, dict)
         else None
     )
-    if isinstance(content_padding_argument, dict):
+    if isinstance(content_padding_argument, dict) and component not in {'HorizontalPager', 'VerticalPager'}:
         padding_expression = content_padding_argument.get("expression")
         dimensions = modifier_dimensions(content_padding_argument)
         if isinstance(padding_expression, str):

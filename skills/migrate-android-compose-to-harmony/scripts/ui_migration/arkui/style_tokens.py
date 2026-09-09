@@ -1,5 +1,6 @@
 """Emit only validated references carried by the single page JSON."""
-from ui_migration.contracts.style_tokens import validate_token_mappings, validate_property_token
+import json
+from ui_migration.contracts.style_tokens import validate_token_reference
 from ui_migration.common import arkts_string
 
 
@@ -12,14 +13,16 @@ class StyleTokenEmitter:
         reference = component.get('source', {}).get('style_token_references', {}).get(path)
         if reference is None:
             return None
-        spec = {key: value for key, value in reference.items() if key != 'android'}
-        validate_token_mappings({reference['android']: spec})
-        validate_property_token(path, spec)
-        target = spec['target']
+        validate_token_reference(reference, path)
+        target = reference['target']
         key = (target['module'], target['export'])
         alias = self.modules.setdefault(key, f'StyleToken{len(self.modules)}')
         self.consumed.add((component['id'], path))
-        return alias + '.' + target['member']
+        expression = alias + '.' + target['member']
+        if 'arguments' in target:
+            arguments = [arkts_string(v) if isinstance(v, str) else json.dumps(v) for v in target['arguments']]
+            expression += '(' + ', '.join(arguments) + ')'
+        return expression
 
     def imports(self):
         return [f'import {{ {symbol} as {alias} }} from {arkts_string(module)};'

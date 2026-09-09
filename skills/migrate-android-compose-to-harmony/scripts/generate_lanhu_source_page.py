@@ -64,6 +64,7 @@ from ui_migration.frontend.reference_layout import SourceLayout
 from ui_migration.frontend.source_tree import SourceTree
 import argparse
 import json
+import copy
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,6 +82,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="Android source layout")
     parser.add_argument('--api-adapters', type=Path,
                         help='Explicit trusted Python adapter manifest with pinned module SHA-256 values.')
+    parser.add_argument('--preserve-component-ui-states', action='store_true',
+                        help='Keep supported business-component UI branches; page state remains fixed.')
     parser.add_argument(
         "--state-fixture",
         type=Path,
@@ -106,24 +109,28 @@ def write_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
-def generate(args: argparse.Namespace) -> dict[str, Any]:
+def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, Any]:
     from layout_expressions import needs_layout_projection
     from ui_migration.frontend.material_defaults import DEFAULT_CONTROL_TYPES
     if args.viewport_width_dp <= 0 or args.viewport_height_dp <= 0:
         raise ValueError("viewport dimensions must be positive")
     if args.slice_scale <= 0:
         raise ValueError("slice scale must be positive")
-    source_payload = read_json(args.source_page)
+    source_payload = copy.deepcopy(projected_payload) if projected_payload is not None else read_json(args.source_page)
+    raw_payload = copy.deepcopy(source_payload)
     from ui_migration.frontend.api_adapters.loader import load_adapters
     from ui_migration.frontend.api_adapters.builtins import BUILTIN_ADAPTERS
     registry = load_adapters(getattr(args, 'api_adapters', None), BUILTIN_ADAPTERS)
     state_projection = None
-    if args.state_fixture is not None:
+    if projected_payload is not None:
+        pass
+    elif args.state_fixture is not None:
         source_payload, state_projection = project_source_page(
             source_payload, read_json(args.state_fixture), allow_unresolved=True, api_registry=registry
         )
     elif (source_payload.get('style_definitions') or {}).get('tokenMappings') or (source_payload.get('style_definitions') or {}).get('componentDefaults') or getattr(args, 'api_adapters', None) is not None or any(
         isinstance(node, dict) and (node.get("visibility_condition") or node.get("list_item_context")
+                                   or node.get('component_kind') == 'project_component'
                                    or (node.get('type') in DEFAULT_CONTROL_TYPES - {'Card', 'Surface'}
                                        and not node.get('source', {}).get('material_defaults_profile'))
                                    or needs_layout_projection(node)
@@ -135,6 +142,12 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             "page": source_payload.get("page"),
             "values": {},
         }, allow_unresolved=True, api_registry=registry)
+    catalogs = []
+    if projected_payload is None and getattr(args, 'preserve_component_ui_states', False):
+        from ui_migration.frontend.component_ui_states import preserve_component_states
+        fixture = read_json(args.state_fixture) if args.state_fixture else {
+            'schema':'android-to-harmony.page-state-fixture.v1', 'page':raw_payload['page'], 'values':{}}
+        source_payload, catalogs = preserve_component_states(raw_payload, source_payload, fixture, registry)
     resolve_native_content_colors(source_payload)
     for node in source_payload.get('components', []):
         if 'input_decoration' not in (node.get('source') or {}):
@@ -151,7 +164,8 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         if isinstance(component, dict):
             content = style_group(component, "content")
             text = content.get("text")
-            if not isinstance(text, str) and (
+            from ui_migration.contracts.style_tokens import has_token_reference
+            if not has_token_reference(component, 'content.text') and not isinstance(text, str) and (
                 text is not None or component.get("type") in TEXT_TYPES | {"ClickableText", "BasicTextField", "TextField", "OutlinedTextField"}
             ):
                 content["text"] = None
@@ -258,6 +272,20 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             "origin": "android-source",
         },
     }
+    if projected_payload is not None:
+        return {'version':version_json, 'unresolved':unresolved}
+    if catalogs:
+        for catalog in catalogs:
+            for variant in catalog['variants']:
+                result = generate(args, projected_payload=variant.pop('payload'))
+                document = result['version']
+                variant['layer'] = document['artboard']['layers'][0]
+                variant['source_generation'] = document['meta']['sourceGeneration']
+                unresolved.extend({**u, 'component_ui_state':catalog['name'] + '/' + variant['id']} for u in result['unresolved'])
+        version_json['meta']['migration']['componentUiStates'] = catalogs
+        generation_complete = not unresolved
+        version_json['meta']['sourceGeneration'].update(generationComplete=generation_complete,
+            verdict='pass' if generation_complete else 'fail', unresolved=unresolved)
     output_dir = args.output_dir.resolve()
     write_json(output_dir / "version_json.json", version_json)
     write_json(output_dir / "component-manifest.json", manifest)

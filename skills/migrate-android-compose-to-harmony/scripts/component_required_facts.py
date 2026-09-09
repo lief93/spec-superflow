@@ -533,6 +533,10 @@ def explicit_fact(
     explicit_null: bool = False,
 ) -> dict[str, str | None]:
     actual = nested_value(component, path)
+    from ui_migration.contracts.style_tokens import has_token_reference
+    if has_token_reference(component, path):
+        return fact(path, 'resolved', origin, source_name, expression,
+            'typed target reference is available; final value belongs to the target library')
     if explicit_null:
         return fact(path, "resolved", origin, source_name, expression, "explicit null is preserved")
     if expected_known:
@@ -587,6 +591,12 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
         fact("structure.children_ids", "resolved", "structure", "children_ids", None, "child order is retained"),
         fact("structure.sibling_index", "resolved", "structure", "sibling_index", None, "sibling order is retained"),
     ]
+    reuse = component.get('source', {}).get('component_reuse')
+    if reuse is not None:
+        from ui_migration.contracts.component_reuse import validate_reuse
+        validate_reuse(reuse)
+        return result + [fact('source.component_reuse', 'resolved', 'component_adapter',
+            reuse['adapter_id'], None, 'explicit target library owns component internals; caller slots remain in the page')]
     # These affect native UI, but cannot be reconstructed from a generic frame/style.
     # Retain an explicit failure instead of silently ignoring a recognized argument.
     unsupported_arguments = {
@@ -597,6 +607,12 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
         'strokeCap', 'gapSize', 'drawStopIndicator', 'startIndent',
     }
     from page_component_catalog import NATIVE_CONTAINERS, NATIVE_LEAVES, NATIVE_BUTTONS
+    if component_type in {'HorizontalPager', 'VerticalPager'}:
+        pager = component.get('source', {}).get('pager')
+        result.append(fact('source.pager', 'resolved' if pager is not None else 'unresolved',
+            'semantic_argument', 'state', semantic_expression(component, 'state'),
+            'pager state, page groups and layout are explicit single-JSON facts'))
+        unsupported_arguments -= {'reverseLayout', 'userScrollEnabled'}
     from page_native_controls import CONTROL_TYPES, PROGRESS_TYPES, SELECTION_FIELDS, arguments_for, parse_argument
     if component_type == 'PullToRefreshBox':
         expression = semantic_expression(component, 'isRefreshing')
@@ -743,6 +759,8 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
         ("verticalArrangement", "style.layout.vertical_arrangement"),
     ):
         expression = semantic_expression(component, name)
+        if component_type in {'HorizontalPager', 'VerticalPager'} and name in {'contentPadding', 'verticalAlignment', 'horizontalAlignment'}:
+            continue
         if component_type in CONTROL_TYPES and name == 'color':
             continue
         if component_type == 'Surface' and name == 'color':

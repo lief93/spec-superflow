@@ -304,6 +304,7 @@ def lanhu_layer(
     hints = property_name_hints(node)
     if hints:
         migration_source['property_names'] = hints
+    migration_source['property_bindings'] = property_name_hints(node, direct_only=True)
     migration_source["modifiers"] = copy.deepcopy(node.get("modifiers") or [])
     if node.get('slot_argument_name'):
         migration_source['slot_argument_name'] = node['slot_argument_name']

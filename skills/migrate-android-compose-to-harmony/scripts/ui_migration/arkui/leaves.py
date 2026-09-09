@@ -17,13 +17,14 @@ class LeafResult:
 
 
 class NativeLeafEmitter:
-    def __init__(self, resources, tinted_resources, layout, unresolved, bind=None, tint_lines=None):
+    def __init__(self, resources, tinted_resources, layout, unresolved, bind=None, tint_lines=None, tokens=None):
         self.resources = resources
         self.tinted_resources = tinted_resources
         self.layout = layout
         self.unresolved = unresolved
         self.bind = bind or (lambda component, path, expression, kind='string': expression)
         self.tint_lines = tint_lines
+        self.tokens = tokens
         self.handlers = {
             'Text': self.text,
             'BasicText': self.text,
@@ -56,11 +57,12 @@ class NativeLeafEmitter:
 
     def text(self, component, prefix, parent_type):
         emitted_phase_paths = set()
-        text = self.bind(component, 'style.content.text', arkts_string(component['style']['content'].get('text') or ''))
+        reference = self.tokens.expression(component, 'content.text') if self.tokens else None
+        text = reference or self.bind(component, 'style.content.text', arkts_string(component['style']['content'].get('text') or ''))
         lines = [f"{prefix}Text({text})"]
         spans = (component.get('source') or {}).get('text_spans')
         plain = component['style']['content'].get('text') or ''
-        if isinstance(spans, list) and spans:
+        if isinstance(spans, list) and spans and not reference:
             encoded = plain.encode('utf-16-le')
             limit = len(encoded) // 2
             valid = all(isinstance(s, dict) and type(s.get('start')) is int and type(s.get('end')) is int

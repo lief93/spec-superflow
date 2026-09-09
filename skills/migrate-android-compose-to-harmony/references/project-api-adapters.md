@@ -127,6 +127,12 @@ records it as a local unresolved fact and retains the source component.
 
 Only return kinds already understood by the contract. A genuinely new semantic
 capability requires coordinated contract/backend support, not just an adapter.
+For color/font/dimension/text APIs whose key should survive as a target-library
+call, subclass `KeyedResourceAdapter` and implement `harmony_target(key, arguments)`;
+see [keyed resource code adapters](style-token-references.md). No final resource
+value is needed. The structured reference travels in the same page JSON; the backend
+does not execute the extension. Existing value adapters remain available for actual
+literal/asset materialization.
 Add tests for aliases, layered parameters, unknown inputs and the final generated
 property. Then validate one native page without editing generated output.
 
@@ -160,6 +166,11 @@ The loader verifies all listed files before executing any and does not auto-disc
 or install packages. Vendor required dependencies for offline environments.
 
 ## Limits And Gates
+
+Existing Harmony business components have a separate `COMPONENT_ADAPTERS` export
+in the same trusted module. See [business component reuse](business-component-reuse.md)
+for source-definition selection, parameter conversion and `@BuilderParam` slots.
+Scalar API adapters still cannot return or replace UI trees.
 
 - This is an extension mechanism, not a claim of complete Kotlin/Compose coverage.
 - Component emitters, static resource materializers and runtime-dependent defaults

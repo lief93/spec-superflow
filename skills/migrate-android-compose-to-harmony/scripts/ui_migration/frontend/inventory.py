@@ -341,6 +341,7 @@ def build_source_page_spec(
             caller_bindings = {**parameter_bindings, **(call.get('local_values') or {})}
             child_scopes = {name: function_scopes.get((str(target[0]), str(target[1])), {})
                             for name in child_bindings}
+            default_arguments = set(child_bindings)
             invocation_names = {}
             for argument_index, argument in enumerate(custom.get("arguments", [])):
                 if not isinstance(argument, dict) or not isinstance(argument.get("expression"), str):
@@ -351,9 +352,10 @@ def build_source_page_spec(
                         candidate_name = parameters[argument_index].get("name")
                         argument_name = candidate_name if isinstance(candidate_name, str) else None
                 if isinstance(argument_name, str):
+                    default_arguments.discard(argument_name)
                     argument_expression = str(argument['expression']).strip()
-                    from .source_names import reference_name
-                    caller_name = reference_name(argument_expression)
+                    from .source_names import direct_reference_name
+                    caller_name = direct_reference_name(argument_expression)
                     if caller_name:
                         invocation_names[argument_name] = caller_name
                     child_scopes[argument_name] = (parameter_scopes or {}).get(
@@ -371,6 +373,8 @@ def build_source_page_spec(
                 target_declaration,
             )
             component['invocation_bindings'] = copy.deepcopy(child_bindings)
+            component['source']['invocation_scopes'] = copy.deepcopy(child_scopes)
+            component['source']['invocation_defaults'] = sorted(default_arguments)
             if invocation_names:
                 component['source']['invocation_names'] = invocation_names
             # Carry a forwarded slot's actual destination back through each business component.
@@ -384,6 +388,8 @@ def build_source_page_spec(
                 if child_call.get("parent_call_id") != call.get("call_id"):
                     continue
                 slot_name = child_call.get("slot_argument_name")
+                if isinstance(slot_name, str):
+                    component['source'].setdefault('caller_slot_roots', {}).setdefault(slot_name, []).append(child_component['id'])
                 slot_host = slot_hosts.get(slot_name) if isinstance(slot_name, str) else None
                 if slot_host is not None:
                     host_id, native_slot = slot_host

@@ -62,7 +62,8 @@ class StyleTokenReferencesTest(unittest.TestCase):
     def test_missing_value_keeps_reference_without_faking_resolved_fact(self):
         loaded, output = self.generate('Text("Hello", fontSize = AppTokens.body)')
         node = next(n for n in loaded['components'] if n['type'] == 'Text')
-        self.assertTrue(any(u['path'] == 'style.typography.font_size_sp' for u in node['unresolved']))
+        self.assertFalse(any(u['path'] == 'style.typography.font_size_sp' for u in node['unresolved']))
+        self.assertIsNone(node['style']['typography']['font_size_sp'])
         self.assertIn('.fontSize(StyleToken0.fontSizeBody)', output)
 
     def test_invalid_units_and_import_code_are_rejected(self):

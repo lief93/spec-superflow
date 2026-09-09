@@ -5,11 +5,18 @@
 ### Generated Source Names
 
 Source-backed page structs and business builders preserve the Android symbol and
-case (`ProfileScreen`, `ProfileCard`). Generated props interfaces use
-`ProfileCardProps`; fields retain references such as `title` or `label`, including
-caller-to-callee forwarding. The frontend writes small `source.property_names`
-and `source.invocation_names` hints into the single page JSON. The backend never
+case (`ProfileScreen`, `ProfileCard`). Private rendering props interfaces use
+`renderProfileCardProps`; the source-named business method retains the declaration's
+parameter names and mapped types. The frontend writes `source.property_names` naming
+hints, PSI-proven `source.property_bindings`/`source.invocation_names` bindings and
+`source.component_interface` into the single page JSON. The backend never
 reopens Kotlin source. Regenerate older JSON to gain naming information it lacks.
+
+Optional business UI alternative preservation is split across
+`frontend/component_ui_states.py` (callee branch collection/context projection),
+`contracts/component_ui_states.py` (embedded Lanhu variant validation/decoding), and
+`arkui/component_ui_states.py` (one source-named builder with a UI-only selector).
+It is opt-in via `--preserve-component-ui-states`; page branch selection stays fixed.
 
 Overloads use parameter-name suffixes, fixed-state specializations use `Variant`,
 and genuine name collisions use numeric suffixes. Keywords and invalid target
@@ -29,6 +36,8 @@ No new third-party dependency or CLI argument is introduced by this refactoring.
 | Entry | Responsibility |
 | --- | --- |
 | `analyze_compose_project.py` | Safe-source component/call inventory |
+| `generate_source_page.py` | Exact Compose root + snapshot/contract + explicit project styles -> source-page.json |
+| `migrate_compose_page.py` | Page-level CLI orchestration, stage logs/timing and partial/error results; calls existing tools without new parsing/rendering rules |
 | `generate_project_style_definitions.py` | Reusable project-global theme file from the analyzed contract; explicit refresh only |
 | `generate_lanhu_source_page.py` | One selected source state to one `version_json.json` |
 | `generate_ui_state_previews.py` | Explicit named scenes, each with its own source-state document |
@@ -107,6 +116,7 @@ All paths below are relative to `scripts/ui_migration/`.
 | Shape values and drawing | `frontend/shapes.py`, `arkui/corners.py` | Typed corner units and physical/relative corners -> native measured-size drawing |
 | Modifier/TextStyle projection | `frontend/projection.py` | Evaluated branches + narrow adapters -> selected style facts |
 | State visibility, list expansion and display values | `frontend/fixed_state.py`, `preview.py` | Explicit scene -> selected source tree |
+| Pager state, pages and native swipe | `frontend/api_adapters/pager.py`, `frontend/pager.py`, `contracts/pager.py`, `arkui/pager.py` | PSI state -> typed page groups -> native Swiper; ordinary page children use existing renderers |
 | Ordered modifier wrappers, scaffold padding | `frontend/normalization.py` | Declared modifiers -> preserved native hierarchy |
 | Source hierarchy and reference frames | `frontend/source_tree.py`, `reference_layout.py` | Source tree -> reference geometry, never a target bbox fallback |
 | Lanhu document serialization | `frontend/lanhu_export.py` | Selected source facts -> version JSON and source phase trace |
@@ -167,9 +177,14 @@ preserve their original arguments/conditions; target generation does not re-eval
 Kotlin or reopen source files. These are extensions to the Lanhu-shaped document,
 not fields claimed to exist in a native Lanhu export.
 
-The target emitter preserves each project component as a named `@Builder` inside the
-generated page, without an additional layout container. Repeated instances share its
-body with typed text, input placeholder, image and identity arguments. Parent layout
+The target emitter preserves each supported project component as a source-named
+`@Builder` inside the generated page, without an additional layout container.
+`frontend/component_interfaces.py` exports the complete source declaration and typed
+call arguments; `contracts/component_interfaces.py` defines the type grammar;
+`arkui/component_interfaces.py` validates and emits the interface from that one JSON.
+Parameter names/order/types come from declarations, including unused business/state
+parameters, not inferred text/media values. `render*` helpers and their `Props` are
+private fixed-state rendering details, not the public business signature. Parent layout
 scope stays on the original native roots, including multiple roots. Selected structure
 or non-parameterized style differences yield explicit specializations of the same
 source definition, listed in the `.migration/arkui-pages` manifest. A definition count
@@ -182,9 +197,18 @@ adding a view: arbitrary function parameters cannot be invoked as ArkUI UI synta
 Nested slot values retain their own bindings. This is fixed-state UI defunctionalization,
 not migration of executable Kotlin callbacks or network/state-management code.
 
+Supported declaration types include primitives, nullable types, nested collections and
+function signatures. Unknown domain/annotated types remain explicit diagnostics;
+no `any` or string fallback is substituted. See the precise limits in
+[business-component-reuse.md](business-component-reuse.md#generated-component-interfaces).
+Only observed, distinguishable source states can dispatch different generated bodies;
+unrepresentable dispatch retains the private previews with a diagnostic, never an empty
+builder. `property_names` is a naming hint; only PSI-proven direct `property_bindings`
+can forward a source parameter. A member's terminal name is not a binding proof.
+
 Scope: reusable UI methods within a generated page. This does not yet promise one
-shared `.ets` module across independently generated pages, original domain-typed
-Kotlin parameters in ArkTS, or automatic ViewModel/event implementation. The manifest
+shared `.ets` module across independently generated pages, arbitrary domain-type
+translation, or automatic ViewModel/event implementation. The manifest
 contains definition -> builder -> instance -> render-argument paths for later wiring.
 No command-line option or second JSON input is required; regenerate old page JSON to
 include the definition records.
