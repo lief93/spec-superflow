@@ -34,7 +34,7 @@ class Frame:
 
 
 class BusinessComponents:
-    def __init__(self, definitions, root_name=None, diagnostic=None):
+    def __init__(self, definitions, root_name=None, diagnostic=None, value_emitter=None):
         if not isinstance(definitions, list):
             raise ArkUIPageError('componentDefinitions must be a list')
         self.definitions = {}
@@ -49,6 +49,8 @@ class BusinessComponents:
         self.instances = {}
         self.root_name = root_name
         self.diagnostic = diagnostic or (lambda *args: None)
+        from ui_migration.arkui.component_interfaces import literal
+        self.value = value_emitter or literal
         self.clear()
 
     def clear(self):

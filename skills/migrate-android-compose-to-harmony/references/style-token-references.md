@@ -50,11 +50,34 @@ reopens source/style/resource files. Raw ArkTS snippets are not accepted.
 Supported keys are nonempty strings resolved from literals, known aliases/parameters
 or selected branches. Additional declared arguments currently accept finite scalar
 values/null; missing inputs, undeclared arguments and unsupported transformations
-stay unresolved. String references currently target plain `Text`, `BasicText` and
-`ClickableText` content, not rich-text spans or arbitrary input label slots.
+stay unresolved. String references support plain text, input text/placeholder
+values and accessibility descriptions. Rich-text spans and composable input-label
+slots still require their own UI semantics; a string reference is not a builder.
 Color and numeric references support the property table below; dimensions declare
 `source_unit='sp', target_unit='fp'` or `dp`/`vp` on the adapter. Image sources,
 composite brushes and arbitrary object-valued expressions are separate capabilities.
+
+### Typed Business Arguments
+
+A resource call can be passed through arbitrary **parameter names** declared as
+`String`, nullable `String`, or supported string-list/array parameters. The
+`component_interface.arguments[].value` retains the typed
+`platform_resource_reference` (key, return kind, target module/export/member and
+literal call arguments), rather than coercing it to a string or executing it.
+Numeric references must likewise match a supported declared numeric type;
+color/dimension references do not implicitly become unqualified numbers/strings.
+
+The backend emits the target call at the business invocation and forwards named
+parameters through nested components. All imports use the shared resource emitter.
+For example, `MyCard(customLabel = text("title"))` can become
+`this.MyCard(StyleToken0.read('title'))`, while its text body uses `customLabel`.
+No adapter per business parameter name is needed. At the native-property boundary,
+the existing property/type rules still decide whether that value is valid for
+text, accessibility, color or another supported property. Unknown model types,
+arbitrary business computations and unsupported native properties remain explicit
+limitations; this does not execute or migrate resource-library internals.
+
+Tests: `python3 -m unittest test_resource_arguments test_keyed_resources -q`.
 
 ## Existing Member Mappings
 

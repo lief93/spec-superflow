@@ -36,7 +36,7 @@ class ComponentUiStates:
         values = []
         for parameter in parameters:
             argument = arguments.get(parameter['name'], {})
-            values.append(literal(argument['value']) if parameter['status'] == 'resolved' and argument.get('status') == 'resolved' else 'null')
+            values.append(self.owner.value(argument['value']) if parameter['status'] == 'resolved' and argument.get('status') == 'resolved' else 'null')
         values.append(literal(catalog['selected']))
         return [' '*indent + 'this.' + entry['name'] + '(' + ', '.join(values) + ')']
 

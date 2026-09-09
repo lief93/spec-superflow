@@ -5,6 +5,8 @@ import math
 
 PROPERTY_TYPES = {
     'content.text': ('string', None, None),
+    'content.placeholder': ('string', None, None),
+    'content.content_description': ('string', None, None),
     'typography.font_size_sp': ('dimension', 'sp', 'fp'),
     'typography.line_height_sp': ('dimension', 'sp', 'fp'),
     'typography.letter_spacing_sp': ('dimension', 'sp', 'fp'),

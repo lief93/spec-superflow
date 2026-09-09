@@ -101,15 +101,15 @@ class Renderer:
             )
         self._page_match_parent_sizes = {}
         self.lengths = LayoutLengths()
+        self.style_tokens = StyleTokenEmitter()
         self.business_components = BusinessComponents(android_page_input.get('component_definitions') or [], root['composable'],
-                                                      self.add_page_json_unresolved)
+                                                      self.add_page_json_unresolved, self.style_tokens.value)
         self.layout = LayoutPolicy(LayoutContext(
             self.android_page_by_id, self.android_page_layout_mode,
             self.android_source_layout_by_subject, self._page_constraint_states,
             self._page_match_parent_sizes, self.record_page_paths,
             self.record_page_layout_rule, self.add_page_json_unresolved, self.lengths,
         ))
-        self.style_tokens = StyleTokenEmitter()
         self.surface = SurfaceEmitter(self.add_page_json_unresolved, self.style_tokens)
         self.leaves = NativeLeafEmitter(self.resource_names, self.tinted_vector_resources,
                                        self.layout, self.add_page_json_unresolved, self.business_components.bind,
@@ -816,8 +816,9 @@ class Renderer:
             lines.append(f"{prefix}  .visibility(Visibility.None)")
             emitted_phase_paths.add("style.state.visible")
         description = style["content"].get("content_description")
-        if isinstance(description, str):
-            description = self.business_components.bind(component, 'style.content.description', arkts_string(description))
+        description_reference = self.style_tokens.expression(component, 'content.content_description')
+        if description_reference is not None or isinstance(description, str):
+            description = self.business_components.bind(component, 'style.content.description', description_reference or arkts_string(description))
             lines.append(f"{prefix}  .accessibilityText({description})")
             emitted_phase_paths.add("style.content.content_description")
         transform = style["transform"]

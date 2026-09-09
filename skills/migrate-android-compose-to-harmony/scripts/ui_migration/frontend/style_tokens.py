@@ -5,6 +5,7 @@ from kotlin_psi import KotlinPsiSyntaxError, parse_expression
 from ui_migration.semantics.syntax import qualified_name, call_from
 from ui_migration.semantics.expressions import LayoutExpressionError
 from ui_migration.contracts.style_tokens import validate_token_mappings, validate_property_token
+from ui_migration.contracts.resource_values import is_resource_value, validate_resource_value
 from .component_defaults import has_source_owner
 from .values import value_resolver
 
@@ -37,6 +38,18 @@ class StyleTokenProjector:
                     return tree
             return tree
 
+        def bind_resource(path, value, name, expression):
+            group, field = path.split('.', 1)
+            result['style'][group][field] = None
+            try:
+                spec = validate_resource_value(value)
+                validate_property_token(path, spec)
+            except ValueError as error:
+                result.setdefault('unresolved', []).append({'path':'style.' + path,
+                    'expression':expression, 'reason':str(error)})
+                return
+            references[path] = {'android':name, 'key':value['key'], **copy.deepcopy(spec)}
+
         def bind(path, tree):
             references.pop(path, None)
             tree = select(tree)
@@ -45,23 +58,13 @@ class StyleTokenProjector:
                 value = resolver.value(tree)
             except LayoutExpressionError:
                 value = None
-            if isinstance(value, dict) and value.get('kind') == 'platform_resource_reference':
-                group, field = path.split('.', 1)
-                result['style'][group][field] = None
+            if is_resource_value(value):
                 call = call_from(tree)
                 name = name or (call.qualified_name if call else 'resource')
                 head, *tail = name.split('.')
                 if isinstance(imports.get(head), str):
                     name = '.'.join([imports[head], *tail])
-                spec = value['reference']
-                try:
-                    validate_token_mappings({name:spec})
-                    validate_property_token(path, spec)
-                except ValueError as error:
-                    result.setdefault('unresolved', []).append({'path':'style.' + path,
-                        'expression':tree.get('text', ''), 'reason':str(error)})
-                    return
-                references[path] = {'android':name, 'key':value['key'], **copy.deepcopy(spec)}
+                bind_resource(path, value, name, tree.get('text') or name)
                 return
             if not name:
                 def contains_mapping(value):
@@ -161,6 +164,13 @@ class StyleTokenProjector:
         except KotlinPsiSyntaxError as error:
             result.setdefault('unresolved', []).append({'path': 'source.style_token_references',
                 'expression': error.expression, 'reason': str(error)})
+        # Values may arrive through arbitrary callee parameters, not direct API syntax.
+        for group, fields in result['style'].items():
+            if not isinstance(fields, dict):
+                continue
+            for field, value in fields.items():
+                if is_resource_value(value):
+                    bind_resource(group + '.' + field, value, 'resource', str(value.get('key') or field))
         result.setdefault('source', {})['style_token_references'] = references
         reference_paths = {'style.' + path for path in references}
         result['unresolved'] = [u for u in result.get('unresolved', []) if u.get('path') not in reference_paths]

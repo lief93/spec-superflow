@@ -107,6 +107,11 @@ def signature(parameters):
 def value_matches(value, node):
     if node['kind'] == 'nullable':
         return value is None or value_matches(value, node['inner'])
+    from .resource_values import is_resource_value, validate_resource_value
+    if is_resource_value(value):
+        spec = validate_resource_value(value)
+        # Color/dimension are not interchangeable with unqualified string/number arguments.
+        return node['kind'] == 'scalar' and spec['kind'] == node['target']
     if node['kind'] == 'function':
         return (isinstance(value, dict) and value.get('kind') == 'empty_callback'
                 and type_text(node['result']) == 'void')

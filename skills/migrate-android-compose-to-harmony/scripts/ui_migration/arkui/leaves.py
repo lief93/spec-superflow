@@ -58,7 +58,7 @@ class NativeLeafEmitter:
     def text(self, component, prefix, parent_type):
         emitted_phase_paths = set()
         reference = self.tokens.expression(component, 'content.text') if self.tokens else None
-        text = reference or self.bind(component, 'style.content.text', arkts_string(component['style']['content'].get('text') or ''))
+        text = self.bind(component, 'style.content.text', reference or arkts_string(component['style']['content'].get('text') or ''))
         lines = [f"{prefix}Text({text})"]
         spans = (component.get('source') or {}).get('text_spans')
         plain = component['style']['content'].get('text') or ''
@@ -100,12 +100,14 @@ class NativeLeafEmitter:
         input_style = component['style'].get('input') or {}
         multiline_input = input_style.get('single_line') is False
         emitted_phase_paths = set()
-        text = self.bind(component, 'style.content.text', arkts_string(component['style']['content'].get('text') or ''))
+        reference = self.tokens.expression(component, 'content.text') if self.tokens else None
+        text = self.bind(component, 'style.content.text', reference or arkts_string(component['style']['content'].get('text') or ''))
         options = [f"text: {text}"]
         emitted_phase_paths.add("style.content.text")
         placeholder = component["style"]["content"].get("placeholder")
-        if isinstance(placeholder, str):
-            placeholder = self.bind(component, 'style.content.placeholder', arkts_string(placeholder))
+        placeholder_reference = self.tokens.expression(component, 'content.placeholder') if self.tokens else None
+        if placeholder_reference is not None or isinstance(placeholder, str):
+            placeholder = self.bind(component, 'style.content.placeholder', placeholder_reference or arkts_string(placeholder))
             options.append(f"placeholder: {placeholder}")
             emitted_phase_paths.add("style.content.placeholder")
         input_component = 'TextArea' if multiline_input else 'TextInput'

@@ -81,7 +81,7 @@ class ComponentInterfaces:
             reference = component.get('source', {}).get('invocation_names', {}).get(parameter['name'])
             value = self.owner.bind({'id':component['id'], 'source':{'property_bindings':{
                 'source.argument.' + parameter['name']: reference or ''}}},
-                'source.argument.' + parameter['name'], literal(argument['value']), parameter['target_type'])
+                'source.argument.' + parameter['name'], self.owner.value(argument['value']), parameter['target_type'])
             values.append(value)
         return 'this.' + entry['name'] + '(' + ', '.join(values) + ')'
 
