@@ -6,6 +6,8 @@ description: Migrate local Android Jetpack Compose or Android Views/XML applicat
 # Migrate Android UI to HarmonyOS
 
 For tooling maintenance, read [tooling-architecture.md](references/tooling-architecture.md).
+For per-control implementations and extension boundaries, read
+[registered-controls.md](references/registered-controls.md).
 Commands keep their existing names; install the complete skill, including `scripts/ui_migration/`.
 
 For one selected Compose page, use the
@@ -17,6 +19,11 @@ build/runtime acceptance; the project-wide agent workflow remains separate.
 The page command's final `result.json` includes grouped `diagnosis` and a Chinese
 `diagnosis.md` report with causes, affected source locations and repair actions.
 Read that summary first; do not equate an unresolved count with a proven visual cause.
+For a command that is still running, read [live progress](references/source-page-workflow.md#live-progress-and-slow-run-diagnosis):
+stderr is streamed immediately, `progress.jsonl` records stage heartbeats and
+`result.json` identifies the active child and log paths. Tail the analysis stderr
+for the current PSI file/function; do not treat a heartbeat as proof of forward progress.
+Reuse an unchanged snapshot/contract pair across pages rather than repeating `--source` intake.
 
 For blank pages or missing sections, follow the ordered
 [source-to-runtime diagnosis](references/source-page-workflow.md#blank-pages-and-missing-components).

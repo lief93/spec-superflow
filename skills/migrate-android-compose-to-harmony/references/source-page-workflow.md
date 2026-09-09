@@ -74,6 +74,67 @@ build or visual verification.
 Use a new `--output-dir` for each attempt. Paths containing spaces are supported;
 quote each argument normally, without embedding Python or setting `PYTHONPATH`.
 
+## Live progress and slow-run diagnosis
+
+Commands are unchanged. `migrate_compose_page.py`, `analyze_compose_project.py` and
+`generate_source_page.py` now emit flushed `[progress]` JSON records on **stderr**.
+Stdout remains one final machine-readable JSON result. A wrapper must forward or
+tail stderr while the child is running, not wait for `communicate()` to finish.
+
+The page command writes these files under its new `--output-dir`:
+
+- `progress.jsonl`: parent stage start/end, reuse decision, child PID and a heartbeat
+  every 10 seconds while active. Read `elapsed_s` and `checkpoint_age_s` separately.
+- `result.json`: atomic current status, `current_stage`, stage `status=running`, PID
+  and log paths, recorded before waiting for the child. Stage exit code/time follow
+  when it finishes; `seconds` here is a checkpoint value, not a live ticking timer.
+- `NN-analysis.stderr.log`: live analyzer detail, including PSI file, function
+  dependencies, cross-file symbol matching and call closures. Other stages have
+  their corresponding stdout/stderr files; files are not delayed until process exit.
+
+For example, while an intake is running:
+
+```sh
+tail -f "/new-page-run/progress.jsonl" "/new-page-run/01-analysis.stderr.log"
+```
+
+The stage number depends on whether intake was reused; use the paths in `result.json`.
+For a standalone analyzer or source-JSON command, persist stderr explicitly:
+
+```sh
+python3 "$SKILL_ROOT/scripts/analyze_compose_project.py" \
+  --snapshot "$SNAPSHOT" --output "$CONTRACT" \
+  2> "/work/analysis.progress.log"
+```
+
+Records contain timestamp, process ID, phase, elapsed time, current file/function
+(`unit`) and real `completed`/`total` counts where available. Counts describe that
+specific loop, not overall migration percent. A heartbeat with unchanged counters
+means the process is still observable, not proof of forward progress or a deadlock.
+Long `checkpoint_age_s` identifies where to profile next; this change adds diagnostics,
+not a performance fix or automatic timeout. Filenames and symbol names are logged,
+not complete source bodies. Apply company log-handling policy to these files.
+
+### Reuse snapshot and contract across pages
+
+`snapshot` is a directory of approved Android text sources, not a screenshot or a
+page JSON. Keep it paired with the contract produced from that exact directory.
+After the first `--source` run, subsequent pages can use:
+
+```sh
+--snapshot "/first-run/snapshot" \
+--contract "/first-run/migration-contract.json"
+```
+
+Replace the `--source` argument with this pair; keep the project styles and target,
+change `--root-source`, `--root-composable`, `--page-id` (and state as needed), and
+choose a new `--output-dir`. No copying of the snapshot is needed. The progress log
+then contains `reuse-analysis` and the stage list contains no `analysis` stage.
+This reuses project analysis, not the prior page JSON. Do not move the snapshot
+without rebuilding its paired contract, or reuse stale analysis after source changes.
+Passing `--source` again intentionally performs fresh whole-project analysis;
+selecting a smaller page does not reduce that intake scan.
+
 ## Inputs and outputs
 
 ```text

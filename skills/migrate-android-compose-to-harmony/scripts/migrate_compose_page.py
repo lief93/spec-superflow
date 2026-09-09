@@ -3,6 +3,7 @@
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import time
 
 from ui_migration.frontend.project_styles import load_style_definitions
 from ui_migration.verification.generation_diagnosis import diagnose, render_markdown
+from ui_migration.progress import Progress, attach_log, checkpoint, phase
 
 SCRIPTS = Path(__file__).parent
 
@@ -41,7 +43,9 @@ def parse_args():
 
 
 def write_json(path, value):
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+    temporary.replace(path)
 
 
 class PageRun:
@@ -59,22 +63,57 @@ class PageRun:
         self.stage = stage
         command = [sys.executable, str(SCRIPTS/script), *map(str, arguments)]
         started = time.monotonic()
-        result = subprocess.run(command, capture_output=True, text=True)
         label = f'{len(self.report["stages"]):02d}-{stage}'
-        (self.directory/(label+'.stdout.log')).write_text(result.stdout)
-        (self.directory/(label+'.stderr.log')).write_text(result.stderr)
-        entry = {'stage':stage, 'command':command, 'exit_code':result.returncode,
-            'seconds':time.monotonic()-started, 'stdout':label+'.stdout.log', 'stderr':label+'.stderr.log'}
+        stdout_path = self.directory/(label+'.stdout.log')
+        stderr_path = self.directory/(label+'.stderr.log')
+        entry = {'stage':stage, 'command':command, 'exit_code':None, 'status':'running',
+            'seconds':0, 'stdout':stdout_path.name, 'stderr':stderr_path.name}
         self.report['stages'].append(entry)
+        self.report.update(status='running', current_stage=stage)
         self.save()
-        if result.returncode:
+        try:
+            with phase(stage), stdout_path.open('w') as stdout, stderr_path.open('w') as stderr:
+                with stderr_path.open() as live, subprocess.Popen(command, stdout=stdout, stderr=stderr,
+                        env={**os.environ, 'PYTHONUNBUFFERED':'1'}) as process:
+                    entry['pid'] = process.pid
+                    checkpoint(stage, child_pid=process.pid, stdout=str(stdout_path), stderr=str(stderr_path))
+                    self.save()
+                    try:
+                        while process.poll() is None:
+                            chunk = live.read()
+                            if chunk:
+                                sys.stderr.write(chunk)
+                                sys.stderr.flush()
+                            time.sleep(0.2)
+                    except BaseException:
+                        process.terminate()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait()
+                        raise
+                    finally:
+                        sys.stderr.write(live.read())
+                        sys.stderr.flush()
+                        entry['exit_code'] = process.returncode
+                    checkpoint(stage, child_pid=process.pid, exit_code=process.returncode)
+            entry['status'] = 'completed' if entry['exit_code'] == 0 else 'failed'
+        except BaseException:
+            entry['status'] = 'interrupted' if entry['exit_code'] is not None else 'failed'
+            raise
+        finally:
+            entry['seconds'] = time.monotonic()-started
+            self.save()
+        output = stdout_path.read_text()
+        if entry['exit_code']:
             try:
-                detail = json.loads(result.stdout).get('error', '')
+                detail = json.loads(output).get('error', '')
             except (ValueError, AttributeError):
                 detail = ''
-            detail = detail or result.stderr[-1000:].strip()
+            detail = detail or stderr_path.read_text()[-1000:].strip()
             raise ValueError(f'{stage} failed: {detail}; see {self.directory/label}.stdout.log and .stderr.log')
-        return json.loads(result.stdout)
+        return json.loads(output)
 
     def save(self):
         self.report['seconds'] = time.monotonic()-self.started
@@ -146,6 +185,8 @@ class PageRun:
             raise ValueError('New target requires --project-name, --bundle-name, --sdk-version and module entry')
         self.directory.mkdir(parents=True)
         self.created = True
+        attach_log(self.directory/'progress.jsonl')
+        self.report['progress_log'] = str(self.directory/'progress.jsonl')
         self.report['inputs'] = {key:str(value.expanduser().resolve()) if isinstance(value, Path) else value
             for key,value in vars(a).items()}
         if a.source:
@@ -154,6 +195,7 @@ class PageRun:
             self.tool('analysis', 'analyze_compose_project.py', '--snapshot', snapshot, '--output', contract)
         else:
             snapshot, contract = source, a.contract.expanduser().resolve()
+            checkpoint('reuse-analysis', snapshot=str(snapshot), contract=str(contract))
         source_page = self.directory/'source-page.json'
         self.tool('source-page', 'generate_source_page.py', '--snapshot', snapshot, '--contract', contract,
             '--style-definitions', styles, '--root-source', a.root_source, '--root-composable', a.root_composable,
@@ -178,6 +220,7 @@ class PageRun:
             '--module', a.module, '--page-json', version, *(['--force'] if a.force else []))
         complete = bool(lanhu.get('generation_complete') and arkui.get('generation_complete'))
         self.report.update(ok=True, status='generated' if complete else 'partial_generation',
+            current_stage=None,
             generation_complete=complete, verdict='pass' if complete else 'fail',
             source_page=str(source_page), version_json=str(version),
             arkui={'output':str(self.target/arkui['output']), 'manifest':str(self.target/arkui['manifest']),
@@ -215,9 +258,11 @@ class PageRun:
 def main():
     run = PageRun(parse_args())
     try:
-        result = run.run()
-    except (ValueError, RuntimeError, OSError, KeyError) as error:
-        run.report.update(ok=False, status='failed', verdict='fail', failed_stage=run.stage, error=str(error))
+        with Progress('page-run'):
+            result = run.run()
+    except (ValueError, RuntimeError, OSError, KeyError, KeyboardInterrupt) as error:
+        run.report.update(ok=False, status='failed', verdict='fail', failed_stage=run.stage,
+                          error=str(error) or type(error).__name__)
         run.finish_diagnosis()
         run.save()
         print(json.dumps(run.report, ensure_ascii=False))

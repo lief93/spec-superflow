@@ -67,6 +67,15 @@ The architecture test checks imports, dependency cycles and these direction rule
 
 ## Module Owners
 
+### Registered Controls
+
+New dialog, menu, tab, navigation, flow and grid controls live individually in
+`ui_migration/controls/`. A shared registry supplies scanner names, slots, argument
+ownership, source-fact projection and target rendering. Each control implements
+`project(ProjectionContext)` and `render(RenderContext)`; target rendering only sees
+page facts and narrow rendering helpers, never the source evaluator or whole renderer.
+See [registered-controls.md](registered-controls.md) for extension steps and limits.
+
 ### Source Dependency Analysis
 
 `frontend/source_symbols.py:SourceSymbolIndex` indexes all PSI function declarations,

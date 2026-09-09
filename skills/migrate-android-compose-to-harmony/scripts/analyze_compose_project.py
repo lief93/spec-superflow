@@ -18,6 +18,7 @@ from typing import Any, Iterable
 from validate_ai_safe_tree import validate as validate_ai_safe_tree
 from ui_migration.frontend.ui_declarations import NATIVE_SLOTS
 from ui_migration.frontend.source_symbols import SourceSymbolIndex, resolve_functions, function_identity
+from ui_migration.progress import Progress, checkpoint, step, tracked
 
 
 PRIMITIVE_MAPPING_CATALOG_PATH = (
@@ -310,6 +311,12 @@ UI_SEMANTIC_ARGUMENTS = {
     "colors",
     "columns",
     "confirmButton",
+    "dismissButton",
+    "dragHandle",
+    "sheetState",
+    "sheetMaxWidth",
+    "sheetGesturesEnabled",
+    "contentWindowInsets",
     "content",
     "containerColor",
     "container",
@@ -427,6 +434,9 @@ UI_SEMANTIC_ARGUMENTS = {
     "visualTransformation",
     "windowInsets",
 }
+from ui_migration.controls.registry import CONTROLS
+COMPOSE_COMPONENTS = tuple(dict.fromkeys((*COMPOSE_COMPONENTS, *sorted(CONTROLS.names))))
+UI_SEMANTIC_ARGUMENTS.update(name for control in CONTROLS for name in control.arguments | control.slots)
 IMAGE_STATE_ARGUMENTS = {
     "error",
     "failure",
@@ -2263,9 +2273,9 @@ def lazy_items_scopes(body: str, body_code: str) -> list[dict[str, Any]]:
             if named is None:
                 if collection_expression is None:
                     collection_expression = chunk.strip()
-            elif named[0] == "items":
+            elif named[0] in {"items", "count"}:
                 collection_expression = named[1].strip()
-        if collection_expression is None or re.fullmatch(r"[0-9]+", collection_expression) is not None:
+        if collection_expression is None:
             continue
         lambda_opening = closing + 1
         while lambda_opening < len(body_code) and body_code[lambda_opening].isspace():
@@ -2287,6 +2297,7 @@ def lazy_items_scopes(body: str, body_code: str) -> list[dict[str, Any]]:
                 "end": lambda_end,
                 "collection": normalize_expression(collection_expression),
                 "item_parameter": parameters[-1],
+                "accepts_count": not indexed,
                 **({'index_parameter': parameters[0]} if indexed else {}),
             }
         )
@@ -2602,11 +2613,12 @@ def extract_semantic_ui_calls(
             candidate["list_item_context"] = {
                 "collection": item_scope["collection"],
                 "item_parameter": item_scope["item_parameter"],
+                "accepts_count": item_scope.get("accepts_count", False),
                 **({'index_parameter':item_scope['index_parameter']} if 'index_parameter' in item_scope else {}),
             }
             candidate['list_item_contexts'] = [
                 {'scope_id': f'{relative}:{composable}:{scope["start"]}',
-                 **{key: scope[key] for key in ('collection', 'item_parameter', 'index_parameter') if key in scope}}
+                 **{key: scope[key] for key in ('collection', 'item_parameter', 'index_parameter', 'accepts_count') if key in scope}}
                 for scope in sorted(item_scopes, key=lambda scope: (scope['start'], -scope['end']))
                 if scope['start'] <= match.start() < scope['end']
             ]
@@ -2901,7 +2913,8 @@ def collect_composable_associations(
 ) -> dict[str, dict[str, Any]]:
     index = SourceSymbolIndex(files)
     from ui_migration.frontend.callable_inventory import lambda_functions
-    ui_functions = {source:[*index.ui_functions(source), *lambda_functions(index, source)] for source in index.syntax}
+    ui_functions = {source:[*index.ui_functions(source), *lambda_functions(index, source)]
+                    for source in tracked(index.syntax, 'content-function-inventory')}
     packages: dict[str, str] = {}
     imports: dict[str, dict[str, str]] = collections.defaultdict(dict)
     parameters_by_source: dict[str, dict[str, list[dict[str, str]]]] = (
@@ -2921,11 +2934,11 @@ def collect_composable_associations(
             parameters_by_source[relative][function_name] = parameters
 
     resolved: dict[str, dict[str, list[dict[str, str]]]] = collections.defaultdict(dict)
-    for relative in packages:
+    for relative in tracked(packages, 'cross-file-symbols'):
         syntax = index.syntax[relative]
         names = {f['name'] for f in index.functions} | set(syntax['imports'])
         names.update(c['name'] for c in syntax['qualifiedCalls'])
-        for name in names:
+        for name in tracked(sorted(names), 'symbol-resolution', lambda name: relative + ':' + name):
             targets = resolve_functions(index.functions, name, source=relative, imports=syntax['imports'],
                                         package=syntax['package'], wildcards=syntax['wildcardImports'])
             targets = [f for f in targets if index.roles[function_identity(f)]=='content']
@@ -2978,7 +2991,7 @@ def extract_composables(
     functions = inventory.get(relative)
     if functions is None:
         functions = SourceSymbolIndex({relative:text}).ui_functions(relative)
-    for function in functions:
+    for function in tracked(functions, 'compose-extraction', lambda item: relative + ':' + item['name']):
         function_name = function['name']
         parameters = function['parameters_text'][1:-1]
         body_opening = function['body_start']
@@ -4368,7 +4381,7 @@ def build_custom_composable_closures(
         if key in adjacency or key in calls_by_definition
     )
     closures: list[dict[str, Any]] = []
-    for root in roots:
+    for root in tracked(roots, 'call-closures', lambda item: item[0] + ':' + item[1]):
         reached: set[tuple[str, str]] = set()
         active: set[tuple[str, str]] = set()
         cycle_edges: set[tuple[tuple[str, str], tuple[str, str]]] = set()
@@ -4458,11 +4471,11 @@ def analyze(snapshot: Path, manifest: dict[str, Any], files: dict[str, str]) -> 
         layer: sorted(paths) for layer, paths in sorted(files_by_layer.items())
     }
 
-    image_associations = collect_custom_image_associations(files)
-    composable_associations = collect_composable_associations(files)
+    image_associations = step('image-associations', collect_custom_image_associations, files)
+    composable_associations = step('composable-associations', collect_composable_associations, files)
     composables = [
         composable
-        for relative, text in files.items()
+        for relative, text in tracked(list(files.items()), 'source-files', lambda item: item[0])
         if relative.endswith((".kt", ".kts"))
         for composable in extract_composables(
             relative,
@@ -4506,7 +4519,7 @@ def analyze(snapshot: Path, manifest: dict[str, Any], files: dict[str, str]) -> 
 
     custom_composable_edges: list[dict[str, Any]] = []
     referenced_primitive_mapping_ids: set[str] = set()
-    for call in semantic_ui_calls:
+    for call in tracked(semantic_ui_calls, 'primitive-mapping', lambda item: item['source'] + ':' + item['composable']):
         custom_composable = call.get("custom_composable")
         if custom_composable is None:
             primitive_mapping = primitive_mappings_by_component.get(call["component"])
@@ -4553,14 +4566,14 @@ def analyze(snapshot: Path, manifest: dict[str, Any], files: dict[str, str]) -> 
                 }
             )
 
-    custom_composable_closures = build_custom_composable_closures(
+    custom_composable_closures = step('call-closures', build_custom_composable_closures,
         composables,
         custom_composable_edges,
         semantic_ui_calls,
     )
 
-    capabilities = detect_capabilities(files)
-    dependencies = extract_dependencies(files)
+    capabilities = step('platform-capabilities', detect_capabilities, files)
+    dependencies = step('dependencies', extract_dependencies, files)
     high_risk = [capability["id"] for capability in capabilities if capability["risk"] == "high"]
     risks: list[dict[str, Any]] = []
     if high_risk:
@@ -4590,7 +4603,7 @@ def analyze(snapshot: Path, manifest: dict[str, Any], files: dict[str, str]) -> 
                 "blocked_file_count": manifest["blocked_file_count"],
             }
         )
-    android_imports = extract_android_imports(files)
+    android_imports = step('android-imports', extract_android_imports, files)
     if android_imports:
         risks.append(
             {
@@ -4604,6 +4617,7 @@ def analyze(snapshot: Path, manifest: dict[str, Any], files: dict[str, str]) -> 
             }
         )
 
+    checkpoint('contract-inventories')
     return {
         "schema": "android-to-harmony.migration-contract.v1",
         "generator": "migrate-android-compose-to-harmony",
@@ -4796,12 +4810,13 @@ def analyze(snapshot: Path, manifest: dict[str, Any], files: dict[str, str]) -> 
 def main() -> int:
     args = parse_args()
     try:
-        snapshot, manifest = load_snapshot(args.snapshot)
-        files = load_text_files(snapshot, manifest)
-        contract = analyze(snapshot, manifest, files)
-        output = normalize_output(args.output)
-        require_separate_output(output, snapshot, manifest)
-        write_contract(output, contract, args.force)
+        with Progress('analysis'):
+            snapshot, manifest = step('validate-snapshot', load_snapshot, args.snapshot)
+            files = step('load-source-files', load_text_files, snapshot, manifest)
+            contract = step('analyze-project', analyze, snapshot, manifest, files)
+            output = normalize_output(args.output)
+            require_separate_output(output, snapshot, manifest)
+            step('write-contract', write_contract, output, contract, args.force)
     except (
         AnalysisError,
         OSError,

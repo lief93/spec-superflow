@@ -439,7 +439,27 @@ class Renderer:
         if component_type in {"LazyColumn", "LazyRow"}:
             scroll_axis = "vertical" if component_type == "LazyColumn" else "horizontal"
 
-        if self.leaves.supports(component_type):
+        from ui_migration.controls.registry import CONTROLS
+        from ui_migration.controls.base import RenderContext
+        registered = CONTROLS.get(component_type)
+        control_result = None
+        if registered is not None:
+            def control_metrics(value):
+                self._control_imports.add("import { LengthMetrics } from '@ohos.arkui.node';")
+                return 'LengthMetrics.vp(' + page_number(value) + ')'
+            def declare_control(name, declaration):
+                identifier = name + str(len(self._page_control_builders))
+                self._page_control_builders.append(declaration(identifier))
+                return identifier
+            context = RenderContext(component, children, indent,
+                lambda child, parent, level: self.page_snapshot_component_lines(child, bounds, parent, level),
+                self.lengths.length,
+                lambda path, reason: self.add_page_json_unresolved(component, path, reason),
+                declare_control, arkts_string, control_metrics)
+            control_result = registered.render(context)
+            lines = control_result.lines
+            emitted_phase_paths.update(control_result.consumed)
+        elif self.leaves.supports(component_type):
             leaf = self.leaves.emit(component, prefix, parent_type)
             if not leaf.lines:
                 return []
@@ -774,6 +794,10 @@ class Renderer:
             identity = self.business_components.bind(component, 'semantic_key', arkts_string(semantic_key))
             lines.append(f"{prefix}  .id({identity})")
         alignment_lines = self.layout.page_snapshot_container_alignment_lines(component)
+        if control_result is not None:
+            alignment_lines = [line for line in alignment_lines
+                if not ('.justifyContent(' in line and any(path in control_result.consumed for path in
+                    ('style.layout.horizontal_arrangement', 'style.layout.vertical_arrangement')))]
         if not scroll_axis:
             lines.extend(f"{prefix}  {line}" for line in alignment_lines)
         if any(".alignItems(" in line or ".alignContent(" in line for line in alignment_lines):
@@ -978,6 +1002,8 @@ class Renderer:
                     prefix + f'  .constraintSize({{ minHeight: {self.lengths.length(minimum)} }})']
             elif minimum is None:
                 self.add_page_json_unresolved(component, 'source.material_item.minimum_interactive_dp', 'minimum interactive size is unresolved')
+        if control_result is not None and control_result.finalize is not None:
+            lines = control_result.finalize(lines)
         return lines
 
     def render_android_page_snapshot(self) -> list[str]:
@@ -1023,6 +1049,8 @@ class Renderer:
         self._material_item_states: dict[str, str] = {}
         self._page_match_parent_sizes.clear()
         self._page_match_parent_builders: list[list[str]] = []
+        self._page_control_builders: list[list[str]] = []
+        self._control_imports: set[str] = set()
         self.typography = TypographyEmitter(FontRegistry(self.verified_font_faces), self.layout, self.add_page_json_unresolved, self.style_tokens)
         page_snapshot_section = self.render_android_page_snapshot()
         for component in self.android_page_by_id.values():
@@ -1032,11 +1060,11 @@ class Renderer:
         business_interfaces, business_methods = self.business_components.declarations()
         return ArkUIDocument(
             self.root, page_snapshot_section, self.verified_font_faces,
-            self.surface.builders, self._page_match_parent_builders,
+            self.surface.builders, self._page_match_parent_builders + self._page_control_builders,
             self._page_scaffold_states, self._page_constraint_states,
             self._uses_drawing_color_filter, self.typography.uses_font_metrics,
             self.lengths.used,
             business_interfaces, business_methods,
             self._material_item_states,
-            self.style_tokens.imports() + self.component_reuse.imports(),
+            self.style_tokens.imports() + self.component_reuse.imports() + sorted(self._control_imports),
         ).render()

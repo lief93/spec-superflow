@@ -10,13 +10,14 @@ from analyze_compose_project import load_snapshot
 from init_harmony_project import load_contract, sha256_file
 from real_page_pipeline import build_source_page_spec
 from ui_migration.frontend.project_styles import load_style_definitions
+from ui_migration.progress import Progress, step, checkpoint
 
 
 def generate(args):
     started = time.monotonic()
-    styles = load_style_definitions(args.style_definitions.expanduser().resolve())
-    contract, contract_path = load_contract(args.contract)
-    snapshot, manifest = load_snapshot(args.snapshot)
+    styles = step('load-project-styles', load_style_definitions, args.style_definitions.expanduser().resolve())
+    contract, contract_path = step('load-contract', load_contract, args.contract)
+    snapshot, manifest = step('validate-snapshot', load_snapshot, args.snapshot)
     if Path(contract['source']['safe_snapshot_root']).resolve() != snapshot:
         raise ValueError('--snapshot does not match the contract source.safe_snapshot_root')
     source_file = (snapshot / args.root_source).resolve()
@@ -37,9 +38,10 @@ def generate(args):
         raise ValueError('--output must be outside the Android source and snapshot')
     if output.exists():
         raise ValueError('Output already exists; use a new page output path: ' + str(output))
-    page = build_source_page_spec(contract, root_source, args.root_composable,
+    page = step('build-source-page', build_source_page_spec, contract, root_source, args.root_composable,
         args.page_id, args.state_id, sha256_file(contract_path), snapshot, style_definitions=styles)
     output.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint('write-source-page', components=len(page['components']), output=str(output))
     with output.open('x', encoding='utf-8') as stream:
         json.dump(page, stream, ensure_ascii=False, indent=2)
         stream.write('\n')
@@ -59,7 +61,8 @@ def main():
     parser.add_argument('--state-id', default='default')
     args = parser.parse_args()
     try:
-        result = generate(args)
+        with Progress('source-page'):
+            result = generate(args)
     except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as error:
         print(json.dumps({'ok':False, 'stage':'source-page', 'error':str(error)}, ensure_ascii=False))
         return 1

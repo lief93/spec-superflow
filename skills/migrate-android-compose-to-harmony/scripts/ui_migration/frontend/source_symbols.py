@@ -7,6 +7,7 @@ from collections import defaultdict, Counter
 from kotlin_psi import parse_declarations, parse_expression
 from page_component_catalog import CONTROL_FAMILIES
 from ui_migration.semantics.syntax import call_from, qualified_name
+from ui_migration.progress import tracked, checkpoint
 
 
 def function_identity(function):
@@ -101,7 +102,8 @@ class SourceSymbolIndex:
                     if not {'build', '.gradle', '.git'}.intersection(path.relative_to(root).parts)})
 
     def __init__(self, files):
-        self.syntax = {path: parse_declarations(text) for path, text in files.items()
+        self.syntax = {path: parse_declarations(text) for path, text in
+                       tracked(list(files.items()), 'psi-declarations', lambda item: item[0])
                        if path.endswith(('.kt', '.kts'))}
         self.functions = []
         self.properties = []
@@ -117,8 +119,9 @@ class SourceSymbolIndex:
         for function in self.functions:
             self.by_source[function['source']].append(function)
         self.edges = {}
-        self.roles = {function_identity(f): self._initial_role(f) for f in self.functions}
-        for function in self.functions:
+        self.roles = {function_identity(f): self._initial_role(f)
+                      for f in tracked(self.functions, 'function-roles', function_identity)}
+        for function in tracked(self.functions, 'function-dependencies', function_identity):
             edges = []
             for call in expression_calls(function['body']):
                 targets = self.resolve(call, function)
@@ -129,7 +132,10 @@ class SourceSymbolIndex:
             self.edges[function_identity(function)] = edges
         # Helpers that emit content inherit its role; value factories never become UI.
         changed = True
+        iteration = 0
         while changed:
+            iteration += 1
+            checkpoint('content-role-propagation', iteration=iteration, total=len(self.functions))
             changed = False
             for function in self.functions:
                 identity = function_identity(function)

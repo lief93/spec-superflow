@@ -607,6 +607,15 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
         'strokeCap', 'gapSize', 'drawStopIndicator', 'startIndent',
     }
     from page_component_catalog import NATIVE_CONTAINERS, NATIVE_LEAVES, NATIVE_BUTTONS
+    from ui_migration.controls.registry import CONTROLS
+    registered_control = CONTROLS.get(component_type)
+    if registered_control is not None:
+        result.append(fact('source.control', 'resolved' if component.get('source', {}).get('control') else 'unresolved',
+            'semantic_argument', component_type, None, 'registered control semantics'))
+        unsupported_arguments -= registered_control.arguments | registered_control.slots
+    if component_type in {'Dialog', 'AlertDialog', 'ModalBottomSheet'}:
+        result.append(fact('source.overlay', 'resolved' if component.get('source', {}).get('overlay') else 'unresolved',
+            'semantic_argument', 'overlay', component_type, 'window-owned content and modal options'))
     if component_type in {'HorizontalPager', 'VerticalPager'}:
         pager = component.get('source', {}).get('pager')
         result.append(fact('source.pager', 'resolved' if pager is not None else 'unresolved',
@@ -759,6 +768,9 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
         ("verticalArrangement", "style.layout.vertical_arrangement"),
     ):
         expression = semantic_expression(component, name)
+        from ui_migration.frontend.ui_declarations import NATIVE_SLOTS
+        if name in NATIVE_SLOTS.get(component_type, ()):
+            continue
         if component_type in {'HorizontalPager', 'VerticalPager'} and name in {'contentPadding', 'verticalAlignment', 'horizontalAlignment'}:
             continue
         if component_type in CONTROL_TYPES and name == 'color':

@@ -8,6 +8,7 @@ CONTROL_FAMILIES = {
     'box': ('Box', 'BoxWithConstraints', 'Surface', 'AnimatedVisibility', 'AnimatedContent'),
     'refresh': ('PullToRefreshBox',),
     'pager': ('HorizontalPager', 'VerticalPager'),
+    'overlay': ('AlertDialog', 'Dialog', 'ModalBottomSheet'),
     'constraint': ('ConstraintLayout',),
     'appbar': ('TopAppBar', 'CenterAlignedTopAppBar', 'LargeFlexibleTopAppBar', 'BottomAppBar'),
     'scaffold': ('Scaffold',),
@@ -24,9 +25,11 @@ CONTROL_FAMILIES = {
     'internal': ('content', 'toolbar', 'ProgressRing'),
 }
 NATIVE_CONTAINERS = frozenset(
-    name for family in ('row', 'column', 'card', 'material_item', 'box', 'refresh', 'pager', 'constraint', 'appbar', 'scaffold')
+    name for family in ('row', 'column', 'card', 'material_item', 'box', 'refresh', 'pager', 'overlay', 'constraint', 'appbar', 'scaffold')
     for name in CONTROL_FAMILIES[family]
 ) | {'content', 'toolbar'}
+from ui_migration.controls.registry import CONTROLS
+NATIVE_CONTAINERS = NATIVE_CONTAINERS | CONTROLS.names
 NATIVE_LEAVES = frozenset(
     name for family in ('text', 'input', 'image', 'spacer', 'selection', 'range', 'progress', 'divider')
     for name in CONTROL_FAMILIES[family]
@@ -110,6 +113,7 @@ FIELD_AUDIT = {
 }
 
 FAMILY_BOUNDARIES = {
+    'overlay': 'Material3 AlertDialog/Dialog/ModalBottomSheet selected UI and named slots in native modal layers; business callbacks and custom window policies remain explicit boundaries',
     'pager': 'Compose Foundation pager: resolved finite pages, initial index, Fill size, spacing, padding, cross-axis alignment, native swipe; custom fling/reverse/fixed-size unresolved',
     'material_item': 'Material3 ListItem named slots and FilterChip fixed-state layout; callbacks remain a business boundary',
     'row': '原生 Row；LazyRow 为展开后的滚动树，不包含惰性复用策略',

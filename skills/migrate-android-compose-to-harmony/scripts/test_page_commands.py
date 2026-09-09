@@ -99,12 +99,23 @@ import androidx.compose.runtime.Composable
         self.assertEqual(result['inputs']['style_definitions'], str(self.styles.resolve()))
         self.assertEqual(json.loads((self.root/'run/result.json').read_text()), result)
         self.assertEqual(result['arkui']['input_mode'], 'page-json-only')
+        events = [json.loads(line) for line in Path(result['progress_log']).read_text().splitlines()]
+        self.assertTrue(any(e['phase'] == 'reuse-analysis' for e in events))
+        self.assertTrue(any(e['event'] == 'phase-start' and e['phase'] == 'source-page' for e in events))
+        self.assertIsNone(result['current_stage'])
+        self.assertNotIn('analysis', [s['stage'] for s in result['stages']])
+        source_stage = next(s for s in result['stages'] if s['stage'] == 'source-page')
+        self.assertIn('build-source-page', (self.root/'run'/source_stage['stderr']).read_text())
         self.assertTrue((self.root/'harmony/entry/src/main/resources/base/media/logo.svg').is_file())
 
     def test_full_command_accepts_raw_source(self):
         args = self.full_args(); del args[:4]; args += ['--source', self.source]
         result = self.run_tool('migrate_compose_page.py', *args)
         self.assertTrue((self.root/'run/snapshot/.android-to-harmony-safe.json').exists())
+        analysis = next(s for s in result['stages'] if s['stage'] == 'analysis')
+        log = (self.root/'run'/analysis['stderr']).read_text()
+        for name in ('psi-declarations', 'function-dependencies', 'symbol-resolution', 'call-closures', 'write-contract'):
+            self.assertIn(name, log)
         self.assertTrue(Path(result['arkui']['output']).is_file())
 
     def test_full_command_refuses_nested_target_before_writing(self):

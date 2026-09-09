@@ -267,6 +267,12 @@ def project_source_page(
         defaults = material_text_defaults(parent, node.get('slot_argument_name') or node.get('source', {}).get('slot_argument_name'))
         if defaults:
             local['__material_text_defaults'] = defaults
+        slot = node.get('slot_argument_name') or node.get('source', {}).get('slot_argument_name') or 'content'
+        registered_style = environment.get('__control_slot_styles', {}).get(parent.get('id'), {}).get(slot, {})
+        if registered_style.get('color'):
+            local['LocalContentColor.current'] = registered_style['color']
+        if registered_style.get('typography'):
+            local['__material_text_defaults'] = registered_style['typography']
         source_file = node.get('source', {}).get('source')
         from ui_migration.frontend.source_symbols import function_identity
         declaration = node.get('source', {}).get('declaration_id')
@@ -336,6 +342,8 @@ def project_source_page(
 
     def resolve_node(node: dict[str, Any], local: dict[str, Any]) -> dict[str, Any]:
         result = copy.deepcopy(node)
+        result['unresolved'] = [item for item in result.get('unresolved', [])
+                                if item.get('path') not in {'source.control', 'source.overlay'}]
         styles.project(result, local,
                             resolved_theme_styles,
                             {t['name'] for t in payload.get('source_tokens', []) if t.get('kind') == 'font_family'} |
@@ -497,6 +505,18 @@ def project_source_page(
             original[c].get('source', {}).get('slot_argument_name') for c in children.get(node['id'], [])])
         from ui_migration.frontend.material_defaults import project_material_defaults
         project_material_defaults(result, local, [original[c] for c in children.get(node['id'], [])])
+        from ui_migration.frontend.overlays import project_overlay
+        project_overlay(result, local, [original[c].get('slot_argument_name') or
+            original[c].get('source', {}).get('slot_argument_name') for c in children.get(node['id'], [])])
+        from ui_migration.controls.registry import CONTROLS
+        from ui_migration.controls.base import ProjectionContext
+        control = CONTROLS.get(result['type'])
+        if control is not None:
+            context = ProjectionContext(result, lambda name: semantic_expression(result, name),
+                lambda expression: evaluate_expression(expression, local), UNRESOLVED,
+                tuple(original[c].get('slot_argument_name') or original[c].get('source', {}).get('slot_argument_name') or 'content'
+                      for c in children.get(node['id'], [])))
+            result['source']['control'] = control.project(context)
         component_defaults.apply(result, local)
         style_tokens.apply(node, result, local)
         result["layout_rules"] = normalized_layout_rules(result)
@@ -614,6 +634,12 @@ def project_source_page(
                     child.get('source', {}).pop('slot_argument_name', None)
             return new_id
         consumed_insets = dict(local.get('__consumed_window_insets', {}))
+        control_facts = node.get('source', {}).get('control', {})
+        if control_facts.get('content_color'):
+            local = {**local, 'LocalContentColor.current': control_facts['content_color']}
+        if control_facts.get('slot_styles'):
+            local = {**local, '__control_slot_styles': {**local.get('__control_slot_styles', {}),
+                component_id: control_facts['slot_styles']}}
         for modifier in node.get('modifiers', []):
             for edge, value in modifier.get('consumed_insets_dp', {}).items():
                 consumed_insets[edge] = max(consumed_insets.get(edge, 0), value)
@@ -628,6 +654,12 @@ def project_source_page(
             parameters = (source.get('source') or {}).get('trailing_lambda_parameters') or ['it']
             local = {**local, parameters[0]: {'__scaffold_padding_owner': new_id}}
         from ui_migration.frontend.pager import PAGER_TYPES, project_pager
+        if source['type'] == 'ContextualFlowRow' and type(control_facts.get('item_count')) is int:
+            parameters = source.get('source', {}).get('trailing_lambda_parameters') or ['it']
+            for item in range(control_facts['item_count']):
+                emit_children(children.get(component_id, []), new_id,
+                    {**local, parameters[0]: item}, suffix + '__item' + str(item))
+            return new_id
         if source['type'] in PAGER_TYPES:
             pager = project_pager(node, local)
             node['required_facts'] = build_required_facts(node)
@@ -698,6 +730,8 @@ def project_source_page(
                 continue
             collection_expression = context['collection']
             collection = evaluate_expression(collection_expression, local)
+            if context.get('accepts_count') and type(collection) is int and 0 <= collection <= 200:
+                collection = list(range(collection))
             if preview is not None and not allow_unresolved:
                 collection = preview.collection(source, collection, UNRESOLVED)
             if isinstance(collection, dict):
@@ -744,6 +778,15 @@ def project_source_page(
         active_roots.extend(emit_children([root_id], None, base_environment, ""))
     if not active_roots:
         raise ValueError("selected page state has no active root")
+    from ui_migration.frontend.overlays import overlay_host
+    host = overlay_host(active_roots, {n['id']: n for n in emitted})
+    if host is not None:
+        host['required_facts'] = build_required_facts(host)
+        for node in emitted:
+            if node['id'] in active_roots:
+                node['parent_id'] = host['id']
+        emitted.insert(0, host)
+        active_roots = [host['id']]
     if len(active_roots) != 1:
         raise ValueError(
             "selected page state has multiple active roots; an explicit source parent layout "

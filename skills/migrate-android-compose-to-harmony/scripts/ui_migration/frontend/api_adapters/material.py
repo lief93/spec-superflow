@@ -23,6 +23,8 @@ ADAPTERS = (ApiAdapter('material.TopAppBarColors', 'background',
     ('androidx.compose.material3.' + owner + '.' + method,), colors,
     aliases=(owner + '.' + method,)) for owner, method in (
         ('ListItemDefaults', 'colors'), ('FilterChipDefaults', 'filterChipColors'),
+        ('NavigationBarItemDefaults', 'colors'), ('NavigationRailItemDefaults', 'colors'),
+        ('MenuDefaults', 'itemColors'),
         ('CardDefaults', 'cardColors'), ('ButtonDefaults', 'buttonColors'),
         ('CheckboxDefaults', 'colors'), ('RadioButtonDefaults', 'colors'),
         ('SwitchDefaults', 'colors'), ('IconButtonDefaults', 'iconButtonColors'),

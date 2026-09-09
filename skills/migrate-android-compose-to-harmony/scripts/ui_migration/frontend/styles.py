@@ -102,7 +102,8 @@ def static_style_for_call(
                 "reason": "custom draw commands require structural extraction or a target renderer",
             }
         )
-    text_expression = semantic_expression(call, "text") or (
+    from .ui_declarations import NATIVE_SLOTS
+    text_expression = (None if 'text' in NATIVE_SLOTS.get(component, ()) else semantic_expression(call, "text")) or (
         first_positional_expression(call) if component in {"Text", "BasicText", "ClickableText"} else None
     )
     if text_expression is not None:
