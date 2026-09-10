@@ -128,16 +128,33 @@ value preview and its Python type, plus length for strings/collections. Invisibl
 characters are escaped and control-character positions are reported. For example:
 
 ```text
-...migration.unresolved[0].reason must be a non-empty printable string (maximum 500); actual='bad\nreason' (type=str, length=10, control_positions=[3]; preview may be truncated)
+...migration.unresolved[0].reason must be non-empty diagnostic text; actual='bad\x00reason' (type=str, length=10, control_positions=[3]; preview may be truncated)
 ```
 
 The error appears in the child command result and failed-phase stderr record; the
 full page command also forwards the command error into `result.json`. Long values
-are truncated only in diagnostics, not in the input JSON. Invalid diagnostic records
-still fail validation; these messages do not silently repair or discard them.
+are truncated only in error previews, not in the input JSON. Diagnostic `reason`
+strings accept newlines, tabs and more than 500 characters without truncation;
+document-size limits still apply. Empty/non-string reasons and unsupported control
+characters such as NUL remain errors. Identifier and other field limits are unchanged.
 Silence alone does not prove a deadlock; this change adds diagnostics,
 not a performance fix or automatic timeout. Filenames and symbol names are logged,
 not complete source bodies. Apply company log-handling policy to these files.
+
+### Composed modifiers
+
+Fixed-state projection expands `Modifier.composed { ... }` and bare `composed`
+inside source Modifier extensions. The factory's `this` retains the incoming chain;
+returning a new `Modifier` replaces it. Nested factories, named `factory` lambdas
+and known `if`/`when` branches use the existing PSI evaluator. Inspector metadata
+is not executed. For RTL conditions, provide `LocalLayoutDirection.current` as
+`"rtl"` or `"ltr"` in fixture values; `LayoutDirection.Rtl/Ltr` resolve accordingly.
+
+Unknown conditions, animation state and nonlocal side effects are not executed or
+guessed. Their unresolved diagnostics remain visible and the candidate page may be
+partial. Supporting the factory wrapper does not imply arbitrary Compose runtime
+support. Full unsupported modifier text stays in `expression`, not duplicated in
+the short `unsupported modifier expression` reason.
 
 For source-page generation, `function-dependencies` reports `indexed_functions`
 (all declarations), `analyzed_functions` (dependencies processed so far), and

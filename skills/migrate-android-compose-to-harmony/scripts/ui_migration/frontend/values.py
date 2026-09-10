@@ -18,6 +18,9 @@ class SourceValues:
         'Color.LightGray': '#FFCCCCCC', 'Color.DarkGray': '#FF444444',
         'Color.Unspecified': {'kind': 'color_unspecified'},
         'CircleShape': {'kind': 'circle'},
+        'LayoutDirection.Rtl': 'rtl', 'LayoutDirection.Ltr': 'ltr',
+        'androidx.compose.ui.unit.LayoutDirection.Rtl': 'rtl',
+        'androidx.compose.ui.unit.LayoutDirection.Ltr': 'ltr',
     }
 
 
@@ -76,6 +79,16 @@ class SourceValues:
 
     def expand_modifier(self, node, context, seen, prefix):
         call = call_from(node)
+        if call.name == 'composed':
+            factories = [argument['value'] for argument in call.arguments
+                         if argument.get('name') in (None, 'factory')
+                         and argument['value'].get('kind') == 'lambda']
+            if len(factories) != 1 or factories[0].get('parameters'):
+                raise LayoutExpressionError('composed requires one receiver factory lambda')
+            scoped = context.scoped(dict(context.values))
+            scoped.modifier_receivers['this'] = (prefix if call.receiver is not None
+                else context.modifier_receivers.get('this', []))
+            return scoped.chain(factories[0]['body'], seen)
         inset_key = {'statusBarsPadding': 'WindowInsets.statusBars',
                      'navigationBarsPadding': 'WindowInsets.navigationBars'}.get(call.name)
         if inset_key and not call.arguments:

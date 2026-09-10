@@ -19,7 +19,7 @@ SCRIPTS = Path(__file__).resolve().parent
 
 class GenerationDiagnosticsTest(unittest.TestCase):
     def test_reason_reports_actual_value_type_length_and_controls(self):
-        for value in ('', None, 12, {}, 'line one\nline two', 'x' * 501):
+        for value in ('', None, 12, {}, 'line one\x00line two', ' \n\t'):
             with self.subTest(value=repr(value)[:40]):
                 with self.assertRaises(PageSnapshotError) as raised:
                     normalize_unresolved([{'path': 'source.state', 'expression': 'state',
@@ -30,8 +30,8 @@ class GenerationDiagnosticsTest(unittest.TestCase):
                 self.assertIn('type=' + type(value).__name__, message)
                 if isinstance(value, (str, dict)):
                     self.assertIn('length=' + str(len(value)), message)
-                if value == 'line one\nline two':
-                    self.assertIn(r'line one\nline two', message)
+                if value == 'line one\x00line two':
+                    self.assertIn(r'line one\x00line two', message)
                     self.assertIn('control_positions=[8]', message)
                 self.assertNotIn('\n', message)
                 self.assertLess(len(message), 700)
@@ -105,16 +105,25 @@ class GenerationDiagnosticsTest(unittest.TestCase):
             self.assertTrue(pages)
             self.assertIn('Progress check', pages[0].read_text())
             document = unpack_lanhu_document(json.loads(version.read_text()))
+            reason = 'unsupported modifier expression:\n' + ('long source excerpt\n' * 50)
             document['artboard']['layers'][0]['migration']['unresolved'] = [
-                {'path': 'source.state', 'expression': 'state', 'reason': 'bad\nreason'}]
+                {'path': 'source.modifiers.unresolvedexpression', 'expression': 'composed { unknown() }',
+                 'reason': reason}]
+            version.write_text(json.dumps(document))
+            payload, _ = self.run_cli('generate_arkui_page.py', '--target', target,
+                                     '--page-json', version, '--force')
+            self.assertTrue(payload['ok'])
+            self.assertIn('Progress check', pages[0].read_text())
+            document['artboard']['layers'][0]['migration']['unresolved'] = [
+                {'path': 'source.state', 'expression': 'state', 'reason': 'bad\x00reason'}]
             version.write_text(json.dumps(document))
             payload, events = self.run_cli('generate_arkui_page.py', '--target', target,
                                           '--page-json', version, '--force', success=False)
-            self.assertIn(r"actual='bad\nreason'", payload['error'])
+            self.assertIn(r"actual='bad\x00reason'", payload['error'])
             self.assertIn('unresolved[0].reason', payload['error'])
             failure = next(e for e in events if e['event'] == 'phase-failed'
                            and e['phase'] == 'validate-lanhu-document')
-            self.assertIn(r"actual='bad\nreason'", failure['error'])
+            self.assertIn(r"actual='bad\x00reason'", failure['error'])
             self.assertEqual(events[-1]['event'], 'failed')
 
 

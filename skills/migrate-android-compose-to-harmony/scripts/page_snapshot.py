@@ -458,11 +458,16 @@ def normalize_unresolved(value: Any, label: str) -> list[dict[str, str]]:
         expression = display_string(item['expression'], f'{label}[{index}].expression')
         if not expression or any(ord(c) < 32 and c not in '\r\n\t' for c in expression):
             raise PageSnapshotError(f'{label}[{index}].expression must be non-empty source text; {actual_value(expression)}')
+        # Diagnostics may contain source excerpts; identifier limits do not apply.
+        reason = item['reason']
+        if (not isinstance(reason, str) or not reason.strip()
+                or any(ord(c) < 32 and c not in '\r\n\t' for c in reason)):
+            raise PageSnapshotError(f'{label}[{index}].reason must be non-empty diagnostic text; {actual_value(reason)}')
         result.append(
             {
                 "path": bounded_string(item["path"], f"{label}[{index}].path", 240),
                 "expression": expression,
-                "reason": bounded_string(item["reason"], f"{label}[{index}].reason"),
+                "reason": reason,
             }
         )
     return result

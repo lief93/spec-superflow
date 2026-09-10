@@ -376,7 +376,7 @@ class LayoutExpressions:
             if expanded is not self.unresolved:
                 return expanded
         if node['kind'] != 'qualified' or node['safe'] or node['selector']['kind'] != 'call':
-            raise LayoutExpressionError('unsupported modifier expression: ' + node.get('text', ''))
+            raise LayoutExpressionError('unsupported modifier expression')
         prefix = self.chain(node['receiver'], seen)
         call = node['selector']
         name = call['callee'].get('name')
