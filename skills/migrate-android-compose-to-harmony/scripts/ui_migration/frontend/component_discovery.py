@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 from typing import ClassVar
 
@@ -11,23 +10,7 @@ from .component_reuse import ComponentAdapter
 from ui_migration.contracts.component_interfaces import signature, value_matches
 
 
-def parser_runtime():
-    home = Path(os.environ.get('DEVECO_HOME', '/Applications/DevEco-Studio.app'))
-    contents = home/'Contents' if (home/'Contents').is_dir() else home
-    node = os.environ.get('ARKTS_NODE') or shutil.which('node') or str(contents/'tools/node/bin/node')
-    explicit = os.environ.get('ARKTS_TYPESCRIPT_PATH')
-    candidates = [Path(explicit)] if explicit else [
-        contents/'sdk/default/openharmony/ets/build-tools/ets-loader/node_modules/typescript',
-    ]
-    if not explicit and os.environ.get('DEVECO_SDK_HOME'):
-        sdk = Path(os.environ['DEVECO_SDK_HOME'])
-        candidates = [sdk/'ets/build-tools/ets-loader/node_modules/typescript',
-            sdk/'openharmony/ets/build-tools/ets-loader/node_modules/typescript',
-            sdk/'default/openharmony/ets/build-tools/ets-loader/node_modules/typescript', *candidates]
-    compiler = next((p for p in candidates if p.exists()), None)
-    if compiler is None or not (shutil.which(node) or Path(node).is_file()):
-        raise ValueError('Auto component discovery needs the ArkTS SDK parser: set ARKTS_TYPESCRIPT_PATH and ARKTS_NODE (or DEVECO_HOME)')
-    return node, str(compiler)
+from ui_migration.arkts_sdk import parser_runtime
 
 
 def target_inventory(target, module, component_dir=None, page_output_dir=None):

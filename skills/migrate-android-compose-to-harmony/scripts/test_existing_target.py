@@ -38,9 +38,9 @@ class ExistingTargetTest(unittest.TestCase):
 
     def test_full_pipeline_and_repeat_preserve_existing_project(self):
         result = self.run_tool('migrate_compose_page.py', *self.args())
-        page = self.output / 'GeneratedPage.ets'
+        page = self.output / 'Page.ets'
         self.assertEqual(Path(result['arkui']['output']), page.resolve())
-        self.assertIn("from '../../business/Caption'", page.read_text())
+        self.assertIn('from "../../business/Caption"', page.read_text())
         self.assertIn('ReusedCaption', page.read_text())
         self.assertTrue((self.main / 'resources/base/media/logo.svg').is_file())
         self.assertFalse((self.target / '.migration').exists())
@@ -79,7 +79,7 @@ class ExistingTargetTest(unittest.TestCase):
 
     def test_unowned_page_is_never_overwritten(self):
         self.output.mkdir(parents=True)
-        page = self.output / 'GeneratedPage.ets'
+        page = self.output / 'Page.ets'
         page.write_text('// hand-written page\n')
         self.run_tool('migrate_compose_page.py', *self.args(), '--force', expected=1)
         self.assertEqual(page.read_text(), '// hand-written page\n')

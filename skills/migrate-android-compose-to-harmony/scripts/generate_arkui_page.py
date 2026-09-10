@@ -11,7 +11,7 @@ import json
 from ui_migration.progress import Progress, step, checkpoint, phase
 from ui_migration.naming import source_identifier
 from ui_migration.contracts.identity import canonical_sha256, require_contract_ui, require_safe_relative_source
-from ui_migration.arkui.project import normalize_target, require_module, validate_previous
+from ui_migration.arkui.project import normalize_target, require_module
 from ui_migration.target_access import add_target_arguments, metadata_directory, check_manifest_outputs, checked_path
 from ui_migration.arkui.renderer import (
     Renderer,
@@ -85,6 +85,13 @@ def generate(
     identity = hashlib.sha256(
         f"{root['source']}#{root['composable']}".encode("utf-8")
     ).hexdigest()[:16]
+    from ui_migration.arkui.source_modules import page_file, render_modules, validate_outputs
+    manifest_relative = str(metadata / 'arkui-pages' / f'{identity}.json') if existing_target else f".migration/arkui-pages/{identity}.json"
+    manifest_path = target / manifest_relative
+    checked_path(metadata, manifest_path)
+    check_manifest_outputs(target, module, manifest_path)
+    output_path = page_file(root, output_directory, target, manifest_path)
+    checked_path(target / module / 'src/main/ets', output_path)
     resource_names, string_values = step('load-target-resources', load_theme_resources, target, module, metadata)
     required_gate = android_page_input.get("required_fact_gate")
     tinted_vector_resources, tinted_vector_payloads, tinted_vector_records = (
@@ -96,11 +103,14 @@ def generate(
         string_values,
         android_page_input,
         tinted_vector_resources,
-        import_module=lambda value: relocate_import(value, target/module/'src/main/ets/generated', output_directory),
+        import_module=lambda value: relocate_import(value, target/module/'src/main/ets/generated', output_path.parent),
     )
     renderer.verified_font_faces = step('verify-font-assets', load_page_font_faces, target, module, android_page_input, metadata)
     with phase('render-arkts', components=len(android_page_input['components'])):
         source = renderer.render()
+    module_payloads, source_organization = step('organize-source-modules', render_modules,
+        source, root, renderer.business_components, output_directory, output_path, identity)
+    source_organization['output_root'] = output_directory.relative_to(target).as_posix()
     target_phase_gate = step('validate-target-consumption', build_target_phase_consumption_gate,
         android_page_input,
         renderer.android_page_processed_component_ids,
@@ -121,26 +131,25 @@ def generate(
                 phase=failure["phase"],
             )
     generation_complete = not renderer.unresolved and target_phase_gate["verdict"] == "pass"
-    output_relative = (output_directory / f"Generated{pascal_identifier(root['composable'])}.ets").relative_to(target).as_posix()
-    manifest_relative = str(metadata / 'arkui-pages' / f'{identity}.json') if existing_target else f".migration/arkui-pages/{identity}.json"
-    output_path = target / output_relative
-    manifest_path = target / manifest_relative
-    if existing_target:
-        checked_path(target / module / 'src/main/ets', output_path)
-        checked_path(metadata, manifest_path)
-        check_manifest_outputs(target, module, manifest_path)
-    validate_previous(target, output_path, manifest_path, root, module, force)
-    if existing_target:
-        previous_outputs = json.loads(manifest_path.read_text()).get('outputs', {}) if manifest_path.exists() else {}
-        for destination in tinted_vector_payloads:
-            checked_path(target / module / 'src/main/resources', destination)
-            if destination.exists() and destination.relative_to(target).as_posix() not in previous_outputs:
-                raise ArkUIPageError(f'refusing to replace an unowned derived vector: {destination}')
-    output_bytes = source.encode("utf-8")
+    output_relative = output_path.relative_to(target).as_posix()
+    payloads = {**module_payloads, **tinted_vector_payloads}
+    deletions = validate_outputs(target, module, output_path, manifest_path, root, force, payloads)
+    output_bytes = module_payloads[output_path]
     semantic_input = {
         "input_mode": "page-json-only",
         "page_json_sha256": android_page_input["sha256"],
     }
+    business_report = renderer.business_components.report()
+    business_report['representation'] = source_organization['representation']
+    business_report['module_sharing'] = source_organization['shared_cross_page_modules']
+    renamed = source_organization['renamed_methods']
+    for definition in business_report['definitions']:
+        definition['builders'] = [renamed.get(name, name) for name in definition['builders']]
+    for instance in business_report['instances']:
+        instance['builder'] = renamed.get(instance['builder'], instance['builder'])
+        instance['slots'] = [renamed.get(name, name) for name in instance['slots']]
+    for entry in business_report['declared_interfaces'] + business_report['component_ui_states']:
+        entry['name'] = renamed.get(entry['name'], entry['name'])
     manifest = {
         "schema": MANIFEST_SCHEMA,
         "generator": "migrate-android-compose-to-harmony",
@@ -156,7 +165,8 @@ def generate(
         "expanded_definition_count": len(renderer.reached_keys),
         "selected_call_count": len(renderer.selected_calls),
         "verified_font_assets": renderer.verified_font_faces,
-        "business_components": renderer.business_components.report(),
+        "business_components": business_report,
+        "source_organization": source_organization,
         "reused_business_components": renderer.component_reuse.instances,
         "generation_complete": generation_complete,
         "verdict": "pass" if generation_complete else "fail",
@@ -166,6 +176,9 @@ def generate(
         "unresolved": renderer.unresolved,
         "warnings": android_page_input.get('generation_warnings', []),
         "outputs": {
+            **{path.relative_to(target).as_posix(): {
+                'sha256': hashlib.sha256(data).hexdigest(), 'kind':'source_ui_module',
+            } for path, data in module_payloads.items()},
             output_relative: {
                 "sha256": hashlib.sha256(output_bytes).hexdigest(),
                 "root_component": source_identifier(root['composable']),
@@ -225,10 +238,9 @@ def generate(
         manifest["android_page_input"]["version_json"] = android_page_input["version_json"]
     manifest_bytes = step('serialize-arkui-manifest', json_bytes, manifest)
     step('write-arkui-output', commit_payloads, {
-        output_path: output_bytes,
+        **payloads,
         manifest_path: manifest_bytes,
-        **tinted_vector_payloads,
-    })
+    }, deletions)
     checkpoint('arkui-output', output=str(output_path), unresolved=len(renderer.unresolved),
                completed=len(renderer.android_page_processed_component_ids), total=len(renderer.android_page_by_id))
     return {

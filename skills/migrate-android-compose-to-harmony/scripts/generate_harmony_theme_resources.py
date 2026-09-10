@@ -669,8 +669,6 @@ def commit_payloads(
         for destination in payloads:
             os.replace(temporary_files[destination], destination)
             replaced.add(destination)
-        for backup in backups.values():
-            backup.unlink(missing_ok=True)
     except Exception:
         for destination in reversed(destinations):
             if destination in replaced:
@@ -682,6 +680,9 @@ def commit_payloads(
     finally:
         for temporary in temporary_files.values():
             temporary.unlink(missing_ok=True)
+    # All outputs are committed; cleanup cannot safely roll back deleted backups.
+    for backup in backups.values():
+        backup.unlink(missing_ok=True)
 
 
 def generate(

@@ -84,9 +84,9 @@ class CustomTargetCommandsTest(unittest.TestCase):
         args = self.full_args() + ['--component-dir', scan,
                                   '--page-output-dir', 'entry/src/main/ets/pages/onboarding']
         result = self.run_tool('migrate_compose_page.py', *args)
-        output = target/'entry/src/main/ets/pages/onboarding/GeneratedPage.ets'
+        output = target/'entry/src/main/ets/pages/onboarding/Page.ets'
         self.assertEqual(Path(result['arkui']['output']), output.resolve())
-        self.assertIn("from '../../shared-ui/Caption'", output.read_text())
+        self.assertIn('from "../../shared-ui/Caption"', output.read_text())
         self.assertIn('ReusedCaption({ title: "Hello" })', output.read_text())
         self.assertFalse((target/'entry/src/main/ets/generated/GeneratedPage.ets').exists())
         self.assertEqual(business.read_text(), original)
@@ -97,7 +97,7 @@ class CustomTargetCommandsTest(unittest.TestCase):
         version = self.root/'run/lanhu/version_json.json'
         self.run_tool('generate_arkui_page.py', '--target', target, '--page-json', version,
                       '--page-output-dir', output.parent, '--force')
-        self.assertIn("from '../../shared-ui/Caption'", output.read_text())
+        self.assertIn('from "../../shared-ui/Caption"', output.read_text())
         output.write_text('// user edit\n' + output.read_text())
         failure = self.run_tool('generate_arkui_page.py', '--target', target, '--page-json', version,
                                '--page-output-dir', output.parent, '--force', expected=1)

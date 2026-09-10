@@ -36,10 +36,26 @@ identifier characters are legalized. Literal-only facts and implementation-only
 helpers have no original source symbol; they retain descriptive generated names.
 This is UI builder naming, not translation of all application methods or fields.
 
-The owned output file keeps its `Generated<Name>.ets` filename so existing
-regeneration ownership checks continue to work. Import the exported type recorded
-in `manifest.outputs[file].root_component`; do not infer the exported symbol from
-the filename. Existing host imports of `Generated<Name>` need that one-time update.
+New output follows the Android source-relative file path (`ui/Card.kt` becomes
+`ui/Card.ets` under the selected output directory). Owned legacy entry filenames
+are retained on regeneration so existing host imports keep working. Import the
+exported type recorded in `manifest.outputs[file].root_component`; do not infer
+the exported symbol from the filename.
+
+`arkui/source_modules.py` plans the output set from embedded definition identities.
+`arkts_source_modules.cjs` uses the SDK AST to relocate generated builders, interfaces,
+calls and imports, preserving string literals and native UI syntax. The shared parser
+locator lives in `arkts_sdk.py`; the backend does not import source discovery.
+Source-named functions and their private fact helpers are colocated in the source
+file. Only functions that transitively require page-owned state/helper access receive
+a typed auxiliary context parameter. Infrastructure without source ownership lives in
+`_migration/<page-identity>/`. No additional layout node is introduced.
+
+Every file is recorded in the page ownership manifest. Identical modules already
+owned by other pages can be reused; differing fixed-state specializations cannot
+overwrite shared files. Regeneration checks every old hash before a transactional
+write/delete and retains files still referenced by another page. This is source-file
+organization for the selected UI, not arbitrary Kotlin or domain-logic translation.
 
 Keep running the existing commands under `scripts/`. Copy/install the complete skill,
 not individual Python files; commands now import the adjacent `ui_migration` package.

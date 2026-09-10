@@ -70,6 +70,11 @@ never reuse by simple name alone. Unmapped components keep source-body translati
 Generated local component interfaces preserve source parameter names/order and declared
 types, including unused business/state parameters. See
 [generated interface boundaries](references/business-component-reuse.md#generated-component-interfaces).
+Page generation now groups those builders by Android source file under the chosen
+output directory, preserving cross-file calls instead of placing all definitions in
+one ETS. The ArkTS SDK parser is required (the same runtime as component discovery).
+Existing owned entry filenames are retained on regeneration; new files use the source
+filename. Read `source_organization` in the output manifest for the exact mapping.
 Do not claim that private rendered-fact Props or unresolved domain types are an equivalent
 business API, or that fixed-state UI generation ports callback implementations.
 For a fixed-state page whose business components must retain other UI alternatives, add

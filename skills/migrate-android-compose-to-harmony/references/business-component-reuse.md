@@ -171,8 +171,8 @@ interface inferred only from currently rendered text/images:
 
 ```typescript
 @Builder
-private AccountCard(title: string, accountId: number, loading: boolean) {
-  this.renderAccountCard({ title: title, viewId: 'AccountCard_Text' })
+export function AccountCard(title: string, accountId: number, loading: boolean) {
+  renderAccountCard({ title: title, viewId: 'AccountCard_Text' })
 }
 ```
 
@@ -180,7 +180,13 @@ The example's `accountId` and `loading` are retained even though the selected UI
 does not use them. Actual calls pass every parameter. Source defaults remain in JSON
 and are materialized at calls; emitted builder declarations currently require all args.
 Names are unchanged when legal/unambiguous; collisions need disambiguation. These are
-page-local builders, not automatically exported shared-library APIs.
+source-file builders, not verified general-purpose shared-library APIs. Their source
+relative paths are retained under the page output directory; same-file functions stay
+together and cross-file calls use generated imports. A typed auxiliary context parameter
+is added only when a builder transitively accesses page-owned state or runtime helpers.
+The manifest's `source_organization` records file/method mappings. Identical owned modules
+can be reused by another page; different selected-state bodies cause a conflict rather
+than silently overwriting another page's component.
 
 Type spelling follows ArkTS, while the JSON retains the original Kotlin declaration:
 
