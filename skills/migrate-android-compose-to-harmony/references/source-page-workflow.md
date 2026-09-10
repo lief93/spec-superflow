@@ -76,8 +76,9 @@ quote each argument normally, without embedding Python or setting `PYTHONPATH`.
 
 ## Live progress and slow-run diagnosis
 
-Commands are unchanged. `migrate_compose_page.py`, `analyze_compose_project.py` and
-`generate_source_page.py` now emit flushed `[progress]` JSON records on **stderr**.
+Commands are unchanged. `migrate_compose_page.py`, `analyze_compose_project.py`,
+`generate_source_page.py`, `generate_lanhu_source_page.py` and `generate_arkui_page.py`
+emit flushed `[progress]` JSON records on **stderr**.
 Stdout remains one final machine-readable JSON result. A wrapper must forward or
 tail stderr while the child is running, not wait for `communicate()` to finish.
 
@@ -91,6 +92,12 @@ The page command writes these files under its new `--output-dir`:
 - `NN-analysis.stderr.log`: live analyzer detail, including PSI file, function
   dependencies, cross-file symbol matching and call closures. Other stages have
   their corresponding stdout/stderr files; files are not delayed until process exit.
+- `NN-lanhu.stderr.log`: internal state projection, component-state variants, layout
+  calculation, layer export, validation and JSON packing/writing checkpoints.
+- `NN-arkui.stderr.log`: JSON decoding, visual defaults, document validation,
+  component-state decoding, ArkTS rendering and output writing checkpoints.
+  Internal records are forwarded live to the terminal and kept in these child logs;
+  `progress.jsonl` contains the parent-stage records, not all child records.
 
 For example, while an intake is running:
 
@@ -112,6 +119,22 @@ Records contain timestamp, process ID, phase, elapsed time, current file/functio
 specific loop, not overall migration percent. There is no periodic heartbeat or
 background logging thread. When work takes a long time, inspect the last unfinished
 stage and its latest file/function checkpoint to identify where to profile next.
+Internal steps emit `phase-start`, `phase-finished` (with `seconds`) or `phase-failed`.
+Recursive projection/export/rendering reports the current component `unit` as work
+advances; those checkpoints are throttled and do not emit while execution is idle.
+
+Shared string, number, color and enum validation errors include a bounded `actual`
+value preview and its Python type, plus length for strings/collections. Invisible
+characters are escaped and control-character positions are reported. For example:
+
+```text
+...migration.unresolved[0].reason must be a non-empty printable string (maximum 500); actual='bad\nreason' (type=str, length=10, control_positions=[3]; preview may be truncated)
+```
+
+The error appears in the child command result and failed-phase stderr record; the
+full page command also forwards the command error into `result.json`. Long values
+are truncated only in diagnostics, not in the input JSON. Invalid diagnostic records
+still fail validation; these messages do not silently repair or discard them.
 Silence alone does not prove a deadlock; this change adds diagnostics,
 not a performance fix or automatic timeout. Filenames and symbol names are logged,
 not complete source bodies. Apply company log-handling policy to these files.

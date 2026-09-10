@@ -1,6 +1,7 @@
 from __future__ import annotations
 import copy
 import re
+from ui_migration.progress import checkpoint
 from collections import defaultdict
 from component_required_facts import normalized_layout_rules
 from typing import Any
@@ -223,6 +224,7 @@ def lanhu_layer(
     component_id: str,
     scale: float,
 ) -> dict[str, Any]:
+    checkpoint('export-layers', unit=component_id)
     node = tree.nodes[component_id]
     component_type = str(node.get("type") or "Group")
     surface = style_group(node, "surface")

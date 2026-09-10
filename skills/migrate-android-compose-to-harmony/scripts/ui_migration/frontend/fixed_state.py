@@ -1,6 +1,7 @@
 from __future__ import annotations
 import copy
 import re
+from ui_migration.progress import checkpoint
 from collections import defaultdict
 from component_required_facts import build_required_facts, is_preview_only_placeholder_expression, normalized_layout_rules, required_fact_gate
 from typing import Any
@@ -563,6 +564,8 @@ def project_source_page(
         environment: dict[str, Any],
         suffix: str,
     ) -> str | None:
+        checkpoint('project-components', unit=component_id + suffix,
+                   emitted=len(emitted), source_components=len(original))
         source = original[component_id]
         local = resolve_environment(source, environment)
         if source.get('source', {}).get('callable_definition_only'):

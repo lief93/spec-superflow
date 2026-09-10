@@ -4,6 +4,7 @@ from component_required_facts import build_required_facts
 from component_required_facts import required_fact_gate
 from pathlib import Path
 from typing import Any
+from ui_migration.progress import Progress, step, checkpoint, phase, tracked
 from ui_migration.contracts.component_ui_states import variant_source_generation
 from ui_migration.contracts.lanhu_storage import pack_lanhu_document
 from ui_migration.frontend.fixed_state import evaluate_expression
@@ -120,17 +121,17 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         raise ValueError("viewport dimensions must be positive")
     if args.slice_scale <= 0:
         raise ValueError("slice scale must be positive")
-    source_payload = copy.deepcopy(projected_payload) if projected_payload is not None else read_json(args.source_page)
-    source_payload = unpack_source_page(source_payload)
+    source_payload = copy.deepcopy(projected_payload) if projected_payload is not None else step('read-source-json', read_json, args.source_page)
+    source_payload = step('decode-source-storage', unpack_source_page, source_payload)
     raw_payload = copy.deepcopy(source_payload)
     from ui_migration.frontend.api_adapters.loader import load_adapters
     from ui_migration.frontend.api_adapters.builtins import BUILTIN_ADAPTERS
-    registry = load_adapters(getattr(args, 'api_adapters', None), BUILTIN_ADAPTERS)
+    registry = step('load-adapters', load_adapters, getattr(args, 'api_adapters', None), BUILTIN_ADAPTERS)
     state_projection = None
     if projected_payload is not None:
         pass
     elif args.state_fixture is not None:
-        source_payload, state_projection = project_source_page(
+        source_payload, state_projection = step('project-state', project_source_page,
             source_payload, read_json(args.state_fixture), allow_unresolved=True, api_registry=registry
         )
     elif source_payload.get('page_host') or (source_payload.get('style_definitions') or {}).get('tokenMappings') or (source_payload.get('style_definitions') or {}).get('componentDefaults') or getattr(args, 'api_adapters', None) is not None or any(
@@ -143,7 +144,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
                                    or any(m.get('name') == 'then' for m in node.get('modifiers', [])))
         for node in source_payload.get("components") or []
     ):
-        source_payload, state_projection = project_source_page(source_payload, {
+        source_payload, state_projection = step('project-state', project_source_page, source_payload, {
             "schema": "android-to-harmony.page-state-fixture.v1",
             "page": source_payload.get("page"),
             "values": {},
@@ -153,7 +154,8 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         from ui_migration.frontend.component_ui_states import preserve_component_states
         fixture = read_json(args.state_fixture) if args.state_fixture else {
             'schema':'android-to-harmony.page-state-fixture.v1', 'page':raw_payload['page'], 'values':{}}
-        source_payload, catalogs = preserve_component_states(raw_payload, source_payload, fixture, registry)
+        source_payload, catalogs = step('preserve-component-states', preserve_component_states,
+                                        raw_payload, source_payload, fixture, registry)
     resolve_native_content_colors(source_payload)
     for node in source_payload.get('components', []):
         if 'input_decoration' not in (node.get('source') or {}):
@@ -166,7 +168,8 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
     expand_surface_padding(source_payload)
     expand_material_touch_targets(source_payload)
     expand_ordered_layout_modifiers(source_payload)
-    for component in source_payload.get("components") or []:
+    for component in tracked(source_payload.get("components") or [], 'prepare-component-facts',
+                             lambda n: n.get('id') if isinstance(n, dict) else type(n).__name__):
         if isinstance(component, dict):
             content = style_group(component, "content")
             text = content.get("text")
@@ -187,14 +190,15 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
                         "reason": "text did not resolve to a string; no placeholder or object stringification",
                     })
             component["required_facts"] = build_required_facts(component)
-    tree = SourceTree(source_payload)
+    tree = step('build-source-tree', SourceTree, source_payload)
     if state_projection is not None or tree.root_layout_context == 'caller_owned':
         state_projection = {**(state_projection or {}), 'active_root_ids': tree.root_ids,
                             'active_root_id': tree.root_id if len(tree.root_ids) == 1 else None,
                             'root_layout_context': tree.root_layout_context}
         tree.payload['state_projection'] = state_projection
     layout = SourceLayout(tree, args.viewport_width_dp, args.viewport_height_dp)
-    layout.calculate()
+    with phase('calculate-layout', components=len(tree.nodes)):
+        layout.calculate()
     # Parameter-forwarded padding is resolved during measurement; retain that
     # same value in the final facts rather than leaving the original symbol.
     for component in tree.nodes.values():
@@ -210,10 +214,11 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         "height": clean_number(args.viewport_height_dp * args.slice_scale),
     }
     page = tree.payload.get("page") or {}
-    fact_gate = required_fact_gate(list(tree.nodes.values()))
-    root_layers = [lanhu_layer(tree, layout, root_id, args.slice_scale) for root_id in tree.root_ids]
-    phase_gate = build_phase_consumption_gate(layout)
-    manifest = component_manifest(tree, layout)
+    fact_gate = step('validate-required-facts', required_fact_gate, list(tree.nodes.values()))
+    with phase('build-lanhu-layers', components=len(tree.nodes)):
+        root_layers = [lanhu_layer(tree, layout, root_id, args.slice_scale) for root_id in tree.root_ids]
+    phase_gate = step('validate-source-consumption', build_phase_consumption_gate, layout)
+    manifest = step('build-component-manifest', component_manifest, tree, layout)
     unresolved = [{'component_id': tree.root_id, **item}
                   for item in [*source_payload.get('source_diagnostics', []), *source_payload.get('unresolved', [])]]
     warnings = []
@@ -291,8 +296,8 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
     if projected_payload is not None:
         return {'version':version_json, 'unresolved':unresolved, 'warnings':warnings}
     if catalogs:
-        for catalog in catalogs:
-            for variant in catalog['variants']:
+        for catalog in tracked(catalogs, 'component-state-catalogs', lambda c: c['name']):
+            for variant in tracked(catalog['variants'], 'component-state-variants', lambda v: catalog['name'] + '/' + v['id']):
                 result = generate(args, projected_payload=variant.pop('payload'))
                 document = result['version']
                 variant['layer'] = document['artboard']['layers'][0]
@@ -305,15 +310,17 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         version_json['meta']['sourceGeneration'].update(generationComplete=generation_complete,
             verdict='pass' if generation_complete else 'fail', unresolved=unresolved)
     output_dir = args.output_dir.resolve()
-    stored_version = pack_lanhu_document(version_json)
-    write_json(output_dir / "version_json.json", stored_version)
-    write_json(output_dir / "component-manifest.json", manifest)
-    write_json(output_dir / "page-state-manifest.json", state_manifest(tree))
+    stored_version = step('pack-lanhu-json', pack_lanhu_document, version_json)
+    step('write-version-json', write_json, output_dir / "version_json.json", stored_version)
+    step('write-component-manifest', write_json, output_dir / "component-manifest.json", manifest)
+    step('write-page-state-manifest', write_json, output_dir / "page-state-manifest.json", state_manifest(tree))
     from ui_migration.frontend.unresolved_worklist import build_worklist
-    worklist = build_worklist(version_json, tree, unresolved)
+    worklist = step('build-unresolved-worklist', build_worklist, version_json, tree, unresolved)
     from init_harmony_project import sha256_file
     worklist['version_json_sha256'] = sha256_file(output_dir / 'version_json.json')
-    write_json(output_dir / 'unresolved-worklist.json', worklist)
+    step('write-unresolved-worklist', write_json, output_dir / 'unresolved-worklist.json', worklist)
+    checkpoint('lanhu-output', completed=len(tree.nodes), total=len(tree.nodes),
+               unresolved=len(unresolved), output=str(output_dir))
     return {
         "status": "generated_requires_screenshot_validation" if generation_complete else "partial_generation",
         "generation_complete": generation_complete,
@@ -337,7 +344,8 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
 
 def main() -> int:
     try:
-        result = generate(parse_args())
+        with Progress('lanhu'):
+            result = generate(parse_args())
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(json.dumps({"status": "failed", "error": str(error)}, ensure_ascii=False))
         return 2

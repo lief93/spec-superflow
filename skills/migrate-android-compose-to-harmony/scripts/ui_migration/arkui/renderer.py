@@ -1,6 +1,7 @@
 from __future__ import annotations
 import copy
 import re
+from ui_migration.progress import checkpoint
 from collections import defaultdict
 from page_component_catalog import NATIVE_CONTAINERS, NATIVE_LEAVES
 from typing import Any
@@ -339,6 +340,8 @@ class Renderer:
         parent_type: str | None,
         indent: int,
     ) -> list[str]:
+        checkpoint('render-components', unit=component['id'],
+                   processed=len(self.android_page_processed_component_ids))
         prefix = " " * indent
         component_type = component["type"]
         selection = (component.get('source') or {}).get('state_resolution') or {}

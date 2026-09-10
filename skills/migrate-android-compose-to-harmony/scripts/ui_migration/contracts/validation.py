@@ -8,6 +8,7 @@ from component_required_facts import normalize_required_facts
 from page_snapshot import PageSnapshotError, normalize_provenance, normalize_style, normalize_unresolved, require_token
 from pathlib import Path
 from typing import Any
+from ui_migration.progress import checkpoint
 from ui_migration.common import ArkUIPageError, LANHU_VERSION_KEYS, PAGE_INPUT_MAX_BYTES, RESOURCE_NAME_PATTERN
 
 
@@ -235,6 +236,7 @@ def validate_lanhu_version_document(version: dict[str, Any]) -> None:
             )
             raise ArkUIPageError(f"Lanhu layer is missing required fields: {missing}")
         layer_id = layer.get("id")
+        checkpoint('validate-layer', unit=layer_id)
         for field in ("id", "name", "type"):
             try:
                 require_token(layer[field], f"Lanhu layer {layer_id} {field}")

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import reprlib
 import struct
 import sys
 import tempfile
@@ -56,6 +57,26 @@ class PageSnapshotError(RuntimeError):
     pass
 
 
+def actual_value(value: Any) -> str:
+    preview = reprlib.Repr()
+    preview.maxstring = preview.maxother = 240
+    preview.maxlist = preview.maxtuple = preview.maxdict = 3
+    preview.maxlevel = 2
+    details = [f'type={type(value).__name__}']
+    if isinstance(value, (str, list, tuple, dict)):
+        details.append(f'length={len(value)}')
+    if isinstance(value, str):
+        positions = []
+        for index, char in enumerate(value):
+            if ord(char) < 32:
+                positions.append(index)
+                if len(positions) == 5:
+                    break
+        if positions:
+            details.append(f'control_positions={positions}')
+    return f'actual={preview.repr(value)} ({", ".join(details)}; preview may be truncated)'
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -89,18 +110,18 @@ def load_json(path: Path, label: str) -> tuple[dict[str, Any], Path]:
 
 def require_token(value: Any, label: str) -> str:
     if not isinstance(value, str) or SAFE_TOKEN.fullmatch(value) is None:
-        raise PageSnapshotError(f"{label} must use 1 to 120 identifier characters")
+        raise PageSnapshotError(f"{label} must use 1 to 120 identifier characters; {actual_value(value)}")
     return value
 
 
 def finite_number(value: Any, label: str, minimum: float | None = None) -> float:
     if type(value) not in {int, float} or not isinstance(value, (int, float)):
-        raise PageSnapshotError(f"{label} must be a finite number")
+        raise PageSnapshotError(f"{label} must be a finite number; {actual_value(value)}")
     number = float(value)
     if number != number or number in {float("inf"), float("-inf")}:
-        raise PageSnapshotError(f"{label} must be a finite number")
+        raise PageSnapshotError(f"{label} must be a finite number; {actual_value(value)}")
     if minimum is not None and number < minimum:
-        raise PageSnapshotError(f"{label} must be at least {minimum}")
+        raise PageSnapshotError(f"{label} must be at least {minimum}; {actual_value(value)}")
     return round(number, 3)
 
 
@@ -115,7 +136,7 @@ def bounded_string(value: Any, label: str, maximum: int = 500) -> str:
         or len(value) > maximum
         or any(ord(character) < 32 for character in value)
     ):
-        raise PageSnapshotError(f"{label} must be a non-empty printable string")
+        raise PageSnapshotError(f"{label} must be a non-empty printable string (maximum {maximum}); {actual_value(value)}")
     return value
 
 
@@ -123,7 +144,7 @@ def display_string(value: Any, label: str, maximum: int = 10000) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or len(value) > maximum or "\x00" in value:
-        raise PageSnapshotError(f"{label} must be a bounded UTF-8 display string")
+        raise PageSnapshotError(f"{label} must be a bounded UTF-8 display string (maximum {maximum}); {actual_value(value)}")
     return value
 
 
@@ -131,7 +152,7 @@ def optional_enum(value: Any, label: str, choices: set[str]) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or value not in choices:
-        raise PageSnapshotError(f"{label} is unsupported")
+        raise PageSnapshotError(f"{label} is unsupported; {actual_value(value)}")
     return value
 
 
@@ -139,7 +160,7 @@ def optional_color(value: Any, label: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or COLOR_PATTERN.fullmatch(value) is None:
-        raise PageSnapshotError(f"{label} must be #RRGGBB or #AARRGGBB")
+        raise PageSnapshotError(f"{label} must be #RRGGBB or #AARRGGBB; {actual_value(value)}")
     return value.upper()
 
 
@@ -436,7 +457,7 @@ def normalize_unresolved(value: Any, label: str) -> list[dict[str, str]]:
             raise PageSnapshotError(f"{label}[{index}] is malformed")
         expression = display_string(item['expression'], f'{label}[{index}].expression')
         if not expression or any(ord(c) < 32 and c not in '\r\n\t' for c in expression):
-            raise PageSnapshotError(f'{label}[{index}].expression must be non-empty source text')
+            raise PageSnapshotError(f'{label}[{index}].expression must be non-empty source text; {actual_value(expression)}')
         result.append(
             {
                 "path": bounded_string(item["path"], f"{label}[{index}].path", 240),

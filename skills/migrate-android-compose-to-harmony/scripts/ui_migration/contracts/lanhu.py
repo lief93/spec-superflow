@@ -10,6 +10,7 @@ from ui_migration.common import ArkUIPageError, LANHU_COMPONENT_MANIFEST_SCHEMA,
 from ui_migration.contracts.identity import canonical_sha256, require_safe_relative_source
 from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
 from ui_migration.contracts.style_defaults import prepare_style_defaults, apply_style_defaults
+from ui_migration.progress import step, tracked
 from ui_migration.contracts.validation import apply_lanhu_visual_style, load_bounded_json_object, normalize_lanhu_layout_relationships, require_lanhu_frame, require_lanhu_number, validate_lanhu_version_document
 
 
@@ -19,15 +20,15 @@ def load_lanhu_page_input(
     *, _version: dict | None = None,
 ) -> dict[str, Any]:
     if _version is None:
-        version, version_path, version_bytes = load_bounded_json_object(version_json_path, "Lanhu version_json")
+        version, version_path, version_bytes = step('read-version-json', load_bounded_json_object, version_json_path, "Lanhu version_json")
     else:
         version, version_path, version_bytes = _version, version_json_path, 0
     try:
-        version = unpack_lanhu_document(version)
+        version = step('decode-lanhu-storage', unpack_lanhu_document, version)
     except ValueError as error:
         raise ArkUIPageError(str(error)) from error
-    style_warnings = prepare_style_defaults(version)
-    validate_lanhu_version_document(version)
+    style_warnings = step('apply-visual-defaults', prepare_style_defaults, version)
+    step('validate-lanhu-document', validate_lanhu_version_document, version)
     manifest: dict[str, Any] | None = None
     manifest_path: Path | None = None
     manifest_bytes = 0
@@ -186,7 +187,7 @@ def load_lanhu_page_input(
 
     full_frames: dict[str, dict[str, float]] = {}
     visible_frames: dict[str, dict[str, float]] = {}
-    for component_id in layer_order:
+    for component_id in tracked(layer_order, 'decode-layer-geometry'):
         raw_frame = require_lanhu_frame(
             layers_by_id[component_id].get("frame"), f"Lanhu layer {component_id}"
         )
@@ -440,7 +441,7 @@ def load_lanhu_page_input(
             "sha256": sha256_file(manifest_path),
         }
     from ui_migration.contracts.component_ui_states import decode_catalogs
-    result['component_ui_states'] = decode_catalogs(version,
+    result['component_ui_states'] = step('decode-component-states', decode_catalogs, version,
         lambda document: load_lanhu_page_input(version_json_path, _version=document))
     for catalog in result['component_ui_states'].values():
         for variant in catalog['variants']:

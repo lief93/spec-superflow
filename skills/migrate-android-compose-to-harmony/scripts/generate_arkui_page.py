@@ -8,6 +8,7 @@ from typing import Any
 import argparse
 import hashlib
 import json
+from ui_migration.progress import Progress, step, checkpoint, phase
 from ui_migration.naming import source_identifier
 from ui_migration.contracts.identity import canonical_sha256, require_contract_ui, require_safe_relative_source
 from ui_migration.arkui.project import normalize_target, require_module, validate_previous
@@ -67,7 +68,7 @@ def generate(
 ) -> dict[str, Any]:
     target = normalize_target(target_path)
     require_module(target, module)
-    android_page_input = load_lanhu_page_input(page_json)
+    android_page_input = step('load-page-json', load_lanhu_page_input, page_json)
     if not android_page_input.get("source_generated"):
         raise ArkUIPageError(
             "--page-json must be a source-generated Lanhu version_json"
@@ -76,21 +77,22 @@ def generate(
     identity = hashlib.sha256(
         f"{root['source']}#{root['composable']}".encode("utf-8")
     ).hexdigest()[:16]
-    resource_names, string_values = load_theme_resources(target, module)
+    resource_names, string_values = step('load-target-resources', load_theme_resources, target, module)
     required_gate = android_page_input.get("required_fact_gate")
     tinted_vector_resources, tinted_vector_payloads, tinted_vector_records = (
-        derive_page_tinted_vectors(target, module, identity, android_page_input)
+        step('derive-tinted-vectors', derive_page_tinted_vectors, target, module, identity, android_page_input)
     )
-    renderer = Renderer(
+    renderer = step('initialize-renderer', Renderer,
         root,
         resource_names,
         string_values,
         android_page_input,
         tinted_vector_resources,
     )
-    renderer.verified_font_faces = load_page_font_faces(target, module, android_page_input)
-    source = renderer.render()
-    target_phase_gate = build_target_phase_consumption_gate(
+    renderer.verified_font_faces = step('verify-font-assets', load_page_font_faces, target, module, android_page_input)
+    with phase('render-arkts', components=len(android_page_input['components'])):
+        source = renderer.render()
+    target_phase_gate = step('validate-target-consumption', build_target_phase_consumption_gate,
         android_page_input,
         renderer.android_page_processed_component_ids,
         renderer.android_page_processed_call_ids,
@@ -204,12 +206,14 @@ def generate(
             },
         }
         manifest["android_page_input"]["version_json"] = android_page_input["version_json"]
-    manifest_bytes = json_bytes(manifest)
-    commit_payloads({
+    manifest_bytes = step('serialize-arkui-manifest', json_bytes, manifest)
+    step('write-arkui-output', commit_payloads, {
         output_path: output_bytes,
         manifest_path: manifest_bytes,
         **tinted_vector_payloads,
     })
+    checkpoint('arkui-output', output=str(output_path), unresolved=len(renderer.unresolved),
+               completed=len(renderer.android_page_processed_component_ids), total=len(renderer.android_page_by_id))
     return {
         "target": str(target),
         "module": module,
@@ -238,12 +242,8 @@ def generate(
 def main() -> int:
     args = parse_args()
     try:
-        result = generate(
-            args.target,
-            args.module,
-            args.page_json,
-            args.force,
-        )
+        with Progress('arkui'):
+            result = generate(args.target, args.module, args.page_json, args.force)
     except (ArkUIPageError, OSError, TypeError, ValueError) as error:
         print(
             json.dumps(
