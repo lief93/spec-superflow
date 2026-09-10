@@ -94,12 +94,14 @@ fun choose(pressed: Boolean): Color = if (pressed) company.DeclarativeTheme.colo
                 self.assertNotIn('ThemeBridge', code)
                 self.assertTrue(result['generation_complete'], result['unresolved'])
 
-    def test_cyclic_getter_is_unresolved_not_default_black(self):
-        _, code, result, _ = self.generate('Text("A", color = Tokens.a ?: Color.Black)', '''
+    def test_cyclic_getter_stays_unresolved_in_source_but_target_reports_default(self):
+        page, code, result, _ = self.generate('Text("A", color = Tokens.a ?: Color.Black)', '''
 object Tokens { val a: Color get() = b; val b: Color get() = a }
 ''', EXTENSION)
         self.assertFalse(result['generation_complete'])
-        self.assertNotIn(".fontColor('#FF000000')", code)
+        self.assertIn(".fontColor('#FF000000')", code)
+        self.assertTrue(any(w.get('kind') == 'style_default_applied' and w['path'] == 'style.typography.color'
+                            for w in page['generation_warnings']))
 
     def test_repeated_properties_keep_independent_keys(self):
         _, code, result, renderer = self.generate('Column { Text("A", color = company.DeclarativeTheme.colors.first); Text("B", color = company.DeclarativeTheme.colors.second) }', extension=EXTENSION)

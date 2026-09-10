@@ -148,14 +148,16 @@ class ComponentUiStatesTest(unittest.TestCase):
         self.assertFalse(result['generation_complete'])
         self.assertTrue(any('PSI when branches disagree' in str(u) for u in result['unresolved']))
 
-    def test_nonselected_unresolved_style_remains_a_generation_failure(self):
+    def test_nonselected_unresolved_style_gets_reported_target_default(self):
         _, renderer, _, result = compile_states('''
 @Composable fun Page() { Badge(false) }
 @Composable fun Badge(loading: Boolean) { if(loading) { Text("Wait", color = unknownColor) } else { Text("Ready", color = Color.Black) } }
 ''')
         self.assertFalse(result['generation_complete'])
         self.assertTrue(any(u.get('component_ui_state') == 'Badge/then' for u in result['unresolved']))
-        self.assertTrue(any('unknownColor' in str(u) for u in renderer.unresolved))
+        self.assertFalse(any('unknownColor' in str(u) for u in renderer.unresolved))
+        self.assertTrue(any('unknownColor' in str(w) and w.get('component_ui_state') == 'Badge/then'
+                            for w in renderer.android_page_input['generation_warnings']))
 
 
 if __name__ == '__main__':

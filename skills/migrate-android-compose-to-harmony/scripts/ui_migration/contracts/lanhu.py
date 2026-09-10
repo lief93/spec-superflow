@@ -9,6 +9,7 @@ from typing import Any
 from ui_migration.common import ArkUIPageError, LANHU_COMPONENT_MANIFEST_SCHEMA, PAGE_SNAPSHOT_COLUMN_COMPONENTS, PAGE_SNAPSHOT_ROW_COMPONENTS
 from ui_migration.contracts.identity import canonical_sha256, require_safe_relative_source
 from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
+from ui_migration.contracts.style_defaults import prepare_style_defaults, apply_style_defaults
 from ui_migration.contracts.validation import apply_lanhu_visual_style, load_bounded_json_object, normalize_lanhu_layout_relationships, require_lanhu_frame, require_lanhu_number, validate_lanhu_version_document
 
 
@@ -25,6 +26,7 @@ def load_lanhu_page_input(
         version = unpack_lanhu_document(version)
     except ValueError as error:
         raise ArkUIPageError(str(error)) from error
+    style_warnings = prepare_style_defaults(version)
     validate_lanhu_version_document(version)
     manifest: dict[str, Any] | None = None
     manifest_path: Path | None = None
@@ -166,6 +168,8 @@ def load_lanhu_page_input(
             instances[component_id] = instance
 
     for component_id, instance in instances.items():
+        if manifest is not None:
+            style_warnings.extend(apply_style_defaults(instance, component_id, facts_key='required_facts'))
         raw_facts = instance.get("required_facts")
         if raw_facts is None:
             raw_facts = instance.get("requiredFacts")
@@ -423,7 +427,7 @@ def load_lanhu_page_input(
         "source_generated": source_generated,
         "root_layout_context": (source_generation.get("stateProjection") or {}).get("root_layout_context")
         if isinstance(source_generation, dict) else None,
-        "generation_warnings": source_generation.get('warnings', []) if isinstance(source_generation, dict) else [],
+        "generation_warnings": (source_generation.get('warnings', []) if isinstance(source_generation, dict) else []) + style_warnings,
         "font_faces": migration_meta.get("fontFaces", []) if isinstance(migration_meta, dict) else [],
         "component_definitions": migration_meta.get('componentDefinitions', []) if isinstance(migration_meta, dict) else [],
         "required_fact_gate": required_fact_gate(list(instances.values())),
@@ -438,6 +442,11 @@ def load_lanhu_page_input(
     from ui_migration.contracts.component_ui_states import decode_catalogs
     result['component_ui_states'] = decode_catalogs(version,
         lambda document: load_lanhu_page_input(version_json_path, _version=document))
+    for catalog in result['component_ui_states'].values():
+        for variant in catalog['variants']:
+            result['generation_warnings'].extend({**warning,
+                'component_ui_state': catalog['name'] + '/' + variant['id']}
+                for warning in variant['page']['generation_warnings'])
     return result
 
 

@@ -222,7 +222,7 @@ class PageRun:
         self.report.update(ok=True, status='generated' if complete else 'partial_generation',
             current_stage=None,
             generation_complete=complete, verdict='pass' if complete else 'fail',
-            warnings=lanhu.get('warnings', []),
+            warnings=arkui.get('warnings', lanhu.get('warnings', [])),
             source_page=str(source_page), version_json=str(version),
             arkui={'output':str(self.target/arkui['output']), 'manifest':str(self.target/arkui['manifest']),
                 'input_mode':'page-json-only', 'unresolved_count':arkui['unresolved_count']})

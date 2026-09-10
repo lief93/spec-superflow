@@ -162,7 +162,7 @@ def generate(
         "derived_page_assets": tinted_vector_records,
         "limitations": [
             "The generator consumes only the source-generated version_json and target-owned resources.",
-            "Missing or symbolic page facts are recorded as unresolved and are never filled from Android source or a migration contract.",
+            "Known visual properties can use reported migration defaults before validation; no Android source or contract is read.",
             "A successful ArkTS build proves source compatibility, not visual or behavioral parity.",
         ],
     }
