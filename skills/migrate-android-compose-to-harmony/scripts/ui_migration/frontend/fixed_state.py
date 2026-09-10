@@ -150,7 +150,7 @@ def project_source_page(
 
     styles = SourceStyleProjector(SourceStyleAdapters(
         ordered_modifier_chain, static_style_for_call, MATERIAL3_TYPOGRAPHY,
-    ))
+    ), token_mappings=(payload.get('style_definitions') or {}).get('tokenMappings'))
     from ui_migration.frontend.component_defaults import ComponentStyleDefaults
     component_defaults = ComponentStyleDefaults(payload.get('style_definitions') or {})
     from ui_migration.frontend.style_tokens import StyleTokenProjector
@@ -312,7 +312,8 @@ def project_source_page(
                 local[name] = fixture['values'][name]
                 continue
             scope = (node.get('parameter_scopes') or {}).get(name, {})
-            resolved = evaluate_expression(str(expression), {**local, **scope}, preserve_units=True)
+            source_type = next((p.get('type') for p in function.get('parameters', []) if p['name'] == name), None)
+            resolved = evaluate_expression(str(expression), {**local, **scope}, preserve_units=True, source_type=source_type)
             local[str(name)] = resolved
             if resolved is not UNRESOLVED:
                 local[str(expression)] = resolved
@@ -593,7 +594,9 @@ def project_source_page(
                 scoped = {**local, **metadata.get('invocation_scopes', {}).get(name, {})}
                 if name in metadata.get('invocation_defaults', []):
                     scoped.update(arguments)
-                return evaluate_expression(expression, scoped, preserve_units=True)
+                definition = component_reuse.definitions.get(source.get('definition_id'), {})
+                source_type = next((p.get('type') for p in definition.get('parameters', []) if p['name'] == name), None)
+                return evaluate_expression(expression, scoped, preserve_units=True, source_type=source_type)
             reuse = component_reuse.resolve(source, reuse_argument)
         except ValueError as error:
             reuse, reuse_error = None, str(error)

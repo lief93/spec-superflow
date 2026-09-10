@@ -21,6 +21,30 @@ PROPERTY_TYPES = {
 }
 
 
+def property_source_type(path):
+    """The native consumer supplies type evidence, not a business field's spelling."""
+    kind, unit, _ = PROPERTY_TYPES[path]
+    if kind == 'dimension':
+        return 'androidx.compose.ui.unit.' + ('Dp' if unit == 'dp' else 'TextUnit')
+    return {'color': 'androidx.compose.ui.graphics.Color',
+            'string': 'kotlin.String', 'number': 'kotlin.Float'}[kind]
+
+
+def validate_property_literal(path, value):
+    """Reject definite scalar type errors; unresolved and structured values have other validators."""
+    if value is None or type(value) not in (str, bool, int, float):
+        return
+    kind = PROPERTY_TYPES[path][0]
+    if kind == 'string':
+        valid = isinstance(value, str)
+    elif kind == 'color':
+        valid = isinstance(value, str) and re.fullmatch(r'#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?', value)
+    else:
+        valid = type(value) in (int, float) and math.isfinite(value)
+    if not valid:
+        raise ValueError(f'{path}: expected {kind}, got {type(value).__name__}: {value!r}')
+
+
 def validate_target(target):
     identifier = r'[A-Za-z_][A-Za-z_0-9]*'
     member = identifier + r'(?:\.' + identifier + r')*'

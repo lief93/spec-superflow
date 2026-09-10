@@ -54,7 +54,8 @@ class TypeParser:
         else:
             name = self.take().removeprefix('kotlin.').removeprefix('collections.')
             scalar = {'String':'string', 'Boolean':'boolean', 'Byte':'number', 'Short':'number',
-                      'Int':'number', 'Float':'number', 'Double':'number', 'Unit':'void'}
+                      'Int':'number', 'Float':'number', 'Double':'number', 'Unit':'void',
+                      'Color':'ResourceColor', 'androidx.compose.ui.graphics.Color':'ResourceColor'}
             if name in scalar:
                 node = {'kind':'scalar', 'target':scalar[name], 'source':name}
             elif name in {'List', 'MutableList', 'Array', 'Set', 'MutableSet', 'Map', 'MutableMap'}:
@@ -111,7 +112,7 @@ def value_matches(value, node):
     if is_resource_value(value):
         spec = validate_resource_value(value)
         # Color/dimension are not interchangeable with unqualified string/number arguments.
-        return node['kind'] == 'scalar' and spec['kind'] == node['target']
+        return node['kind'] == 'scalar' and spec['kind'] == {'ResourceColor':'color'}.get(node['target'], node['target'])
     if node['kind'] == 'function':
         return (isinstance(value, dict) and value.get('kind') == 'empty_callback'
                 and type_text(node['result']) == 'void')
@@ -120,6 +121,8 @@ def value_matches(value, node):
             return isinstance(value, list) and all(value_matches(v, node['items'][0]) for v in value)
         return False
     source = node['source']
+    if node['target'] == 'ResourceColor':
+        return isinstance(value, str) and re.fullmatch(r'#[0-9a-fA-F]{8}', value) is not None
     if source == 'String':
         return type(value) is str
     if source == 'Boolean':

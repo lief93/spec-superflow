@@ -4,7 +4,7 @@ import copy
 from kotlin_psi import KotlinPsiSyntaxError, parse_expression
 from ui_migration.semantics.syntax import qualified_name, call_from
 from ui_migration.semantics.expressions import LayoutExpressionError
-from ui_migration.contracts.style_tokens import validate_token_mappings, validate_property_token
+from ui_migration.contracts.style_tokens import property_source_type, validate_property_literal, validate_token_mappings, validate_property_token
 from ui_migration.contracts.resource_values import is_resource_value, validate_resource_value
 from .component_defaults import has_source_owner
 from .values import value_resolver
@@ -55,9 +55,19 @@ class StyleTokenProjector:
             tree = select(tree)
             name = qualified_name(tree)
             try:
-                value = resolver.value(tree)
+                source_type = property_source_type(path)
+                from .api_adapters.registry import AdapterRegistry
+                mapped_name = AdapterRegistry.qualified_symbol(name, imports) if name else None
+                value = resolver.value(tree) if mapped_name in self.mappings else resolver.typed_value(tree, source_type)
             except LayoutExpressionError:
                 value = None
+            if mapped_name not in self.mappings:
+                try:
+                    validate_property_literal(path, value)
+                except ValueError as error:
+                    result.setdefault('unresolved', []).append({'path': 'source.arguments.' + path,
+                        'expression': tree.get('text', ''), 'reason': str(error)})
+                    return
             if is_resource_value(value):
                 call = call_from(tree)
                 name = name or (call.qualified_name if call else 'resource')

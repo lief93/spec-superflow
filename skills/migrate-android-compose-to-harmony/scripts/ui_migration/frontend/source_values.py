@@ -17,6 +17,8 @@ def matches_source_type(value, name):
     from ui_migration.contracts.resource_values import is_resource_value, validate_resource_value
     if is_resource_value(value):
         spec = validate_resource_value(value)
+        if spec['kind'] == 'object':
+            return name == spec['sourceType']
         expected = {'Color': ('color', None), 'String': ('string', None),
                     'Dp': ('dimension', 'dp'), 'TextUnit': ('dimension', 'sp'),
                     'Int': ('number', None), 'Long': ('number', None),
@@ -50,9 +52,9 @@ def bind_arguments(call, parameters, context, seen, *, partial=False):
                 argument = None
         try:
             if argument is not None:
-                local[name] = context.value(argument, seen)
+                local[name] = context.typed_value(argument, parameter.get('type'), seen)
             elif isinstance(parameter.get('default'), str):
-                local[name] = scoped.value(parse_expression(parameter['default']), seen)
+                local[name] = scoped.typed_value(parse_expression(parameter['default']), parameter.get('type'), seen)
             else:
                 raise LayoutExpressionError('missing source parameter: ' + name)
         except LayoutExpressionError:
@@ -109,7 +111,7 @@ def source_function_scope(call, context, seen, receiver_type=None):
                 # Type filtering resolves overloads; it is not a Kotlin type checker.
                 if len(functions) > 1 and not matches_source_type(value, parameter.get('type', '')):
                     raise LayoutExpressionError('source overload type mismatch')
-                if parameter['type'] == 'Dp' and not (isinstance(value, LayoutDimension) and value.unit == 'dp'):
+                if parameter['type'] == 'Dp' and not matches_source_type(value, 'Dp'):
                     raise LayoutExpressionError('Dp overload mismatch')
                 if parameter['type'] == 'Shape' and not isinstance(value, dict):
                     raise LayoutExpressionError('Shape overload mismatch')
@@ -120,7 +122,7 @@ def source_function_scope(call, context, seen, receiver_type=None):
                         if name not in parameter_names:
                             scoped.values[name] = value
             scoped.values.update(__source_file=function['source'], __source_owner=function.get('owner'),
-                                 __source_imports=function.get('imports', {}))
+                                 __source_imports=function.get('imports', {}), __return_type=function.get('return_type'))
             candidates.append((scoped, function['body'], path))
         except LayoutExpressionError:
             continue
@@ -131,7 +133,7 @@ def source_function_scope(call, context, seen, receiver_type=None):
     return None
 
 
-def source_property_value(name, context, seen):
+def source_property_value(name, context, seen, *, expected_type=None):
     functions = context.values.get('__source_functions', [])
     source = context.values.get('__source_file')
     properties = context.values.get('__source_properties', [])
@@ -151,7 +153,8 @@ def source_property_value(name, context, seen):
         local.pop(candidate['name'], None)
     local.update(__source_file=property['source'], __source_owner=property.get('owner'),
                  __source_imports=property.get('imports', {}))
-    return context.scoped(local, {}).value(property.get('value_syntax') or parse_expression(property['expression']), seen+(identity,))
+    return context.scoped(local, {}).typed_value(property.get('value_syntax') or parse_expression(property['expression']),
+        property.get('type') or expected_type, seen+(identity,))
 
 
 def source_call_value(call, context, seen):
@@ -171,7 +174,7 @@ def source_call_value(call, context, seen):
         scope = source_function_scope(reference, target.context, seen+(identity,))
         if scope:
             scoped, body, path = scope
-            return scoped.value(body, path)
+            return scoped.typed_value(body, scoped.values.get('__return_type'), path)
     if call.receiver is not None and call.name.startswith('component') and not call.arguments:
         index = call.name.removeprefix('component')
         if index.isdigit():
@@ -182,7 +185,7 @@ def source_call_value(call, context, seen):
     function = source_function_scope(call, context, seen)
     if function:
         scoped, body, path = function
-        return scoped.value(body, path)
+        return scoped.typed_value(body, scoped.values.get('__return_type'), path)
     owner = qualified_name(call.receiver) if call.receiver else None
     identity = 'call:' + call.qualified_name
     if identity in seen or len(seen) >= 64:

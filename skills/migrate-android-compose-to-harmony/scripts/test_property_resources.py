@@ -7,6 +7,8 @@ EXTENSION = '''from ui_migration.frontend.api_adapters.keyed_resources import Ke
 
 class Colors(KeyedResourceAdapter):
     def resolve(self, reference):
+        if reference.key is None:
+            return None
         return {"key": reference.key, "target": {"module":"./ThemeBridge",
             "export":"ThemeBridge", "member":"color", "arguments":[reference.key]}}
 

@@ -1,8 +1,55 @@
 # Reuse An Existing Harmony Business Component
 
-This is explicit component-library reuse, not same-name guessing. Without a matching
-adapter, the existing source-definition-to-page-local-builder translation remains
+Reuse can be discovered from an existing target or explicitly registered. Without a
+matching component, source-definition-to-page-local-builder translation remains
 unchanged. Reuse does not automatically port Android callback/network business code.
+
+## Automatic Matching (Default For The Page Command)
+
+`migrate_compose_page.py` now scans `<target>/<module>/src/main/ets` before projection.
+No per-component registration is required. A new target with no components simply
+uses normal generation. `--no-auto-component-reuse` disables discovery.
+For the individual `generate_lanhu_source_page.py` command pass
+`--harmony-target /path/to/harmony --harmony-module entry` (module defaults to entry).
+The source JSON command is unchanged; discovery runs during projection, not in the
+single-JSON backend. Existing component files are read-only and never replaced.
+
+The SDK ArkTS syntax-tree parser reads named, directly exported `@Component` /
+`@ComponentV2` structs and top-level exported `@Builder` functions. It does not execute
+their bodies. Generated directories, dependency/build directories, symlinks, private
+declarations, and `@Entry` pages are excluded. Default exports, barrel re-exports,
+external packages, inherited/aliased model types and generic signatures are not
+automatically resolved; use explicit adapters for these cases.
+
+Matching uses the component's simple name, every Android parameter's name and its
+supported equivalent ArkTS type. Callback argument names do not affect type identity.
+String/Boolean/numeric primitives, nullable primitives, Color -> ResourceColor,
+Dp/TextUnit -> numeric vp/fp, explicit empty no-argument callbacks and no-argument
+content slots are supported. Struct slots must be `@BuilderParam`; function calls
+use target declaration argument order, while struct calls use named properties.
+Literal string/number/boolean initializers can supply omitted target type annotations.
+Internal `@State`/`@Local` and storage/context state are not caller parameters.
+Additional target struct properties are allowed only when optional/defaulted.
+Two-way bindings, Modifier, arbitrary model objects, collection values, nonempty
+business callbacks and parameterized slots require separate adaptation; they are not
+dropped or replaced with guessed values. A matching declaration is not proof of a
+valid target project: native build checks, including ArkUI reserved names, still apply.
+
+Explicit `COMPONENT_ADAPTERS` take priority. Without one, exactly one compatible
+target is required; type mismatch, unresolved arguments or ambiguity retain the
+Android body and report incomplete reuse, never silently choosing the first match.
+`lanhu/component-discovery.json` records scanned declarations and per-definition
+`matched`, `not-found`, `explicit` or `incompatible` decisions. A `matched` decision
+means signature selection; successful argument binding is separately recorded in
+the generated JSON / `reused_business_components` manifest.
+
+Parser dependencies use `DEVECO_HOME` / `DEVECO_SDK_HOME` where available. For another
+installation set `ARKTS_TYPESCRIPT_PATH` to the SDK's
+`ets/build-tools/ets-loader/node_modules/typescript` directory (or its library file),
+and optionally `ARKTS_NODE` to the Node executable. Standard npm TypeScript does not
+parse ArkTS structs. The local macOS DevEco installation is a fallback, not a pinned
+SDK version; no dependency is downloaded. Missing parser dependencies produce an
+actionable error rather than an empty successful scan.
 
 ## Register Once Per Project
 
@@ -57,7 +104,7 @@ resource-library reference. A `platform_resource_reference` returned by an exist
 keyed resource API adapter is retained as a target call, not forced to a literal.
 No arbitrary ArkTS code is accepted in the JSON. Callback bodies, arbitrary model
 objects, and Modifier chains do not silently disappear: they need a separate supported
-mapping and otherwise remain unresolved. This is not automatic API-signature discovery.
+mapping and otherwise remain unresolved.
 
 ## Content Slots
 
@@ -98,7 +145,7 @@ invented automatically.
 
 ```bash
 cd "$SKILL_ROOT/scripts"
-python3 -m unittest test_component_interfaces test_component_reuse test_business_components test_keyed_resources -q
+python3 -m unittest test_component_interfaces test_component_reuse test_component_discovery test_business_components test_keyed_resources -q
 ```
 
 Tests cover explicit identity, no same-name guessing, ambiguity, parameter defaults

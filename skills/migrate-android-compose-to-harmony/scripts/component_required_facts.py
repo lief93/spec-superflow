@@ -895,7 +895,13 @@ def build_required_facts(component: dict[str, Any]) -> list[dict[str, str | None
             path = "style.surface.border"
         elif name in {"shadow", "requireCardElevation"}:
             path = "style.surface.shadows"
-        elif name == "clip":
+        elif name == 'focusable':
+            path = 'style.state.focusable'
+            positional, named = parsed_arguments(expression)
+            enabled = named.get('enabled') or (positional[0] if positional else 'true')
+            expected_known = enabled in {'true', 'false'}
+            expected = enabled == 'true' if expected_known else None
+        elif name in {"clip", "clipToBounds"}:
             path = "style.surface.clip"
             expected = True
             expected_known = True

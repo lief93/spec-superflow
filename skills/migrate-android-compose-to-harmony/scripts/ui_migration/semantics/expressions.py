@@ -50,7 +50,7 @@ def needs_layout_projection(node):
 
 
 class LayoutExpressions:
-    def __init__(self, bindings, values, evaluate_leaf, unresolved, serialize_modifier=None, *, evaluate_node=None, expand_chain=None, value_syntax=None, coalesce_value=None):
+    def __init__(self, bindings, values, evaluate_leaf, unresolved, serialize_modifier=None, *, evaluate_node=None, expand_chain=None, value_syntax=None, coalesce_value=None, typed_fallback=None, member_value=None):
         self.bindings = bindings
         self.values = values
         self.evaluate_leaf = evaluate_leaf
@@ -61,6 +61,8 @@ class LayoutExpressions:
         self.expand_chain = expand_chain
         self.value_syntax = value_syntax
         self.coalesce_value = coalesce_value
+        self.typed_fallback = typed_fallback
+        self.member_value = member_value
 
     def leaf(self, node, seen):
         if self.evaluate_node is not None:
@@ -71,7 +73,8 @@ class LayoutExpressions:
         result = LayoutExpressions(self.bindings if bindings is None else bindings, values,
                                  self.evaluate_leaf, self.unresolved, self.serialize_modifier,
                                  evaluate_node=self.evaluate_node, expand_chain=self.expand_chain, value_syntax=self.value_syntax,
-                                 coalesce_value=self.coalesce_value)
+                                 coalesce_value=self.coalesce_value, typed_fallback=self.typed_fallback,
+                                 member_value=self.member_value)
         result.modifier_receivers = dict(self.modifier_receivers)
         return result
 
@@ -82,6 +85,17 @@ class LayoutExpressions:
         if not isinstance(expression, str) or expression.strip() == name:
             raise LayoutExpressionError(f'unknown layout reference: {name}')
         return parse_expression(expression), seen + (name,)
+
+    def typed_value(self, node, source_type, seen=()):
+        try:
+            return self.value(node, seen)
+        except LayoutExpressionError as error:
+            if not source_type or self.typed_fallback is None:
+                raise
+            result = self.typed_fallback(node, source_type, self, seen, str(error))
+            if result is self.unresolved:
+                raise
+            return result
 
     def value(self, node, seen=()):
         known = self.values.get(node.get('text'), self.unresolved)
@@ -157,6 +171,10 @@ class LayoutExpressions:
                 key = node['selector']['name']
                 if receiver is None and node['safe']:
                     return None
+                if self.member_value is not None:
+                    result = self.member_value(receiver, key)
+                    if result is not self.unresolved:
+                        return result
                 if isinstance(receiver, dict) and key in receiver:
                     if receiver[key] is not self.unresolved:
                         return receiver[key]

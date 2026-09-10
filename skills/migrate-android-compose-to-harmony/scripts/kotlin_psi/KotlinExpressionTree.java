@@ -222,6 +222,7 @@ public final class KotlinExpressionTree {
                 if (owner instanceof KtObjectDeclaration && ((KtObjectDeclaration) owner).isCompanion())
                     owner = PsiTreeUtil.getParentOfType(owner, KtClassOrObject.class);
                 globalProperties.add(node("property", "name", property.getName(),
+                    "type", property.getTypeReference() == null ? null : property.getTypeReference().getText(),
                     "owner", owner == null ? null : owner.getName(), "expression", propertyValue.getText(),
                     "value_syntax", getterValue ? tree(propertyValue) : null));
             }

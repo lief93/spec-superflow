@@ -815,6 +815,9 @@ class Renderer:
         if isinstance(state.get("enabled"), bool):
             lines.append(f"{prefix}  .enabled({str(state['enabled']).lower()})")
             emitted_phase_paths.add("style.state.enabled")
+        if isinstance(state.get('focusable'), bool):
+            lines.append(f"{prefix}  .focusable({str(state['focusable']).lower()})")
+            emitted_phase_paths.add('style.state.focusable')
         if state.get("visible") is False:
             lines.append(f"{prefix}  .visibility(Visibility.None)")
             emitted_phase_paths.add("style.state.visible")

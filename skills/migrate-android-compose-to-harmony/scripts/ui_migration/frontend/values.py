@@ -10,6 +10,16 @@ from ui_migration.frontend.api_adapters.state import collected_state
 
 
 class SourceValues:
+    @staticmethod
+    def member_value(receiver, name):
+        from ui_migration.contracts.resource_values import is_resource_value, resource_property
+        if not is_resource_value(receiver):
+            return UNRESOLVED
+        value = resource_property(receiver, name)
+        if value is None:
+            raise LayoutExpressionError('resource object has no mapped property: ' + name)
+        return value
+
     CONSTANTS = {
         'Color.White': '#FFFFFFFF', 'Color.Black': '#FF000000',
         'Color.Gray': '#FF888888', 'Color.Transparent': '#00000000',
@@ -18,10 +28,64 @@ class SourceValues:
         'Color.LightGray': '#FFCCCCCC', 'Color.DarkGray': '#FF444444',
         'Color.Unspecified': {'kind': 'color_unspecified'},
         'CircleShape': {'kind': 'circle'},
+        'RectangleShape': {'kind': 'rounded_corner', 'radius_dp': 0},
         'LayoutDirection.Rtl': 'rtl', 'LayoutDirection.Ltr': 'ltr',
         'androidx.compose.ui.unit.LayoutDirection.Rtl': 'rtl',
         'androidx.compose.ui.unit.LayoutDirection.Ltr': 'ltr',
     }
+
+    def typed_fallback(self, node, source_type, context, seen, reason):
+        registry = context.values.get('__api_registry', BUILTIN_REGISTRY)
+        if not registry._fallbacks:
+            return UNRESOLVED
+        source_type = source_type.removesuffix('?').strip()
+        imports = context.values.get('__source_imports') or {}
+        source_type = imports.get(source_type, source_type)
+        expected_type = source_type
+        qualified_types = {'androidx.compose.ui.graphics.Color': 'Color',
+            'androidx.compose.ui.unit.Dp': 'Dp', 'androidx.compose.ui.unit.TextUnit': 'TextUnit',
+            **{'kotlin.' + name: name for name in ('String', 'Int', 'Long', 'Float', 'Double')}}
+        source_type = qualified_types.get(source_type, source_type)
+        if (source_type not in {'Color', 'String', 'Dp', 'TextUnit', 'Int', 'Long', 'Float', 'Double'}
+                and ('object', source_type) not in registry._fallbacks):
+            return UNRESOLVED
+        if 'cyclic or over-deep' in reason or 'ambiguous' in reason:
+            return UNRESOLVED
+        path = qualified_name(node)
+        if path in context.bindings:
+            bound, trace = context.bound(path, seen)
+            return context.typed_value(bound, source_type, trace)
+        kind = node['kind']
+        if kind == 'return':
+            return context.typed_value(node['value'], source_type, seen)
+        if kind == 'block':
+            scoped, terminal = context.block(node, seen)
+            return scoped.typed_value(terminal, source_type, seen)
+        if kind in ('if', 'when'):
+            try:
+                branch = context.branch(node, seen)
+            except LayoutExpressionError:
+                pass  # An adapter may translate the entire dynamic expression, never one guessed branch.
+            else:
+                return context.typed_value(branch, source_type, seen)
+        if kind == 'binary' and node['operator'] == '?:':
+            left = context.typed_value(node['left'], source_type, seen)
+            if left is None:
+                return context.typed_value(node['right'], source_type, seen)
+            result = self.coalesce(left, node['right'], context, seen)
+            return left if result is UNRESOLVED else result
+        # A known consumer type follows source helpers whose return type is inferred.
+        # Declaration scopes and cycle/overload checks remain owned by source_values.
+        value = source_property_value(path, context, seen, expected_type=expected_type) if path else UNRESOLVED
+        if value is not UNRESOLVED:
+            return value
+        call = call_from(node)
+        if call:
+            scope = source_function_scope(call, context, seen)
+            if scope:
+                scoped, body, trace = scope
+                return scoped.typed_value(body, scoped.values.get('__return_type') or expected_type, trace)
+        return registry.fallback_value(node, source_type, context, seen, reason)
 
 
     def coalesce(self, left, right, context, seen):
@@ -152,12 +216,13 @@ SOURCE_VALUES = SourceValues()
 def value_resolver(bindings, values, serialize_modifier=None):
     return LayoutExpressions(bindings, values, None, UNRESOLVED, serialize_modifier,
                              evaluate_node=SOURCE_VALUES.evaluate_node, expand_chain=SOURCE_VALUES.expand_modifier,
-                             value_syntax=SOURCE_VALUES.value_syntax, coalesce_value=SOURCE_VALUES.coalesce)
+                             value_syntax=SOURCE_VALUES.value_syntax, coalesce_value=SOURCE_VALUES.coalesce,
+                             typed_fallback=SOURCE_VALUES.typed_fallback, member_value=SOURCE_VALUES.member_value)
 
 
-def evaluate_expression(expression, environment, *, preserve_units=False):
+def evaluate_expression(expression, environment, *, preserve_units=False, source_type=None):
     value = expression.strip()
-    if value in environment:
+    if value in environment and environment[value] is not UNRESOLVED:
         result = environment[value]
         return result.value if isinstance(result, LayoutDimension) and not preserve_units else result
     if value.startswith('#') and len(value) == 9:
@@ -169,7 +234,7 @@ def evaluate_expression(expression, environment, *, preserve_units=False):
     if value == 'None':
         return None
     try:
-        result = value_resolver({}, environment).value(parse_expression(value))
+        result = value_resolver({}, environment).typed_value(parse_expression(value), source_type)
         return result.value if isinstance(result, LayoutDimension) and not preserve_units else result
     except (LayoutExpressionError, KotlinPsiSyntaxError):
         return UNRESOLVED

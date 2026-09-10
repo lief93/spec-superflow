@@ -233,6 +233,130 @@ preservation remains unresolved. This is not a general Kotlin-to-ArkTS expressio
 translator. Composite TextStyle/Shape objects, gradient objects, arbitrary function
 calls and resource-object dimensions require additional typed adapters.
 
+## Type-Based Fallback
+
+Every `KeyedResourceAdapter` receives unresolved expressions of its declared type
+by default; there is no opt-in flag, second adapter class, or need to register each
+token. Explicit symbol matching still takes priority. For example:
+
+```python
+from ui_migration.frontend.api_adapters.keyed_resources import KeyedResourceAdapter
+
+class ProjectResources(KeyedResourceAdapter):
+    def resolve(self, reference):
+        prefix = 'company.Theme.colors.'
+        if reference.symbol.startswith(prefix):
+            key = reference.symbol[len(prefix):]
+            return {'key': key, 'target': {
+                'module': './ThemeBridge', 'export': 'ThemeBridge',
+                'member': 'color', 'arguments': [key]}}
+        return None
+
+ADAPTERS = [ProjectResources('project.colors', (), 'color').declaration()]
+```
+
+Matching the prefix above is project-owned key extraction inside the handler, not
+generator registration. The resolver is offered any unresolved expression with a
+supported known type. `reference.expression`, `source_type`, `source_file`, and
+`reason` describe the expression at the reached source boundary. `symbol` is the
+import-qualified property/call identity when available; composite expressions have
+no invented symbol. In type-fallback mode `key` is `None`: a field name is not proof
+of a library key. The implementation must return its own nonempty key/target or None.
+Returning None retains the unresolved diagnostic; the existing target visual-default
+policy may still produce a candidate page with a reported degradation.
+
+Type evidence comes from source parameter/constructor-field declarations, immutable
+property declarations, explicit helper return types, or supported native property
+contracts. Arbitrary business names such as `abc: Color` work. No Color/Dp inference
+is made from a name containing `color`, `statusHeight`, or `Fixed200`. Currently
+supported fallback types are Color, String, Dp, TextUnit and Int/Long/Float/Double;
+dimensions retain dp/vp or sp/fp. Custom types/type aliases need additional resolution.
+Adapters of the same kind/unit pair are tried in registration order. Returning None
+continues to the next adapter; the first resolved result wins. If all decline, the
+existing target default policy applies. Duplicate explicit symbols remain errors.
+
+Known constants, fixture/framework context and normal explicit-symbol adapters are
+tried before type fallback. Source wrappers/getters are evaluated before falling
+back on their outer expression. Selected branches preserve their selected expression;
+an unknown condition is offered as a whole expression, never one guessed branch.
+Cyclic or ambiguous resolution is not hidden by a type fallback. The handler returns
+the same validated target call/property description, never raw ArkTS snippets.
+
+System-derived dimensions use the same interface: a declared Dp expression may map
+to a target-side system bridge rather than a fixed Android-device height. Existing
+known inset fixtures and consumed-inset accounting remain unchanged. This does not
+add every system API or every dimension consumer: the property table above remains
+the supported target-reference surface (arbitrary runtime height/padding references
+are not enabled by registering a fallback). Target system bridges own their runtime
+updates; resource conversion must not duplicate an existing safe-area adjustment.
+For a nonnullable source Color, the target bridge must return a usable ResourceColor,
+not undefined, unless the source reference carries a valid explicit fallback.
+
+Regenerate analysis/contract and source-page JSON when declaration type metadata is
+missing in an older inventory, then regenerate Lanhu JSON with `--api-adapters`.
+The backend still needs only the resulting page JSON. Type-based fallback tests:
+`python3 -m unittest test_typed_resource_fallback -q`.
+
+## Project Object Types
+
+The same adapter supports named project/framework object types, including Compose
+TextStyle, without an additional adapter class. Declare the source type identity
+and the exported target type explicitly; identical short names are not proof of
+cross-platform compatibility.
+
+```python
+class Styles(KeyedResourceAdapter):
+    def resolve(self, reference):
+        if reference.symbol != 'company.Typography.body':
+            return None
+        return {'key': 'body', 'target': {
+            'module': './ThemeBridge', 'export': 'ThemeBridge',
+            'member': 'style', 'arguments': ['body']}}
+
+ADAPTERS = [Styles('project.styles', (), 'object',
+    source_type='androidx.compose.ui.text.TextStyle',
+    target_type={'module': './ThemeBridge', 'export': 'BusinessTextStyle'}
+).declaration()]
+```
+
+An explicitly mapped business component can receive this object intact, for
+example `Caption({ appearance: ThemeBridge.style('body') })`. The page JSON retains
+the structured call, source type and target type; the backend needs neither the
+Android sources nor the Python adapter. A native ArkTS build checks the bridge's
+actual return type against the consuming component. The project must supply the
+bridge and target component; the adapter does not generate their implementation.
+
+This is an extensible named-type boundary, not a universal Kotlin-to-ArkTS type
+compiler. Generic/structural/function type signatures are not accepted here.
+Automatic same-name component discovery does not yet use object type mappings;
+use an explicit component mapping for object-valued parameters. Native `Text`
+cannot consume an arbitrary target TextStyle object just because it has that name:
+native property projection still requires a supported consumer mapping. Returning
+None keeps the unresolved argument rather than fabricating an object. Scalar
+visual defaults do not invent business objects, callbacks or model values.
+
+Verification: `python3 -m unittest test_object_resource_adapter -q`.
+
+### Object Property Mappings
+
+Object adapter results may also contain `properties`, keyed by Android member name.
+Each value is a validated resource reference specification (`kind`, `target`, units
+for dimensions, or `sourceType`/`targetType` and optional nested `properties` for
+objects). This works for arbitrary named business objects, not just text styles.
+The whole-object `target` remains usable by explicit component reuse. Undeclared
+members are unresolved, never inferred from target field names or JSON metadata.
+
+Native Text consumes mapped Compose TextStyle members through its existing typed
+typography properties. Explicit Text arguments override `copy` arguments, which
+override the original style. Opaque target objects without declared member mappings
+remain unsupported by native Text; this does not imply support for every native
+consumer or Kotlin type. No new adapter class or raw target-code format is added.
+
+See the [complete owner-based example](../examples/object-properties/README.md),
+including the executable Python adapter and Harmony bridge. It handles a token family
+without enumerating individual members. Tests load the same example file:
+`python3 -m unittest test_object_property_adapter -q`.
+
 ## Validation Boundaries
 
 - Numeric unit pairs are explicit: only sp/fp and dp/vp are currently supported.

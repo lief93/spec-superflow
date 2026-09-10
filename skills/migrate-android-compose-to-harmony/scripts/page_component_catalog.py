@@ -91,6 +91,7 @@ FIELD_AUDIT = {
     'state.selected': ('selection', '条件', 'RadioButton 的明确选中态；不代表任意容器都有选中样式', 'page_snapshot_component_lines'),
     'state.checked': ('selection', '条件', 'Checkbox/Switch 的明确布尔状态；缺失或动态未解析阻断', 'page_snapshot_component_lines'),
     'state.clickable': ('all', '业务边界', '只记录入口元数据；UI 渲染不产生业务 onClick，另走 behavior contract', 'build_target_phase_consumption_gate'),
+    'state.focusable': ('all', '条件', '固定布尔值映射 focusable；交互流仍需 behavior wiring', 'page_snapshot_component_lines'),
     'content.text': ('text input button', '条件', 'text/value/已解析资源；Button 文本在子 Text 实际消费', 'page_snapshot_component_lines'),
     'content.placeholder': ('input', '条件', '纯文字提示；复杂 slot/浮动 label 不等同 placeholder', 'page_snapshot_component_lines'),
     'content.content_description': ('all', '已实现', 'contentDescription; 显式 null 不设置', 'page_snapshot_component_lines'),

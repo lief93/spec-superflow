@@ -36,7 +36,8 @@ ADAPTERS = [Colors("company.color", ("company.Colors.get",), "color").declaratio
 
 
 class KeyedResourcesTest(unittest.TestCase):
-    def generate(self, body, declarations='', extension=EXTENSION, *, extra_files=None, source_imports=''):
+    def generate(self, body, declarations='', extension=EXTENSION, *, extra_files=None, source_imports='', harmony_files=None,
+                 preserve_component_ui_states=False, token_mappings=None):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -50,14 +51,28 @@ import company.Copy
             (root/name).write_text(content)
         contract = analyze(root, {}, files)
         styles = build_style_definitions(style_helpers.ProjectStyleDefinitionsTest().contract())
+        if token_mappings is not None:
+            styles['tokenMappings'] = token_mappings
         page = build_source_page_spec(contract, 'Page.kt', 'Page', 'page', 'default', 'test', root,
                                       style_definitions=styles)
         (root/'source.json').write_text(json.dumps(page))
         (root/'adapter.py').write_text(extension)
         (root/'adapters.json').write_text(json.dumps({'schema':'ui-migration.api-adapters.v1', 'modules':[
             {'path':'adapter.py', 'sha256':hashlib.sha256(extension.encode()).hexdigest()}]}))
+        if harmony_files is not None:
+            for name, content in harmony_files.items():
+                path = root/'harmony/entry/src/main/ets'/name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
         result = generate(Namespace(source_page=root/'source.json', state_fixture=None, output_dir=root/'out',
-            viewport_width_dp=360, viewport_height_dp=760, slice_scale=2, device='test', api_adapters=root/'adapters.json'))
+            viewport_width_dp=360, viewport_height_dp=760, slice_scale=2, device='test', api_adapters=root/'adapters.json',
+            harmony_target=root/'harmony' if harmony_files is not None else None,
+            preserve_component_ui_states=preserve_component_ui_states))
+        if harmony_files is not None:
+            result['discovery'] = json.loads((root/'out/component-discovery.json').read_text())
+            import shutil
+            if (root/'harmony').exists():
+                shutil.rmtree(root/'harmony')
         loaded = load_lanhu_page_input(root/'out/version_json.json')
         # The backend can run after the source and executable extension are gone.
         (root/'source.json').unlink()

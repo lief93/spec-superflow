@@ -46,7 +46,7 @@ STYLE_SECTIONS: dict[str, tuple[str, ...]] = {
     "transform": (
         "translation_x_dp", "translation_y_dp", "scale_x", "scale_y", "rotation_degrees",
     ),
-    "state": ("visible", "enabled", "selected", "checked", "clickable", "refreshing"),
+    "state": ("visible", "enabled", "selected", "checked", "clickable", "refreshing", "focusable"),
     "content": ("text", "placeholder", "content_description", "role", "locale"),
     "input": ("single_line", "read_only", "password", "keyboard_type", "ime_action"),
     "control": ("value", "minimum", "maximum", "steps", "active_color", "inactive_color", "stroke_width_dp"),
@@ -346,7 +346,7 @@ def normalize_style(value: Any, label: str) -> dict[str, dict[str, Any]]:
                 target[field] = normalize_border(raw, path)
             elif field == "shadows":
                 target[field] = normalize_shadows(raw, path)
-            elif field in {"visible", "enabled", "selected", "checked", "clickable", "refreshing", "clip", "single_line", "read_only", "password", "soft_wrap", "include_font_padding"}:
+            elif field in {"visible", "enabled", "selected", "checked", "clickable", "refreshing", "focusable", "clip", "single_line", "read_only", "password", "soft_wrap", "include_font_padding"}:
                 if raw is not None and type(raw) is not bool:
                     raise PageSnapshotError(f"{path} must be a boolean")
                 target[field] = raw

@@ -60,8 +60,10 @@ def selected_modifiers(modifiers, resolver):
 
 
 class SourceStyleProjector:
-    def __init__(self, adapters: SourceStyleAdapters):
+    def __init__(self, adapters: SourceStyleAdapters, *, token_mappings=None):
         self.adapters = adapters
+        from ui_migration.contracts.style_tokens import validate_token_mappings
+        self.token_mappings = validate_token_mappings(token_mappings or {})
 
     def project(self, node, values, theme_styles, font_families):
         bindings = {**(node.get('file_values') or {}), **(node.get('parameter_bindings') or {}),
@@ -154,6 +156,8 @@ class SourceStyleProjector:
             'aspectRatio': [('layout', 'aspect_ratio')],
             'background': [('surface', 'background')], 'alpha': [('surface', 'alpha')],
             'clip': [('surface', 'clip'), ('surface', 'corner_radius_dp'), ('surface', 'corner_sizes')],
+            'clipToBounds': [('surface', 'clip')],
+            'focusable': [('state', 'focusable')],
             'border': [('surface', 'border'), ('surface', 'corner_radius_dp'), ('surface', 'corner_sizes')],
             'shadow': [('surface', 'shadows')],
             'rotate': [('transform', 'rotation_degrees')],
@@ -172,6 +176,8 @@ class SourceStyleProjector:
 
 
     def project_text_styles(self, node, resolver, theme_styles, font_families):
+        from ui_migration.contracts.resource_values import is_resource_value, validate_resource_value, resource_property
+        from ui_migration.contracts.style_tokens import PROPERTY_TYPES, property_source_type, validate_property_literal, validate_property_token
         if node['type'] not in {'Text', 'BasicText', 'ClickableText', 'TextField', 'BasicTextField', 'OutlinedTextField'}:
             return
         fields = {'fontSize': 'font_size_sp', 'fontWeight': 'font_weight', 'fontStyle': 'font_style',
@@ -183,9 +189,14 @@ class SourceStyleProjector:
         def properties(tree, seen=()):
             nonlocal uses_theme_style
             try:
-                resolved = resolver.value(tree, seen)
+                resolved = resolver.typed_value(tree, 'androidx.compose.ui.text.TextStyle', seen)
                 if isinstance(resolved, dict) and resolved.get('kind') == 'text_style':
                     return {name: parse_expression(expression) for name, expression in resolved['properties'].items()}
+                if is_resource_value(resolved):
+                    spec = validate_resource_value(resolved)
+                    if (spec['kind'] == 'object' and spec['sourceType'] == 'androidx.compose.ui.text.TextStyle'
+                            and 'properties' in spec):
+                        return {name: resource_property(resolved, name) for name in spec['properties']}
             except LayoutExpressionError:
                 pass
             if tree['kind'] == 'name':
@@ -258,6 +269,14 @@ class SourceStyleProjector:
                                               ('fontWeight', 'font_weight', 400)]:
                     if not uses_theme_style and name not in selected and name not in semantic:
                         node['style']['typography'][field] = default
+                if not uses_theme_style and 'lineHeight' not in selected and 'lineHeight' not in semantic:
+                    for argument, metrics in (
+                        ('platformStyle', ('include_font_padding',)),
+                        ('lineHeightStyle', ('line_height_alignment', 'line_height_trim')),
+                    ):
+                        if argument not in selected:
+                            for field in metrics:
+                                node['style']['typography'][field] = None
             except (LayoutExpressionError, KotlinPsiSyntaxError) as error:
                 node.setdefault('unresolved', []).append({'path': 'source.arguments.style',
                     'expression': style_arg['expression'], 'reason': str(error)})
@@ -269,6 +288,38 @@ class SourceStyleProjector:
         for name, tree in selected.items():
             path = 'style.typography.' + fields[name] if name in fields else 'source.arguments.style.' + name
             try:
+                if not is_resource_value(tree) and path.removeprefix('style.') in PROPERTY_TYPES:
+                    from ui_migration.semantics.syntax import qualified_name
+                    from ui_migration.frontend.api_adapters.registry import AdapterRegistry
+                    symbol = qualified_name(tree)
+                    symbol = AdapterRegistry.qualified_symbol(symbol, resolver.values.get('__source_imports') or {}) if symbol else None
+                    try:
+                        if symbol in self.token_mappings:
+                            value = {'kind': 'platform_resource_reference', 'key': symbol,
+                                     'reference': self.token_mappings[symbol]}
+                        else:
+                            value = resolver.typed_value(tree, property_source_type(path.removeprefix('style.')))
+                    except LayoutExpressionError:
+                        value = None
+                    try:
+                        validate_property_literal(path.removeprefix('style.'), value)
+                    except ValueError as error:
+                        raise LayoutExpressionError(str(error)) from error
+                    if is_resource_value(value):
+                        tree = value
+                if is_resource_value(tree):
+                    spec = validate_resource_value(tree)
+                    if name not in fields:
+                        raise LayoutExpressionError('unsupported TextStyle property: ' + name)
+                    try:
+                        validate_property_token('typography.' + fields[name], spec)
+                    except ValueError as error:
+                        raise LayoutExpressionError(str(error)) from error
+                    node['style']['typography'][fields[name]] = tree
+                    node['unresolved'] = [e for e in node.get('unresolved', []) if e.get('path') != path]
+                    node.setdefault('provenance', []).append({'paths': [path], 'origin': 'source_resolved',
+                                                             'source': style_arg['expression'] if style_arg else name})
+                    continue
                 if name == 'textIndent':
                     invocation = call_from(tree)
                     if invocation is None or invocation.name != 'TextIndent':
@@ -328,4 +379,5 @@ class SourceStyleProjector:
             except (LayoutExpressionError, KotlinPsiSyntaxError) as error:
                 if name in fields:
                     node['style']['typography'][fields[name]] = None
-                node.setdefault('unresolved', []).append({'path': path, 'expression': tree['text'], 'reason': str(error)})
+                node.setdefault('unresolved', []).append({'path': path,
+                    'expression': tree.get('text') or (style_arg['expression'] if style_arg else name), 'reason': str(error)})

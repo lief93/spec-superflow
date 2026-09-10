@@ -27,6 +27,9 @@ class ComponentAdapter:
         """Override for project-specific value/unit conversion, never raw ArkTS."""
         return {target: arguments[source] for source, target in self.parameters.items()}
 
+    def argument(self, name, expression, arguments, evaluate):
+        return evaluate(name, expression, arguments)
+
 
 class ComponentReuse:
     def __init__(self, adapters, definitions):
@@ -46,6 +49,8 @@ class ComponentReuse:
         if len(matches) != 1:
             raise ValueError('ambiguous component adapters: ' + ', '.join(a.id for a in matches))
         adapter = matches[0]
+        if getattr(adapter, 'error', None):
+            raise ValueError(adapter.error)
         if sum(adapter.matches(d) for d in self.definitions.values()) != 1:
             raise ValueError('component selector matches multiple source definitions; specify source/declaration_id')
         declared = {p['name']: p for p in definition.get('parameters', [])}
@@ -64,7 +69,7 @@ class ComponentReuse:
             expression = bindings.get(name, declared[name].get('default'))
             if not isinstance(expression, str):
                 raise ValueError('component parameter has no value: ' + name)
-            value = evaluate(name, expression, arguments)
+            value = adapter.argument(name, expression, arguments, evaluate)
             if value is UNRESOLVED:
                 raise ValueError('component parameter is unresolved: ' + name + ' = ' + expression)
             arguments[name] = value
@@ -82,12 +87,15 @@ class ComponentReuse:
             raise ValueError('component adapter properties must be an object')
         # Keyed API adapters can delegate the final value to the Harmony library.
         properties = {k: ({'kind': 'resource', 'target': v['reference']['target']}
-                          if isinstance(v, dict) and v.get('kind') == 'platform_resource_reference' else v)
+                          if isinstance(v, dict) and v.get('kind') == 'platform_resource_reference'
+                          and v['reference']['kind'] != 'object' else v)
                       for k, v in properties.items()}
         record = {'schema': 'ui-migration.component-reuse.v1', 'adapter_id': adapter.id,
                   'definition_id': definition['id'], 'android': adapter.android,
                   'target': {'module': adapter.module, 'export': adapter.export},
                   'properties': properties, 'slots': slots}
-        if type(adapter).properties is ComponentAdapter.properties:
+        if getattr(adapter, 'call_style', 'properties') != 'properties':
+            record['call_style'] = adapter.call_style
+        if type(adapter).properties is ComponentAdapter.properties or getattr(adapter, 'preserve_parameter_names', False):
             record['property_parameters'] = {target:source for source, target in adapter.parameters.items()}
         return validate_reuse(record)

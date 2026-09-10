@@ -72,12 +72,15 @@ class TypographyEmitter:
             font_face = next((face for face in self.fonts.faces if face['alias'] == font_alias), None)
             untrimmed = (typography.get('line_height_alignment') == 'center'
                          and typography.get('line_height_trim') == 'none'
-                         and typography.get('include_font_padding') is False and line_height is not None)
+                         and typography.get('include_font_padding') is False
+                         and (line_height is not None or token_height is not None))
             if token_height:
                 lines.append(f'{prefix}  .lineHeight({token_height})')
                 emitted_phase_paths.add('style.typography.line_height_sp')
                 if is_text and untrimmed:
                     lines.append(f'{prefix}  .halfLeading(true)')
+                    emitted_phase_paths.update({'style.typography.' + field for field in
+                        ('include_font_padding', 'line_height_alignment', 'line_height_trim')})
             elif is_text and untrimmed:
                 lines.append(f'{prefix}  .lineHeight({page_number(line_height)})')
                 lines.append(f'{prefix}  .halfLeading(true)')

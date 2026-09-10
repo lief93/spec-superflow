@@ -18,11 +18,17 @@ class ComponentReuseEmitter:
         return self.modules[key]
 
     def value(self, value):
+        if value == {'kind':'empty_callback'}:
+            return '() => {}'
         if isinstance(value, dict):
-            target = value['target']
+            from ui_migration.contracts.resource_values import is_resource_value, validate_resource_value
+            spec = validate_resource_value(value) if is_resource_value(value) else value
+            target = spec['target']
             expression = self.imported(target['module'], target['export']) + '.' + target['member']
             if 'arguments' in target:
                 expression += '(' + ', '.join(self.value(v) for v in target['arguments']) + ')'
+            if 'fallback' in spec:
+                expression = '(' + expression + ' ?? ' + self.value(spec['fallback']) + ')'
             return expression
         return json.dumps(value, ensure_ascii=False)
 
@@ -44,7 +50,7 @@ class ComponentReuseEmitter:
             if reference and kind:
                 expression = self.business_components.bind({'id':component['id'], 'source':{'property_bindings':{
                     'source.reused_property.' + name:reference}}}, 'source.reused_property.' + name, expression, kind)
-            arguments.append(name + ': ' + expression)
+            arguments.append(expression if record.get('call_style') == 'positional' else name + ': ' + expression)
         self.instances.append({'component_id': component['id'], **record})
         by_id = {child['id']: child for child in children}
         for name, ids in record['slots'].items():
@@ -53,7 +59,10 @@ class ComponentReuseEmitter:
                 lambda: [line for root in ids for line in render_slot(by_id[root], 4)])
             call = self.business_components.call(invocation)
             arguments.append(name + ': () => { ' + call + ' }')
-        return [' ' * indent + alias + '({ ' + ', '.join(arguments) + ' })']
+        arguments = ', '.join(arguments)
+        if record.get('call_style') != 'positional':
+            arguments = '{ ' + arguments + ' }'
+        return [' ' * indent + alias + '(' + arguments + ')']
 
     def imports(self):
         return ["import { " + symbol + ' as ' + alias + " } from '" + module + "';"

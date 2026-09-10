@@ -14,7 +14,7 @@ class AdapterConflict(ValueError):
     pass
 
 
-CAPABILITIES = frozenset({'image', 'font', 'background', 'shape', 'border', 'size', 'text', 'state'})
+CAPABILITIES = frozenset({'image', 'font', 'background', 'shape', 'border', 'size', 'text', 'state', 'value'})
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,8 @@ class ApiAdapter:
     aliases: tuple[str, ...] = ()
     receiver_kind: str | None = None
     access: str = 'call'
+    fallback_type: tuple | None = None
+    fallback: Callable | None = None
 
 
 def frozen(value):
@@ -98,10 +100,11 @@ class AdapterRegistry:
         self.component_adapters = tuple(component_adapters)
         self._symbols, self._aliases, self._members, ids = {}, {}, {}, set()
         self._resource_owners = {}
+        self._fallbacks = {}
         for adapter in self.adapters:
             if not isinstance(adapter, ApiAdapter) or adapter.capability not in CAPABILITIES or not callable(adapter.evaluate):
                 raise ValueError('invalid API adapter declaration')
-            if not adapter.id or adapter.id in ids or not adapter.symbols:
+            if not adapter.id or adapter.id in ids or not (adapter.symbols or adapter.fallback_type):
                 raise AdapterConflict('duplicate/empty adapter id or symbols: ' + adapter.id)
             ids.add(adapter.id)
             if adapter.access not in {'call', 'resource'}:
@@ -109,6 +112,10 @@ class AdapterRegistry:
             if adapter.access == 'resource':
                 if adapter.aliases or adapter.receiver_kind:
                     raise ValueError('resource adapters require qualified symbols')
+            if adapter.fallback_type is not None:
+                if adapter.access != 'resource' or not callable(adapter.fallback):
+                    raise ValueError('typed fallback requires a resource resolver')
+                self._fallbacks.setdefault(adapter.fallback_type, []).append(adapter)
             for symbol in adapter.symbols:
                 if adapter.access == 'resource' and symbol.endswith('.*'):
                     owner = symbol[:-2]
@@ -190,4 +197,18 @@ class AdapterRegistry:
     def inventory(self):
         return [{'id': a.id, 'capability': a.capability, 'symbols': list(a.symbols),
                  'aliases': list(a.aliases), 'receiver_kind': a.receiver_kind,
-                 **({'access': a.access} if a.access != 'call' else {})} for a in self.adapters]
+                 **({'access': a.access} if a.access != 'call' else {}),
+                 **({'fallback_type': list(a.fallback_type)} if a.fallback_type else {})} for a in self.adapters]
+
+    def fallback_value(self, node, source_type, context, seen, reason):
+        types = {'Color': ('color', None), 'String': ('string', None),
+                 'Dp': ('dimension', 'dp'), 'TextUnit': ('dimension', 'sp'),
+                 'Int': ('number', None), 'Long': ('number', None),
+                 'Float': ('number', None), 'Double': ('number', None)}
+        restricted = AdapterContext(ReadOnlyValues(context.values), context.value, context.render)
+        for adapter in self._fallbacks.get(types.get(source_type, ('object', source_type)), ()):
+            result = adapter.fallback(node, source_type, restricted, seen, reason)
+            validate_value(result)
+            if result is not UNRESOLVED:
+                return result
+        return UNRESOLVED

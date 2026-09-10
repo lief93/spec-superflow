@@ -85,6 +85,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="Android source layout")
     parser.add_argument('--api-adapters', type=Path,
                         help='Explicit trusted Python adapter manifest with pinned module SHA-256 values.')
+    parser.add_argument('--harmony-target', type=Path, help='Discover compatible existing components in this Harmony project.')
+    parser.add_argument('--harmony-module', default='entry')
     parser.add_argument('--preserve-component-ui-states', action='store_true',
                         help='Keep supported business-component UI branches; page state remains fixed.')
     parser.add_argument(
@@ -127,6 +129,16 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
     from ui_migration.frontend.api_adapters.loader import load_adapters
     from ui_migration.frontend.api_adapters.builtins import BUILTIN_ADAPTERS
     registry = step('load-adapters', load_adapters, getattr(args, 'api_adapters', None), BUILTIN_ADAPTERS)
+    discovery = None
+    if projected_payload is None and getattr(args, 'harmony_target', None):
+        from ui_migration.frontend.component_discovery import target_inventory, discover_adapters
+        discovery = step('discover-harmony-components', target_inventory,
+                         args.harmony_target, getattr(args, 'harmony_module', 'entry'))
+        automatic, decisions = discover_adapters(source_payload.get('component_definitions', []),
+                                                 registry.component_adapters, discovery)
+        registry.component_adapters = (*registry.component_adapters, *automatic)
+        discovery['decisions'] = decisions
+        write_json(args.output_dir.resolve() / 'component-discovery.json', discovery)
     state_projection = None
     if projected_payload is not None:
         pass
@@ -134,7 +146,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         source_payload, state_projection = step('project-state', project_source_page,
             source_payload, read_json(args.state_fixture), allow_unresolved=True, api_registry=registry
         )
-    elif source_payload.get('page_host') or (source_payload.get('style_definitions') or {}).get('tokenMappings') or (source_payload.get('style_definitions') or {}).get('componentDefaults') or getattr(args, 'api_adapters', None) is not None or any(
+    elif discovery is not None or source_payload.get('page_host') or (source_payload.get('style_definitions') or {}).get('tokenMappings') or (source_payload.get('style_definitions') or {}).get('componentDefaults') or getattr(args, 'api_adapters', None) is not None or any(
         isinstance(node, dict) and (node.get("visibility_condition") or node.get("list_item_context")
                                    or node.get('component_kind') == 'project_component'
                                    or node.get('type') in CONTROLS.names

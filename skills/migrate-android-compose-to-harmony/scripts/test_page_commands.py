@@ -118,6 +118,29 @@ import androidx.compose.runtime.Composable
             self.assertIn(name, log)
         self.assertTrue(Path(result['arkui']['output']).is_file())
 
+    def test_full_command_auto_reuses_existing_target_and_can_opt_out(self):
+        self.run_tool('migrate_compose_page.py', *self.full_args())
+        library = self.root/'harmony/entry/src/main/ets/components/Caption.ets'
+        library.parent.mkdir(parents=True)
+        content = '''@Component
+export struct Caption {
+  @Prop title: string = ""
+  build() { Text(this.title) }
+}
+'''
+        library.write_text(content)
+        args = self.full_args()
+        args[args.index('--output-dir') + 1] = self.root/'run-auto'
+        result = self.run_tool('migrate_compose_page.py', *args, '--force')
+        self.assertIn('ReusedCaption({ title: "Hello" })', Path(result['arkui']['output']).read_text())
+        discovery = json.loads((self.root/'run-auto/lanhu/component-discovery.json').read_text())
+        self.assertTrue(any(d['status'] == 'matched' for d in discovery['decisions']))
+        self.assertEqual(library.read_text(), content)
+        args[args.index('--output-dir') + 1] = self.root/'run-no-auto'
+        result = self.run_tool('migrate_compose_page.py', *args, '--force', '--no-auto-component-reuse')
+        self.assertNotIn('ReusedCaption', Path(result['arkui']['output']).read_text())
+        self.assertEqual(library.read_text(), content)
+
     def test_caller_owned_outputs_pass_full_command_with_a_context_warning(self):
         (self.source/'Page.kt').write_text('''package example
 import androidx.compose.runtime.Composable

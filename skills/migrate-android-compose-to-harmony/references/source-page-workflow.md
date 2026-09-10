@@ -31,6 +31,15 @@ silently fall back to re-extraction. Add `--project-name`, `--bundle-name` and
 normal project/asset ownership checks. New targets use module `entry`; existing
 targets may select `--module`.
 
+The page command automatically scans existing named components in the target module
+and reuses a unique same-name, compatible-parameter declaration. Inspect
+`lanhu/component-discovery.json` for selection decisions; explicit component adapters
+take priority. Use `--no-auto-component-reuse` to disable this. See
+[automatic component matching](business-component-reuse.md#automatic-matching-default-for-the-page-command)
+for supported types, SDK parser configuration and limits. Standalone Lanhu generation
+opts in with `--harmony-target` and optional `--harmony-module`; no target source is
+read by the final ArkUI backend.
+
 `--root-source` and `--root-composable` are required. There is no automatic entry
 selection. `--state-fixture` is optional only when source values suffice; omitted
 state does not invent loaded data. `--api-adapters /absolute/manifest.json` passes

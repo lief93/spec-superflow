@@ -10,6 +10,12 @@ def identifier(value):
 
 
 def validate_property(value):
+    from .resource_values import is_resource_value, validate_resource_value
+    if is_resource_value(value):
+        validate_resource_value(value)
+        return
+    if isinstance(value, dict) and value == {'kind':'empty_callback'}:
+        return
     if value is None or type(value) in (str, bool, int):
         return
     if type(value) is float and math.isfinite(value):
@@ -23,6 +29,10 @@ def validate_property(value):
 def validate_reuse(record):
     if not isinstance(record, dict) or record.get('schema') != 'ui-migration.component-reuse.v1':
         raise ValueError('invalid component reuse declaration')
+    if record.get('call_style', 'properties') not in {'properties', 'positional'}:
+        raise ValueError('invalid component call style')
+    if record.get('call_style') == 'positional' and record.get('slots'):
+        raise ValueError('positional reuse does not support content slots')
     for field in ('adapter_id', 'definition_id', 'android'):
         if not isinstance(record.get(field), str) or not record[field]:
             raise ValueError('component reuse requires ' + field)

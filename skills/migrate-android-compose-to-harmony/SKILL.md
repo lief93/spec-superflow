@@ -14,6 +14,10 @@ For one selected Compose page, use the
 [page-level command](references/source-page-workflow.md#one-command-for-one-page)
 `migrate_compose_page.py`; for source JSON alone use `generate_source_page.py`.
 Both require the exact page function and explicit project style configuration.
+The page command automatically reuses compatible same-name components from the target
+module; see [component discovery and explicit overrides](references/business-component-reuse.md#automatic-matching-default-for-the-page-command).
+Use `--no-auto-component-reuse` to disable it. No per-component registration is needed
+for supported signatures; unknown types and ambiguous matches remain diagnostic.
 Do not reconstruct these steps using ad hoc inline Python. Generated code is not
 build/runtime acceptance; the project-wide agent workflow remains separate.
 The page command's final `result.json` includes grouped `diagnosis` and a Chinese

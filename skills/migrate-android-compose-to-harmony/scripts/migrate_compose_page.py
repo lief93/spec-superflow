@@ -29,6 +29,8 @@ def parse_args():
     parser.add_argument('--state-id', default='default')
     parser.add_argument('--state-fixture', type=Path)
     parser.add_argument('--api-adapters', type=Path)
+    parser.add_argument('--no-auto-component-reuse', action='store_true',
+                        help='Disable same-name/signature discovery in the target module.')
     parser.add_argument('--preserve-component-ui-states', action='store_true',
                         help='Preserve business-component UI branches without migrating their business conditions.')
     parser.add_argument('--module', default='entry')
@@ -201,6 +203,8 @@ class PageRun:
             '--style-definitions', styles, '--root-source', a.root_source, '--root-composable', a.root_composable,
             '--page-id', a.page_id, '--state-id', a.state_id, '--output', source_page)
         options = []
+        if not getattr(a, 'no_auto_component_reuse', False):
+            options.extend(['--harmony-target', self.target, '--harmony-module', a.module])
         if getattr(a, 'preserve_component_ui_states', False):
             options.append('--preserve-component-ui-states')
         for name,path in (('--state-fixture', a.state_fixture), ('--api-adapters', a.api_adapters)):

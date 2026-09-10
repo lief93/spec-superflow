@@ -30,6 +30,8 @@ def preserve_component_states(raw, projected, fixture, registry):
     catalogs, diagnostics = [], []
     replacements = {}
     for active_instance in projected['components']:
+        if active_instance.get('source', {}).get('component_reuse') is not None:
+            continue  # The target library owns its internal state UI.
         # Source IDs identify definitions; expanded IDs identify independent UI instances.
         instance = nodes[active_instance.get('source_component_id', active_instance['id'])]
         definition = definitions.get(instance.get('definition_id'), {})

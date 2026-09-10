@@ -841,6 +841,23 @@ def static_style_for_call(
                 unresolved.append(
                     {"path": "style.surface.background", "expression": arguments, "reason": "theme or dynamic source expression"}
                 )
+        elif name == 'focusable':
+            positional, named = parsed_arguments(arguments)
+            enabled = named.get('enabled') or (positional[0] if positional else 'true')
+            value = evaluate_expression(enabled, {})
+            if type(value) is bool:
+                style['state']['focusable'] = value
+                provenance_paths.append('style.state.focusable')
+            else:
+                unresolved.append({'path':'style.state.focusable', 'expression':enabled,
+                                   'reason':'focusable requires a resolved boolean'})
+            interaction = named.get('interactionSource') or (positional[1] if len(positional) > 1 else 'null')
+            if interaction != 'null':
+                unresolved.append({'path':'source.modifiers.focusable.interactionSource', 'expression':interaction,
+                                   'reason':'focus interaction stream requires target behavior wiring'})
+        elif name == "clipToBounds" and not arguments.strip():
+            style['surface']['clip'] = True
+            provenance_paths.append('style.surface.clip')
         elif name == "clip":
             positional, named = parsed_arguments(arguments)
             shape_expression = named.get('shape') or (positional[0] if positional else '')
