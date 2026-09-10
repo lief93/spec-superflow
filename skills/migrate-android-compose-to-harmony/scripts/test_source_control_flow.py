@@ -19,7 +19,7 @@ class SourceControlFlowTest(unittest.TestCase):
                            'rows.forEachIndexed(action = { index, item -> Text(item) })'):
             calls = extract_semantic_ui_calls('Page.kt', invocation, 'Page', invocation, 0, set(), {}, {})
             self.assertEqual(next(c for c in calls if c['component']=='Text')['list_item_context'],
-                {'collection':'rows', 'item_parameter':'item', 'index_parameter':'index'})
+                {'collection':'rows', 'item_parameter':'item', 'index_parameter':'index', 'accepts_count':False})
 
     def test_nested_if_else_and_implicit_foreach_context_are_preserved(self) -> None:
         body = """
@@ -61,7 +61,7 @@ Column {
         )
         self.assertEqual(
             icon["list_item_context"],
-            {"collection": "items", "item_parameter": "it"},
+            {"collection": "items", "item_parameter": "it", "accepts_count": False},
         )
 
     def test_async_image_model_and_multiline_builder_are_preserved(self) -> None:
@@ -120,7 +120,7 @@ Column {
         )
         self.assertEqual(
             text["list_item_context"],
-            {"collection": "items", "item_parameter": "it"},
+            {"collection": "items", "item_parameter": "it", "accepts_count": False},
         )
 
     def test_subjectless_when_expression_branches_are_preserved(self) -> None:

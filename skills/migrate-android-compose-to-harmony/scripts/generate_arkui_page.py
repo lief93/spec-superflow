@@ -12,6 +12,7 @@ from ui_migration.progress import Progress, step, checkpoint, phase
 from ui_migration.naming import source_identifier
 from ui_migration.contracts.identity import canonical_sha256, require_contract_ui, require_safe_relative_source
 from ui_migration.arkui.project import normalize_target, require_module, validate_previous
+from ui_migration.target_access import add_target_arguments, metadata_directory, check_manifest_outputs, checked_path
 from ui_migration.arkui.renderer import (
     Renderer,
 )
@@ -58,6 +59,7 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--force", action="store_true")
+    add_target_arguments(parser)
     return parser.parse_args()
 
 
@@ -67,8 +69,10 @@ def generate(
     page_json: Path,
     force: bool,
     page_output_dir: Path | None = None,
+    *, existing_target=False, target_metadata_dir=None,
 ) -> dict[str, Any]:
-    target = normalize_target(target_path)
+    metadata = metadata_directory(target_path, module, existing_target, target_metadata_dir)
+    target = target_path.expanduser().resolve() if existing_target else normalize_target(target_path)
     require_module(target, module)
     from ui_migration.target_paths import page_directory, relocate_import
     output_directory = page_directory(target, module, page_output_dir)
@@ -81,7 +85,7 @@ def generate(
     identity = hashlib.sha256(
         f"{root['source']}#{root['composable']}".encode("utf-8")
     ).hexdigest()[:16]
-    resource_names, string_values = step('load-target-resources', load_theme_resources, target, module)
+    resource_names, string_values = step('load-target-resources', load_theme_resources, target, module, metadata)
     required_gate = android_page_input.get("required_fact_gate")
     tinted_vector_resources, tinted_vector_payloads, tinted_vector_records = (
         step('derive-tinted-vectors', derive_page_tinted_vectors, target, module, identity, android_page_input)
@@ -94,7 +98,7 @@ def generate(
         tinted_vector_resources,
         import_module=lambda value: relocate_import(value, target/module/'src/main/ets/generated', output_directory),
     )
-    renderer.verified_font_faces = step('verify-font-assets', load_page_font_faces, target, module, android_page_input)
+    renderer.verified_font_faces = step('verify-font-assets', load_page_font_faces, target, module, android_page_input, metadata)
     with phase('render-arkts', components=len(android_page_input['components'])):
         source = renderer.render()
     target_phase_gate = step('validate-target-consumption', build_target_phase_consumption_gate,
@@ -118,10 +122,20 @@ def generate(
             )
     generation_complete = not renderer.unresolved and target_phase_gate["verdict"] == "pass"
     output_relative = (output_directory / f"Generated{pascal_identifier(root['composable'])}.ets").relative_to(target).as_posix()
-    manifest_relative = f".migration/arkui-pages/{identity}.json"
+    manifest_relative = str(metadata / 'arkui-pages' / f'{identity}.json') if existing_target else f".migration/arkui-pages/{identity}.json"
     output_path = target / output_relative
     manifest_path = target / manifest_relative
+    if existing_target:
+        checked_path(target / module / 'src/main/ets', output_path)
+        checked_path(metadata, manifest_path)
+        check_manifest_outputs(target, module, manifest_path)
     validate_previous(target, output_path, manifest_path, root, module, force)
+    if existing_target:
+        previous_outputs = json.loads(manifest_path.read_text()).get('outputs', {}) if manifest_path.exists() else {}
+        for destination in tinted_vector_payloads:
+            checked_path(target / module / 'src/main/resources', destination)
+            if destination.exists() and destination.relative_to(target).as_posix() not in previous_outputs:
+                raise ArkUIPageError(f'refusing to replace an unowned derived vector: {destination}')
     output_bytes = source.encode("utf-8")
     semantic_input = {
         "input_mode": "page-json-only",
@@ -246,7 +260,8 @@ def main() -> int:
     args = parse_args()
     try:
         with Progress('arkui'):
-            result = generate(args.target, args.module, args.page_json, args.force, args.page_output_dir)
+            result = generate(args.target, args.module, args.page_json, args.force, args.page_output_dir,
+                              existing_target=args.existing_target, target_metadata_dir=args.target_metadata_dir)
     except (ArkUIPageError, OSError, TypeError, ValueError) as error:
         print(
             json.dumps(

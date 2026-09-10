@@ -1,7 +1,7 @@
 """Bounded pure Kotlin operations on already parsed receiver/argument nodes."""
 import math
 from ui_migration.semantics.literals import display_value
-from ui_migration.semantics.syntax import call_from
+from ui_migration.semantics.syntax import call_from, is_standard_call
 
 
 def builtin_value(node, context, seen):
@@ -40,6 +40,12 @@ def builtin_value(node, context, seen):
                     return math.floor(dp * pixels + .5)
     if call.qualified_name in ('listOf', 'kotlin.collections.listOf'):
         return [evaluate(argument['value']) for argument in call.arguments]
+    imports = context.values.get('__source_imports') or {}
+    if call.name == 'arrayOf' or imports.get(call.name) == 'kotlin.arrayOf':
+        if is_standard_call(call, 'kotlin.arrayOf', imports,
+                            set(context.bindings) | set(context.values) |
+                            {f['name'] for f in context.values.get('__source_functions', [])}):
+            return [evaluate(argument['value']) for argument in call.arguments]
     if call.qualified_name in ('mapOf', 'kotlin.collections.mapOf'):
         pairs = [evaluate(a['value']) for a in call.arguments]
         if all(isinstance(p, tuple) and len(p) == 2 and isinstance(p[0], (str, int, bool)) for p in pairs):

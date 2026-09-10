@@ -109,6 +109,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target", required=True, type=Path)
     parser.add_argument("--module", default="entry")
     parser.add_argument("--force", action="store_true")
+    from ui_migration.target_access import add_target_arguments
+    add_target_arguments(parser)
     return parser.parse_args()
 
 
@@ -687,14 +689,20 @@ def generate(
     target_path: Path,
     module: str,
     force: bool,
+    *, existing_target=False, target_metadata_dir=None,
 ) -> dict[str, Any]:
-    target = normalize_target(target_path)
+    from ui_migration.target_access import metadata_directory, check_manifest_outputs, checked_path
+    metadata = metadata_directory(target_path, module, existing_target, target_metadata_dir)
+    target = target_path.expanduser().resolve() if existing_target else normalize_target(target_path)
     require_safe_module(target, module)
     contract, resolved_contract = load_contract(contract_path)
     if contract is None or resolved_contract is None:
         raise ThemeResourceError("migration contract is required")
     inventory = require_theme_inventory(contract)
-    manifest_path = target / ".migration" / "compose-theme-resources.json"
+    manifest_path = metadata / 'compose-theme-resources.json'
+    if existing_target:
+        checked_path(metadata, manifest_path)
+        check_manifest_outputs(target, module, manifest_path)
     previous = load_previous_manifest(
         manifest_path,
         target,
@@ -746,6 +754,22 @@ def generate(
     output_metadata: dict[str, Any] = {}
     generated_names: dict[str, list[str]] = {}
     for relative, category, generated_values in relative_outputs:
+        if existing_target:
+            if not generated_values:
+                continue
+            relative = str(Path(relative).with_name('migration_' + Path(relative).name))
+            destination = checked_path(target / module / 'src/main/resources', target / relative)
+            if destination.exists() and (previous is None or relative not in previous['outputs']):
+                raise ThemeResourceError(f'refusing to replace an unowned theme file: {relative}')
+            for other in destination.parent.glob('*.json'):
+                if other == destination:
+                    continue
+                checked_path(target, other)
+                payload = json.loads(other.read_text(encoding='utf-8'))
+                names_in_other = {item.get('name') for item in payload.get(category, []) if isinstance(item, dict)}
+                conflicts = names_in_other.intersection(generated_values)
+                if conflicts:
+                    raise ThemeResourceError('generated theme resource conflicts with an existing target resource: ' + ', '.join(sorted(conflicts)))
         previous_for_output = previous_names.get(relative, [])
         if not isinstance(previous_for_output, list) or not all(
             isinstance(name, str) for name in previous_for_output
@@ -806,7 +830,7 @@ def generate(
     return {
         "target": str(target),
         "module": module,
-        "manifest": ".migration/compose-theme-resources.json",
+        "manifest": str(manifest_path) if existing_target else ".migration/compose-theme-resources.json",
         "resource_skeleton_complete": not unresolved,
         "unresolved_count": len(unresolved),
         "font_copy_plan_count": len(font_copy_plan),
@@ -822,6 +846,7 @@ def main() -> int:
             args.target,
             args.module,
             args.force,
+            existing_target=args.existing_target, target_metadata_dir=args.target_metadata_dir,
         )
     except (ThemeResourceError, OSError, TypeError, ValueError) as error:
         print(

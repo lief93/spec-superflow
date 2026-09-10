@@ -161,6 +161,7 @@ public final class KotlinExpressionTree {
         }
         List<Object> localBindings = new ArrayList<>();
         List<Object> qualifiedCalls = new ArrayList<>();
+        List<Object> lambdaCalls = new ArrayList<>();
         List<Object> globalProperties = new ArrayList<>();
         List<Object> propertyGetters = new ArrayList<>();
         List<Object> forLoops = new ArrayList<>();
@@ -187,8 +188,7 @@ public final class KotlinExpressionTree {
             }
         }
         for (KtCallExpression call : PsiTreeUtil.findChildrenOfType(file, KtCallExpression.class)) {
-            if (call.getParent() instanceof KtDotQualifiedExpression && call.getCalleeExpression() != null) {
-                KtDotQualifiedExpression qualified = (KtDotQualifiedExpression) call.getParent();
+            if (call.getCalleeExpression() != null) {
                 List<Object> lambdaScopes = new ArrayList<>();
                 List<KtLambdaExpression> directLambdas = new ArrayList<>();
                 for (KtValueArgument argument : call.getValueArguments()) {
@@ -204,10 +204,21 @@ public final class KotlinExpressionTree {
                         "start", lambda.getBodyExpression().getTextOffset(),
                         "end", lambda.getBodyExpression().getTextRange().getEndOffset()));
                 }
-                qualifiedCalls.add(node("call", "start", call.getTextOffset(),
-                    "name", qualified.getReceiverExpression().getText() + "." + call.getCalleeExpression().getText(),
-                    "callee", call.getCalleeExpression().getText(),
-                    "receiver", qualified.getReceiverExpression().getText(), "lambdaScopes", lambdaScopes));
+                if (call.getParent() instanceof KtDotQualifiedExpression) {
+                    KtDotQualifiedExpression qualified = (KtDotQualifiedExpression) call.getParent();
+                    qualifiedCalls.add(node("call", "start", call.getTextOffset(),
+                        "name", qualified.getReceiverExpression().getText() + "." + call.getCalleeExpression().getText(),
+                        "callee", call.getCalleeExpression().getText(),
+                        "receiver", qualified.getReceiverExpression().getText(), "lambdaScopes", lambdaScopes));
+                }
+                if (!lambdaScopes.isEmpty()) {
+                    KtExpression expression = call;
+                    if (call.getParent() instanceof KtQualifiedExpression
+                            && ((KtQualifiedExpression) call.getParent()).getSelectorExpression() == call)
+                        expression = (KtQualifiedExpression) call.getParent();
+                    lambdaCalls.add(node("lambda_call", "start", expression.getTextOffset(),
+                        "expression", tree(expression), "lambdaScopes", lambdaScopes));
+                }
             }
         }
         for (KtProperty property : PsiTreeUtil.findChildrenOfType(file, KtProperty.class)) {
@@ -293,7 +304,7 @@ public final class KotlinExpressionTree {
                 "line", file.getText().substring(0, function.getTextOffset()).split("\n", -1).length));
         }
         return node("declarations", "functions", functions, "typeAliases", typeAliases, "imports", imports, "localBindings", localBindings,
-                    "qualifiedCalls", qualifiedCalls, "globalProperties", globalProperties,
+                    "qualifiedCalls", qualifiedCalls, "lambdaCalls", lambdaCalls, "globalProperties", globalProperties,
                     "propertyGetters", propertyGetters, "forLoops", forLoops, "lambdas", lambdas, "recordClasses", recordClasses,
                     "package", file.getPackageFqName().asString(), "wildcardImports", wildcardImports);
     }

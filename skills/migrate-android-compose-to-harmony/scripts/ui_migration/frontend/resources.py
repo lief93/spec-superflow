@@ -160,7 +160,7 @@ def find_resource_file(source_root: Path | None, resource: str) -> Path | None:
     return (defaults or candidates or [None])[0]
 
 
-def safe_asset_index(source_root: Path | None, source_relative: str | None = None) -> dict[str, dict[str, Any]]:
+def _safe_asset_candidates(source_root: Path | None) -> dict[str, list[dict[str, Any]]]:
     if source_root is None:
         return {}
     manifest = source_root / ".android-to-harmony-safe.json"
@@ -191,14 +191,28 @@ def safe_asset_index(source_root: Path | None, source_relative: str | None = Non
                 if dimensions is not None:
                     evidence["width_dp"], evidence["height_dp"] = dimensions
         candidates[resource_path.stem].append(evidence)
+    return candidates
+
+
+def _select_asset_candidates(candidates, source_relative):
     module = source_relative.split('/src/', 1)[0] + '/src/' if source_relative and '/src/' in source_relative else None
     result = {}
     for name, items in candidates.items():
         scoped = [item for item in items if module and item['path'].startswith(module)]
         selected = scoped or items
         if len({item['sha256'] for item in selected}) == 1:
-            result[name] = selected[0]
+            result[name] = dict(selected[0])
     return result
+
+
+def safe_asset_index(source_root: Path | None, source_relative: str | None = None) -> dict[str, dict[str, Any]]:
+    return _select_asset_candidates(_safe_asset_candidates(source_root), source_relative)
+
+
+def safe_asset_indexes(source_root: Path | None, sources):
+    candidates = _safe_asset_candidates(source_root)
+    return (_select_asset_candidates(candidates, None),
+            {source: _select_asset_candidates(candidates, source) for source in dict.fromkeys(sources)})
 
 
 def android_vector_dimensions(path: Path | None) -> tuple[float, float] | None:

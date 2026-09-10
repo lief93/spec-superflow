@@ -10,7 +10,7 @@ from ui_migration.frontend.bindings import bind_source_expression, bound_modifie
 from ui_migration.frontend.definitions import component_definition, source_component_id, source_semantic_key
 from ui_migration.frontend.model import MATERIAL3_TYPOGRAPHY, RealPageError, SOURCE_PAGE_SCHEMA
 from ui_migration.frontend.relationships import source_layout_relationships
-from ui_migration.frontend.resources import resource_values, runtime_asset_rules, safe_asset_index
+from ui_migration.frontend.resources import resource_values, runtime_asset_rules, safe_asset_indexes
 from ui_migration.frontend.styles import static_style_for_call
 from ui_migration.frontend.project_styles import build_style_definitions, validate_style_definitions
 from ui_migration.frontend.function_inventory import source_functions
@@ -143,8 +143,7 @@ def build_source_page_spec(
         and token.get("kind") == "font_family"
         and isinstance(token.get("name"), str)
     }
-    manifest_assets = safe_asset_index(source_root)
-    scoped_assets = {source: safe_asset_index(source_root, source) for source, _ in reached_keys}
+    manifest_assets, scoped_assets = safe_asset_indexes(source_root, (source for source, _ in reached_keys))
     components: list[dict[str, Any]] = []
     component_definitions: dict[str, dict[str, Any]] = {}
     metadata_cache: dict[str, tuple[str | None, dict[str, str]]] = {}

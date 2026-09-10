@@ -6,6 +6,32 @@ import json
 import re
 
 
+def collect_unresolved(components, initial):
+    """Keep diagnostic order/duplicates; look up required facts within their component."""
+    unresolved = list(initial)
+    keys = {}
+
+    def remember(record):
+        keys.setdefault(record['component_id'], []).append((record.get('path'), record.get('expression')))
+
+    for record in unresolved:
+        remember(record)
+    for component in components:
+        component_id = component['id']
+        for item in component.get('unresolved') or []:
+            record = {'component_id': component_id, **item}
+            unresolved.append(record)
+            remember(record)
+        for item in component.get('required_facts') or []:
+            if item['status'] in {'symbolic', 'unresolved'} and (
+                item.get('path'), item.get('expression')
+            ) not in keys.get(component_id, []):
+                record = {'component_id': component_id, **item}
+                unresolved.append(record)
+                remember(record)
+    return unresolved
+
+
 def category(path: str) -> str:
     if path.startswith('source.theme.'):
         return 'theme'
@@ -45,7 +71,7 @@ def build_worklist(document: dict, tree, unresolved: list[dict]) -> dict:
         if issue.get('candidates'):
             context['candidates'] = issue['candidates']
         key = json.dumps([category(path), path, expression, source.get('source'),
-                          source.get('composable'), context], sort_keys=True, ensure_ascii=False)
+                          source.get('composable'), context, issue.get('component_ui_state')], sort_keys=True, ensure_ascii=False)
         task_id = hashlib.sha256(key.encode()).hexdigest()[:20]
         task = grouped.setdefault(task_id, {
             'id': task_id, 'category': category(path), 'path': path, 'expression': expression,
@@ -54,6 +80,8 @@ def build_worklist(document: dict, tree, unresolved: list[dict]) -> dict:
         occurrence = {'component_id': component_id, 'component_type': node.get('type'),
                       'source': {k: source[k] for k in ('source', 'line', 'composable', 'call_id') if k in source},
                       'reason': issue.get('reason') or issue.get('message') or issue.get('status')}
+        if issue.get('component_ui_state'):
+            occurrence['component_ui_state'] = issue['component_ui_state']
         if occurrence not in task['occurrences']:
             task['occurrences'].append(occurrence)
     tasks = list(grouped.values())

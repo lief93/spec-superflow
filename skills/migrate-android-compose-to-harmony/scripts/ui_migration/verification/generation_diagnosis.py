@@ -1,6 +1,7 @@
 """Explain existing generation evidence without executing source or guessing visual causes."""
 from dataclasses import dataclass
 import json
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,10 @@ class Rule:
 
 
 RULES = (
+    Rule('state_preview_default', ('preview default branch selected',), 'content',
+        '条件尚未解析；当前仅展示默认预览分支，其他分支属性已保留，不参与当前布局。',
+        '需要真实状态时补充源状态输入并重新生成；预览选择不代表运行时条件或业务逻辑已还原。',
+        'frontend/preview.py; frontend/fixed_state.py', True),
     Rule('target_fact_not_consumed', ('page JSON fact was not consumed by the ArkUI emitter',), 'control',
         '属性已进入页面 JSON，但 ArkUI 生成器没有记录对应消费。',
         '检查该组件的渲染分支与属性消费记录，区分组件未输出、属性未映射和消费记录遗漏；不是直接补默认值。',
@@ -60,6 +65,14 @@ RULES = (
         'component_required_facts.py; arkui/renderer.py'),
 )
 
+STATUSES = {
+    'pending': '当前 UI 待处理',
+    'defaulted': '默认值降级，仍需核对还原',
+    'deferred_dynamic': '动态/业务条件暂缓',
+    'other_state': '其他组件状态待处理',
+    'resolved_reference': '目标引用已消费，不计入未解决',
+}
+
 
 def classify(reason, path):
     for rule in RULES:
@@ -88,20 +101,51 @@ def diagnose(worklist=None, manifest=None, source_page=None, failure=None, versi
             nodes[layer['id']] = {'type':migration.get('componentType'), 'source':migration['source']}
         pending.extend(layer.get('layers', []))
     issues = {}
+    consumed = {(c.get('component_id'), c.get('path')) for c in
+        manifest.get('target_phase_consumption_gate', {}).get('checks', []) if c.get('status') == 'consumed'}
+    target_errors = {(u.get('page_component_id') or u.get('component_id'), u.get('path'))
+                     for u in manifest.get('unresolved', [])}
+    defaults = {(w.get('component_id'), w.get('path')): w for w in manifest.get('warnings', [])
+                if w.get('kind') == 'style_default_applied'}
+
+    def disposition(path, reason, occurrence):
+        if occurrence and occurrence.get('component_ui_state'):
+            return 'other_state'
+        identity = ((occurrence or {}).get('component_id'), path)
+        if identity not in target_errors:
+            if identity in defaults:
+                return 'defaulted'
+            if identity in consumed and path.startswith('style.'):
+                from ui_migration.contracts.style_tokens import has_token_reference
+                try:
+                    if has_token_reference(nodes.get(identity[0], {}), path):
+                        return 'resolved_reference'
+                except ValueError:
+                    pass
+        if path == 'source.state_resolution' or classify(reason, path).code == 'state_not_selected':
+            return 'deferred_dynamic'
+        return 'pending'
 
     def add(path, expression, reason, occurrence, bindings, evidence, execution=False):
         path, expression, reason = path or '', expression or '', reason or ''
+        status = disposition(path, reason, occurrence)
+        state = (occurrence or {}).get('component_ui_state')
         if occurrence is not None:
             source = occurrence.get('source') or {}
             occurrence = {key:occurrence.get(key) for key in ('component_id', 'component_type')}
             occurrence.update(path=path, reason=reason,
                 source={key:source[key] for key in ('source', 'line', 'composable', 'call_id') if key in source})
+            if state:
+                occurrence['component_ui_state'] = state
+            if status == 'defaulted':
+                occurrence['fallback'] = defaults[(occurrence['component_id'], path)].get('fallback')
         rule = classify(reason, path)
         if execution and rule.code == 'unclassified':
             rule = Rule('execution_failed', (), 'execution', '命令在当前阶段停止，未完成后续生成。',
                 '处理下方原始错误后使用新的运行目录重试；不要复用上次生成文件冒充本次结果。', failure['stage'])
-        key = (rule.code, expression, reason, json.dumps(bindings, sort_keys=True, ensure_ascii=False))
+        key = (status, state, rule.code, expression, reason, json.dumps(bindings, sort_keys=True, ensure_ascii=False))
         issue = issues.setdefault(key, {'code':rule.code, 'summary':rule.summary, 'impact':rule.impact,
+            'status':status,
             'root_cause_confirmed':rule.confirmed, 'action':rule.action, 'owner':rule.owner,
             'expression':expression, 'bindings':bindings, 'paths':[], 'reasons':[reason],
             'occurrences':[], 'evidence':[]})
@@ -121,7 +165,8 @@ def diagnose(worklist=None, manifest=None, source_page=None, failure=None, versi
         reason = item.get('page_reason') or item.get('reason', '')
         matches = [issue for issue in issues.values() if issue['expression'] == expression
             and reason in issue['reasons'] and path in issue['paths']
-            and any(o.get('component_id') == component_id for o in issue['occurrences'])]
+            and any(o.get('component_id') == component_id and not o.get('component_ui_state')
+                    for o in issue['occurrences'])]
         if len(matches) == 1:
             matches[0]['evidence'] = sorted(set(matches[0]['evidence']) | {'arkui_manifest'})
             continue
@@ -129,32 +174,113 @@ def diagnose(worklist=None, manifest=None, source_page=None, failure=None, versi
         occurrence = {'component_id':component_id, 'component_type':node.get('type'),
             'source':node.get('source', {}), 'reason':reason}
         add(path, expression, reason, occurrence, {}, 'arkui_manifest')
+    for (component_id, path), warning in defaults.items():
+        matches = [issue for issue in issues.values() if any(
+            o.get('component_id') == component_id and o.get('path') == path and not o.get('component_ui_state')
+            for o in issue['occurrences'])]
+        if matches:
+            for issue in matches:
+                issue['evidence'] = sorted(set(issue['evidence']) | {'arkui_default_warning'})
+            continue
+        node = nodes.get(component_id, {})
+        add(path, warning.get('expression'), warning.get('reason'),
+            {'component_id':component_id, 'component_type':node.get('type'), 'source':node.get('source', {})},
+            {}, 'arkui_default_warning')
     if failure:
         add('', '', failure['error'], None, {}, 'command_error', execution=True)
     priority = {'execution':0, 'content':1, 'layout':2, 'control':3, 'style':4, 'unknown':5}
-    ordered = sorted(issues.values(), key=lambda issue:priority[issue['impact']])
+    ordered = sorted(issues.values(), key=lambda issue:(list(STATUSES).index(issue['status']), priority[issue['impact']]))
+    counts = {status:sum(issue['status'] == status for issue in ordered) for status in STATUSES}
+    outstanding = len(ordered) - counts['resolved_reference']
     return {'schema':'android-to-harmony.generation-diagnosis.v1', 'issue_count':len(ordered),
-        'summary':f'发现 {len(ordered)} 组生成问题，已合并重复证据。' if ordered else '未收集到具体失败项；这不等于视觉验收通过。',
+        'unresolved_count':outstanding, 'counts':counts,
+        'target_evidence_available':bool(manifest),
+        'summary':f'尚有 {outstanding} 组未解决事项（含降级、暂缓和其他状态），目标引用已消费 {counts["resolved_reference"]} 组。',
         'scope':'generation-evidence', 'visual_cause_verified':False,
         'priority_note':'按内容、布局、控件、样式排序，不代表已证明整页空白由第一项引起。',
         'issues':ordered}
 
 
 def render_markdown(diagnosis):
-    lines = ['# 页面生成诊断', '', diagnosis['summary'], '', diagnosis['priority_note'], '']
+    lines = ['# 页面未解决事项', '', diagnosis['summary'], '',
+        '这是本次运行的统一清单；按诊断组计数，不是原始日志条数，也不等于已证实的独立根因数。',
+        '默认值降级仍可能影响还原度；暂缓不代表已实现。零未解决项也不代表视觉验收通过。', '',
+        '| 分类 | 数量 |', '| --- | ---: |']
+    lines.extend(f'| {label} | {diagnosis["counts"][status]} |' for status, label in STATUSES.items())
+    lines.extend(['', diagnosis['priority_note'], ''])
+    if not diagnosis['target_evidence_available']:
+        lines.extend(['尚无最终 ArkUI manifest，当前计数仅基于已收集证据，不能确认目标端已解决。', ''])
     for error in diagnosis.get('collection_errors', []):
         lines.extend([f"证据读取失败：`{error['path']}`：{error['error']}", ''])
+    if diagnosis.get('visual_triage'):
+        from ui_migration.verification.visual_triage import render_triage
+        lines.extend([render_triage(diagnosis['visual_triage']), '', '## 生成问题明细', ''])
     for index, issue in enumerate(diagnosis['issues'], 1):
         lines.extend([f"## {index}. {issue['summary']}", '',
+            f"状态：**{STATUSES[issue['status']]}**",
             '根因：' + ('已确认。' if issue['root_cause_confirmed'] else '尚未确定完整上游根因；以下是已定位的失败环节。'),
             f"处理：{issue['action']}", f"对应模块：`{issue['owner']}`",
             f"属性：`{', '.join(issue['paths'])}`", '', '表达式与参数：', '```json',
             json.dumps({'expression':issue['expression'], 'bindings':issue['bindings']}, ensure_ascii=False, indent=2),
             '```', '', '影响位置：'])
+        if issue['status'] == 'deferred_dynamic':
+            lines.append('暂缓动态/业务实现；该条件未选定的分支可能造成当前页面内容缺失。'
+                         '若需还原此状态，应提供真实状态输入或实现等价条件选择，不能改成恒真。')
         for occurrence in issue['occurrences']:
             source = occurrence.get('source') or {}
             lines.append(f"- `{occurrence.get('component_id')}` {occurrence.get('component_type') or ''} "
                 f"`{source.get('source', '未绑定源码')}:{source.get('line', '?')}` {source.get('composable', '')} "
                 f"属性 `{occurrence.get('path', '')}`")
+            if occurrence.get('component_ui_state'):
+                lines.append(f"  组件状态：`{occurrence['component_ui_state']}`")
+            if 'fallback' in occurrence:
+                lines.append('  当前默认值：`' + json.dumps(occurrence['fallback'], ensure_ascii=False) + '`')
         lines.extend(['', '原始原因：', '```text', '\n'.join(issue['reasons']), '```', ''])
     return '\n'.join(lines)+'\n'
+
+
+def diagnose_run(directory, report, comparison=None):
+    """Use the same current-run evidence for command completion and later visual triage."""
+    evidence, errors = {}, []
+    paths = {}
+    if directory is not None:
+        directory = Path(directory)
+        paths = {'source_page': directory/'source-page.json',
+                 'version_page': directory/'lanhu/version_json.json',
+                 'worklist': directory/'lanhu/unresolved-worklist.json'}
+        if report.get('arkui'):
+            paths['manifest'] = Path(report['arkui']['manifest'])
+        for name, path in paths.items():
+            if path.is_file():
+                try:
+                    value = json.loads(path.read_text(encoding='utf-8'))
+                    if not isinstance(value, dict):
+                        raise ValueError('Expected a JSON object')
+                    evidence[name] = value
+                except (ValueError, OSError) as error:
+                    errors.append({'path': str(path), 'error': str(error)})
+            elif name == 'manifest':
+                errors.append({'path': str(path), 'error': 'Recorded ArkUI manifest is missing'})
+    failure = ({'stage': report['failed_stage'], 'error': report['error']}
+               if report.get('status') == 'failed' else None)
+    diagnosis = diagnose(**evidence, failure=failure)
+    if comparison is not None:
+        import hashlib
+        from ui_migration.contracts.identity import canonical_sha256
+        from ui_migration.verification.visual_triage import correlate
+        for name in ('source_page', 'version_page'):
+            if name not in evidence:
+                raise ValueError('Visual triage requires readable ' + name)
+        version_sha = hashlib.sha256(paths['version_page'].read_bytes()).hexdigest()
+        expected = evidence.get('worklist', {}).get('version_json_sha256')
+        if expected and expected != version_sha:
+            raise ValueError('Worklist belongs to a different version_json.json; regenerate paired evidence')
+        expected = evidence.get('manifest', {}).get('semantic_input_sha256')
+        page_sha = canonical_sha256({'version_json_sha256': version_sha})
+        if expected and expected != canonical_sha256({'input_mode': 'page-json-only', 'page_json_sha256': page_sha}):
+            raise ValueError('ArkUI manifest belongs to a different version_json.json; use the matching run')
+        diagnosis['visual_triage'] = correlate(diagnosis, comparison, evidence['source_page'],
+            evidence['version_page'], evidence.get('manifest', {}))
+    diagnosis['collection_errors'] = errors
+    diagnosis['collection_complete'] = not errors
+    return diagnosis

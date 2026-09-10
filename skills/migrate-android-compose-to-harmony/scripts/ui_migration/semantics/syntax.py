@@ -53,3 +53,12 @@ def call_from(node):
         return None
     name = qualified_name(node['callee'])
     return Call(name, tuple(node['arguments']), receiver, safe) if name else None
+
+
+def is_standard_call(call, symbol, imports, shadowed):
+    """Bounded name resolution, not a claim of Kotlin compiler symbol binding."""
+    if call.receiver is not None:
+        return not call.safe and call.qualified_name == symbol and symbol.split('.')[0] not in shadowed
+    if call.name in shadowed:
+        return False
+    return imports.get(call.name, 'kotlin.' + call.name) == symbol

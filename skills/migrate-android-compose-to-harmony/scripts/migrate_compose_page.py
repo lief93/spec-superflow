@@ -10,7 +10,7 @@ import sys
 import time
 
 from ui_migration.frontend.project_styles import load_style_definitions
-from ui_migration.verification.generation_diagnosis import diagnose, render_markdown
+from ui_migration.verification.generation_diagnosis import diagnose_run, render_markdown
 from ui_migration.progress import Progress, attach_log, checkpoint, phase
 
 SCRIPTS = Path(__file__).parent
@@ -43,6 +43,8 @@ def parse_args():
     parser.add_argument('--viewport-height-dp', type=float, required=True)
     parser.add_argument('--slice-scale', type=float, default=2)
     parser.add_argument('--force', action='store_true', help='Regenerate an owned ArkUI page, never replace the project or run directory.')
+    from ui_migration.target_access import add_target_arguments
+    add_target_arguments(parser)
     return parser.parse_args()
 
 
@@ -125,29 +127,7 @@ class PageRun:
             write_json(self.directory/'result.json', self.report)
 
     def finish_diagnosis(self):
-        evidence = {}
-        collection_errors = []
-        if self.created:
-            paths = {'source_page':self.directory/'source-page.json',
-                'version_page':self.directory/'lanhu/version_json.json',
-                'worklist':self.directory/'lanhu/unresolved-worklist.json'}
-            if self.report.get('arkui'):
-                paths['manifest'] = Path(self.report['arkui']['manifest'])
-            for name, path in paths.items():
-                if path.is_file():
-                    try:
-                        value = json.loads(path.read_text(encoding='utf-8'))
-                        if not isinstance(value, dict):
-                            raise ValueError('Expected a JSON object')
-                        evidence[name] = value
-                    except (ValueError, OSError) as error:
-                        collection_errors.append({'path':str(path), 'error':str(error)})
-        failure = None
-        if self.report.get('status') == 'failed':
-            failure = {'stage':self.report['failed_stage'], 'error':self.report['error']}
-        diagnosis = diagnose(**evidence, failure=failure)
-        diagnosis['collection_errors'] = collection_errors
-        diagnosis['collection_complete'] = not collection_errors
+        diagnosis = diagnose_run(self.directory if self.created else None, self.report)
         self.report['diagnosis'] = diagnosis
         if self.created:
             path = self.directory/'diagnosis.md'
@@ -156,6 +136,15 @@ class PageRun:
 
     def run(self):
         a = self.args
+        from ui_migration.target_access import metadata_directory
+        existing_target = getattr(a, 'existing_target', False)
+        metadata_base = getattr(a, 'target_metadata_dir', None)
+        metadata = metadata_directory(a.target, a.module, existing_target, metadata_base)
+        self.target_options = (['--existing-target', '--target-metadata-dir', metadata_base.expanduser().resolve()]
+                               if existing_target else [])
+        if not existing_target and self.target.exists():
+            from ui_migration.arkui.project import normalize_target
+            normalize_target(a.target)
         from ui_migration.target_paths import ets_directory, page_directory
         page_output = page_directory(self.target, a.module, getattr(a, 'page_output_dir', None))
         component_dir = getattr(a, 'component_dir', None)
@@ -191,6 +180,11 @@ class PageRun:
             for path in protected:
                 if output.is_relative_to(path) or path.is_relative_to(output):
                     raise ValueError('Source, target and run directories must be separate')
+        if existing_target:
+            base = metadata_base.expanduser().resolve()
+            for path in [*protected, self.directory]:
+                if base.is_relative_to(path) or path.is_relative_to(base):
+                    raise ValueError('Target metadata, source and per-run output directories must be separate')
         if self.target.is_relative_to(self.directory) or self.directory.is_relative_to(self.target):
             raise ValueError('--target and --output-dir must be separate directories')
         if self.directory.exists():
@@ -208,6 +202,8 @@ class PageRun:
             for key,value in vars(a).items()}
         self.report['inputs']['page_output_dir'] = str(page_output)
         self.report['inputs']['component_dir'] = str(component_dir) if component_dir else None
+        if existing_target:
+            self.report['target_metadata_dir'] = str(metadata)
         if a.source:
             snapshot, contract = self.directory/'snapshot', self.directory/'migration-contract.json'
             self.tool('snapshot', 'prepare_safe_snapshot.py', '--source', source, '--snapshot', snapshot)
@@ -238,11 +234,11 @@ class PageRun:
             self.tool('target', 'init_harmony_project.py', '--output', self.target, '--contract', contract,
                 '--project-name', a.project_name, '--bundle-name', a.bundle_name, '--sdk-version', a.sdk_version)
         self.tool('theme', 'generate_harmony_theme_resources.py', '--contract', contract,
-            '--target', self.target, '--module', a.module, '--force')
+            '--target', self.target, '--module', a.module, '--force', *self.target_options)
         self.resources(snapshot, version)
         arkui = self.tool('arkui', 'generate_arkui_page.py', '--target', self.target,
             '--module', a.module, '--page-json', version, '--page-output-dir', page_output,
-            *(['--force'] if a.force else []))
+            *(['--force'] if a.force else []), *self.target_options)
         complete = bool(lanhu.get('generation_complete') and arkui.get('generation_complete'))
         self.report.update(ok=True, status='generated' if complete else 'partial_generation',
             current_stage=None,
@@ -271,6 +267,7 @@ class PageRun:
         if names:
             self.tool('drawables', 'materialize_static_drawables.py', '--manifest', snapshot/'.android-to-harmony-safe.json',
                 '--target', self.target, '--module', self.args.module, '--page-json', version,
+                *self.target_options,
                 *[arg for name in names for arg in ('--name', name)])
         for resource in sorted({f['resource'] for f in document['meta']['migration'].get('fontFaces', [])}):
             candidates = [asset['path'] for asset in manifest['local_only_assets']
@@ -278,7 +275,8 @@ class PageRun:
             if len(candidates) == 1:
                 destination = self.target/self.args.module/'src/main/resources/rawfile'/Path(candidates[0]).name
                 self.tool('font', 'copy_local_asset.py', '--manifest', snapshot/'.android-to-harmony-safe.json',
-                    '--asset-path', candidates[0], '--target', self.target, '--destination', destination)
+                    '--asset-path', candidates[0], '--target', self.target, '--destination', destination,
+                    *self.target_options)
         # The existing generator rejects missing/ambiguous font dependencies.
 
 

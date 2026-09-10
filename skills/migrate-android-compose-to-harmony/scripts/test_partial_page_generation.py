@@ -32,7 +32,7 @@ class PartialPageGenerationTest(unittest.TestCase):
         loaded = load_lanhu_page_input(version)
         return root / 'out', result, loaded
 
-    def test_unknown_branches_preserve_both_trees_without_claiming_either_visible(self):
+    def test_unknown_branches_preview_first_without_claiming_condition_resolved(self):
         page = self.source('''Column {
 Text("Known title")
 if (state.loading) { Text("Loading") } else { Text("Content") }
@@ -41,15 +41,17 @@ Text("Known footer")
         out, result, loaded = self.generate_page(page)
         self.assertEqual(result['status'], 'partial_generation')
         self.assertEqual(result['verdict'], 'fail')
-        self.assertEqual(len(loaded['components']), len(page['components']))
-        deferred = [n for n in loaded['components'] if n['source'].get('state_resolution')]
-        self.assertEqual(len(deferred), 2)
-        self.assertTrue(all(n['source']['state_resolution']['status'] == 'unresolved' for n in deferred))
+        retained = result['state_projection']['retained_components']
+        self.assertEqual(len(loaded['components']) + len(retained), len(page['components']))
+        defaults = [n for n in loaded['components'] if n['source'].get('state_resolution')]
+        self.assertEqual(len(defaults), 1)
+        self.assertEqual(defaults[0]['source']['state_resolution']['status'], 'preview_default')
+        self.assertFalse(result['state_projection']['selection_complete'])
         renderer = Renderer(derive_page_root(loaded), set(), {}, loaded)
         text = renderer.render()
         self.assertIn("'Known title'", text)
         self.assertIn("'Known footer'", text)
-        self.assertNotIn("Text('Loading')", text)
+        self.assertIn("Text('Loading')", text)
         self.assertNotIn("Text('Content')", text)
         self.assertTrue(renderer.unresolved)
         worklist = json.loads((out / 'unresolved-worklist.json').read_text())
@@ -166,6 +168,10 @@ fun RecursiveItem() { Column { RecursiveItem() } }
         self.assertNotIn('needs_assistance', pending)
         self.assertEqual(pending['task_count'], 1)
         self.assertEqual(build_worklist(document, tree, issues), build_worklist(document, tree, issues))
+        variants = build_worklist(document, tree, issues + [
+            {**issues[0], 'component_ui_state': 'Button/pressed'}])
+        self.assertEqual(variants['task_count'], 2)
+        self.assertEqual(variants['tasks'][1]['occurrences'][0]['component_ui_state'], 'Button/pressed')
 
 
 if __name__ == '__main__':

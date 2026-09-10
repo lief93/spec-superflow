@@ -129,7 +129,8 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         raise ValueError("slice scale must be positive")
     source_payload = copy.deepcopy(projected_payload) if projected_payload is not None else step('read-source-json', read_json, args.source_page)
     source_payload = step('decode-source-storage', unpack_source_page, source_payload)
-    raw_payload = copy.deepcopy(source_payload)
+    preserve_states = projected_payload is None and getattr(args, 'preserve_component_ui_states', False)
+    raw_payload = copy.deepcopy(source_payload) if preserve_states else None
     from ui_migration.frontend.api_adapters.loader import load_adapters
     from ui_migration.frontend.api_adapters.builtins import BUILTIN_ADAPTERS
     registry = step('load-adapters', load_adapters, getattr(args, 'api_adapters', None), BUILTIN_ADAPTERS)
@@ -167,7 +168,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
             "values": {},
         }, allow_unresolved=True, api_registry=registry)
     catalogs = []
-    if projected_payload is None and getattr(args, 'preserve_component_ui_states', False):
+    if preserve_states:
         from ui_migration.frontend.component_ui_states import preserve_component_states
         fixture = read_json(args.state_fixture) if args.state_fixture else {
             'schema':'android-to-harmony.page-state-fixture.v1', 'page':raw_payload['page'], 'values':{}}
@@ -242,17 +243,8 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
     if tree.root_layout_context == 'caller_owned':
         warnings.append({'component_id': tree.root_id, 'path': 'layout.root_host',
             'reason': 'caller-owned root placement; outputs are preserved, but preview origin is not a source layout fact'})
-    for component in tree.nodes.values():
-        for item in component.get("unresolved") or []:
-            unresolved.append({"component_id": component["id"], **item})
-        for item in component.get("required_facts") or []:
-            if item["status"] in {"symbolic", "unresolved"} and not any(
-                existing["component_id"] == component["id"]
-                and existing.get("path") == item.get("path")
-                and existing.get("expression") == item.get("expression")
-                for existing in unresolved
-            ):
-                unresolved.append({"component_id": component["id"], **item})
+    from ui_migration.frontend.unresolved_worklist import collect_unresolved
+    unresolved = collect_unresolved(tree.nodes.values(), unresolved)
     unresolved.extend({"kind": "source_phase_unconsumed", **item}
                       for item in phase_gate["failures"])
     generation_complete = not unresolved

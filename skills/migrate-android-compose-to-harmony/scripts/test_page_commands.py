@@ -108,6 +108,93 @@ import androidx.compose.runtime.Composable
         self.assertIn('build-source-page', (self.root/'run'/source_stage['stderr']).read_text())
         self.assertTrue((self.root/'harmony/entry/src/main/resources/base/media/logo.svg').is_file())
 
+    def test_full_command_preserves_repeat_title_and_intrinsic_image_dimensions(self):
+        from generate_arkui_page import load_lanhu_page_input
+        (self.source/'Page.kt').write_text('''package example
+import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.material3.Text
+import androidx.compose.foundation.Image
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.*
+@Composable fun Page() {
+    val focusRequester = remember { FocusRequester() }
+    val currentPage = 2
+    Column {
+        Text("Title", color = Color.Black, fontSize = 16.sp,
+             modifier = Modifier.focusRequester(focusRequester).padding(8.dp))
+        Row { repeat(4) { index ->
+            Box(Modifier.size(8.dp).background(if (currentPage == index) Color.Red else Color.Black)) {}
+            Spacer(Modifier.width(4.dp))
+        } }
+        if (currentPage in arrayOf(0, 1, 2)) { Text("Next", color = Color.Black) }
+        else { Text("Explore", color = Color.Black) }
+        Image(painterResource(R.drawable.logo), contentDescription = "Logo")
+    }
+}
+''')
+        (self.source/'app/src/main/res/drawable/logo.xml').write_text(
+            '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="96dp" android:height="48dp" '
+            'android:viewportWidth="96" android:viewportHeight="48"><path android:fillColor="#FF123456" '
+            'android:pathData="M0,0L96,0L96,48L0,48Z"/></vector>')
+        args = self.full_args(); del args[:4]; args += ['--source', self.source]
+        result = self.run_tool('migrate_compose_page.py', *args)
+        code = Path(result['arkui']['output']).read_text()
+        page = load_lanhu_page_input(self.root/'run/lanhu/version_json.json')
+        self.assertEqual(len([n for n in page['components'] if n['type']=='Box']), 4)
+        self.assertEqual([n['style']['content']['text'] for n in page['components'] if n['type']=='Text'], ['Title', 'Next'])
+        self.assertFalse(any(n.get('slot_invocation') for n in page['components']))
+        image = next(n for n in page['components'] if n['type']=='Image')
+        self.assertEqual((image['style']['asset']['width_dp'], image['style']['asset']['height_dp']), (96, 48))
+        self.assertIn('maxWidth: 96, maxHeight: 48', code)
+        self.assertIn('.aspectRatio(2)', code)
+        self.assertIn("Text('Title')", code)
+        self.assertNotIn("Text('Explore')", code)
+        self.assertEqual(code.count('.backgroundColor('), 4)
+        self.assertEqual(result['arkui']['input_mode'], 'page-json-only')
+        self.assertTrue((self.root/'harmony/entry/src/main/resources/base/media/logo.svg').is_file())
+
+    def test_full_command_previews_unknown_branch_and_retains_alternative(self):
+        from ui_migration.contracts.lanhu_storage import unpack_lanhu_document
+        (self.source/'Page.kt').write_text('''package example
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.*
+@Composable fun Page(currentPage: Int) {
+    Column {
+        Text("Title", color = Color.Black, fontSize = 16.sp)
+        if (currentPage < 3) {
+            Text("Next", fontSize = 18.sp, color = Color.Red, modifier = Modifier.height(30.dp))
+        } else {
+            Text("Explore", fontSize = 24.sp, color = Color.Blue, modifier = Modifier.height(90.dp))
+        }
+        Text("Footer", color = Color.Black, fontSize = 16.sp)
+    }
+}
+''')
+        args = self.full_args(); del args[:4]; args += ['--source', self.source]
+        result = self.run_tool('migrate_compose_page.py', *args)
+        code = Path(result['arkui']['output']).read_text()
+        self.assertIn("Text('Next')", code)
+        self.assertNotIn("Text('Explore')", code)
+        document = unpack_lanhu_document(json.loads((self.root/'run/lanhu/version_json.json').read_text()))
+        projection = document['meta']['sourceGeneration']['stateProjection']
+        self.assertFalse(projection['selection_complete'])
+        alternative = next(n for n in projection['retained_components'] if n['type']=='Text')
+        self.assertEqual(alternative['style']['content']['text'], 'Explore')
+        self.assertEqual(alternative['style']['typography']['font_size_sp'], 24)
+        issues = result['diagnosis']['issues']
+        self.assertTrue(any(i['code']=='state_preview_default' and i['status']=='deferred_dynamic' for i in issues))
+        self.assertTrue((self.root/'run/diagnosis.md').is_file())
+        self.assertFalse(result['visual_verified'])
+
     def test_full_command_accepts_raw_source(self):
         args = self.full_args(); del args[:4]; args += ['--source', self.source]
         result = self.run_tool('migrate_compose_page.py', *args)
@@ -193,6 +280,16 @@ import androidx.compose.runtime.Composable
         markdown = Path(result['diagnosis_report']).read_text()
         self.assertIn('unknownInk', markdown)
         self.assertIn('处理：', markdown)
+        self.assertIn('尚有', markdown)
+        self.assertEqual(result['diagnosis']['unresolved_count'], sum(
+            count for status, count in result['diagnosis']['counts'].items() if status != 'resolved_reference'))
+        comparison = self.root/'comparison.json'
+        comparison.write_text(json.dumps({'schema': 'android-to-harmony.local-image-comparison.v1',
+            'component_inventories': [], 'viewport_compatibility': {}}))
+        refreshed = self.run_tool('diagnose_page_fidelity.py', '--run-dir',
+            Path(result['diagnosis_report']).parent, '--comparison-report', comparison)
+        self.assertFalse(refreshed['comparable'])
+        self.assertIn('P0', Path(refreshed['diagnosis_report']).read_text())
 
     def test_explicit_state_reaches_generation(self):
         (self.source/'Page.kt').write_text('''package example

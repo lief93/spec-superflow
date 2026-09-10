@@ -2332,6 +2332,44 @@ def for_each_scopes(body: str, body_code: str) -> list[dict[str, Any]]:
     return scopes
 
 
+def repeat_scopes(syntax, file_syntax, offset, parameters):
+    from ui_migration.semantics.syntax import call_from, is_standard_call
+    def transfers_control(node):
+        if isinstance(node, dict):
+            if node.get('kind') == 'lambda':
+                return False
+            if node.get('kind') == 'return' or node.get('psiType') in ('KtBreakExpression', 'KtContinueExpression', 'KtThrowExpression'):
+                return True
+            return any(transfers_control(value) for value in node.values())
+        return isinstance(node, list) and any(transfers_control(value) for value in node)
+
+    scopes = []
+    declarations = {f['name'] for f in file_syntax['functions']} | set(parameters)
+    declarations.update(p['name'] for p in file_syntax.get('globalProperties', []))
+    for entry in syntax.get('lambdaCalls', []):
+        call = call_from(entry['expression'])
+        shadowed = declarations | {b['name'] for b in syntax['localBindings']
+                                   if b['start'] <= entry['start'] < b['end']}
+        if call is None or not is_standard_call(call, 'kotlin.repeat', file_syntax['imports'], shadowed):
+            continue
+        count = call.argument('times')
+        action = call.argument('action', 1)
+        if len(call.arguments) != 2 or count is None or action is None or action.get('kind') != 'lambda':
+            continue
+        if len(entry['lambdaScopes']) != 1:
+            continue
+        scope = entry['lambdaScopes'][0]
+        names = action.get('parameters') or ['it']
+        if len(names) != 1:
+            continue
+        scopes.append({'start': scope['start'] - offset, 'end': scope['end'] - offset,
+            'collection': count['text'], 'item_parameter': names[0],
+            'accepts_count': True, 'iteration_kind': 'repeat',
+            **({'unsupported_reason': 'unsupported repeat control transfer; source template retained, not selected for rendering'}
+               if transfers_control(action['body']) else {})})
+    return scopes
+
+
 def extract_semantic_ui_calls(
     relative: str,
     source_text: str,
@@ -2350,7 +2388,8 @@ def extract_semantic_ui_calls(
     scoped_bindings = scope_syntax['localBindings']
     from ui_migration.frontend.callable_inventory import callable_field_names
     from kotlin_psi import parse_expression
-    callable_names = callable_field_names(parse_declarations(source_text))
+    file_syntax = parse_declarations(source_text)
+    callable_names = callable_field_names(file_syntax)
     stored_lambdas = []
     def collect_lambdas(node):
         if isinstance(node, dict):
@@ -2377,15 +2416,20 @@ def extract_semantic_ui_calls(
     when_conditions = enclosing_when_conditions(body, body_code)
     item_scopes = lazy_items_scopes(body, body_code)
     item_scopes.extend(for_each_scopes(body, body_code))
+    parameters = [p['name'] for f in file_syntax['functions'] if f['name'] == composable for p in f['parameters']]
+    item_scopes.extend(repeat_scopes(scope_syntax, file_syntax, len(scope_prefix), parameters))
     item_scopes.extend({**scope, 'start': scope['start'] - len(scope_prefix),
                         'end': scope['end'] - len(scope_prefix)}
                        for scope in scope_syntax.get('forLoops', []))
     slot_parameter_names = slot_parameter_names or set()
     candidates: list[dict[str, Any]] = []
+    modifier_spans = []
     for match in re.finditer(
         r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(\(|\{)",
         body_code,
     ):
+        if any(start <= match.start() < end for start, end in modifier_spans):
+            continue
         local_values = {}
         for binding in sorted(scoped_bindings, key=lambda entry: entry['start']):
             if binding['start'] <= match.start() + len(scope_prefix) < binding['end']:
@@ -2448,6 +2492,12 @@ def extract_semantic_ui_calls(
             and "contentPadding" not in named_arguments
         ):
             continue
+        # A Modifier argument produces operations, never visual child calls. In
+        # particular, a selector may share a name with a remembered local value.
+        for chunk, start, end in argument_spans:
+            named = split_named_argument(chunk)
+            if (named is not None and named[0] == 'modifier') or chunk.strip() == modifier_expression.strip():
+                modifier_spans.append((opening + 1 + start, opening + 1 + end))
         after_call = closing + 1
         while after_call < len(body_code) and body_code[after_call].isspace():
             after_call += 1
@@ -2616,10 +2666,12 @@ def extract_semantic_ui_calls(
                 "item_parameter": item_scope["item_parameter"],
                 "accepts_count": item_scope.get("accepts_count", False),
                 **({'index_parameter':item_scope['index_parameter']} if 'index_parameter' in item_scope else {}),
+                **({'iteration_kind':item_scope['iteration_kind']} if 'iteration_kind' in item_scope else {}),
+                **({'unsupported_reason':item_scope['unsupported_reason']} if 'unsupported_reason' in item_scope else {}),
             }
             candidate['list_item_contexts'] = [
                 {'scope_id': f'{relative}:{composable}:{scope["start"]}',
-                 **{key: scope[key] for key in ('collection', 'item_parameter', 'index_parameter', 'accepts_count') if key in scope}}
+                 **{key: scope[key] for key in ('collection', 'item_parameter', 'index_parameter', 'accepts_count', 'iteration_kind', 'unsupported_reason') if key in scope}}
                 for scope in sorted(item_scopes, key=lambda scope: (scope['start'], -scope['end']))
                 if scope['start'] <= match.start() < scope['end']
             ]

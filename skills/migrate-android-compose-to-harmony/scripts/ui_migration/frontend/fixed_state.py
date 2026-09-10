@@ -251,6 +251,9 @@ def project_source_page(
     inactive: list[str] = []
     expanded_count = 0
     deferred = []
+    retained_ids = set()
+    from ui_migration.frontend.preview import ConditionalPreview
+    conditional_preview = ConditionalPreview(original.values()) if allow_unresolved else None
     functions_by_source = {function['source']: function for function in payload.get('source_functions', [])}
     functions_by_identity = {(function['source'], function['name']): function
                              for function in payload.get('source_functions', [])}
@@ -552,9 +555,11 @@ def project_source_page(
                     parent_id=parent_id, children_ids=[], sibling_index=0)
         node.setdefault('source', {})['state_resolution'] = copy.deepcopy(selection)
         node['unresolved'].append({'path': 'source.state_resolution', 'expression': selection['expression'],
-            'reason': 'state selection is unresolved; source template retained, not selected for rendering'})
+            'reason': selection.get('reason', 'state selection is unresolved; source template retained, not selected for rendering')})
         emitted.append(node)
         deferred.append(node['id'])
+        if not local.get('__conditional_preview', {}).get('displayed', True):
+            retained_ids.add(node['id'])
         for child_id in children.get(component_id, []):
             emit_deferred(child_id, node['id'], local, suffix, selection)
         return node['id']
@@ -573,6 +578,13 @@ def project_source_page(
             inactive_subtree(component_id)
             return None
         visible = visibility_value(source, local)
+        selection = None
+        if conditional_preview is not None:
+            selected_visible, selection = conditional_preview.select(source, local, suffix, evaluate_expression)
+            if selected_visible is not None:
+                visible = selected_visible
+                if visible and source.get('type') == 'AnimatedVisibility':
+                    visible = evaluate_expression(semantic_expression(source, 'visible'), local)
         if visible is False:
             inactive_subtree(component_id)
             return None
@@ -637,6 +649,14 @@ def project_source_page(
         node["children_ids"] = []
         node["sibling_index"] = 0
         emitted.append(node)
+        if selection is not None:
+            node['source']['state_resolution'] = copy.deepcopy(selection)
+            node['unresolved'].append({'path': 'source.state_resolution',
+                'expression': selection['expression'],
+                'reason': 'preview default branch selected; condition remains unresolved and runtime behavior is not verified'})
+            local = {**local, '__conditional_preview': selection}
+            if not selection['displayed']:
+                retained_ids.add(new_id)
         if reuse is not None:
             for name, roots in reuse['slots'].items():
                 reuse['slots'][name] = emit_children(roots, new_id, local, suffix)
@@ -684,7 +704,7 @@ def project_source_page(
             for page in range(pager['page_count']):
                 roots = emit_children(children.get(component_id, []), new_id,
                     {**local, parameters[0]: page}, suffix + '__page' + str(page))
-                pager['pages'].append(roots)
+                pager['pages'].append([root for root in roots if root not in retained_ids])
             return new_id
         invocation = source.get('slot_invocation') or {}
         if invocation and (invocation.get('expression') or not children.get(component_id)):
@@ -741,7 +761,11 @@ def project_source_page(
                     inactive_subtree(node_id)
                 continue
             collection_expression = context['collection']
-            collection = evaluate_expression(collection_expression, local)
+            collection = UNRESOLVED if context.get('unsupported_reason') else evaluate_expression(collection_expression, local)
+            if context.get('iteration_kind') == 'repeat':
+                # Kotlin repeat with a nonpositive count has no iterations. Keep
+                # the existing 200-instance bound; never truncate larger counts.
+                collection = list(range(max(0, collection))) if type(collection) is int and collection <= 200 else UNRESOLVED
             if context.get('accepts_count') and type(collection) is int and 0 <= collection <= 200:
                 collection = list(range(collection))
             if preview is not None and not allow_unresolved:
@@ -752,7 +776,8 @@ def project_source_page(
                 if allow_unresolved:
                     ids.extend(emit_deferred(node_id, parent_id, environment, suffix,
                         {'status': 'unresolved', 'kind': 'collection', 'expression': collection_expression,
-                         'owner_id': component_id + suffix}) for node_id in group)
+                         'owner_id': component_id + suffix,
+                         **({'reason': context['unsupported_reason']} if context.get('unsupported_reason') else {})}) for node_id in group)
                     continue
                 raise ValueError(
                     f"state collection requires a resolved list for {component_id}: {collection_expression}"
@@ -787,6 +812,7 @@ def project_source_page(
             inactive_subtree(root_id)
             continue
         active_roots.extend(emit_children([root_id], None, base_environment, ""))
+    active_roots = [root for root in active_roots if root not in retained_ids]
     if not active_roots:
         raise ValueError("selected page state has no active root")
     from ui_migration.frontend.overlays import overlay_host
@@ -810,6 +836,16 @@ def project_source_page(
         emitted_by_id[parent_id]["children_ids"] = child_ids
         for index, child_id in enumerate(child_ids):
             emitted_by_id[child_id]["sibling_index"] = index
+    retained = [node for node in emitted if node['id'] in retained_ids]
+    emitted = [node for node in emitted if node['id'] not in retained_ids]
+    for node in emitted:
+        node['children_ids'] = [child for child in node['children_ids'] if child not in retained_ids]
+        reuse = node.get('source', {}).get('component_reuse')
+        if reuse is not None:
+            reuse['slots'] = {name: [root for root in roots if root not in retained_ids]
+                              for name, roots in reuse['slots'].items()}
+        for index, child in enumerate(node['children_ids']):
+            emitted_by_id[child]['sibling_index'] = index
     projected = copy.deepcopy(payload)
     projected["components"] = emitted
     inactive_only = set(original) - {node["source_component_id"] for node in emitted}
@@ -828,7 +864,9 @@ def project_source_page(
         "inactive_source_ids": sorted(set(inactive)),
         "expanded_list_instances": expanded_count,
         "deferred_component_ids": deferred,
-        "selection_complete": not deferred,
+        "selection_complete": not deferred and not (conditional_preview and any(d['defaulted'] for d in conditional_preview.decisions.values())),
+        "preview_branch_choices": [d for d in conditional_preview.decisions.values() if d['defaulted']] if conditional_preview else [],
+        "retained_components": retained,
         "api_extensions": list(api_registry.identities) if api_registry is not None else [],
     }
     if preview is not None:

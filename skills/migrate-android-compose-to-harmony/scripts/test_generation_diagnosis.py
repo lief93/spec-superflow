@@ -99,3 +99,79 @@ class GenerationDiagnosisTest(unittest.TestCase):
         result = diagnose({})
         self.assertEqual(result['issue_count'], 0)
         self.assertFalse(result['visual_cause_verified'])
+
+    def test_dynamic_conditions_are_deferred_but_still_outstanding(self):
+        task = self.task('state selection is unresolved; source template retained, not selected',
+                         'currentPage == it', 'source.state_resolution')
+        result = diagnose({'tasks': [task]})
+        self.assertEqual(result['counts']['pending'], 0)
+        self.assertEqual(result['counts']['deferred_dynamic'], 1)
+        self.assertEqual(result['unresolved_count'], 1)
+        markdown = render_markdown(result)
+        self.assertIn('暂缓', markdown)
+        self.assertIn('currentPage == it', markdown)
+        self.assertIn('内容缺失', markdown)
+
+    def test_other_component_states_do_not_merge_with_current_page(self):
+        first = self.task('unresolved color', 'Theme.ink', 'style.typography.color')
+        second = self.task('unresolved color', 'Theme.ink', 'style.typography.color')
+        second['occurrences'][0]['component_ui_state'] = 'Button/pressed'
+        result = diagnose({'tasks': [first, second]})
+        self.assertEqual(result['counts']['pending'], 1)
+        self.assertEqual(result['counts']['other_state'], 1)
+        self.assertEqual(result['unresolved_count'], 2)
+        self.assertIn('Button/pressed', render_markdown(result))
+
+    def test_consumed_reference_retires_only_its_exact_component_property(self):
+        task = self.task('unresolved color', 'Theme.ink', 'style.typography.color')
+        version = {'artboard': {'layers': [{'id': 'a', 'migration': {'source': {
+            'style_token_references': {'typography.color': {'android': 'Theme.ink',
+                'kind': 'color', 'target': {'module': './Theme', 'export': 'Theme', 'member': 'ink'}}}}}}]}}
+        manifest = {'target_phase_consumption_gate': {'checks': [
+            {'component_id': 'a', 'path': 'style.typography.color', 'status': 'consumed'}]}}
+        result = diagnose({'tasks': [task]}, manifest, version_page=version)
+        self.assertEqual(result['counts']['resolved_reference'], 1)
+        self.assertEqual(result['unresolved_count'], 0)
+        manifest['target_phase_consumption_gate']['checks'][0]['component_id'] = 'another-instance'
+        self.assertEqual(diagnose({'tasks': [task]}, manifest, version_page=version)['unresolved_count'], 1)
+        manifest['target_phase_consumption_gate']['checks'][0]['component_id'] = 'a'
+        manifest['unresolved'] = [{'page_component_id': 'a', 'path': 'style.typography.color',
+                                   'reason': 'target expression could not be rendered'}]
+        self.assertEqual(diagnose({'tasks': [task]}, manifest, version_page=version)['counts']['resolved_reference'], 0)
+
+    def test_default_warning_is_not_lost_or_counted_twice(self):
+        task = self.task('unresolved color', 'Theme.ink', 'style.typography.color')
+        warning = {'kind': 'style_default_applied', 'component_id': 'a',
+            'path': 'style.typography.color', 'expression': 'Theme.ink',
+            'fallback': '#FF000000', 'reason': 'migration default used'}
+        manifest = {'warnings': [warning], 'target_phase_consumption_gate': {'checks': [
+            {'component_id': 'a', 'path': 'style.typography.color', 'status': 'consumed'}]}}
+        for worklist in ({'tasks': [task]}, {}):
+            result = diagnose(worklist, manifest)
+            self.assertEqual(result['counts']['defaulted'], 1)
+            self.assertEqual(result['unresolved_count'], 1)
+            self.assertIn('#FF000000', render_markdown(result))
+
+    def test_real_adapter_output_reconciles_historical_style_diagnostic(self):
+        from test_keyed_resources import KeyedResourcesTest
+        generator = KeyedResourcesTest()
+        self.addCleanup(generator.doCleanups)
+        page, code, _, renderer = generator.generate('Text("A", color = Palette.get("text.primary"))')
+        node = next(n for n in page['components'] if n['type'] == 'Text')
+        self.assertIn(".fontColor(StyleToken0.resolve('text.primary'))", code)
+        task = self.task('unresolved color', 'Palette.get("text.primary")', 'style.typography.color')
+        task['occurrences'][0]['component_id'] = node['id']
+        manifest = {'unresolved': renderer.unresolved,
+                    'target_phase_consumption_gate': renderer.test_phase_gate}
+        report = diagnose({'tasks': [task]}, manifest, source_page=page)
+        self.assertEqual(report['counts']['resolved_reference'], 1)
+        self.assertEqual(report['unresolved_count'], 0)
+
+    def test_reference_without_consumption_is_still_unresolved(self):
+        task = self.task('unresolved color', 'Theme.ink', 'style.typography.color')
+        source = {'components': [{'id': 'a', 'source': {'style_token_references': {
+            'typography.color': {'android': 'Theme.ink', 'kind': 'color',
+                'target': {'module': './Theme', 'export': 'Theme', 'member': 'ink'}}}}}]}
+        report = diagnose({'tasks': [task]}, source_page=source)
+        self.assertEqual(report['unresolved_count'], 1)
+        self.assertIn('尚无最终 ArkUI manifest', render_markdown(report))

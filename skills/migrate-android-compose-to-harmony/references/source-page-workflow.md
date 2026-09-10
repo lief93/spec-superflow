@@ -27,9 +27,10 @@ to create a fresh snapshot and analysis under the new output directory. The
 explicit style file must already exist in either mode; use
 `generate_project_style_definitions.py` to prepare it once. Missing styles never
 silently fall back to re-extraction. Add `--project-name`, `--bundle-name` and
-`--sdk-version` when creating a new target; an existing target must satisfy the
-normal project/asset ownership checks. New targets use module `entry`; existing
-targets may select `--module`.
+`--sdk-version` when creating a new target. Previously initialized targets retain
+normal project/asset ownership checks. For an ordinary existing Harmony project,
+use the explicit existing-project mode below. New targets use module `entry`;
+existing targets may select `--module`.
 
 ### Custom component and page directories
 
@@ -39,6 +40,8 @@ Independently select an existing component scan directory and a generated-page d
 ```bash
 # Add these options to the page command above:
 --target "/path/to/existing-harmony-project" \
+--existing-target \
+--target-metadata-dir "/path/to/migration-records" \
 --module entry \
 --component-dir "entry/src/main/ets/components" \
 --page-output-dir "entry/src/main/ets/pages/migrated" \
@@ -54,8 +57,42 @@ excludes the selected output subtree, legacy `generated` directories, dependency
 directories and symlinks. Do not use the output directory as the scan root.
 Without these options the original scan root and `ets/generated` output are unchanged.
 Resources still go to the selected module's `src/main/resources`; existing components
-are imported, not moved or copied. Existing project ownership and overwrite checks
-still apply; these options do not adopt an unregistered project or rewrite its routes.
+are imported, not moved or copied. Custom directories alone do not disable project
+ownership checks; add `--existing-target` for an ordinary project without a migration
+marker. Neither mode rewrites routes or project configuration.
+
+### Existing Harmony project output
+
+`--existing-target --target-metadata-dir /path/to/migration-records` enables writes
+into an existing project without reading or creating `TARGET/.migration/state.json`.
+The selected project must already contain `build-profile.json5`, `oh-package.json5`,
+and the selected module's `src/main/module.json5`, `ets`, and `resources` directories.
+These are structural preflight checks, not SDK build verification. Directory/module
+and symlink protections still apply. The project is never initialized or adopted by
+forging a migration project marker.
+
+Keep the metadata directory stable across runs and separate from the Android source,
+snapshot, Harmony target, and each fresh `--output-dir`. It stores theme manifests,
+asset/font/vector ledgers and page-generation manifests, partitioned by the canonical
+target path and module. Preserve it when upgrading the tool. `result.json` reports the
+resolved record directory and page manifest path. A fresh per-run output directory is
+still required; do not use a new metadata directory for every attempt.
+
+Theme resources use dedicated `migration_color.json` / `migration_float.json` files
+under the selected module's resource qualifiers. Existing resource JSON files remain
+byte-for-byte unchanged. Conflicting resource names, unowned destination files and
+modified generated outputs are rejected, including with `--force`. `--force` only
+regenerates outputs still matching their recorded hashes. If records are lost, the
+tool refuses to overwrite existing generated files rather than guessing ownership.
+
+For standalone reruns, pass the same two flags to `generate_harmony_theme_resources.py`,
+`materialize_static_drawables.py`, `copy_local_asset.py`, `convert_android_vector.py`,
+and `generate_arkui_page.py` as applicable. The page runner forwards these options to
+all target-writing stages, including font copying. Source-page and Lanhu generation
+do not require this project marker and retain their existing input flags.
+
+This mode only generates page code and required resources. Host integration,
+configuration, signing, SDK compilation, and runtime acceptance remain separate.
 
 Standalone `generate_lanhu_source_page.py` accepts `--component-dir` and
 `--page-output-dir` with `--harmony-target` / `--harmony-module`.
@@ -116,6 +153,24 @@ upstream cause is not proven. Unknown errors remain explicit, and evidence-read
 errors appear in `collection_errors`; neither is treated as success. Group ordering
 does not prove which issue caused a blank rendered page. This report does not replace
 build or visual verification.
+
+`diagnosis.md` is the single human-facing outstanding-issue list for the run.
+Its headline uses `result.json.diagnosis.unresolved_count`, not the sum of stage
+`unresolved_count` values. The count is diagnostic groups, not proven independent
+root causes. `counts` separates `pending` (current UI), `defaulted` (visual defaults
+still need review), `deferred_dynamic` (unresolved dynamic/business conditions, including preview selections),
+and `other_state` (component-state variants). All four remain outstanding;
+deferred conditions are not silently marked implemented. Collected UI branches may
+use a marked default preview; unsupported templates can still leave content missing.
+This report does not implement conditions or force source inputs true.
+`resolved_reference` is excluded from the outstanding total only when a valid
+reference and actual target consumption match the exact component/property and
+no target error remains there. Unknown aliases or merely calling an adapter are
+not resolution evidence. Other-state occurrences retain `component_ui_state`.
+Without a final ArkUI manifest, the report explicitly labels its evidence incomplete.
+The original stage reports, `generation_complete` and `verdict` remain unchanged;
+this consolidated maintenance list is not a new generation/acceptance gate.
+
 Use a new `--output-dir` for each attempt. Paths containing spaces are supported;
 quote each argument normally, without embedding Python or setting `PYTHONPATH`.
 
@@ -498,7 +553,8 @@ Rules and limits:
   business components. Scenes evaluate those conditions with explicit inputs and retain fixed
   call parameters: `actionLabel=null` cannot become a visible action by preview selection.
   If a non-null card and loading are both supplied, the source's first branch wins. Unknown
-  structural conditions remain deferred facts in a partial scene, not a generation exception.
+  structural conditions use a marked default UI branch in a partial scene when branch
+  metadata is available; they are not reported as resolved business conditions.
   No state inputs means inventory only, not automatically invented scenes or business reachability.
 - Whole-page branches, local loading/error branches and dialog branches remain source-owned.
   Independent source roots (for example Scaffold plus Dialog) require an explicit `root_id`
@@ -666,6 +722,50 @@ Automatic crops use recorded application content bounds; inspect them instead of
 fixed status-bar height. `--target-size` does not make incompatible page states/viewports equivalent.
 No image-model recognition is required; pixel analysis is local Pillow processing.
 
+### Correlate measured differences with generation diagnostics
+
+After the comparator finishes, refresh the same run's `diagnosis.md`:
+
+```bash
+python3 "$SKILL_ROOT/scripts/diagnose_page_fidelity.py" \
+  --run-dir "$PAGE_RUN" \
+  --comparison-report "$PAGE_RUN/comparison/comparison.json"
+```
+
+This command reads `result.json`, `source-page.json`, `lanhu/version_json.json`,
+the worklist, the recorded ArkUI manifest and the comparator report. It does not
+reanalyze source, execute adapters, compile, capture screens or edit ETS. It checks
+available worklist/manifest hashes against the version JSON before associating
+evidence. Copying an unrelated run's report is not a shortcut; missing/malformed
+artifacts remain explicit evidence gaps.
+
+The report places measured findings before the generation issue details and links
+them by issue number. A unique source semantic identity is required; component
+name, displayed text, similar position and repeated callsites are not guessed as
+instance identity. Exact or containing structured property paths link directly;
+other diagnostics on the same component are only contextual candidates. State
+variant diagnostics are not attached to the current page's measured differences.
+
+Sorting is deterministic: P0 incompatible page/state/viewport evidence, P1 missing
+components/hierarchy/geometry, P2 resource/text/style/appearance differences, P3
+insufficient mapping or one-sided measurement. Within a level the comparator's
+component impact score orders inspection, not causality. No unresolved entry is
+required for a measured difference to appear. Deferred business conditions remain
+deferred, but a corresponding measured missing section stays visible as a P1
+finding. The script does not implement the condition or force it true.
+
+Each finding retains actual left/right evidence, source location when uniquely
+bound, related diagnostic reasons/modules, target consumption and repair-verification
+steps. For literal properties it compares source/version values with the Android
+measurement to identify the last matching and first differing recorded artifact.
+Unknown values and target calls remain unknown; no target expression is evaluated.
+For missing sections and layout, artifact presence is evidence, not proof the
+artifact was correct. Runtime binding gaps can resemble missing UI. Runtime theme,
+locale, scroll/data alignment and the installed build still need confirmation.
+The generation verdict is unchanged; visual findings and generation groups overlap
+and must not be added together as independent bugs. AI/human investigation should
+start with the explicitly unproven links, not reconstruct every known fact manually.
+
 ## Result semantics and troubleshooting
 
 | Result | Meaning / next action |
@@ -723,6 +823,61 @@ Report each finding as: **section/component -> last correct artifact -> first
 incorrect artifact -> evidence -> responsible module -> repair -> verification**.
 Request only the necessary sanitized artifacts for private projects; do not ask
 users to upload private repository contents indiscriminately.
+
+#### Unknown conditional UI previews
+
+The normal partial-generation path projects controls and properties for all collected
+alternatives of an undecidable `if`/`when` group. It displays the first alternative not
+proven false; known source inputs still select the actual branch. Nested groups and
+pager/list instances have independent choices. Source parameters are never fabricated
+to make the preview condition true, so unrelated expressions may remain unresolved.
+
+The selected nodes carry `source.state_resolution.status = preview_default` and an
+unresolved diagnostic. `meta.sourceGeneration.stateProjection.preview_branch_choices`
+records the selections; `retained_components` stores the other projected nodes once,
+with their properties, source conditions and parent IDs. These nodes are outside the
+active artboard tree and cannot take layout space. This is retained UI data, not a
+runtime branch switch or automatic pager/button linkage. To display a different real
+state, provide source fixture values and regenerate.
+
+`diagnosis.md` explains the default preview and keeps its condition outstanding.
+`selection_complete`, business parity and visual acceptance are not granted by
+showing a default branch. Unknown collection counts still remain deferred. Legacy
+source documents without `ui_state_path` cannot safely group alternatives and retain
+their previous deferred behavior; regenerate source analysis for those documents.
+For current source documents, rerun Lanhu generation and ArkUI; no contract rebuild
+is needed for this projection-only change.
+
+Verify with `python3 -m unittest test_conditional_ui_preview` and
+`test_page_commands.PageCommandsTest.test_full_command_previews_unknown_branch_and_retains_alternative`.
+
+#### Standard collection and repeat gaps
+
+`arrayOf(...)` now participates in bounded fixed-state value evaluation, including
+indexing, size and membership conditions. `repeat(times) { index -> ... }` is
+extracted from PSI call/lambda scopes and uses the existing ordered list-instance
+projection. Named `times`/`action`, the implicit `it`, qualified `kotlin.repeat`,
+import aliases, nested scopes and forwarded component counts are covered.
+Known nonpositive repeat counts emit no items. Unknown/noninteger counts and counts
+above the existing 200-per-loop expansion bound remain deferred; no single item or
+truncated prefix is invented. This is selected-state UI expansion, not translation
+of arbitrary loop side effects or runtime data/state updates. Direct early control
+transfers such as `return@repeat` retain an unsupported diagnostic instead of being
+ignored while emitting the entire body.
+
+Recognition uses PSI structure plus known API names, imports and declarations;
+it is not compiler type/symbol resolution. Known same-name declarations and local
+bindings do not become standard library calls just because their spelling matches.
+Modifier argument spans are excluded from visual call extraction: a remembered
+local named `focusRequester` cannot turn `.focusRequester(...)` into Text content.
+The actual focus operation remains diagnostic until it has target behavior support.
+
+After updating this parser, regenerate the migration contract from the unchanged
+safe snapshot, then source-page JSON, Lanhu JSON and ArkUI. Reusing an old contract
+would retain its missing iteration scopes and misclassified calls. Run
+`python3 -m unittest test_ui_iteration_gaps test_source_control_flow test_source_callables
+test_ui_state_semantics test_page_commands` for the affected paths. These tests do
+not establish visual fidelity of a private project without paired runtime evidence.
 
 #### Runtime mapping is a separate diagnosis
 

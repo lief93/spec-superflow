@@ -1,6 +1,58 @@
 from __future__ import annotations
 
 
+class ConditionalPreview:
+    """Select a UI preview without changing source evaluation inputs."""
+    def __init__(self, nodes):
+        self.groups = {}
+        self.decisions = {}
+        for node in nodes:
+            for path in node.get('ui_state_path', []):
+                group = self.groups.setdefault(path['group_id'], {
+                    'branches': path['branches'], 'conditions': {}})
+                group['conditions'][path['branch_id']] = path['condition']
+
+    def select(self, node, environment, suffix, evaluate):
+        inherited = environment.get('__conditional_preview')
+        choices = list(inherited['choices']) if inherited else []
+        displayed = inherited['displayed'] if inherited else True
+        # Explicit component variants own their replacement conditions.
+        if node.get('source', {}).get('ui_branch_origin') is not None:
+            return None, inherited
+        paths = node.get('ui_state_path') or []
+        for path in paths:
+            key = (path['group_id'], suffix)
+            if key not in self.decisions:
+                group = self.groups[path['group_id']]
+                candidates = []
+                for branch in group['branches']:
+                    expression = group['conditions'].get(branch)
+                    value = evaluate(expression, environment) if expression else None
+                    if branch == 'else' and not expression and all(c[1] is False for c in candidates):
+                        value = True
+                    candidates.append((branch, value, expression))
+                first = next((entry for entry in candidates if entry[1] is not False), None)
+                self.decisions[key] = {
+                    'group_id': path['group_id'], 'instance_suffix': suffix,
+                    'selected_branch': first[0] if first else None,
+                    'defaulted': first is not None and first[1] is not True,
+                    'expression': (first[2] or path['condition']) if first else path['condition'],
+                }
+            decision = self.decisions[key]
+            matches = path['branch_id'] == decision['selected_branch']
+            if not decision['defaulted'] and not matches:
+                return False, None
+            displayed = displayed and matches
+            if decision['defaulted'] and decision not in choices:
+                choices.append(decision)
+        if not choices:
+            return None, None
+        selection = {'status': 'preview_default', 'kind': 'condition',
+                     'expression': choices[0]['expression'], 'displayed': displayed,
+                     'business_verified': False, 'choices': choices}
+        return (True if paths else None), selection
+
+
 def node_paths(payload):
     nodes = {node['id']: node for node in payload['components']}
     paths = {}

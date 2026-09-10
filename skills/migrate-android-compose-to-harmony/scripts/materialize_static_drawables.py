@@ -55,6 +55,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--target", required=True, type=Path)
     parser.add_argument("--module", default="entry")
+    from ui_migration.target_access import add_target_arguments
+    add_target_arguments(parser)
     parser.add_argument('--page-json', type=Path, help='Use the selected page asset SHA to disambiguate same-name module resources')
     parser.add_argument(
         "--name",
@@ -157,6 +159,8 @@ def page_asset_hashes(path: Path) -> dict[str, str]:
 def main() -> int:
     args = parse_args()
     try:
+        from ui_migration.target_access import metadata_directory
+        metadata_directory(args.target, args.module, args.existing_target, args.target_metadata_dir)
         manifest = load_manifest(args.manifest)
         selected_hashes = page_asset_hashes(args.page_json) if args.page_json else {}
         target = Path(os.path.abspath(os.path.expanduser(str(args.target)))).resolve()
@@ -244,6 +248,7 @@ def main() -> int:
                         str(target),
                         "--destination",
                         str(destination),
+                        *(['--existing-target', '--target-metadata-dir', str(args.target_metadata_dir)] if args.existing_target else []),
                     ],
                 )
                 unsupported_xml = (
@@ -322,7 +327,7 @@ def main() -> int:
         }
         print(json.dumps(output, ensure_ascii=False, sort_keys=True))
         return 1 if failures else 0
-    except MaterializeDrawablesError as error:
+    except (MaterializeDrawablesError, ValueError, OSError) as error:
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False, sort_keys=True))
         return 1
 

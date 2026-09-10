@@ -55,6 +55,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target", required=True, type=Path)
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument("--force", action="store_true")
+    from ui_migration.target_access import add_target_arguments
+    add_target_arguments(parser)
     return parser.parse_args()
 
 
@@ -761,8 +763,10 @@ def convert_vector(
     }
 
 
-def load_ledger(target: Path) -> tuple[Path, dict[str, Any]]:
-    path = target / ".migration" / "vector-conversions.json"
+def load_ledger(target: Path, metadata_dir=None) -> tuple[Path, dict[str, Any]]:
+    path = (metadata_dir or target / '.migration') / 'vector-conversions.json'
+    if path.is_symlink():
+        raise VectorConversionError('vector conversion ledger must not be a symbolic link')
     if not path.exists():
         return path, {"schema": LEDGER_SCHEMA, "conversions": {}}
     if not path.is_file() or path.is_symlink():
@@ -781,6 +785,7 @@ def load_ledger(target: Path) -> tuple[Path, dict[str, Any]]:
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.write-", dir=path.parent
     )
@@ -873,11 +878,14 @@ def main() -> int:
         if source.suffix.lower() != ".xml":
             raise VectorConversionError("approved asset is not an Android vector XML")
         target, destination, destination_relative = validate_target_and_destination(
-            args.target, args.destination
+            args.target, args.destination,
+            existing_target=args.existing_target, target_metadata_dir=args.target_metadata_dir,
         )
         color_resources = load_safe_color_resources(args.manifest, args.asset_path)
         svg, metadata = convert_vector(source, color_resources)
-        ledger_path, ledger = load_ledger(target)
+        from ui_migration.target_access import asset_metadata
+        metadata_dir = asset_metadata(args.target, args.destination, args.existing_target, args.target_metadata_dir)
+        ledger_path, ledger = load_ledger(target, metadata_dir)
         changed, destination_hash = install_conversion(
             source,
             source_root,

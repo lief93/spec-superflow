@@ -51,6 +51,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target", required=True, type=Path)
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument("--force", action="store_true")
+    from ui_migration.target_access import add_target_arguments
+    add_target_arguments(parser)
     return parser.parse_args()
 
 
@@ -152,32 +154,37 @@ def validate_target_and_destination(
     target_path: Path,
     destination_path: Path,
     source_suffix: str = "",
+    *, existing_target=False, target_metadata_dir=None,
 ) -> tuple[Path, Path, str]:
+    if existing_target:
+        from ui_migration.target_access import asset_metadata
+        asset_metadata(target_path, destination_path, True, target_metadata_dir)
     target = absolute_without_final_symlink(target_path, "target")
     if not target.is_dir():
         raise AssetCopyError(f"target project does not exist: {target}")
-    state_path = target / ".migration" / "state.json"
-    if not state_path.is_file() or state_path.is_symlink():
-        raise AssetCopyError("target project marker is missing")
-    try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as error:
-        raise AssetCopyError(f"invalid target project marker: {error}") from error
-    if (
-        not isinstance(state, dict)
-        or state.get("schema") != TARGET_STATE_SCHEMA
-        or state.get("generator") != "migrate-android-compose-to-harmony"
-    ):
-        raise AssetCopyError("target project marker is invalid")
-    recorded_output = state.get("output_root")
-    if recorded_output != ".":
-        if not isinstance(recorded_output, str):
-            raise AssetCopyError("target project output marker is invalid")
-        if absolute_without_final_symlink(
-            Path(recorded_output),
-            "recorded target",
-        ) != target:
-            raise AssetCopyError("target project output marker does not match")
+    if not existing_target:
+        state_path = target / ".migration" / "state.json"
+        if not state_path.is_file() or state_path.is_symlink():
+            raise AssetCopyError("target project marker is missing")
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as error:
+            raise AssetCopyError(f"invalid target project marker: {error}") from error
+        if (
+            not isinstance(state, dict)
+            or state.get("schema") != TARGET_STATE_SCHEMA
+            or state.get("generator") != "migrate-android-compose-to-harmony"
+        ):
+            raise AssetCopyError("target project marker is invalid")
+        recorded_output = state.get("output_root")
+        if recorded_output != ".":
+            if not isinstance(recorded_output, str):
+                raise AssetCopyError("target project output marker is invalid")
+            if absolute_without_final_symlink(
+                Path(recorded_output),
+                "recorded target",
+            ) != target:
+                raise AssetCopyError("target project output marker does not match")
 
     raw_destination = Path(
         os.path.abspath(os.path.expanduser(str(destination_path)))
@@ -213,8 +220,10 @@ def validate_target_and_destination(
     return target, destination, relative.as_posix()
 
 
-def load_asset_ledger(target: Path) -> tuple[Path, dict[str, Any]]:
-    ledger_path = target / ".migration" / "assets.json"
+def load_asset_ledger(target: Path, metadata_dir=None) -> tuple[Path, dict[str, Any]]:
+    ledger_path = (metadata_dir or target / '.migration') / 'assets.json'
+    if ledger_path.is_symlink():
+        raise AssetCopyError('asset ledger must not be a symbolic link')
     if not ledger_path.exists():
         return ledger_path, {
             "schema": ASSET_LEDGER_SCHEMA,
@@ -236,6 +245,7 @@ def load_asset_ledger(target: Path) -> tuple[Path, dict[str, Any]]:
 
 
 def write_asset_ledger(path: Path, ledger: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.write-",
         dir=path.parent,
@@ -333,9 +343,12 @@ def main() -> int:
                 args.target,
                 args.destination,
                 source.suffix.lower(),
+                existing_target=args.existing_target, target_metadata_dir=args.target_metadata_dir,
             )
         )
-        ledger_path, ledger = load_asset_ledger(target)
+        from ui_migration.target_access import asset_metadata
+        metadata = asset_metadata(args.target, args.destination, args.existing_target, args.target_metadata_dir)
+        ledger_path, ledger = load_asset_ledger(target, metadata)
         destination, changed = copy_asset(
             source,
             source_root,
@@ -347,7 +360,7 @@ def main() -> int:
         )
         if changed:
             write_asset_ledger(ledger_path, ledger)
-    except (AssetCopyError, OSError) as error:
+    except (AssetCopyError, OSError, ValueError) as error:
         print(
             json.dumps(
                 {

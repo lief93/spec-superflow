@@ -11,10 +11,14 @@ from ui_migration.contracts.material_icons import material_icon_identity
 from ui_migration.common import ArkUIPageError, RESOURCE_NAME_PATTERN, pascal_identifier
 
 
-def load_theme_resources(target: Path, module: str) -> tuple[set[str], dict[str, str]]:
+def load_theme_resources(target: Path, module: str, metadata_dir=None) -> tuple[set[str], dict[str, str]]:
     resources: set[str] = set()
     string_values: dict[str, str] = {}
-    manifest_path = target / ".migration" / "compose-theme-resources.json"
+    manifest_path = (metadata_dir or target / '.migration') / 'compose-theme-resources.json'
+    if metadata_dir is not None and metadata_dir != target / '.migration':
+        from ui_migration.target_access import check_manifest_outputs, checked_path
+        checked_path(metadata_dir, manifest_path)
+        check_manifest_outputs(target, module, manifest_path)
     if manifest_path.exists():
         if manifest_path.is_symlink() or not manifest_path.is_file():
             raise ArkUIPageError("theme resource manifest is not a regular file")
@@ -64,13 +68,13 @@ def load_theme_resources(target: Path, module: str) -> tuple[set[str], dict[str,
     return resources, string_values
 
 
-def load_page_font_faces(target: Path, module: str, page: dict[str, Any]) -> list[dict[str, Any]]:
+def load_page_font_faces(target: Path, module: str, page: dict[str, Any], metadata_dir=None) -> list[dict[str, Any]]:
     faces = page.get("font_faces", [])
     if not isinstance(faces, list):
         raise ArkUIPageError("page fontFaces must be a list")
     if not faces:
         return []
-    ledger_path = target / ".migration/assets.json"
+    ledger_path = (metadata_dir or target / '.migration') / 'assets.json'
     if ledger_path.is_symlink() or not ledger_path.is_file():
         raise ArkUIPageError("page fonts require a verified target asset ledger")
     ledger = json.loads(ledger_path.read_text(encoding="utf-8"))

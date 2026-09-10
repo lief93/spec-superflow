@@ -21,6 +21,10 @@ for supported signatures; unknown types and ambiguous matches remain diagnostic.
 Use `--component-dir` and `--page-output-dir` for independent target-module scan/output
 locations; keep intermediate artifacts in `--output-dir`. See
 [custom directories](references/source-page-workflow.md#custom-component-and-page-directories).
+For an ordinary existing Harmony project, add `--existing-target` and a stable
+`--target-metadata-dir` outside the project. All page/theme/asset ownership records
+stay there; no project marker is required or created. See
+[existing project output](references/source-page-workflow.md#existing-harmony-project-output).
 Do not reconstruct these steps using ad hoc inline Python. Generated code is not
 build/runtime acceptance; the project-wide agent workflow remains separate.
 The page command's final `result.json` includes grouped `diagnosis` and a Chinese
@@ -93,8 +97,10 @@ hide missing source hierarchy or custom-drawing support.
 For explicitly UI-only multi-state prototypes, use the scoped preview procedure in
 [source-page-workflow.md](references/source-page-workflow.md#ui-only-previews-when-business-values-are-unavailable).
 It evaluates explicit scene inputs through source conditions and marks sample or UIAutomator
-display text. Unknown local facts do not block JSON output: undecided branches and list
-templates remain explicitly deferred until inputs resolve them, never independent branch switches.
+display text. Unknown UI branch conditions preserve alternative component properties in
+top-level state projection metadata and display one marked default preview branch. This
+does not assign business inputs or implement runtime switching. Unknown collection counts
+still retain deferred templates, not invented items. See the workflow's conditional preview section.
 Keep the generated `unresolved-worklist.json` as a diagnostic report, not an AI task queue.
 Do not add an AI value-completion or AI review stage to the migration flow. Continue known output
 with unresolved facts reported; use supported parsers, explicit scene inputs and verified runtime
