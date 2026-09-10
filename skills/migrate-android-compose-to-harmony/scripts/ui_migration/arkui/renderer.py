@@ -27,12 +27,14 @@ class Renderer:
         string_values: dict[str, str],
         android_page_input: dict[str, Any],
         tinted_vector_resources: dict[tuple[str, str], str] | None = None,
+        import_module=None,
     ) -> None:
         if not isinstance(android_page_input, dict):
             raise ArkUIPageError(
                 "source-generated page JSON is required; source translation fallback is disabled"
             )
         self.root = root
+        self.import_module = import_module or (lambda value: value)
         self.resource_names = resource_names
         self.android_page_input = android_page_input
         self.android_page_layout_mode = "snapshot"
@@ -1080,5 +1082,5 @@ class Renderer:
             self.lengths.used,
             business_interfaces, business_methods,
             self._material_item_states,
-            self.style_tokens.imports() + self.component_reuse.imports() + sorted(self._control_imports),
+            self.style_tokens.imports(self.import_module) + self.component_reuse.imports(self.import_module) + sorted(self._control_imports),
         ).render()

@@ -43,6 +43,6 @@ class StyleTokenEmitter:
             return '[' + ', '.join(self.value(item) for item in value) + ']'
         return literal(value)
 
-    def imports(self):
-        return [f'import {{ {symbol} as {alias} }} from {arkts_string(module)};'
+    def imports(self, module_path=lambda value: value):
+        return [f'import {{ {symbol} as {alias} }} from {arkts_string(module_path(module))};'
                 for (module, symbol), alias in self.modules.items()]

@@ -18,6 +18,9 @@ The page command automatically reuses compatible same-name components from the t
 module; see [component discovery and explicit overrides](references/business-component-reuse.md#automatic-matching-default-for-the-page-command).
 Use `--no-auto-component-reuse` to disable it. No per-component registration is needed
 for supported signatures; unknown types and ambiguous matches remain diagnostic.
+Use `--component-dir` and `--page-output-dir` for independent target-module scan/output
+locations; keep intermediate artifacts in `--output-dir`. See
+[custom directories](references/source-page-workflow.md#custom-component-and-page-directories).
 Do not reconstruct these steps using ad hoc inline Python. Generated code is not
 build/runtime acceptance; the project-wide agent workflow remains separate.
 The page command's final `result.json` includes grouped `diagnosis` and a Chinese

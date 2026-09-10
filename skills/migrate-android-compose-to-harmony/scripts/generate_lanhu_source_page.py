@@ -87,6 +87,8 @@ def parse_args() -> argparse.Namespace:
                         help='Explicit trusted Python adapter manifest with pinned module SHA-256 values.')
     parser.add_argument('--harmony-target', type=Path, help='Discover compatible existing components in this Harmony project.')
     parser.add_argument('--harmony-module', default='entry')
+    parser.add_argument('--component-dir', type=Path, help='Component scan directory, absolute or relative to --harmony-target, inside the module ETS tree.')
+    parser.add_argument('--page-output-dir', type=Path, help='Page output directory to exclude from discovery, relative to --harmony-target or absolute.')
     parser.add_argument('--preserve-component-ui-states', action='store_true',
                         help='Keep supported business-component UI branches; page state remains fixed.')
     parser.add_argument(
@@ -115,6 +117,8 @@ def write_json(path: Path, value: Any) -> None:
 
 
 def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, Any]:
+    if (getattr(args, 'component_dir', None) is not None or getattr(args, 'page_output_dir', None) is not None) and not getattr(args, 'harmony_target', None):
+        raise ValueError('--component-dir and --page-output-dir require --harmony-target')
     from ui_migration.contracts.source_storage import unpack_source_page
     from layout_expressions import needs_layout_projection
     from ui_migration.frontend.material_defaults import DEFAULT_CONTROL_TYPES
@@ -133,7 +137,8 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
     if projected_payload is None and getattr(args, 'harmony_target', None):
         from ui_migration.frontend.component_discovery import target_inventory, discover_adapters
         discovery = step('discover-harmony-components', target_inventory,
-                         args.harmony_target, getattr(args, 'harmony_module', 'entry'))
+                         args.harmony_target, getattr(args, 'harmony_module', 'entry'),
+                         getattr(args, 'component_dir', None), getattr(args, 'page_output_dir', None))
         automatic, decisions = discover_adapters(source_payload.get('component_definitions', []),
                                                  registry.component_adapters, discovery)
         registry.component_adapters = (*registry.component_adapters, *automatic)

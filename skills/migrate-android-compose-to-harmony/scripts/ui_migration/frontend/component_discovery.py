@@ -30,14 +30,19 @@ def parser_runtime():
     return node, str(compiler)
 
 
-def target_inventory(target, module):
-    if not module or Path(module).name != module or module in {'.', '..'}:
-        raise ValueError('invalid Harmony module name')
+def target_inventory(target, module, component_dir=None, page_output_dir=None):
+    from ui_migration.target_paths import ets_directory, page_directory
     target = Path(target).expanduser().resolve()
-    root = target/module/'src/main/ets'
+    root = ets_directory(target, module, component_dir, option='--component-dir')
+    output = page_directory(target, module, page_output_dir)
+    if root.is_relative_to(output):
+        raise ValueError('--component-dir must not be inside --page-output-dir')
+    if component_dir is not None and not root.is_dir():
+        raise ValueError('--component-dir does not exist: ' + str(root))
     files = []
     for directory, dirs, names in os.walk(root, followlinks=False):
         dirs[:] = sorted(d for d in dirs if d not in {'generated', 'oh_modules', 'node_modules', 'build', '.hvigor'}
+                         and Path(directory)/d != output
                          and not (Path(directory)/d).is_symlink())
         files.extend(str(Path(directory)/name) for name in sorted(names)
                      if name.endswith('.ets') and not (Path(directory)/name).is_symlink())
@@ -51,7 +56,7 @@ def target_inventory(target, module):
         raise ValueError('ArkTS component discovery failed: ' + result.stderr[-2000:])
     inventory = json.loads(result.stdout)
     for item in inventory['components']:
-        relative = os.path.relpath(Path(item['path']).with_suffix(''), root/'generated').replace(os.sep, '/')
+        relative = os.path.relpath(Path(item['path']).with_suffix(''), target/module/'src/main/ets/generated').replace(os.sep, '/')
         item['module'] = relative if relative.startswith('.') else './' + relative
     inventory.update(files=len(files), root=str(root))
     return inventory

@@ -7,6 +7,10 @@ unchanged. Reuse does not automatically port Android callback/network business c
 ## Automatic Matching (Default For The Page Command)
 
 `migrate_compose_page.py` now scans `<target>/<module>/src/main/ets` before projection.
+Use `--component-dir` to narrow that scan and `--page-output-dir` to independently
+place generated pages. Paths are absolute or relative to the target project root,
+inside the selected module's ETS tree. The output subtree is excluded and imports
+are relocated automatically. See [custom directories](source-page-workflow.md#custom-component-and-page-directories).
 No per-component registration is required. A new target with no components simply
 uses normal generation. `--no-auto-component-reuse` disables discovery.
 For the individual `generate_lanhu_source_page.py` command pass

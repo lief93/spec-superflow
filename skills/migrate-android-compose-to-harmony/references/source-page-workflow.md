@@ -31,6 +31,42 @@ silently fall back to re-extraction. Add `--project-name`, `--bundle-name` and
 normal project/asset ownership checks. New targets use module `entry`; existing
 targets may select `--module`.
 
+### Custom component and page directories
+
+Keep intermediate JSON/logs outside the target project with `--output-dir`.
+Independently select an existing component scan directory and a generated-page directory:
+
+```bash
+# Add these options to the page command above:
+--target "/path/to/existing-harmony-project" \
+--module entry \
+--component-dir "entry/src/main/ets/components" \
+--page-output-dir "entry/src/main/ets/pages/migrated" \
+--output-dir "/path/to/new-migration-attempt"
+```
+
+Both directory options accept an absolute path or a path relative to `--target`
+(not the shell working directory). Both must be inside the selected module's
+`src/main/ets` tree; direct cross-module source imports are not introduced.
+The component directory must exist. The page directory is created automatically;
+the filename remains `Generated<RootName>.ets`. Component scanning is recursive and
+excludes the selected output subtree, legacy `generated` directories, dependency/build
+directories and symlinks. Do not use the output directory as the scan root.
+Without these options the original scan root and `ets/generated` output are unchanged.
+Resources still go to the selected module's `src/main/resources`; existing components
+are imported, not moved or copied. Existing project ownership and overwrite checks
+still apply; these options do not adopt an unregistered project or rewrite its routes.
+
+Standalone `generate_lanhu_source_page.py` accepts `--component-dir` and
+`--page-output-dir` with `--harmony-target` / `--harmony-module`.
+Standalone `generate_arkui_page.py` accepts `--page-output-dir` with `--target` / `--module`.
+Supply the same output directory during discovery so it is excluded from scanning.
+JSON/adapter relative module references keep their established `ets/generated` base;
+the ArkUI emitter relocates relative imports for the actual page directory. Package
+imports are unchanged, so changing the destination does not require rewriting adapters.
+`--force` still only replaces unchanged owned output at the same path; relocating an
+already generated page is not an implicit move/delete operation.
+
 The page command automatically scans existing named components in the target module
 and reuses a unique same-name, compatible-parameter declaration. Inspect
 `lanhu/component-discovery.json` for selection decisions; explicit component adapters

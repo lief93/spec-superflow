@@ -47,6 +47,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--target", required=True, type=Path)
     parser.add_argument("--module", default="entry")
+    parser.add_argument('--page-output-dir', type=Path, help='Page directory, absolute or relative to --target, inside the module ETS tree; created automatically.')
     parser.add_argument(
         "--page-json",
         required=True,
@@ -65,9 +66,12 @@ def generate(
     module: str,
     page_json: Path,
     force: bool,
+    page_output_dir: Path | None = None,
 ) -> dict[str, Any]:
     target = normalize_target(target_path)
     require_module(target, module)
+    from ui_migration.target_paths import page_directory, relocate_import
+    output_directory = page_directory(target, module, page_output_dir)
     android_page_input = step('load-page-json', load_lanhu_page_input, page_json)
     if not android_page_input.get("source_generated"):
         raise ArkUIPageError(
@@ -88,6 +92,7 @@ def generate(
         string_values,
         android_page_input,
         tinted_vector_resources,
+        import_module=lambda value: relocate_import(value, target/module/'src/main/ets/generated', output_directory),
     )
     renderer.verified_font_faces = step('verify-font-assets', load_page_font_faces, target, module, android_page_input)
     with phase('render-arkts', components=len(android_page_input['components'])):
@@ -112,9 +117,7 @@ def generate(
                 phase=failure["phase"],
             )
     generation_complete = not renderer.unresolved and target_phase_gate["verdict"] == "pass"
-    output_relative = (
-        f"{module}/src/main/ets/generated/Generated{pascal_identifier(root['composable'])}.ets"
-    )
+    output_relative = (output_directory / f"Generated{pascal_identifier(root['composable'])}.ets").relative_to(target).as_posix()
     manifest_relative = f".migration/arkui-pages/{identity}.json"
     output_path = target / output_relative
     manifest_path = target / manifest_relative
@@ -243,7 +246,7 @@ def main() -> int:
     args = parse_args()
     try:
         with Progress('arkui'):
-            result = generate(args.target, args.module, args.page_json, args.force)
+            result = generate(args.target, args.module, args.page_json, args.force, args.page_output_dir)
     except (ArkUIPageError, OSError, TypeError, ValueError) as error:
         print(
             json.dumps(

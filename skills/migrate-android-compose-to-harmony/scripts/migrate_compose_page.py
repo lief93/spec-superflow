@@ -34,6 +34,8 @@ def parse_args():
     parser.add_argument('--preserve-component-ui-states', action='store_true',
                         help='Preserve business-component UI branches without migrating their business conditions.')
     parser.add_argument('--module', default='entry')
+    parser.add_argument('--component-dir', type=Path, help='Existing component scan directory, absolute or relative to --target, inside the module ETS tree.')
+    parser.add_argument('--page-output-dir', type=Path, help='Generated page directory, absolute or relative to --target, inside the module ETS tree.')
     parser.add_argument('--project-name', help='Required for a new target.')
     parser.add_argument('--bundle-name', help='Required for a new target.')
     parser.add_argument('--sdk-version', help='Required for a new target; use an installed SDK version.')
@@ -154,6 +156,19 @@ class PageRun:
 
     def run(self):
         a = self.args
+        from ui_migration.target_paths import ets_directory, page_directory
+        page_output = page_directory(self.target, a.module, getattr(a, 'page_output_dir', None))
+        component_dir = getattr(a, 'component_dir', None)
+        if component_dir is not None:
+            if getattr(a, 'no_auto_component_reuse', False):
+                raise ValueError('--component-dir cannot be used with --no-auto-component-reuse')
+            component_dir = ets_directory(self.target, a.module, component_dir, option='--component-dir')
+            if not component_dir.is_dir():
+                raise ValueError('--component-dir does not exist: ' + str(component_dir))
+        if not getattr(a, 'no_auto_component_reuse', False):
+            scan_root = component_dir or ets_directory(self.target, a.module)
+            if scan_root.is_relative_to(page_output):
+                raise ValueError('--component-dir must not be inside --page-output-dir')
         if bool(a.snapshot) != bool(a.contract):
             raise ValueError('--snapshot and --contract must be provided together; --source does not accept --contract')
         styles = a.style_definitions.expanduser().resolve()
@@ -191,6 +206,8 @@ class PageRun:
         self.report['progress_log'] = str(self.directory/'progress.jsonl')
         self.report['inputs'] = {key:str(value.expanduser().resolve()) if isinstance(value, Path) else value
             for key,value in vars(a).items()}
+        self.report['inputs']['page_output_dir'] = str(page_output)
+        self.report['inputs']['component_dir'] = str(component_dir) if component_dir else None
         if a.source:
             snapshot, contract = self.directory/'snapshot', self.directory/'migration-contract.json'
             self.tool('snapshot', 'prepare_safe_snapshot.py', '--source', source, '--snapshot', snapshot)
@@ -204,7 +221,10 @@ class PageRun:
             '--page-id', a.page_id, '--state-id', a.state_id, '--output', source_page)
         options = []
         if not getattr(a, 'no_auto_component_reuse', False):
-            options.extend(['--harmony-target', self.target, '--harmony-module', a.module])
+            options.extend(['--harmony-target', self.target, '--harmony-module', a.module,
+                            '--page-output-dir', page_output])
+            if component_dir is not None:
+                options.extend(['--component-dir', component_dir])
         if getattr(a, 'preserve_component_ui_states', False):
             options.append('--preserve-component-ui-states')
         for name,path in (('--state-fixture', a.state_fixture), ('--api-adapters', a.api_adapters)):
@@ -221,7 +241,8 @@ class PageRun:
             '--target', self.target, '--module', a.module, '--force')
         self.resources(snapshot, version)
         arkui = self.tool('arkui', 'generate_arkui_page.py', '--target', self.target,
-            '--module', a.module, '--page-json', version, *(['--force'] if a.force else []))
+            '--module', a.module, '--page-json', version, '--page-output-dir', page_output,
+            *(['--force'] if a.force else []))
         complete = bool(lanhu.get('generation_complete') and arkui.get('generation_complete'))
         self.report.update(ok=True, status='generated' if complete else 'partial_generation',
             current_stage=None,

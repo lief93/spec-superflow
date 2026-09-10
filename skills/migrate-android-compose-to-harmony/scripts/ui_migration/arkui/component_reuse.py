@@ -64,6 +64,7 @@ class ComponentReuseEmitter:
             arguments = '{ ' + arguments + ' }'
         return [' ' * indent + alias + '(' + arguments + ')']
 
-    def imports(self):
-        return ["import { " + symbol + ' as ' + alias + " } from '" + module + "';"
+    def imports(self, module_path=lambda value: value):
+        from ui_migration.common import arkts_string
+        return ["import { " + symbol + ' as ' + alias + " } from " + arkts_string(module_path(module)) + ";"
                 for (module, symbol), alias in self.modules.items()]
