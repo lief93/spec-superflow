@@ -9,6 +9,7 @@ from ui_migration.contracts.identity import require_safe_relative_source
 from ui_migration.target_access import checked_path, check_manifest_outputs
 from ui_migration.arkui.project import validate_previous
 from ui_migration.common import ArkUIPageError
+from ui_migration.naming import source_identifier
 
 
 def source_file(source):
@@ -31,13 +32,15 @@ def page_file(root, output, target, manifest):
 
 
 def render_modules(code, root, business, output, page):
-    owners, mapping = {}, []
+    owners, mapping, preferred_names = {}, [], {}
     destinations = {page.relative_to(output).as_posix().casefold():root['source']}
     for definition in business.definitions.values():
         reached = [b['name'] for b in business.builders.values() if b['definition_id'] == definition['id']]
         entry = business.interfaces.entries.get(definition['id']) or business.ui_states.entries.get(definition['id'])
         if entry:
             reached.append(entry['name'])
+        elif len(reached) == 1:
+            preferred_names[reached[0]] = source_identifier(definition['type'])
         if not reached:
             continue
         source = (definition.get('identity') or {}).get('source')
@@ -54,12 +57,15 @@ def render_modules(code, root, business, output, page):
     script = Path(__file__).resolve().parents[2] / 'arkts_source_modules.cjs'
     result = subprocess.run([node, str(script), compiler], input=json.dumps({
         'code':code, 'page':page.relative_to(output).as_posix(), 'owners':owners,
+        'preferred_names':preferred_names,
+        'facades': {entry['name']:entry['variants'][0]['invocation'].name
+                    for entry in business.interfaces.entries.values() if len(entry['variants']) == 1},
     }), capture_output=True, text=True, timeout=120)
     if result.returncode:
         raise ArkUIPageError('source module generation failed: ' + result.stderr[-2000:])
     result = json.loads(result.stdout)
     for item in mapping:
-        item['methods'] = [result['method_names'][name] for name in item['methods']]
+        item['methods'] = list(dict.fromkeys(result['method_names'][name] for name in item['methods']))
     files, case_paths = {}, {}
     for relative, content in result['files'].items():
         destination = checked_path(output, output / relative)
@@ -69,7 +75,9 @@ def render_modules(code, root, business, output, page):
         case_paths[folded] = relative
         files[destination] = content.encode('utf-8')
     return files, {'representation':'source-file-builders', 'definitions':mapping,
-                   'renamed_methods':{name:target for name,target in result['method_names'].items() if name != target},
+                   'renamed_methods':{name:target for name,target in result['method_names'].items()
+                                      if name != target and name not in result['inlined_methods']},
+                   'inlined_methods':result['inlined_methods'],
                    'context_parameter':result['context_parameter'],
                    'shared_cross_page_modules':'identical-owned-modules-only',
                    'scope':'selected-page-ui; business callbacks and domain types are not synthesized'}

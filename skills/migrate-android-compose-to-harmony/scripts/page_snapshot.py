@@ -10,6 +10,7 @@ import reprlib
 import struct
 import sys
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -438,11 +439,14 @@ def normalize_provenance(value: Any, label: str) -> list[dict[str, Any]]:
             item["origin"], f"{label}[{index}].origin",
             {"runtime", "source_resolved", "source_expression", "pixel_sampled", "manual_verified", "ui_preview_sample"},
         )
+        source = display_string(item['source'], f'{label}[{index}].source')
+        if not source or not source.strip() or any(unicodedata.category(c) == 'Cc' and c not in '\r\n\t' for c in source):
+            raise PageSnapshotError(f'{label}[{index}].source must be non-empty source text; {actual_value(source)}')
         result.append(
             {
                 "paths": paths,
                 "origin": origin,
-                "source": bounded_string(item["source"], f"{label}[{index}].source"),
+                "source": source,
             }
         )
     return result

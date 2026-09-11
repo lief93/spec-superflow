@@ -15,6 +15,71 @@ from ui_migration.common import MANIFEST_SCHEMA
 
 
 class SourceModulesTest(unittest.TestCase):
+    def test_fixed_dp_does_not_inject_context(self):
+        _, _, _, renderer, code = compile_page('''
+@Composable fun Page() { Dot() }
+@Composable fun Dot() { Box(Modifier.size(width = 16.dp, height = 6.dp).padding(1.5.dp)) }
+''')
+        files, report = render_modules(code, renderer.root, renderer.business_components,
+            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
+        output = files[Path('/tmp/generated/Page.ets')].decode()
+        self.assertIn('.width(16)', output)
+        self.assertIn('.height(6)', output)
+        self.assertIn('.padding(1.5)', output)
+        self.assertNotIn('migrationContext', output)
+        self.assertNotIn('layoutPx', output)
+        self.assertIsNone(report['context_parameter'])
+
+    def test_single_source_body_has_no_render_wrapper(self):
+        _, _, _, renderer, code = compile_page('''
+@Composable fun Page() { Caption("One"); Caption("Two") }
+@Composable fun Caption(label: String) { Text(label) }
+''')
+        files, report = render_modules(code, renderer.root, renderer.business_components,
+            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
+        output = files[Path('/tmp/generated/Page.ets')].decode()
+        self.assertIn('export function Caption(label: string)', output)
+        self.assertIn('Text(label)', output)
+        self.assertNotIn('renderCaption', output)
+        self.assertEqual(report['definitions'][0]['methods'], ['Caption'])
+
+    def test_effectful_argument_is_not_duplicated_by_inlining(self):
+        _, _, _, renderer, code = compile_page('''
+@Composable fun Page() { Caption("One") }
+@Composable fun Caption(label: String) { Text(label) }
+''')
+        code = code.replace('label: label,', 'label: lookup(label),')
+        self.assertIn('lookup(label)', code)
+        files, report = render_modules(code, renderer.root, renderer.business_components,
+            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
+        output = files[Path('/tmp/generated/Page.ets')].decode()
+        self.assertIn('renderCaption', output)
+        self.assertEqual(output.count('lookup(label)'), 1)
+        self.assertEqual(report['inlined_methods'], {})
+
+    def test_opaque_parameter_does_not_force_preview_prefix(self):
+        _, _, _, renderer, code = compile_page('''
+@Composable fun Page() { Caption(model) }
+@Composable fun Caption(data: DomainModel) { Text("One") }
+''')
+        files, report = render_modules(code, renderer.root, renderer.business_components,
+            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
+        output = files[Path('/tmp/generated/Page.ets')].decode()
+        self.assertIn('export function Caption(', output)
+        self.assertNotIn('export function previewCaption', output)
+
+    def test_recovered_source_name_still_uses_target_identifier_rules(self):
+        _, _, _, renderer, code = compile_page('''
+@Composable fun Page() { Caption(model) }
+@Composable fun Caption(data: DomainModel) { Text("One") }
+''')
+        definition = next(d for d in renderer.business_components.definitions.values() if d['type'] == 'Caption')
+        for name, expected in [('class', 'classValue'), ('two words', 'two_words')]:
+            definition['type'] = name
+            files, _ = render_modules(code, renderer.root, renderer.business_components,
+                Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
+            self.assertIn('export function ' + expected + '(', files[Path('/tmp/generated/Page.ets')].decode())
+
     def test_module_write_failure_restores_complete_old_output_set(self):
         from generate_harmony_theme_resources import commit_payloads
         import os
@@ -91,8 +156,9 @@ class SourceModulesTest(unittest.TestCase):
             Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
         output = files[Path('/tmp/generated/Page.ets')].decode()
         self.assertIn('export function Label(renderLabel: string)', output)
-        self.assertIn('renderLabel2({ renderLabel: renderLabel', output)
-        self.assertEqual(report['renamed_methods'], {'renderLabel':'renderLabel2'})
+        self.assertIn('Text(renderLabel)', output)
+        self.assertNotIn('export function renderLabel', output)
+        self.assertEqual(report['inlined_methods'], {'renderLabel':'Label'})
 
     def test_source_path_is_flattened_and_cannot_escape(self):
         self.assertEqual(source_file('feature/src/main/kotlin/example/Card.kt'),
@@ -242,10 +308,10 @@ import example.ui.Shell
         self.assertIn('Header("Second")', page.read_text())
         self.assertNotIn('export function Header', page.read_text())
         self.assertIn('export function Header(title: string)', header.read_text())
-        self.assertIn('Caption(props.title)', header.read_text())
+        self.assertIn('Caption(title)', header.read_text())
         self.assertEqual(header.read_text().count('Text('), 2)
         self.assertIn('export function Label(renderLabel: string)', header.read_text())
-        self.assertIn('renderLabel2({ renderLabel: renderLabel', header.read_text())
+        self.assertIn('Text(renderLabel)', header.read_text())
         self.assertIn('export function', shell.read_text())
         recorded = json.loads(manifest.read_text())
         for relative, record in recorded['outputs'].items():

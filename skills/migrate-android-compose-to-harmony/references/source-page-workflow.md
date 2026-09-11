@@ -242,6 +242,9 @@ are truncated only in error previews, not in the input JSON. Diagnostic `reason`
 strings accept newlines, tabs and more than 500 characters without truncation;
 document-size limits still apply. Empty/non-string reasons and unsupported control
 characters such as NUL remain errors. Identifier and other field limits are unchanged.
+`provenance[].source` also retains multiline source evidence, up to 10,000
+characters; blank values and controls other than CR/LF/tab remain invalid. It is
+not an identifier and is not restricted to a 500-character single-line label.
 Silence alone does not prove a deadlock; this change adds diagnostics,
 not a performance fix or automatic timeout. Filenames and symbol names are logged,
 not complete source bodies. Apply company log-handling policy to these files.
@@ -701,6 +704,27 @@ For regeneration, use a fresh target or `--force` only when the generator's exis
 are unchanged. Do not hand-edit generated layouts to improve the first-pass score.
 
 ## 7. Build, capture and compare
+
+Generated source modules preserve source method names where representable. A
+single-use fixed-state rendering helper is merged into its source facade only
+when its arguments and scope can be safely substituted; state dispatch and
+effectful arguments retain their helpers. An unsupported declaration can still
+require generated props rather than the original signature. Fixed dp lengths
+emit logical numeric ArkUI lengths, without a pixel-rounding helper or a context
+parameter just for constants. Actual measurement, font-metric and state dependencies
+can still require a typed context. These rules do not imply business-state parity.
+
+### Required regression after tooling changes
+
+After each migration-tool change, rerun at least one previously adapted page through
+fresh source/page generation, native build, installation, launch, capture and
+comparison. Unit tests or an SDK build alone do not satisfy this regression gate.
+Reuse its explicit state fixture and matching viewport, locale, theme and font scale;
+retain the prior evidence and use a new run directory. Record revision, commands,
+stage timings, generated/build hashes and comparison results. Never patch generated
+ETS to make the check pass. Report execution success separately from visual
+acceptance, including pre-existing failures and newly introduced regressions. A
+missing device or incomplete comparison contract must be reported as unverified.
 
 Mount the emitted root component in the target's chosen route, configure the actual SDK/signing,
 then compile/install with the existing project build workflow. The generator does not launch the
