@@ -1027,10 +1027,10 @@ class Renderer:
         ]
         if self.android_page_input.get("root_layout_context") == "caller_owned":
             roots.sort(key=lambda component: component["sibling_index"])
-            lines = ["  @Builder", "  private renderAndroidPageSnapshot() {"]
+            lines = []
             for component in roots:
                 lines.extend(self.page_snapshot_component_lines(component, content_bounds, None, 4))
-            return lines + ["  }"]
+            return lines
         roots.sort(
             key=lambda component: (
                 0 if component["style"]["content"].get("role") == "surface" else 1,
@@ -1039,7 +1039,7 @@ class Renderer:
                 component["bounds_dp"]["x"],
             )
         )
-        lines = ["  @Builder", "  private renderAndroidPageSnapshot() {", "    Stack() {"]
+        lines = ["    Stack() {"]
         for component in roots:
             lines.extend(self.page_snapshot_component_lines(component, content_bounds, None, 6))
         lines.extend([
@@ -1049,7 +1049,6 @@ class Renderer:
         ])
         if "compose_theme_background" in self.resource_names:
             lines.append("      .backgroundColor($r('app.color.compose_theme_background'))")
-        lines.append("  }")
         return lines
 
     def render(self) -> str:
@@ -1074,6 +1073,8 @@ class Renderer:
                 if (component['id'], path) not in self.style_tokens.consumed:
                     self.add_page_json_unresolved(component, 'style.' + path, 'mapped style token was not consumed by this component renderer')
         business_interfaces, business_methods = self.business_components.declarations()
+        self.business_components.preferred_imports.update(
+            {alias:symbol for (_, symbol), alias in self.style_tokens.modules.items()})
         return ArkUIDocument(
             self.root, page_snapshot_section, self.verified_font_faces,
             self.surface.builders, self._page_match_parent_builders + self._page_control_builders,

@@ -56,8 +56,7 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
         )
         renderer.render_android_page_snapshot = Mock(
             return_value=[
-                "  @Builder",
-                "  private renderAndroidPageSnapshot() {}",
+                "    Text('Page content')",
             ]
         )
         renderer.selected_calls = []
@@ -77,7 +76,8 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
 
         source = renderer.render()
 
-        self.assertIn("this.renderAndroidPageSnapshot()", source)
+        self.assertIn("Text('Page content')", source)
+        self.assertNotIn("renderAndroidPageSnapshot", source)
         renderer.root_public_parameters.assert_not_called()
         renderer.render_definition.assert_not_called()
 
@@ -161,7 +161,8 @@ class GenerateArkUILanhuInputTest(unittest.TestCase):
 
             source = renderer.render()
 
-            self.assertIn("this.renderAndroidPageSnapshot()", source)
+            self.assertIn("build() {", source)
+            self.assertNotIn("renderAndroidPageSnapshot", source)
             for fallback in mocks.values():
                 fallback.assert_not_called()
 

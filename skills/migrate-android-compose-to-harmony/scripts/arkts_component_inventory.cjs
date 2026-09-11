@@ -66,6 +66,15 @@ for (const path of input.files) {
         slot:pd.includes('BuilderParam'), required:pd.includes('Require') || !(p.initializer || p.questionToken),
         optional:!!p.questionToken});
     }
+    if (struct) {
+      // Count all BuilderParams, including private/internal fields which are
+      // not caller arguments. Tail content is legal only for a single slot.
+      const slots = node.members.filter(p => ts.isPropertyDeclaration(p) && decorators(p).includes('BuilderParam'));
+      if (slots.length === 1 && !has(slots[0], ts.SyntaxKind.PrivateKeyword) &&
+          propertyType(slots[0]) === '()=>void' && !record.errors.length) {
+        record.target_content_slot = slots[0].name.getText(source);
+      }
+    }
     components.push(record);
   }
 }

@@ -80,6 +80,7 @@ def render_modules(code, root, business, output, page):
                    'renamed_methods':{name:target for name,target in result['method_names'].items()
                                       if name != target and name not in result['inlined_methods']},
                    'inlined_methods':result['inlined_methods'],
+                   'slot_lowerings':business.slot_lowerings,
                    'context_parameter':result['context_parameter'],
                    'shared_cross_page_modules':'identical-owned-modules-only',
                    'scope':'selected-page-ui; business callbacks and domain types are not synthesized'}

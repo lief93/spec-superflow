@@ -124,16 +124,13 @@ class ArkUIDocument:
         lines.append("  build() {")
         lines.extend([
             "    Stack() {",
-            "      this.renderAndroidPageSnapshot()",
+            *['  ' + line for line in self.body],
             "    }",
             "      .alignContent(Alignment.TopStart)",
             "      .width('100%')",
             "      .height('100%')",
         ])
         lines.extend(("  }", ""))
-        if self.body:
-            lines.extend(self.body)
-            lines.append("")
         lines.extend(self.business_methods)
         lines.extend(("}", ""))
         return "\n".join(lines)

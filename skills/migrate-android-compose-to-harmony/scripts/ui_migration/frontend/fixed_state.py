@@ -157,7 +157,8 @@ def project_source_page(
     style_tokens = StyleTokenProjector(payload.get('style_definitions') or {})
     from ui_migration.frontend.component_reuse import ComponentReuse
     component_reuse = ComponentReuse(getattr(api_registry, 'component_adapters', ()),
-                                     payload.get('component_definitions', []))
+                                     payload.get('component_definitions', []),
+                                     getattr(api_registry, 'component_inventory', ()))
     from ui_migration.frontend.component_interfaces import project_interface
     if fixture.get("schema") != "android-to-harmony.page-state-fixture.v1":
         raise ValueError(f"unsupported state fixture schema: {fixture.get('schema')!r}")

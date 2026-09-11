@@ -45,6 +45,11 @@ def validate_reuse(record):
         raise ValueError('component reuse requires properties and slots objects')
     if set(properties) & set(slots):
         raise ValueError('component properties and slots must have distinct names')
+    if 'target_content_slot' in record:
+        if (record.get('call_style', 'properties') != 'properties'
+                or not identifier(record['target_content_slot'])
+                or list(slots) != [record['target_content_slot']]):
+            raise ValueError('target content slot must identify the sole mapped slot')
     bindings = record.get('property_parameters', {})
     if not isinstance(bindings, dict) or any(k not in properties or not identifier(v) for k, v in bindings.items()):
         raise ValueError('invalid component property parameter bindings')

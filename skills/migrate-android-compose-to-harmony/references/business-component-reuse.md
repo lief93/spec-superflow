@@ -150,18 +150,41 @@ resolved properties, and slot child IDs. The ArkUI backend reads only that JSON;
 it neither loads the Python module nor rereads Android source.
 
 For the example above, generated code calls the imported `AccountCard` with mapped
-properties and typed slot-builder closures. Nested caller parameters are forwarded
-through the enclosing generated builder, not frozen into a slot method. Mapped
-no-argument content slots use SDK Builder helpers with only referenced enclosing
-source parameters. Fixed text, resources, IDs and styles stay in the helper body;
-they do not become a rendered-fact Props interface or a BusinessSlot dispatcher.
-Keep these slot Builders as methods on the generated page and pass closures such as
+properties and content. When SDK declaration scanning proves that the target struct
+has exactly one no-argument `@BuilderParam`, the JSON records `target_content_slot`.
+Its caller-owned UI stays inline as `AccountCard({ ... }) { ... }`; nested reused
+containers do not acquire synthetic Content methods or rendered-fact Props.
+Source functions containing this UI still retain their own source method boundary
+and supported parameters. The page body is emitted in `build()`, without an extra
+`renderAndroidPageSnapshot()` method. Style/resource imports also prefer the target
+export name over a `StyleTokenN` alias when no name conflict exists.
+
+Multiple slots, uninspected package exports and older JSON lacking the target
+signature keep SDK Builder helpers with only referenced enclosing source parameters.
+Fixed text, resources, IDs and styles stay in those helper bodies. Keep these slot
+Builders as methods on the generated page and pass closures such as
 `content: () => { this.ShellContent(title) }`. This preserves their rendering receiver;
 moving them to global functions loses that receiver inside ordinary callbacks.
 An exported source function that uses a local slot Builder receives a typed rendering
 context for that call, not for fixed dimensions. No duplicate AccountCard implementation
 is generated. Target symbols retain their export names unless a binding collision
 requires an alias.
+`source_organization.slot_lowerings` records each inline/helper decision and reason.
+The native trailing-closure restriction is documented in the
+[Huawei BuilderParam guide](https://developer.huawei.com/consumer/cn/doc/doccenter-capabilities/arkts-builderparam).
+
+Regenerate `version_json.json` through the page command to collect target signatures;
+an unchanged snapshot/contract can be reused. Re-running only ArkUI with old JSON
+removes the page wrapper and unnecessary import aliases, but cannot prove missing
+target slot facts. With explicit adapters, `--no-auto-component-reuse` still permits
+signature inspection without automatic component selection. If the output covers
+the whole ETS scan root, inspection is skipped and safe helper lowering remains.
+No additional adapter registration option is needed for inspected components.
+
+This is not full source-code reconstruction: already expanded pager/list instances
+remain expanded, unsupported domain parameter types remain diagnostic, and selected
+state computations are not recovered as Kotlin-equivalent method bodies. Do not
+claim that every source method or business callback has been preserved.
 The `.migration` result includes `reused_business_components` with each selected
 adapter, source definition, target, properties and slots. Local generated builders
 remain reported separately under `business_components`.

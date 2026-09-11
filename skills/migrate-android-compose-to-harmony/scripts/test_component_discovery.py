@@ -57,7 +57,8 @@ COMPONENT_ADAPTERS = [ComponentAdapter('explicit','example.Caption','@company/ui
         self.assertFalse(result['generation_complete'])
         self.assertNotIn('Internal', code)
         self.assertNotIn('Caller', code)
-        self.assertIn('content: () => { this.ShellContent(', code)
+        self.assertIn('ReusedShell({  }) {', code)
+        self.assertNotIn('ShellContent(', code)
         self.assertEqual(len(renderer.component_reuse.instances), 1)
         shell = next(n for n in page['components'] if n['type'] == 'Shell')
         self.assertEqual(shell['source']['component_reuse']['slots']['content'], [])
@@ -179,7 +180,8 @@ model?: Account
     def test_missing_required_slot_gets_empty_slot_with_diagnostic(self):
         _, code, result, renderer = self.generate(files={'Caption.ets':component(fields='@BuilderParam content: () => void')})
         self.assertEqual(renderer.component_reuse.instances[0]['slots'], {'content':[]})
-        self.assertIn('content: () =>', code)
+        self.assertIn('ReusedCaption({  }) {', code)
+        self.assertNotIn('ShellContent(', code)
         self.assertFalse(result['generation_complete'])
 
     def test_required_nullable_and_color_use_default_placeholders(self):

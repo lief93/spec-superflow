@@ -1,5 +1,6 @@
 """Custom scan/output directories through real CLIs and SDK discovery."""
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -68,6 +69,18 @@ class CustomTargetCommandsTest(unittest.TestCase):
     setUp = test_page_commands.PageCommandsTest.setUp
     run_tool = test_page_commands.PageCommandsTest.run_tool
     full_args = test_page_commands.PageCommandsTest.full_args
+
+    def test_explicit_adapters_with_ets_root_output_do_not_require_scanning_output(self):
+        extension = self.root/'adapters.py'
+        extension.write_text('ADAPTERS = []\nCOMPONENT_ADAPTERS = []\n')
+        manifest = self.root/'adapters.json'
+        manifest.write_text(json.dumps({'schema':'ui-migration.api-adapters.v1', 'modules':[
+            {'path':extension.name, 'sha256':hashlib.sha256(extension.read_bytes()).hexdigest()}]}))
+        result = self.run_tool('migrate_compose_page.py', *self.full_args(),
+            '--no-auto-component-reuse', '--api-adapters', manifest,
+            '--page-output-dir', 'entry/src/main/ets')
+        self.assertEqual(Path(result['arkui']['output']).parent, (self.root/'harmony/entry/src/main/ets').resolve())
+        self.assertFalse((self.root/'run/lanhu/component-discovery.json').exists())
 
     def test_existing_project_custom_paths_and_owned_regeneration(self):
         target = self.root/'harmony'

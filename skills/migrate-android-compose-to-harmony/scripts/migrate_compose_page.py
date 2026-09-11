@@ -216,9 +216,12 @@ class PageRun:
             '--style-definitions', styles, '--root-source', a.root_source, '--root-composable', a.root_composable,
             '--page-id', a.page_id, '--state-id', a.state_id, '--output', source_page)
         options = []
-        if not getattr(a, 'no_auto_component_reuse', False):
+        inspect_explicit = a.api_adapters and not ets_directory(self.target, a.module).is_relative_to(page_output)
+        if not getattr(a, 'no_auto_component_reuse', False) or inspect_explicit:
             options.extend(['--harmony-target', self.target, '--harmony-module', a.module,
                             '--page-output-dir', page_output])
+            if getattr(a, 'no_auto_component_reuse', False):
+                options.append('--no-auto-component-reuse')
             if component_dir is not None:
                 options.extend(['--component-dir', component_dir])
         if getattr(a, 'preserve_component_ui_states', False):

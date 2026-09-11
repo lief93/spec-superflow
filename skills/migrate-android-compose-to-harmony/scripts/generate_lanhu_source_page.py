@@ -86,6 +86,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--api-adapters', type=Path,
                         help='Explicit trusted Python adapter manifest with pinned module SHA-256 values.')
     parser.add_argument('--harmony-target', type=Path, help='Discover compatible existing components in this Harmony project.')
+    parser.add_argument('--no-auto-component-reuse', action='store_true', help='Inspect target signatures but use only explicit component adapters.')
     parser.add_argument('--harmony-module', default='entry')
     parser.add_argument('--component-dir', type=Path, help='Component scan directory, absolute or relative to --harmony-target, inside the module ETS tree.')
     parser.add_argument('--page-output-dir', type=Path, help='Page output directory to exclude from discovery, relative to --harmony-target or absolute.')
@@ -140,8 +141,9 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         discovery = step('discover-harmony-components', target_inventory,
                          args.harmony_target, getattr(args, 'harmony_module', 'entry'),
                          getattr(args, 'component_dir', None), getattr(args, 'page_output_dir', None))
-        automatic, decisions = discover_adapters(source_payload.get('component_definitions', []),
-                                                 registry.component_adapters, discovery)
+        registry.component_inventory = discovery['components']
+        automatic, decisions = ([], []) if getattr(args, 'no_auto_component_reuse', False) else discover_adapters(
+            source_payload.get('component_definitions', []), registry.component_adapters, discovery)
         registry.component_adapters = (*registry.component_adapters, *automatic)
         discovery['decisions'] = decisions
         write_json(args.output_dir.resolve() / 'component-discovery.json', discovery)

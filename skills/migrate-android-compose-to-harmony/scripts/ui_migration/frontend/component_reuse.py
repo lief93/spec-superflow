@@ -68,9 +68,10 @@ class ComponentAdapter:
 
 
 class ComponentReuse:
-    def __init__(self, adapters, definitions):
+    def __init__(self, adapters, definitions, target_components=()):
         self.definitions = {d['id']: d for d in definitions}
         self.adapters = tuple(adapters)
+        self.target_components = tuple(target_components)
         ids = set()
         for adapter in self.adapters:
             if not isinstance(adapter, ComponentAdapter) or not adapter.id or adapter.id in ids:
@@ -104,4 +105,12 @@ class ComponentReuse:
                   **bound, 'properties': properties}
         if getattr(adapter, 'call_style', 'properties') != 'properties':
             record['call_style'] = adapter.call_style
+        candidates = [c for c in self.target_components
+                      if c['module'] == adapter.module and c['name'] == adapter.export]
+        if len(candidates) == 1:
+            candidate = candidates[0]
+            slot = candidate.get('target_content_slot')
+            if (not candidate['errors'] and candidate['call_style'] == 'properties'
+                    and slot and list(record['slots']) == [slot]):
+                record['target_content_slot'] = slot
         return validate_reuse(record)

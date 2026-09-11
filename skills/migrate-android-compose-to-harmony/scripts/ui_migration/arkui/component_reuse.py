@@ -56,7 +56,20 @@ class ComponentReuseEmitter:
             arguments.append(expression if record.get('call_style') == 'positional' else name + ': ' + expression)
         self.instances.append({'component_id': component['id'], **record})
         by_id = {child['id']: child for child in children}
+        inline_slot = record.get('target_content_slot')
+        if inline_slot:
+            self.business_components.slot_lowerings.append({'component_id':component['id'],
+                'slot':inline_slot, 'representation':'trailing-content',
+                'reason':'target declaration has exactly one no-argument BuilderParam'})
+            lines = [' ' * indent + alias + '({ ' + ', '.join(arguments) + ' }) {']
+            with self.business_components.inline_content():
+                for root in record['slots'][inline_slot]:
+                    lines.extend(render_slot(by_id[root], indent + 2))
+            return lines + [' ' * indent + '}']
         for name, ids in record['slots'].items():
+            self.business_components.slot_lowerings.append({'component_id':component['id'],
+                'slot':name, 'representation':'local-builder',
+                'reason':'target single no-argument BuilderParam not proven; receiver-bound helper required'})
             method = record['target']['export'] + name[:1].upper() + name[1:]
             invocation = self.business_components.capture(None, method,
                 lambda: [line for root in ids for line in render_slot(by_id[root], 4)], direct_slot=True)

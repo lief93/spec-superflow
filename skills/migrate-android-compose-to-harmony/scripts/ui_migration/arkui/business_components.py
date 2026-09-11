@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from contextlib import contextmanager
 import json
 
 from ui_migration.common import ArkUIPageError, pascal_identifier
@@ -32,6 +33,7 @@ class Frame:
     names: NameScope = field(default_factory=NameScope)
     slot_names: list[str] = field(default_factory=list)
     preserve_literals: bool = False
+    preserve_constants: bool = False
     source_parameters: set[str] = field(default_factory=set)
 
 
@@ -57,6 +59,7 @@ class BusinessComponents:
 
     def clear(self):
         self.preferred_imports = {}
+        self.slot_lowerings = []
         self.frames.clear()
         self.builders.clear()
         self.instances.clear()
@@ -80,7 +83,7 @@ class BusinessComponents:
         frame = self.frames[-1]
         source = component.get('source') or {}
         source_name = source.get('property_bindings', {}).get(path)
-        if frame.preserve_literals and source_name not in frame.source_parameters:
+        if (frame.preserve_literals or frame.preserve_constants) and source_name not in frame.source_parameters:
             return expression
         hint = source.get('property_names', {}).get(path)
         fallbacks = {'semantic_key': 'viewId', 'style.content.text': 'text',
@@ -89,6 +92,18 @@ class BusinessComponents:
         name = frame.names.allocate(hint or source_name or fallbacks.get(path, 'value'))
         frame.arguments.append(Argument(kind, expression, component['id'], path, name, source_name or ''))
         return name if frame.preserve_literals else f'props.{name}'
+
+    @contextmanager
+    def inline_content(self):
+        frame = self.frames[-1] if self.frames else None
+        previous = frame.preserve_constants if frame else False
+        if frame:
+            frame.preserve_constants = True
+        try:
+            yield
+        finally:
+            if frame:
+                frame.preserve_constants = previous
 
     def capture(self, definition_id, symbol, render, prefix='', *, direct_slot=False):
         frame = Frame(preserve_literals=direct_slot)
