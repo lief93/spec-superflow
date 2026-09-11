@@ -49,3 +49,5 @@ class DependencyGraph:
                         for _, targets in self.edges[identity] for t in targets):
                     index.roles[identity] = 'content'
                     changed = True
+        from .content_roles import refine_value_roles
+        refine_value_roles(index, selected)

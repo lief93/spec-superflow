@@ -51,6 +51,7 @@ class AdapterContext:
 class AdapterMatch:
     adapter: ApiAdapter
     receiver: object = UNRESOLVED
+    symbol: str | None = None
 
 
 class ReadOnlyValues(Mapping):
@@ -168,6 +169,16 @@ class AdapterRegistry:
 
     def resolve(self, call, context, seen):
         adapter = self.select(call.qualified_name, context.values.get('__source_imports') or {}) if call else None
+        symbol = None
+        if adapter is None and call and context.values.get('__source_functions'):
+            from ui_migration.frontend.source_values import source_function_candidates
+            from ui_migration.frontend.source_symbols import function_fq_name, matches_argument_shape
+            functions = [f for f in source_function_candidates(call, context) if matches_argument_shape(f, call)]
+            mapped = [(function_fq_name(f), self.select(function_fq_name(f), {})) for f in functions]
+            if any(candidate for _, candidate in mapped):
+                if len(functions) != 1:
+                    raise LayoutExpressionError('ambiguous source overload for adapter: ' + call.name)
+                symbol, adapter = mapped[0]
         receiver = UNRESOLVED
         if adapter is None and call and call.receiver is not None and any(name == call.name for _, name in self._members):
             try:
@@ -178,7 +189,7 @@ class AdapterRegistry:
             if isinstance(receiver, str) and len(receiver) == 9 and receiver.startswith('#'):
                 kind = 'color'
             adapter = self._members.get((kind, call.name))
-        return AdapterMatch(adapter, receiver) if adapter else None
+        return AdapterMatch(adapter, receiver, symbol) if adapter else None
 
     def evaluate(self, node, context, seen, match=None):
         call = call_from(node)
@@ -188,7 +199,7 @@ class AdapterRegistry:
         restricted = AdapterContext(ReadOnlyValues(context.values), context.value, context.render,
                                     receiver=match.receiver)
         if match.adapter.access == 'resource':
-            call = Call(self.qualified_symbol(call.qualified_name, context.values.get('__source_imports') or {}),
+            call = Call(match.symbol or self.qualified_symbol(call.qualified_name, context.values.get('__source_imports') or {}),
                         call.arguments, safe=call.safe)
         result = match.adapter.evaluate(call, restricted, seen)
         validate_value(result)

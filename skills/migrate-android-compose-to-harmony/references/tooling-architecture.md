@@ -12,6 +12,15 @@ outputs under the actual parent and records a union for business-boundary bounds
 Multiple root outputs remain ordered and caller-owned, not an invented Stack.
 Unknown parent IDs, cycles and ambiguous entry declarations remain errors.
 
+Value-use positions in PSI (arguments, local initializers and helper returns)
+refine inferred expression-bodied composables into value helpers. The annotation
+alone does not make a call a UI builder. Known UI emissions and invoked composable
+slots take precedence; a mixed value/UI callable is retained with a diagnostic.
+Constructing or returning a UI lambda does not execute it. This bounded analysis
+is not compiler-level return-type/effect inference. Exact project adapters also
+use source declaration lookup for same-file and same-package calls; ambiguous
+source overloads are not selected by short name.
+
 ## Public Entry Points
 
 ### Generated Source Names

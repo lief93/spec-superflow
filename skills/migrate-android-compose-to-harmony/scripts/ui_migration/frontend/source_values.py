@@ -67,7 +67,7 @@ def bind_arguments(call, parameters, context, seen, *, partial=False):
     return scoped
 
 
-def source_function_scope(call, context, seen, receiver_type=None):
+def source_function_candidates(call, context, receiver_type=None):
     owner = qualified_name(call.receiver) if call.receiver else context.values.get('__source_owner')
     inventory = context.values.get('__source_functions', [])
     caller = next((f for f in inventory + context.values.get('__source_properties', [])
@@ -82,12 +82,17 @@ def source_function_scope(call, context, seen, receiver_type=None):
         functions = [f for f in functions if (f.get('receiver') or '').rsplit('.',1)[-1] == receiver_type
                      or not f.get('receiver') and (f.get('return_type') or '').rsplit('.',1)[-1] == receiver_type]
     elif call.receiver is None:
-        functions = [f for f in functions if not f.get('receiver') and f.get('owner') == owner]
+        functions = [f for f in functions if not f.get('receiver')]
     else:
         functions = [f for f in functions if f.get('owner') == owner or f.get('receiver')]
     same_file = [f for f in functions if f['source'] == context.values.get('__source_file')]
     if same_file:
         functions = same_file
+    return functions
+
+
+def source_function_scope(call, context, seen, receiver_type=None):
+    functions = source_function_candidates(call, context, receiver_type)
     candidates = []
     for function in functions:
         identity = f"function:{function['source']}:{function['line']}"

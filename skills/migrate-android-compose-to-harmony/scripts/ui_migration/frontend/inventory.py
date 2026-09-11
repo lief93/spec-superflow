@@ -148,6 +148,10 @@ def build_source_page_spec(
     component_definitions: dict[str, dict[str, Any]] = {}
     metadata_cache: dict[str, tuple[str | None, dict[str, str]]] = {}
     expansion_unresolved: list[dict[str, str]] = []
+    for identity in getattr(dependency_index, 'mixed_value_functions', []):
+        if identity in traced:
+            expansion_unresolved.append({'path':'source.callable_role', 'expression':identity,
+                'reason':'callable produces both a value and UI; combined evaluation requires an explicit target mapping'})
     for missing in (dependency_gate or {}).get('missing_content_definitions', []):
         expansion_unresolved.append({'path':'source_dependency_trace',
             'expression':missing['id'], 'reason':'reachable content definition missing from UI call closure'})

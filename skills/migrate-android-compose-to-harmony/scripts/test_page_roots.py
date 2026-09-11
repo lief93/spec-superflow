@@ -77,7 +77,8 @@ class PageRootsTest(unittest.TestCase):
             (root / 'Page.kt').write_text(code)
             original = SourceSymbolIndex._initial_role
             with patch.object(SourceSymbolIndex, '_initial_role',
-                    lambda self, f: 'content' if f['name'] == 'Label' else original(self, f)):
+                    lambda self, f: 'content' if f['name'] == 'Label' else original(self, f)), \
+                    patch('ui_migration.frontend.content_roles.refine_value_roles'):
                 contract = analyze(root, {}, {'Page.kt': code})
             source = build_source_page_spec(contract, 'Page.kt', 'Page', 'page', 'default', 'a' * 64, root)
         self.assertEqual([n['type'] for n in project(source)['components'] if n['parent_id'] is None], ['Column'])

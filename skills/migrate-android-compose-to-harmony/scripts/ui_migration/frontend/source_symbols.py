@@ -153,7 +153,7 @@ class SourceSymbolIndex:
         result = self._type(function.get('return_type'), function['source'])
         if receiver.rsplit('.',1)[-1]=='Modifier' or (result or '').rsplit('.',1)[-1]=='Modifier':
             return 'modifier'
-        if result and result!='Unit':
+        if result and result.rsplit('.', 1)[-1]!='Unit':
             return 'value'
         from .content_roles import returns_only_value
         if returns_only_value(function['body']):

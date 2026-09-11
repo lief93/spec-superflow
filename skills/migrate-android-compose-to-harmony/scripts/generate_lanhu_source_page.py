@@ -154,6 +154,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         )
     elif discovery is not None or source_payload.get('page_host') or (source_payload.get('style_definitions') or {}).get('tokenMappings') or (source_payload.get('style_definitions') or {}).get('componentDefaults') or getattr(args, 'api_adapters', None) is not None or any(
         isinstance(node, dict) and (node.get("visibility_condition") or node.get("list_item_context")
+                                   or node.get('slot_invocation')
                                    or node.get('component_kind') == 'project_component'
                                    or node.get('type') in CONTROLS.names
                                    or (node.get('type') in DEFAULT_CONTROL_TYPES - {'Card', 'Surface'}
