@@ -25,27 +25,46 @@ declarations, and `@Entry` pages are excluded. Default exports, barrel re-export
 external packages, inherited/aliased model types and generic signatures are not
 automatically resolved; use explicit adapters for these cases.
 
-Matching uses the component's simple name, every Android parameter's name and its
-supported equivalent ArkTS type. Callback argument names do not affect type identity.
-String/Boolean/numeric primitives, nullable primitives, Color -> ResourceColor,
-Dp/TextUnit -> numeric vp/fp, explicit empty no-argument callbacks and no-argument
-content slots are supported. Struct slots must be `@BuilderParam`; function calls
-use target declaration argument order, while struct calls use named properties.
+Matching selects the unique same-name target declaration; Android parameter names
+and types no longer decide whether the component can be reused. Automatic binding
+uses target defaults only: no Android argument is evaluated, converted or forwarded,
+even when names and types match. To pass source values, resource adapter results or
+caller content, register an explicit component adapter.
+Struct slots must be `@BuilderParam`; function calls use target declaration argument
+order, while struct calls use named properties. Positional gaps use `undefined`
+to activate the target default without shifting later arguments.
 Literal string/number/boolean initializers can supply omitted target type annotations.
 Internal `@State`/`@Local` and storage/context state are not caller parameters.
-Additional target struct properties are allowed only when optional/defaulted.
-Two-way bindings, Modifier, arbitrary model objects, collection values, nonempty
-business callbacks and parameterized slots require separate adaptation; they are not
-dropped or replaced with guessed values. A matching declaration is not proof of a
+All optional/defaulted target parameters are omitted. Required
+basic values use explicit placeholders: empty strings, zero numbers, false booleans,
+black ResourceColor, null for nullable types, and empty no-argument void callbacks
+or slots. Unions use null when allowed, otherwise a supported primitive member's
+default; unions of only unknown objects still need explicit adaptation.
+These placeholders do not represent equivalent UI or business behavior.
+Every discarded source argument and placeholder required target argument
+is recorded in `diagnosis.md` as a defaulted issue. Existing target-only defaults
+are normal omissions, recorded in `binding_decisions` without a degradation issue.
+Arbitrary required model objects, collections, parameterized callbacks/slots and
+unsupported declaration decorators still need explicit adaptation; no object is
+invented. A matching declaration is not proof of a
 valid target project: native build checks, including ArkUI reserved names, still apply.
 
-Explicit `COMPONENT_ADAPTERS` take priority. Without one, exactly one compatible
-target is required; type mismatch, unresolved arguments or ambiguity retain the
-Android body and report incomplete reuse, never silently choosing the first match.
+Explicit `COMPONENT_ADAPTERS` take priority and retain their strict parameter
+accounting contract. Without one, exactly one same-name target is required.
+Ambiguity, invalid declarations or an unfillable required complex parameter retain
+the Android body and report incomplete reuse, never choosing the first match.
 `lanhu/component-discovery.json` records scanned declarations and per-definition
 `matched`, `not-found`, `explicit` or `incompatible` decisions. A `matched` decision
-means signature selection; successful argument binding is separately recorded in
-the generated JSON / `reused_business_components` manifest.
+means name selection; successful argument binding and per-parameter decisions are
+separately recorded in the generated JSON / `reused_business_components` manifest.
+A component can be reused while `generation_complete=false`: defaults/omissions
+remain visible in the unified diagnosis and do not stop supported code generation.
+
+For example, Android `Caption(labelText: String, enabled: Boolean)` can reuse
+Harmony `Caption` with `title: string = 'Default'` and `enabled: boolean = true`.
+Both target properties retain their defaults; both Android arguments are reported
+as omitted. To preserve the label, register a component adapter mapping
+`labelText` to `title`. The tool does not infer that these names mean the same thing.
 
 Parser dependencies use `DEVECO_HOME` / `DEVECO_SDK_HOME` where available. For another
 installation set `ARKTS_TYPESCRIPT_PATH` to the SDK's

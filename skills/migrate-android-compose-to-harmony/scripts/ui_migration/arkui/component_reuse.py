@@ -18,6 +18,8 @@ class ComponentReuseEmitter:
         return self.modules[key]
 
     def value(self, value):
+        if value == {'kind':'omitted_argument'}:
+            return 'undefined'
         if value == {'kind':'empty_callback'}:
             return '() => {}'
         if isinstance(value, dict):

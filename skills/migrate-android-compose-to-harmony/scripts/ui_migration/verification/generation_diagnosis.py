@@ -16,6 +16,10 @@ class Rule:
 
 
 RULES = (
+    Rule('component_reuse_parameter', ('component reuse parameter ',), 'control',
+        '已复用鸿蒙组件，但部分参数被省略或使用占位值。',
+        '核对目标默认值；需要保留源参数语义时配置显式组件 adapter。空回调不代表业务行为已迁移。',
+        'frontend/component_arguments.py', True),
     Rule('state_preview_default', ('preview default branch selected',), 'content',
         '条件尚未解析；当前仅展示默认预览分支，其他分支属性已保留，不参与当前布局。',
         '需要真实状态时补充源状态输入并重新生成；预览选择不代表运行时条件或业务逻辑已还原。',
@@ -111,6 +115,8 @@ def diagnose(worklist=None, manifest=None, source_page=None, failure=None, versi
     def disposition(path, reason, occurrence):
         if occurrence and occurrence.get('component_ui_state'):
             return 'other_state'
+        if path.startswith('source.component_reuse.parameters.') and reason.startswith('component reuse parameter '):
+            return 'defaulted'
         identity = ((occurrence or {}).get('component_id'), path)
         if identity not in target_errors:
             if identity in defaults:
@@ -138,7 +144,9 @@ def diagnose(worklist=None, manifest=None, source_page=None, failure=None, versi
             if state:
                 occurrence['component_ui_state'] = state
             if status == 'defaulted':
-                occurrence['fallback'] = defaults[(occurrence['component_id'], path)].get('fallback')
+                warning = defaults.get((occurrence['component_id'], path))
+                if warning:
+                    occurrence['fallback'] = warning.get('fallback')
         rule = classify(reason, path)
         if execution and rule.code == 'unclassified':
             rule = Rule('execution_failed', (), 'execution', '命令在当前阶段停止，未完成后续生成。',

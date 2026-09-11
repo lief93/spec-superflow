@@ -219,7 +219,9 @@ export struct Caption {
         args = self.full_args()
         args[args.index('--output-dir') + 1] = self.root/'run-auto'
         result = self.run_tool('migrate_compose_page.py', *args, '--force')
-        self.assertIn('ReusedCaption({ title: "Hello" })', Path(result['arkui']['output']).read_text())
+        self.assertIn('ReusedCaption({  })', Path(result['arkui']['output']).read_text())
+        self.assertFalse(result['generation_complete'])
+        self.assertGreater(result['diagnosis']['counts']['defaulted'], 0)
         discovery = json.loads((self.root/'run-auto/lanhu/component-discovery.json').read_text())
         self.assertTrue(any(d['status'] == 'matched' for d in discovery['decisions']))
         self.assertEqual(library.read_text(), content)

@@ -52,6 +52,8 @@ def validate_reuse(record):
     for name, value in properties.items():
         if not identifier(name):
             raise ValueError('invalid component property name')
+        if value == {'kind': 'omitted_argument'} and record.get('call_style') == 'positional':
+            continue
         validate_property(value)
     for name, roots in slots.items():
         if not identifier(name) or not isinstance(roots, list):

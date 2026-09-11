@@ -617,7 +617,8 @@ def project_source_page(
             node['source']['component_reuse'] = reuse
             # The selected target library owns the internals; do not replay its
             # Android implementation or infer target sizes from that implementation.
-            node['style'], node['modifiers'], node['unresolved'] = {}, [], []
+            node['style'], node['modifiers'] = {}, []
+            node['unresolved'] = copy.deepcopy(reuse.get('diagnostics', []))
             node['required_facts'] = build_required_facts(node)
         else:
             node = resolve_node(source, local)

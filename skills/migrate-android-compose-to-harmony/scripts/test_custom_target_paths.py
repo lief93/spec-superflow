@@ -87,7 +87,9 @@ class CustomTargetCommandsTest(unittest.TestCase):
         output = target/'entry/src/main/ets/pages/onboarding/Page.ets'
         self.assertEqual(Path(result['arkui']['output']), output.resolve())
         self.assertIn('from "../../shared-ui/Caption"', output.read_text())
-        self.assertIn('ReusedCaption({ title: "Hello" })', output.read_text())
+        self.assertIn('ReusedCaption({  })', output.read_text())
+        self.assertFalse(result['generation_complete'])
+        self.assertGreater(result['diagnosis']['counts']['defaulted'], 0)
         self.assertFalse((target/'entry/src/main/ets/generated/GeneratedPage.ets').exists())
         self.assertEqual(business.read_text(), original)
         self.assertTrue((self.root/'run/source-page.json').exists())

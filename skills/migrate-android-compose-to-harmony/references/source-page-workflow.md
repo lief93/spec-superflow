@@ -107,9 +107,11 @@ imports are unchanged, so changing the destination does not require rewriting ad
 already generated page is not an implicit move/delete operation.
 
 The page command automatically scans existing named components in the target module
-and reuses a unique same-name, compatible-parameter declaration. Inspect
+and reuses a unique same-name declaration using target defaults only. Inspect
 `lanhu/component-discovery.json` for selection decisions; explicit component adapters
-take priority. Use `--no-auto-component-reuse` to disable this. See
+take priority and can map source values. Automatic reuse omits all source arguments;
+these omissions and required placeholder values remain diagnostic,
+without preventing the reused call from being generated. Use `--no-auto-component-reuse` to disable this. See
 [automatic component matching](business-component-reuse.md#automatic-matching-default-for-the-page-command)
 for supported types, SDK parser configuration and limits. Standalone Lanhu generation
 opts in with `--harmony-target` and optional `--harmony-module`; no target source is
