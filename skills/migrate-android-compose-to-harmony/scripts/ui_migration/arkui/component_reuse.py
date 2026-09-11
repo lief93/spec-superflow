@@ -15,6 +15,7 @@ class ComponentReuseEmitter:
         key = (module, symbol)
         if key not in self.modules:
             self.modules[key] = self.import_names.allocate('Reused' + symbol)
+            self.business_components.preferred_imports[self.modules[key]] = symbol
         return self.modules[key]
 
     def value(self, value):
@@ -56,9 +57,9 @@ class ComponentReuseEmitter:
         self.instances.append({'component_id': component['id'], **record})
         by_id = {child['id']: child for child in children}
         for name, ids in record['slots'].items():
-            method = 'render' + record['target']['export'] + name[:1].upper() + name[1:]
+            method = record['target']['export'] + name[:1].upper() + name[1:]
             invocation = self.business_components.capture(None, method,
-                lambda: [line for root in ids for line in render_slot(by_id[root], 4)])
+                lambda: [line for root in ids for line in render_slot(by_id[root], 4)], direct_slot=True)
             call = self.business_components.call(invocation)
             arguments.append(name + ': () => { ' + call + ' }')
         arguments = ', '.join(arguments)

@@ -53,12 +53,11 @@ COMPONENT_ADAPTERS = [ComponentAdapter('shell', 'example.Shell', './CompanyUi', 
 '''
         page, code, result, renderer = self.generate('Shell("Title") { Text("First", color = Color.Black); Text("Second", color = Color.Black) }',
             '@Composable fun Shell(title: String, content: @Composable () -> Unit) { Column { Text("Internal"); content() } }', extension)
-        self.assertIn('heading: "Title", body: () => { this.renderShellBody(', code)
+        self.assertIn('heading: "Title", body: () => { this.ShellBody() }', code)
         self.assertNotIn('Internal', code)
-        self.assertEqual(code.count("text: 'First'"), 1)
-        self.assertEqual(code.count("text2: 'Second'"), 1)
-        self.assertIn('Text(props.text)', code)
-        self.assertIn('Text(props.text2)', code)
+        self.assertEqual(code.count("Text('First')"), 1)
+        self.assertEqual(code.count("Text('Second')"), 1)
+        self.assertNotIn('renderShellBody', code)
         root = next(n for n in page['components'] if n['type'] == 'Shell')
         self.assertEqual(root['source']['component_reuse']['slots']['body'], root['children_ids'])
         self.assertTrue(result['generation_complete'], result['unresolved'])
@@ -112,9 +111,9 @@ COMPONENT_ADAPTERS = [ComponentAdapter('shell', 'example.Shell', './CompanyUi', 
 @Composable fun Shell(content: @Composable () -> Unit) { Column { content() } }
 ''', extension)
         self.assertIn('this.Outer("Forwarded")', code)
-        self.assertIn('body: () => { this.renderShellBody({ title: props.title, viewId: props.viewId }) }', code)
-        self.assertIn('private renderShellBody(props: renderShellBodyProps)', code)
-        self.assertIn('Text(props.title)', code)
+        self.assertIn('body: () => { this.ShellBody(props.title) }', code)
+        self.assertNotIn('renderShellBody', code)
+        self.assertIn('Text(title)', code)
         self.assertTrue(result['generation_complete'], result['unresolved'])
         self.assertEqual(renderer.test_phase_gate['verdict'], 'pass', renderer.test_phase_gate['failures'])
 
@@ -129,9 +128,8 @@ COMPONENT_ADAPTERS = [ComponentAdapter('shell', 'example.Shell', './CompanyUi', 
         for node in page['components']:
             if node['type'] == 'Shell':
                 self.assertEqual(node['source']['component_reuse']['slots']['body'], node['children_ids'])
-        self.assertIn("label: 'One'", code)
-        self.assertIn("label: 'Two'", code)
-        self.assertIn('Text(props.label)', code)
+        self.assertEqual(code.count("Text('One')"), 1)
+        self.assertEqual(code.count("Text('Two')"), 1)
         self.assertTrue(result['generation_complete'], result['unresolved'])
 
     def test_code_adapter_converts_dimension_without_raw_code(self):
@@ -191,10 +189,11 @@ COMPONENT_ADAPTERS = [ComponentAdapter('panel', 'example.Panel', './Ui', 'Panel'
         self.assertEqual(len(record['slots']['top']), 1)
         self.assertEqual(len(record['slots']['body']), 1)
         self.assertNotEqual(record['slots']['top'], record['slots']['body'])
-        self.assertEqual(code.count("text: 'Header'"), 1)
-        self.assertEqual(code.count("text: 'Body'"), 1)
-        self.assertIn('top: () => { this.renderPanelTop(', code)
-        self.assertIn("body: () => { this.renderPanelTop({ text: 'Body'", code)
+        self.assertEqual(code.count("Text('Header')"), 1)
+        self.assertEqual(code.count("Text('Body')"), 1)
+        self.assertIn('top: () => { this.PanelTop() }', code)
+        self.assertIn('body: () => { this.PanelBody() }', code)
+        self.assertNotIn('renderPanelTop', code)
         self.assertTrue(result['generation_complete'], result['unresolved'])
         self.assertEqual(renderer.test_phase_gate['verdict'], 'pass', renderer.test_phase_gate['failures'])
 

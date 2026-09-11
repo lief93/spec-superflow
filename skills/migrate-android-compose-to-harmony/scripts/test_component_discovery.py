@@ -57,7 +57,7 @@ COMPONENT_ADAPTERS = [ComponentAdapter('explicit','example.Caption','@company/ui
         self.assertFalse(result['generation_complete'])
         self.assertNotIn('Internal', code)
         self.assertNotIn('Caller', code)
-        self.assertIn('content: () => { this.renderShellContent(', code)
+        self.assertIn('content: () => { this.ShellContent(', code)
         self.assertEqual(len(renderer.component_reuse.instances), 1)
         shell = next(n for n in page['components'] if n['type'] == 'Shell')
         self.assertEqual(shell['source']['component_reuse']['slots']['content'], [])

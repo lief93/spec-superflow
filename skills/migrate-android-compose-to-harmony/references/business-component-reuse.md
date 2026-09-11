@@ -151,8 +151,17 @@ it neither loads the Python module nor rereads Android source.
 
 For the example above, generated code calls the imported `AccountCard` with mapped
 properties and typed slot-builder closures. Nested caller parameters are forwarded
-through the enclosing generated builder, not frozen into the slot method. It does not generate another AccountCard
-implementation. Target symbols stay readable; aliases/suffixes disambiguate collisions.
+through the enclosing generated builder, not frozen into a slot method. Mapped
+no-argument content slots use SDK Builder helpers with only referenced enclosing
+source parameters. Fixed text, resources, IDs and styles stay in the helper body;
+they do not become a rendered-fact Props interface or a BusinessSlot dispatcher.
+Keep these slot Builders as methods on the generated page and pass closures such as
+`content: () => { this.ShellContent(title) }`. This preserves their rendering receiver;
+moving them to global functions loses that receiver inside ordinary callbacks.
+An exported source function that uses a local slot Builder receives a typed rendering
+context for that call, not for fixed dimensions. No duplicate AccountCard implementation
+is generated. Target symbols retain their export names unless a binding collision
+requires an alias.
 The `.migration` result includes `reused_business_components` with each selected
 adapter, source definition, target, properties and slots. Local generated builders
 remain reported separately under `business_components`.

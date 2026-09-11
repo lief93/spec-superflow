@@ -8,6 +8,45 @@ if (!ts.isStructDeclaration || ts.ScriptKind.ETS === undefined) {
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 let source = ts.createSourceFile('Page.ets', input.code, ts.ScriptTarget.Latest, true, ts.ScriptKind.ETS);
 const text = n => n.getText(source);
+// Resolve generated import aliases only after all declarations and native uses
+// are known. Imported names, property keys and string literals are not references.
+const importAliases = new Map(), occupiedImports = new Set(), shadowedImports = new Set();
+function inspectImports(n) {
+  if (ts.isImportSpecifier(n) && n.propertyName && input.preferred_imports?.[n.name.text]) {
+    importAliases.set(n.name.text, n);
+  }
+  if (ts.isIdentifier(n) && !(ts.isImportSpecifier(n.parent) && n.parent.propertyName === n)) occupiedImports.add(n.text);
+  if ((ts.isParameter(n) || ts.isVariableDeclaration(n) || ts.isBindingElement(n) ||
+       ts.isFunctionDeclaration(n) || ts.isClassDeclaration(n)) && n.name && ts.isIdentifier(n.name)) shadowedImports.add(n.name.text);
+  if (ts.isShorthandPropertyAssignment(n)) shadowedImports.add(n.name.text);
+  ts.forEachChild(n, inspectImports);
+}
+inspectImports(source);
+const importRenames = new Map();
+for (const [alias] of importAliases) {
+  const preferred = input.preferred_imports[alias];
+  if (!occupiedImports.has(preferred) && !shadowedImports.has(alias)) {
+    importRenames.set(alias, preferred);
+    occupiedImports.add(preferred);
+  }
+}
+if (importRenames.size) {
+  const edits = [];
+  function renameImports(n) {
+    if (ts.isImportSpecifier(n) && importRenames.has(n.name.text)) {
+      const preferred = importRenames.get(n.name.text);
+      edits.push([n.getStart(source), n.end, n.propertyName.text === preferred ? preferred : n.propertyName.text + ' as ' + preferred]);
+      return;
+    }
+    if (ts.isIdentifier(n) && importRenames.has(n.text) &&
+        n.parent.name !== n &&
+        !(ts.isQualifiedName(n.parent) && n.parent.right === n)) edits.push([n.getStart(source), n.end, importRenames.get(n.text)]);
+    ts.forEachChild(n, renameImports);
+  }
+  renameImports(source);
+  for (const [a, b, value] of edits.sort((a,b) => b[0]-a[0])) input.code = input.code.slice(0,a) + value + input.code.slice(b);
+  source = ts.createSourceFile('Page.ets', input.code, ts.ScriptTarget.Latest, true, ts.ScriptKind.ETS);
+}
 const collapsed = new Map();
 // Inline only generated, single-use facades with inert arguments. Calls, local
 // bindings and multi-state dispatch stay intact, preserving evaluation and scope.
@@ -80,8 +119,11 @@ const decorators = n => (ts.getDecorators?.(n) || n.decorators || n.illegalDecor
   (n.modifiers || []).filter(ts.isDecorator)).map(d => text(d.expression));
 const page = source.statements.find(ts.isStructDeclaration);
 if (!page) throw new Error('Generated page struct is missing');
+// Slot callbacks need a real component receiver. Lifting these methods into
+// global Builders loses that receiver inside ordinary callback arrows.
+const localSlotBuilders = new Set(input.local_slot_builders || []);
 const builders = new Map(page.members.filter(m => ts.isMethodDeclaration(m) && decorators(m).includes('Builder'))
-  .filter(m => m.name.text !== 'renderAndroidPageSnapshot').map(m => [m.name.text, m]));
+  .filter(m => m.name.text !== 'renderAndroidPageSnapshot' && !localSlotBuilders.has(m.name.text)).map(m => [m.name.text, m]));
 const owners = new Map(Object.entries(input.owners));
 const interfaceNodes = source.statements.filter(n => ts.isInterfaceDeclaration(n) || ts.isClassDeclaration(n));
 const interfaceNames = new Set(interfaceNodes.map(n => n.name.text));
@@ -215,9 +257,9 @@ for (const member of page.members) {
       if (!member.type) throw new Error('Generated runtime property needs an explicit type');
       runtimeMembers.push('  ' + text(member.name) + ': ' + text(member.type));
     } else if (ts.isMethodDeclaration(member)) {
-      if (!member.type) throw new Error('Generated runtime helper needs an explicit return type');
+      if (!member.type && !localSlotBuilders.has(member.name.text)) throw new Error('Generated runtime helper needs an explicit return type');
       runtimeMembers.push('  ' + text(member.name) + '(' + member.parameters.map(p =>
-        text(p.name) + (p.questionToken || p.initializer ? '?' : '') + ': ' + text(p.type)).join(', ') + '): ' + text(member.type));
+        text(p.name) + (p.questionToken || p.initializer ? '?' : '') + ': ' + text(p.type)).join(', ') + '): ' + (member.type ? text(member.type) : 'void'));
     }
   }
   pageParts.push('  ' + value);

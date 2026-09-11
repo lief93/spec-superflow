@@ -41,7 +41,7 @@ class ExistingTargetTest(unittest.TestCase):
         page = self.output / 'Page.ets'
         self.assertEqual(Path(result['arkui']['output']), page.resolve())
         self.assertIn('from "../../business/Caption"', page.read_text())
-        self.assertIn('ReusedCaption', page.read_text())
+        self.assertIn('Caption({', page.read_text())
         self.assertTrue((self.main / 'resources/base/media/logo.svg').is_file())
         self.assertFalse((self.target / '.migration').exists())
         for path, content in self.originals.items():

@@ -31,6 +31,8 @@ class Frame:
     slots: list[Invocation] = field(default_factory=list)
     names: NameScope = field(default_factory=NameScope)
     slot_names: list[str] = field(default_factory=list)
+    preserve_literals: bool = False
+    source_parameters: set[str] = field(default_factory=set)
 
 
 class BusinessComponents:
@@ -54,6 +56,7 @@ class BusinessComponents:
         self.clear()
 
     def clear(self):
+        self.preferred_imports = {}
         self.frames.clear()
         self.builders.clear()
         self.instances.clear()
@@ -77,16 +80,20 @@ class BusinessComponents:
         frame = self.frames[-1]
         source = component.get('source') or {}
         source_name = source.get('property_bindings', {}).get(path)
+        if frame.preserve_literals and source_name not in frame.source_parameters:
+            return expression
         hint = source.get('property_names', {}).get(path)
         fallbacks = {'semantic_key': 'viewId', 'style.content.text': 'text',
                      'style.content.placeholder': 'placeholder', 'style.asset.resource': 'image',
                      'style.content.description': 'contentDescription'}
         name = frame.names.allocate(hint or source_name or fallbacks.get(path, 'value'))
         frame.arguments.append(Argument(kind, expression, component['id'], path, name, source_name or ''))
-        return f'props.{name}'
+        return name if frame.preserve_literals else f'props.{name}'
 
-    def capture(self, definition_id, symbol, render, prefix=''):
-        frame = Frame()
+    def capture(self, definition_id, symbol, render, prefix='', *, direct_slot=False):
+        frame = Frame(preserve_literals=direct_slot)
+        frame.source_parameters = ({p['name'] for p in self.definitions.get(definition_id, {}).get('parameters', [])}
+                                   if not direct_slot else set().union(*(f.source_parameters for f in self.frames)))
         self.frames.append(frame)
         try:
             body = render()
@@ -94,7 +101,7 @@ class BusinessComponents:
             self.frames.pop()
         # Fixed-state structure/style variants are explicit specializations of a
         # source definition, never aliases inferred from visually similar trees.
-        key = json.dumps([definition_id, body, [(a.name, a.kind) for a in frame.arguments], frame.slot_names])
+        key = json.dumps([definition_id, body, [(a.name, a.kind) for a in frame.arguments], frame.slot_names, direct_slot])
         if key in self.keys:
             return Invocation(self.keys[key], frame.arguments, frame.slots)
         preferred = prefix + symbol
@@ -112,11 +119,12 @@ class BusinessComponents:
             'argument_names': [a.name for a in frame.arguments],
             'slot_count': len(frame.slots),
             'slot_names': frame.slot_names,
+            'direct_slot': direct_slot,
         }
         return Invocation(name, frame.arguments, frame.slots)
 
     def slot_value(self, invocation):
-        slots = [b['name'] for b in self.builders.values() if b['definition_id'] is None]
+        slots = [b['name'] for b in self.builders.values() if b['definition_id'] is None and not b['direct_slot']]
         arrays = {}
         for argument in invocation.arguments:
             value = self.bind({'id': argument.component_id, 'source': {'property_bindings': {argument.path: argument.source_name}}}, argument.path,
@@ -129,6 +137,7 @@ class BusinessComponents:
 
     def call(self, invocation, component=None):
         arguments = []
+        direct_slot = self.builders[invocation.name]['direct_slot']
         if invocation.arguments:
             properties = []
             for argument in invocation.arguments:
@@ -136,8 +145,11 @@ class BusinessComponents:
                 preferred = ((component or {}).get('source') or {}).get('invocation_names', {}).get(preferred, preferred)
                 value = self.bind({'id': argument.component_id, 'source': {'property_bindings': {argument.path: preferred}}}, argument.path,
                                   argument.expression, argument.kind)
-                properties.append(f'{argument.name}: {value}')
-            arguments.append('{ ' + ', '.join(properties) + ' }')
+                properties.append(value if direct_slot else f'{argument.name}: {value}')
+            if direct_slot:
+                arguments.extend(properties)
+            else:
+                arguments.append('{ ' + ', '.join(properties) + ' }')
         for slot in invocation.slots:
             arguments.append(self.slot_value(slot))
         return f"this.{invocation.name}({', '.join(arguments)})"
@@ -173,7 +185,7 @@ class BusinessComponents:
         declared_methods = self.interfaces.declarations()
         ui_interfaces, ui_methods = self.ui_states.declarations()
         interfaces.extend(ui_interfaces)
-        slots = [b for b in self.builders.values() if b['definition_id'] is None]
+        slots = [b for b in self.builders.values() if b['definition_id'] is None and not b['direct_slot']]
         if slots:
             for slot in slots:
                 for kind in slot['argument_types']:
@@ -198,7 +210,9 @@ class BusinessComponents:
         for builder in self.builders.values():
             name = builder['name']
             parameters = []
-            if builder['argument_types']:
+            if builder['direct_slot']:
+                parameters.extend(f'{name}: {kind}' for name, kind in zip(builder['argument_names'], builder['argument_types']))
+            elif builder['argument_types']:
                 interface = name + 'Props'
                 interfaces.append(f'interface {interface} {{')
                 for index, kind in enumerate(builder['argument_types']):

@@ -58,6 +58,8 @@ def render_modules(code, root, business, output, page):
     result = subprocess.run([node, str(script), compiler], input=json.dumps({
         'code':code, 'page':page.relative_to(output).as_posix(), 'owners':owners,
         'preferred_names':preferred_names,
+        'preferred_imports':{alias:source_identifier(symbol) for alias, symbol in business.preferred_imports.items()},
+        'local_slot_builders':[b['name'] for b in business.builders.values() if b['direct_slot']],
         'facades': {entry['name']:entry['variants'][0]['invocation'].name
                     for entry in business.interfaces.entries.values() if len(entry['variants']) == 1},
     }), capture_output=True, text=True, timeout=120)
