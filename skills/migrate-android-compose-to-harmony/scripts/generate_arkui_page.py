@@ -85,7 +85,7 @@ def generate(
     identity = hashlib.sha256(
         f"{root['source']}#{root['composable']}".encode("utf-8")
     ).hexdigest()[:16]
-    from ui_migration.arkui.source_modules import page_file, render_modules, validate_outputs
+    from ui_migration.arkui.source_modules import page_file, render_modules, validate_outputs, prune_obsolete_directories
     manifest_relative = str(metadata / 'arkui-pages' / f'{identity}.json') if existing_target else f".migration/arkui-pages/{identity}.json"
     manifest_path = target / manifest_relative
     checked_path(metadata, manifest_path)
@@ -109,7 +109,7 @@ def generate(
     with phase('render-arkts', components=len(android_page_input['components'])):
         source = renderer.render()
     module_payloads, source_organization = step('organize-source-modules', render_modules,
-        source, root, renderer.business_components, output_directory, output_path, identity)
+        source, root, renderer.business_components, output_directory, output_path)
     source_organization['output_root'] = output_directory.relative_to(target).as_posix()
     target_phase_gate = step('validate-target-consumption', build_target_phase_consumption_gate,
         android_page_input,
@@ -241,6 +241,7 @@ def generate(
         **payloads,
         manifest_path: manifest_bytes,
     }, deletions)
+    prune_obsolete_directories(output_directory, deletions)
     checkpoint('arkui-output', output=str(output_path), unresolved=len(renderer.unresolved),
                completed=len(renderer.android_page_processed_component_ids), total=len(renderer.android_page_by_id))
     return {

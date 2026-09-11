@@ -16,7 +16,7 @@ def source_file(source):
     path = PurePosixPath(source)
     if path.suffix not in ('.kt', '.kts') or path.parts[0] == '_migration':
         raise ArkUIPageError('unsupported source module path: ' + source)
-    return path.with_suffix('.ets').as_posix()
+    return path.with_suffix('.ets').name
 
 
 def page_file(root, output, target, manifest):
@@ -26,11 +26,11 @@ def page_file(root, output, target, manifest):
         entries = [target / path for path, record in previous.get('outputs', {}).items()
                    if record.get('root_component')]
         if len(entries) == 1 and entries[0].is_relative_to(output):
-            candidate = entries[0]
+            candidate = output / entries[0].name
     return candidate
 
 
-def render_modules(code, root, business, output, page, identity):
+def render_modules(code, root, business, output, page):
     owners, mapping = {}, []
     destinations = {page.relative_to(output).as_posix().casefold():root['source']}
     for definition in business.definitions.values():
@@ -54,7 +54,6 @@ def render_modules(code, root, business, output, page, identity):
     script = Path(__file__).resolve().parents[2] / 'arkts_source_modules.cjs'
     result = subprocess.run([node, str(script), compiler], input=json.dumps({
         'code':code, 'page':page.relative_to(output).as_posix(), 'owners':owners,
-        'support':'_migration/' + identity,
     }), capture_output=True, text=True, timeout=120)
     if result.returncode:
         raise ArkUIPageError('source module generation failed: ' + result.stderr[-2000:])
@@ -78,8 +77,12 @@ def render_modules(code, root, business, output, page, identity):
 
 def validate_outputs(target, module, page, manifest, root, force, payloads):
     check_manifest_outputs(target, module, manifest)
-    validate_previous(target, page, manifest, root, module, force)
     previous = json.loads(manifest.read_text(encoding='utf-8')).get('outputs', {}) if manifest.is_file() else {}
+    old_entries = [target / path for path, entry in previous.items() if entry.get('root_component')]
+    old_page = page
+    if len(old_entries) == 1 and old_entries[0].name == page.name and old_entries[0].is_relative_to(page.parent):
+        old_page = old_entries[0]
+    validate_previous(target, old_page, manifest, root, module, force)
     shared = {}
     for other in manifest.parent.glob('*.json'):
         if other == manifest:
@@ -103,3 +106,14 @@ def validate_outputs(target, module, page, manifest, root, force, payloads):
             raise ArkUIPageError('refusing to replace an unowned generated output: ' + str(destination))
     # validate_previous verified every old hash before any output can be removed.
     return {target / path for path in previous if target / path not in payloads and target / path not in shared}
+
+
+def prune_obsolete_directories(output, deletions):
+    for deleted in deletions:
+        directory = deleted.parent
+        while directory != output and directory.is_relative_to(output):
+            try:
+                directory.rmdir()
+            except OSError:
+                break
+            directory = directory.parent

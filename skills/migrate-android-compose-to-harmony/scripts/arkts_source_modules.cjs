@@ -14,13 +14,10 @@ const page = source.statements.find(ts.isStructDeclaration);
 if (!page) throw new Error('Generated page struct is missing');
 const builders = new Map(page.members.filter(m => ts.isMethodDeclaration(m) && decorators(m).includes('Builder'))
   .filter(m => m.name.text !== 'renderAndroidPageSnapshot').map(m => [m.name.text, m]));
-const runtimePath = input.support + '/Runtime.ets';
-const slotsPath = input.support + '/Builders.ets';
-const owners = new Map([...builders.keys()].map(name => [name, input.owners[name] || slotsPath]));
+const owners = new Map(Object.entries(input.owners));
 const interfaceNodes = source.statements.filter(n => ts.isInterfaceDeclaration(n) || ts.isClassDeclaration(n));
 const interfaceNames = new Set(interfaceNodes.map(n => n.name.text));
-const interfaceOwners = new Map(interfaceNodes.map(n => [n.name.text,
-  owners.get(n.name.text.replace(/Props$/, '')) || runtimePath]));
+const types = new Map(interfaceNodes.map(n => [n.name.text, n]));
 const needsContext = new Set(), calls = new Map();
 for (const [name, member] of builders) {
   const dependencies = new Set();
@@ -74,7 +71,7 @@ let contextType = 'MigrationRenderContext';
 while (allNames.has(contextType)) contextType = '_' + contextType;
 const files = new Map();
 const chunks = file => {
-  if (!files.has(file)) files.set(file, {parts: [], imports: new Map()});
+  if (!files.has(file)) files.set(file, {parts: [], imports: new Map(), builders: new Set(), types: new Set(), context: false});
   return files.get(file);
 };
 function moduleName(from, to) {
@@ -93,7 +90,9 @@ function rewrite(node, file, ctx) {
     if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) &&
         n.expression.expression.kind === ts.SyntaxKind.ThisKeyword && builders.has(n.expression.name.text)) {
       const name = n.expression.name.text;
-      use(file, owners.get(name), methodNames.get(name));
+      const owner = owners.get(name) || file;
+      chunks(owner).builders.add(name);
+      use(file, owner, methodNames.get(name));
       edits.push([n.expression.getStart(source), n.expression.end, methodNames.get(name)]);
       // AST NodeArray.pos is immediately after the opening parenthesis.
       if (needsContext.has(name)) edits.push([n.arguments.pos, n.arguments.pos, ctx + (n.arguments.length ? ', ' : '')]);
@@ -104,7 +103,7 @@ function rewrite(node, file, ctx) {
         edits.push([n.getStart(source), n.end, ctx]);
       }
     }
-    if (ts.isIdentifier(n) && interfaceNames.has(n.text)) use(file, interfaceOwners.get(n.text), n.text);
+    if (ts.isIdentifier(n) && interfaceNames.has(n.text)) chunks(file).types.add(n.text);
     ts.forEachChild(n, visit);
   }
   visit(node);
@@ -137,18 +136,42 @@ for (const member of page.members) {
   pageParts.push('  ' + value);
 }
 chunks(input.page).parts.push('@Component\nexport struct ' + page.name.text + ' {\n' + pageParts.join('\n\n') + '\n}');
-for (const [name, member] of builders) {
-  const file = owners.get(name);
-  if (needsContext.has(name)) use(file, runtimePath, contextType);
-  const parameters = member.parameters.map(p => rewrite(p, file, context));
-  if (needsContext.has(name)) parameters.unshift(context + ': ' + contextType);
-  const body = rewrite(member.body, file, context).split('\n').map((line,i) => i ? line.replace(/^  /, '') : line).join('\n');
-  chunks(file).parts.push('@Builder\nexport function ' + methodNames.get(name) + '(' + parameters.join(', ') + ') ' + body);
+for (const [name, file] of owners) chunks(file).builders.add(name);
+// Anonymous slot builders and structural types belong to their consuming module.
+// Iterate to a fixed point because a helper can reach another source module.
+const emitted = new Map();
+let pending = true;
+while (pending) {
+  pending = false;
+  for (const [file, value] of files) {
+    if (!emitted.has(file)) emitted.set(file, new Set());
+    for (const name of value.builders) {
+      if (emitted.get(file).has(name)) continue;
+      emitted.get(file).add(name);
+      pending = true;
+      const member = builders.get(name);
+      const parameters = member.parameters.map(p => rewrite(p, file, context));
+      if (needsContext.has(name)) {
+        value.context = true;
+        parameters.unshift(context + ': ' + contextType);
+      }
+      const body = rewrite(member.body, file, context).split('\n').map((line,i) => i ? line.replace(/^  /, '') : line).join('\n');
+      value.parts.push('@Builder\nexport function ' + methodNames.get(name) + '(' + parameters.join(', ') + ') ' + body);
+    }
+  }
 }
-for (const node of interfaceNodes) chunks(interfaceOwners.get(node.name.text)).parts.push('export ' + text(node));
-if (needsContext.size) {
-  chunks(runtimePath).parts.push('export interface ' + contextType + ' {\n' + runtimeMembers.join('\n') + '\n}');
-  chunks(runtimePath).parts.unshift("import { UIContext } from '@ohos.arkui.UIContext';");
+for (const [file, value] of files) {
+  if (value.context) {
+    value.parts.push('export interface ' + contextType + ' {\n' + runtimeMembers.join('\n') + '\n}');
+    value.parts.unshift("import { UIContext } from '@ohos.arkui.UIContext';");
+    for (const member of page.members) {
+      if (member.type) rewrite(member.type, file, context);
+      if (ts.isMethodDeclaration(member) && !builders.has(member.name?.text)) {
+        for (const parameter of member.parameters) if (parameter.type) rewrite(parameter.type, file, context);
+      }
+    }
+  }
+  for (const name of value.types) value.parts.push('export ' + rewrite(types.get(name), file, context));
 }
 const originalImports = source.statements.filter(ts.isImportDeclaration);
 const output = {};

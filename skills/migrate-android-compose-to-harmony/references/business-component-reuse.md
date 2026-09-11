@@ -200,7 +200,7 @@ does not use them. Actual calls pass every parameter. Source defaults remain in 
 and are materialized at calls; emitted builder declarations currently require all args.
 Names are unchanged when legal/unambiguous; collisions need disambiguation. These are
 source-file builders, not verified general-purpose shared-library APIs. Their source
-relative paths are retained under the page output directory; same-file functions stay
+basenames are placed directly under the page output directory; same-file functions stay
 together and cross-file calls use generated imports. A typed auxiliary context parameter
 is added only when a builder transitively accesses page-owned state or runtime helpers.
 The manifest's `source_organization` records file/method mappings. Identical owned modules

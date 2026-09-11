@@ -57,7 +57,7 @@ class SourceModulesTest(unittest.TestCase):
 @Composable fun Caption(label: String) { Text(label) }
 ''')
         files, report = render_modules(code, renderer.root, renderer.business_components,
-            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'), 'test')
+            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
         output = files[Path('/tmp/generated/Page.ets')].decode()
         self.assertIn('export function Caption(label: string)', output)
         self.assertIn('Caption("this.Caption( stays text")', output)
@@ -73,13 +73,14 @@ class SourceModulesTest(unittest.TestCase):
 ''')
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            files, report = render_modules(code, renderer.root, renderer.business_components, root, root/'Page.ets', 'test')
+            files, report = render_modules(code, renderer.root, renderer.business_components, root, root/'Page.ets')
             combined = '\n'.join(data.decode() for data in files.values())
             self.assertIsNotNone(report['context_parameter'])
             self.assertIn('scaffold0Topbar: number', combined)
             self.assertIn('migrationContext.scaffold0Topbar = Number(area.height)', combined)
             self.assertIn('renderBusinessSlot(', combined)
             self.assertIn('export interface BusinessSlot', combined)
+            self.assertEqual(set(files), {root/'Page.ets'})
 
     def test_source_parameter_does_not_shadow_global_helper(self):
         _, _, _, renderer, code = compile_page('''
@@ -87,15 +88,15 @@ class SourceModulesTest(unittest.TestCase):
 @Composable fun Label(renderLabel: String) { Text(renderLabel) }
 ''')
         files, report = render_modules(code, renderer.root, renderer.business_components,
-            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'), 'test')
+            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
         output = files[Path('/tmp/generated/Page.ets')].decode()
         self.assertIn('export function Label(renderLabel: string)', output)
         self.assertIn('renderLabel2({ renderLabel: renderLabel', output)
         self.assertEqual(report['renamed_methods'], {'renderLabel':'renderLabel2'})
 
-    def test_source_path_is_not_flattened_and_cannot_escape(self):
+    def test_source_path_is_flattened_and_cannot_escape(self):
         self.assertEqual(source_file('feature/src/main/kotlin/example/Card.kt'),
-                         'feature/src/main/kotlin/example/Card.ets')
+                         'Card.ets')
         for name in ('../Card.kt', '/Card.kt', '_migration/Card.kt', 'Card.txt'):
             with self.subTest(name=name), self.assertRaises(ArkUIPageError):
                 source_file(name)
@@ -142,11 +143,23 @@ class SourceModulesTest(unittest.TestCase):
         definition['identity']['source'] = 'ui/Caption.kt'
         code = "import { Palette } from './theme/Palette';\n" + code
         files, _ = render_modules(code, renderer.root, renderer.business_components,
-            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'), 'test')
-        caption = files[Path('/tmp/generated/ui/Caption.ets')].decode()
-        self.assertIn('from "../theme/Palette"', caption)
+            Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
+        caption = files[Path('/tmp/generated/Caption.ets')].decode()
+        self.assertIn('from "./theme/Palette"', caption)
         self.assertIn('export function Caption(label: string)', caption)
-        self.assertIn('from "./ui/Caption"', files[Path('/tmp/generated/Page.ets')].decode())
+        self.assertIn('from "./Caption"', files[Path('/tmp/generated/Page.ets')].decode())
+
+    def test_flattened_source_basename_collision_is_rejected(self):
+        _, _, _, renderer, code = compile_page('''
+@Composable fun Page() { First(); Second() }
+@Composable fun First() { Text("One") }
+@Composable fun Second() { Text("Two") }
+''')
+        for definition in renderer.business_components.definitions.values():
+            definition['identity']['source'] = definition['type'] + '/Card.kt'
+        with self.assertRaisesRegex(ArkUIPageError, 'same ETS output'):
+            render_modules(code, renderer.root, renderer.business_components,
+                           Path('/tmp/generated'), Path('/tmp/generated/Page.ets'))
 
 
 class SourceModulesCommandsTest(unittest.TestCase):
@@ -202,18 +215,29 @@ import example.ui.Shell
         result, target, page, manifest = self.generate(complete=True)
         self.assertTrue(result['generation_complete'], result.get('diagnosis'))
         self.assertEqual(result['verdict'], 'pass')
-        self.assertTrue((target/'entry/src/main/ets/generated/ui/Header.ets').is_file())
-        self.assertTrue((target/'entry/src/main/ets/generated/ui/Shell.ets').is_file())
+        self.assertTrue((target/'entry/src/main/ets/generated/Header.ets').is_file())
+        self.assertTrue((target/'entry/src/main/ets/generated/Shell.ets').is_file())
+
+    def test_custom_directory_contains_flat_page_and_component_files(self):
+        result = self.run_tool('migrate_compose_page.py', *self.prepare(), '--no-auto-component-reuse',
+                               '--page-output-dir', 'entry/src/main/ets/view')
+        output = (self.root/'harmony/entry/src/main/ets/view').resolve()
+        self.assertEqual(Path(result['arkui']['output']), output/'Profile.ets')
+        self.assertEqual({p.name for p in output.iterdir()}, {'Profile.ets', 'Header.ets', 'Shell.ets'})
+        self.assertIn('from "./Header"', (output/'Profile.ets').read_text())
 
     def test_complete_page_keeps_source_files_and_nested_calls(self):
         result, target, page, manifest = self.generate()
         base = target/'entry/src/main/ets/generated'
-        self.assertEqual(page, (base/'screens/Profile.ets').resolve())
-        header = base/'ui/Header.ets'
-        shell = base/'ui/Shell.ets'
+        self.assertEqual(page, (base/'Profile.ets').resolve())
+        header = base/'Header.ets'
+        shell = base/'Shell.ets'
         self.assertTrue(header.is_file())
         self.assertTrue(shell.is_file())
-        self.assertIn('from "../ui/Header"', page.read_text())
+        self.assertEqual({p.name for p in base.iterdir()}, {'Profile.ets', 'Header.ets', 'Shell.ets'})
+        self.assertIn('export interface BusinessSlot', shell.read_text())
+        self.assertNotIn('_migration', '\n'.join(p.read_text() for p in base.glob('*.ets')))
+        self.assertIn('from "./Header"', page.read_text())
         self.assertIn('Header("First")', page.read_text())
         self.assertIn('Header("Second")', page.read_text())
         self.assertNotIn('export function Header', page.read_text())
@@ -235,18 +259,53 @@ import example.ui.Shell
         self.assertIn('changed after generation', failure.stdout)
         self.assertTrue(header.read_text().startswith('// manual change'))
 
+    def test_nested_owned_outputs_are_relocated_without_deleting_user_files(self):
+        result, target, page, manifest = self.generate()
+        target = target.resolve()
+        base = page.parent
+        record = json.loads(manifest.read_text())
+        nested_outputs = {}
+        for relative, entry in record['outputs'].items():
+            old = target/relative
+            nested = base/'legacy/src/main'/old.name
+            nested.parent.mkdir(parents=True, exist_ok=True)
+            old.rename(nested)
+            nested_outputs[nested.relative_to(target).as_posix()] = entry
+        support = base/'_migration/old/Runtime.ets'
+        support.parent.mkdir(parents=True)
+        support.write_text('// legacy generated runtime')
+        nested_outputs[support.relative_to(target).as_posix()] = {
+            'sha256':hashlib.sha256(support.read_bytes()).hexdigest()}
+        record['outputs'] = nested_outputs
+        manifest.write_text(json.dumps(record))
+        keep = base/'legacy/Notes.txt'
+        keep.write_text('user-owned')
+        support.write_text('// edited runtime')
+        failure = self.run_tool('generate_arkui_page.py', '--target', target, '--page-json',
+                               self.root/'run/lanhu/version_json.json', '--force', expected=1)
+        self.assertIn('changed after generation', failure.stdout)
+        self.assertFalse(page.exists())
+        support.write_text('// legacy generated runtime')
+        self.run_tool('generate_arkui_page.py', '--target', target, '--page-json',
+                      self.root/'run/lanhu/version_json.json', '--force')
+        self.assertTrue(page.is_file())
+        self.assertFalse((base/'_migration').exists())
+        self.assertFalse((base/'legacy/src').exists())
+        self.assertEqual(keep.read_text(), 'user-owned')
+        self.assertEqual({p.name for p in base.glob('*.ets')}, {'Profile.ets', 'Header.ets', 'Shell.ets'})
+
     def test_unowned_component_file_is_not_replaced(self):
         args = self.prepare()
         target = self.root/'harmony'
         self.run_tool('init_harmony_project.py', '--output', target, '--contract', self.contract,
                       '--project-name', 'Modules', '--bundle-name', 'com.example.modules', '--sdk-version', '6.0.0(20)')
-        header = target/'entry/src/main/ets/generated/ui/Header.ets'
+        header = target/'entry/src/main/ets/generated/Header.ets'
         header.parent.mkdir(parents=True)
         header.write_text('// business-owned file')
         failure = self.run_tool('migrate_compose_page.py', *args, '--no-auto-component-reuse', expected=1)
         self.assertIn('unowned generated output', failure.stdout)
         self.assertEqual(header.read_text(), '// business-owned file')
-        self.assertFalse((target/'entry/src/main/ets/generated/screens/Profile.ets').exists())
+        self.assertFalse((target/'entry/src/main/ets/generated/Profile.ets').exists())
 
 
 if __name__ == '__main__':

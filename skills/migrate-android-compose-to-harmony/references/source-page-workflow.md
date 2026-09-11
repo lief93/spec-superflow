@@ -52,9 +52,10 @@ Both directory options accept an absolute path or a path relative to `--target`
 (not the shell working directory). Both must be inside the selected module's
 `src/main/ets` tree; direct cross-module source imports are not introduced.
 The component directory must exist. The page directory is created automatically;
-new pages and generated components preserve their Android source-relative paths
-and filenames with an `.ets` suffix. Owned legacy page entry paths remain unchanged
-on regeneration. Component scanning is recursive and
+new pages and generated components use Android source basenames with an `.ets`
+suffix directly in that directory, without package or `_migration` subdirectories.
+Owned legacy entry basenames are preserved, but nested entries are flattened on
+regeneration; update host imports that referenced their old locations. Component scanning is recursive and
 excludes the selected output subtree, legacy `generated` directories, dependency/build
 directories and symlinks. Do not use the output directory as the scan root.
 Without these options the original scan root and `ets/generated` output are unchanged.
