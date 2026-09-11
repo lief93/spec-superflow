@@ -35,6 +35,8 @@ class Frame:
     preserve_literals: bool = False
     preserve_constants: bool = False
     source_parameters: set[str] = field(default_factory=set)
+    value_parameters: dict[str, str] = field(default_factory=dict)
+    source_identity: tuple = ()
 
 
 class BusinessComponents:
@@ -66,6 +68,8 @@ class BusinessComponents:
         self.keys = {}
         self.names = NameScope({'renderBusinessSlot', 'renderAndroidPageSnapshot', 'layoutPx',
                                 'nativeFontSize', 'nativeLineHeight', self.root_name})
+        if hasattr(self, 'source_program'):
+            self.names.used.update(self.source_program.symbols)
         from ui_migration.arkui.component_interfaces import ComponentInterfaces
         self.interfaces = ComponentInterfaces(self, self.diagnostic)
         from ui_migration.arkui.component_ui_states import ComponentUiStates
@@ -105,8 +109,17 @@ class BusinessComponents:
             if frame:
                 frame.preserve_constants = previous
 
-    def capture(self, definition_id, symbol, render, prefix='', *, direct_slot=False):
+    def value_parameters(self, component):
+        if not self.frames:
+            return {}
+        frame = self.frames[-1]
+        source = component.get('source', {})
+        return frame.value_parameters if frame.source_identity == (source.get('source'), source.get('composable')) else {}
+
+    def capture(self, definition_id, symbol, render, prefix='', *, direct_slot=False, value_parameters=None):
         frame = Frame(preserve_literals=direct_slot)
+        frame.value_parameters = value_parameters or {}
+        frame.source_identity = ((self.definitions.get(definition_id, {}).get('identity') or {}).get('source'), symbol)
         frame.source_parameters = ({p['name'] for p in self.definitions.get(definition_id, {}).get('parameters', [])}
                                    if not direct_slot else set().union(*(f.source_parameters for f in self.frames)))
         self.frames.append(frame)
@@ -127,6 +140,9 @@ class BusinessComponents:
         if any(b['definition_id'] == definition_id for b in self.builders.values()) and definition_id:
             preferred += 'Variant'
         name = self.names.allocate(preferred, 'Component')
+        while name + 'Props' in self.names.used:
+            name = self.names.allocate(preferred, 'Component')
+        self.names.used.add(name + 'Props')
         self.keys[key] = name
         self.builders[name] = {
             'name': name, 'definition_id': definition_id, 'symbol': symbol,
@@ -175,7 +191,10 @@ class BusinessComponents:
         if not definition or definition.get('component_kind') != 'project_component':
             raise ArkUIPageError('missing project component definition: ' + str(definition_id))
         record = self.interfaces.contract(component, definition)
-        invocation = self.capture(definition_id, definition['type'], render, 'render' if record is not None else 'preview')
+        value_parameters = {p['name']:p['kotlin_type'] for p in record['parameters']} if record and all(
+            a['status'] == 'resolved' for a in record['arguments']) else {}
+        invocation = self.capture(definition_id, definition['type'], render,
+            'render' if record is not None else 'preview', value_parameters=value_parameters)
         self.instances[component['id']] = {
             'id': component['id'], 'definition_id': definition_id,
             'builder': invocation.name, 'invocation_bindings': component.get('invocation_bindings') or {},

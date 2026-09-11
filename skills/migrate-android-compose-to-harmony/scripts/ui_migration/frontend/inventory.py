@@ -555,6 +555,10 @@ def build_source_page_spec(
                   if record['name'] not in {c['name'] for c in (ui.get('kotlin_data_class_inventory') or {}).get('classes', [])}]]},
         "source_enum_inventory": copy.deepcopy(ui.get('kotlin_enum_inventory') or {}),
         "source_functions": functions,
+        "source_records": [{**record, 'source': path,
+                            'imports': syntax.get('imports', {}), 'wildcard_imports': syntax.get('wildcardImports', [])}
+                           for path, syntax in (dependency_index.syntax.items() if dependency_index else [])
+                           for record in syntax.get('recordClasses', [])],
         "source_properties": dependency_index.properties if dependency_index is not None else [],
         "source_dependency_trace": dependency_trace,
         "source_dependency_gate": dependency_gate,

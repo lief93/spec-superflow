@@ -44,8 +44,13 @@ public final class KotlinExpressionTree {
         } else if (expression instanceof KtProperty) {
             KtProperty item = (KtProperty) expression;
             result = node("local", "name", item.getName(), "mutable", item.isVar(),
+                "type", item.getTypeReference() == null ? null : item.getTypeReference().getText(),
                 "delegated", item.getDelegateExpression() != null,
                 "value", tree(item.getInitializer() != null ? item.getInitializer() : item.getDelegateExpression()));
+        } else if (expression instanceof KtForExpression) {
+            KtForExpression item = (KtForExpression) expression;
+            result = node("for", "parameter", item.getLoopParameter() == null ? null : item.getLoopParameter().getName(),
+                "collection", tree(item.getLoopRange()), "body", tree(item.getBody()));
         } else if (expression instanceof KtTryExpression) {
             KtTryExpression item = (KtTryExpression) expression;
             List<Object> catches = new ArrayList<>();
@@ -173,10 +178,16 @@ public final class KotlinExpressionTree {
             for (KtParameter p : item.getPrimaryConstructorParameters()) {
                 if (!p.hasValOrVar()) continue;
                 fields.add(node("parameter", "name", p.getName(),
+                    "mutable", p.isMutable(),
                     "type", p.getTypeReference() == null ? "" : p.getTypeReference().getText(),
                     "default", p.getDefaultValue() == null ? null : p.getDefaultValue().getText()));
             }
-            if (!fields.isEmpty()) recordClasses.add(node("record", "name", item.getName(), "properties", fields));
+            if (!fields.isEmpty()) recordClasses.add(node("record", "name", item.getName(), "properties", fields,
+                "top_level", item.getParent() instanceof KtFile,
+                "package", file.getPackageFqName().asString(),
+                "plain", item.getDeclarations().isEmpty() && item.getSuperTypeListEntries().isEmpty()
+                    && item.getTypeParameters().isEmpty() && fields.size() == item.getPrimaryConstructorParameters().size()
+                    && PsiTreeUtil.getParentOfType(item, KtClassOrObject.class, KtNamedFunction.class) == null));
         }
         for (KtForExpression loop : PsiTreeUtil.findChildrenOfType(file, KtForExpression.class)) {
             if (loop.getLoopParameter() != null && loop.getLoopParameter().getName() != null
@@ -292,6 +303,7 @@ public final class KotlinExpressionTree {
             if (owner instanceof KtObjectDeclaration && ((KtObjectDeclaration) owner).isCompanion())
                 owner = PsiTreeUtil.getParentOfType(owner, KtClassOrObject.class);
             functions.add(node("function", "name", function.getName(),
+                "top_level", function.getParent() instanceof KtFile,
                 "annotations", function.getAnnotationEntries().stream().map(a -> a.getShortName() == null ? "" : a.getShortName().asString()).toList(),
                 "parameters_text", function.getValueParameterList() == null ? "" : function.getValueParameterList().getText(),
                 "body_start", function.getBodyExpression().getTextRange().getStartOffset(),

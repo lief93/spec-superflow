@@ -8,11 +8,13 @@ class StyleTokenEmitter:
     def __init__(self):
         self.modules = {}
         self.consumed = set()
+        self.source_program = None
+        self.reserved_symbols = set()
 
     def expression(self, component, path):
         reference = component.get('source', {}).get('style_token_references', {}).get(path)
         if reference is None:
-            return None
+            return self.source_program.expression(component, path) if self.source_program else None
         validate_token_reference(reference, path)
         self.consumed.add((component['id'], path))
         return self.reference_expression(reference)
@@ -27,7 +29,12 @@ class StyleTokenEmitter:
         from ui_migration.contracts.style_tokens import validate_target
         validate_target(target)
         key = (target['module'], target['export'])
-        alias = self.modules.setdefault(key, f'StyleToken{len(self.modules)}')
+        if key not in self.modules:
+            index = len(self.modules)
+            while f'StyleToken{index}' in self.reserved_symbols or f'StyleToken{index}' in self.modules.values():
+                index += 1
+            self.modules[key] = f'StyleToken{index}'
+        alias = self.modules[key]
         expression = alias + '.' + target['member']
         if 'arguments' in target:
             arguments = [arkts_string(v) if isinstance(v, str) else json.dumps(v) for v in target['arguments']]

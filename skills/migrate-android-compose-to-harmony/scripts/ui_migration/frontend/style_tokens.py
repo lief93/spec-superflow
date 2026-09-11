@@ -15,15 +15,17 @@ TEXT_ARGUMENTS = {'fontSize': 'font_size_sp', 'color': 'color', 'fontWeight': 'f
 
 
 class StyleTokenProjector:
-    def __init__(self, definitions):
+    def __init__(self, definitions, source_program=None):
         self.mappings = validate_token_mappings(definitions.get('tokenMappings', {}))
         self.defaults = definitions.get('componentDefaults', {})
+        self.source_program = source_program
 
     def apply(self, original, result, environment):
         bindings = {**original.get('file_values', {}), **original.get('parameter_bindings', {}),
                     **original.get('local_values', {})}
         imports = environment.get('__source_imports') or {}
         references = {}
+        method_references = {}
         environment = {**environment, 'componentState': result['style']['state']}
         resolver = value_resolver(bindings, environment)
 
@@ -52,6 +54,7 @@ class StyleTokenProjector:
 
         def bind(path, tree):
             references.pop(path, None)
+            original_tree = tree
             tree = select(tree)
             name = qualified_name(tree)
             try:
@@ -61,6 +64,11 @@ class StyleTokenProjector:
                 value = resolver.value(tree) if mapped_name in self.mappings else resolver.typed_value(tree, source_type)
             except LayoutExpressionError:
                 value = None
+            if self.source_program and not is_resource_value(value):
+                method = self.source_program.reference(original_tree, bindings, environment,
+                    set(original.get('parameter_bindings', {})) - set(original.get('local_values', {})), original.get('source'))
+                if method is not None:
+                    method_references[path] = method
             if mapped_name not in self.mappings:
                 try:
                     validate_property_literal(path, value)
@@ -189,5 +197,7 @@ class StyleTokenProjector:
                 if is_resource_value(value):
                     bind_resource(group + '.' + field, value, 'resource', str(value.get('key') or field))
         result.setdefault('source', {})['style_token_references'] = references
+        if method_references:
+            result['source']['method_references'] = method_references
         reference_paths = {'style.' + path for path in references}
         result['unresolved'] = [u for u in result.get('unresolved', []) if u.get('path') not in reference_paths]

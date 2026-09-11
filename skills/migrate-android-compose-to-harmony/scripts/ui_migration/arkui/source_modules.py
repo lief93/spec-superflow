@@ -33,7 +33,18 @@ def page_file(root, output, target, manifest):
 
 def render_modules(code, root, business, output, page):
     owners, mapping, preferred_names = {}, [], {}
+    value_program = getattr(business, 'source_program', None)
+    value_report = value_program.report() if value_program else {'functions': [], 'consumed': [], 'unsupported': []}
+    value_owners = {}
     destinations = {page.relative_to(output).as_posix().casefold():root['source']}
+    for declaration in value_report['functions']:
+        source = declaration['source']
+        relative = page.relative_to(output).as_posix() if source == root['source'] else source_file(source)
+        previous = destinations.setdefault(relative.casefold(), source)
+        if previous != source:
+            raise ArkUIPageError('source files map to the same ETS output: ' + previous + ', ' + source)
+        value_owners[declaration['name']] = relative
+        declaration['output'] = relative
     for definition in business.definitions.values():
         reached = [b['name'] for b in business.builders.values() if b['definition_id'] == definition['id']]
         entry = business.interfaces.entries.get(definition['id']) or business.ui_states.entries.get(definition['id'])
@@ -57,6 +68,7 @@ def render_modules(code, root, business, output, page):
     script = Path(__file__).resolve().parents[2] / 'arkts_source_modules.cjs'
     result = subprocess.run([node, str(script), compiler], input=json.dumps({
         'code':code, 'page':page.relative_to(output).as_posix(), 'owners':owners,
+        'value_owners':value_owners,
         'preferred_names':preferred_names,
         'preferred_imports':{alias:source_identifier(symbol) for alias, symbol in business.preferred_imports.items()},
         'local_slot_builders':[b['name'] for b in business.builders.values() if b['direct_slot']],
@@ -77,6 +89,7 @@ def render_modules(code, root, business, output, page):
         case_paths[folded] = relative
         files[destination] = content.encode('utf-8')
     return files, {'representation':'source-file-builders', 'definitions':mapping,
+                   'value_methods':value_report,
                    'renamed_methods':{name:target for name,target in result['method_names'].items()
                                       if name != target and name not in result['inlined_methods']},
                    'inlined_methods':result['inlined_methods'],

@@ -154,7 +154,9 @@ def project_source_page(
     from ui_migration.frontend.component_defaults import ComponentStyleDefaults
     component_defaults = ComponentStyleDefaults(payload.get('style_definitions') or {})
     from ui_migration.frontend.style_tokens import StyleTokenProjector
-    style_tokens = StyleTokenProjector(payload.get('style_definitions') or {})
+    from ui_migration.frontend.source_program import SourceProgramProjector
+    source_program = SourceProgramProjector(payload)
+    style_tokens = StyleTokenProjector(payload.get('style_definitions') or {}, source_program)
     from ui_migration.frontend.component_reuse import ComponentReuse
     component_reuse = ComponentReuse(getattr(api_registry, 'component_adapters', ()),
                                      payload.get('component_definitions', []),
@@ -849,6 +851,7 @@ def project_source_page(
         for index, child in enumerate(node['children_ids']):
             emitted_by_id[child]['sibling_index'] = index
     projected = copy.deepcopy(payload)
+    projected['source_program'] = source_program.payload()
     projected["components"] = emitted
     inactive_only = set(original) - {node["source_component_id"] for node in emitted}
     projected["layout_relationships"] = [

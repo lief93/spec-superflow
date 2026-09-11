@@ -107,6 +107,14 @@ class Renderer:
         self.style_tokens = StyleTokenEmitter()
         self.business_components = BusinessComponents(android_page_input.get('component_definitions') or [], root['composable'],
                                                       self.add_page_json_unresolved, self.style_tokens.value)
+        from ui_migration.arkui.source_program import SourceProgramEmitter
+        self.source_program = SourceProgramEmitter(android_page_input.get('source_program') or {},
+            self.add_page_json_unresolved, [root['composable'], *[d['type'] for d in self.business_components.definitions.values()],
+                                           *[c['type'] for c in android_page_input['components']]])
+        self.style_tokens.source_program = self.source_program
+        self.style_tokens.reserved_symbols = self.source_program.symbols
+        self.business_components.source_program = self.source_program
+        self.source_program.parameter_types = self.business_components.value_parameters
         self.layout = LayoutPolicy(LayoutContext(
             self.android_page_by_id, self.android_page_layout_mode,
             self.android_source_layout_by_subject, self._page_constraint_states,
@@ -1053,6 +1061,7 @@ class Renderer:
 
     def render(self) -> str:
         from ui_migration.arkui.component_reuse import ComponentReuseEmitter
+        self.source_program.clear()
         self.style_tokens.modules.clear()
         self.style_tokens.consumed.clear()
         self.business_components.clear()
@@ -1072,6 +1081,12 @@ class Renderer:
             for path in component.get('source', {}).get('style_token_references', {}):
                 if (component['id'], path) not in self.style_tokens.consumed:
                     self.add_page_json_unresolved(component, 'style.' + path, 'mapped style token was not consumed by this component renderer')
+            attempted = {(entry['component_id'], entry['path']) for entry in
+                         self.source_program.consumed + self.source_program.failures}
+            for path in component.get('source', {}).get('method_references', {}):
+                if (component['id'], path) not in attempted:
+                    self.add_page_json_unresolved(component, 'source.method_references.' + path,
+                        'source value method was not consumed by this component renderer')
         business_interfaces, business_methods = self.business_components.declarations()
         self.business_components.preferred_imports.update(
             {alias:symbol for (_, symbol), alias in self.style_tokens.modules.items()})
@@ -1084,4 +1099,4 @@ class Renderer:
             business_interfaces, business_methods,
             self._material_item_states,
             self.style_tokens.imports(self.import_module) + self.component_reuse.imports(self.import_module) + sorted(self._control_imports),
-        ).render()
+        ).render() + '\n' + self.source_program.code() + '\n'

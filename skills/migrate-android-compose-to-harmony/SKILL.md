@@ -38,6 +38,10 @@ Reuse an unchanged snapshot/contract pair across pages rather than repeating `--
 Source-page and generated Lanhu JSON use lossless same-file shared references; all readers must be
 updated together. See [JSON storage and roots](references/source-page-workflow.md#json-size-and-null-fields).
 Do not erase value-helper roots by name or wrap arbitrary multi-root functions.
+For source-preserved ordinary objects and value methods, see
+[source value methods](references/source-value-methods.md). Supported pure methods
+are emitted and consumed automatically; this does not imply full business-state
+or callback translation.
 Preserve ordered outputs and `parent_id`; business boundaries do not add layout
 containers. Unhosted outputs remain caller-owned, with non-failing context warnings;
 do not confuse successful code generation with verified placement in a caller.

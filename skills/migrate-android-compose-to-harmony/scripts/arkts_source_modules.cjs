@@ -125,7 +125,12 @@ const localSlotBuilders = new Set(input.local_slot_builders || []);
 const builders = new Map(page.members.filter(m => ts.isMethodDeclaration(m) && decorators(m).includes('Builder'))
   .filter(m => m.name.text !== 'renderAndroidPageSnapshot' && !localSlotBuilders.has(m.name.text)).map(m => [m.name.text, m]));
 const owners = new Map(Object.entries(input.owners));
-const interfaceNodes = source.statements.filter(n => ts.isInterfaceDeclaration(n) || ts.isClassDeclaration(n));
+const valueOwners = new Map(Object.entries(input.value_owners || {}));
+const valueNodes = source.statements.filter(n => valueOwners.has(n.name?.text));
+if (new Set(valueNodes.map(n => n.name.text)).size !== valueNodes.length || valueNodes.length !== valueOwners.size) {
+  throw new Error('Source value declaration collision or missing declaration');
+}
+const interfaceNodes = source.statements.filter(n => (ts.isInterfaceDeclaration(n) || ts.isClassDeclaration(n)) && !valueOwners.has(n.name?.text));
 const interfaceNames = new Set(interfaceNodes.map(n => n.name.text));
 const types = new Map(interfaceNodes.map(n => [n.name.text, n]));
 const isLayoutCall = n => ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) &&
@@ -232,6 +237,11 @@ function rewrite(node, file, ctx) {
       }
     }
     if (ts.isIdentifier(n) && interfaceNames.has(n.text)) chunks(file).types.add(n.text);
+    if (ts.isIdentifier(n) && valueOwners.has(n.text) &&
+        !(ts.isPropertyAccessExpression(n.parent) && n.parent.name === n) &&
+        !(n.parent.name === n && !ts.isShorthandPropertyAssignment(n.parent))) {
+      use(file, valueOwners.get(n.text), n.text);
+    }
     ts.forEachChild(n, visit);
   }
   visit(node);
@@ -265,6 +275,10 @@ for (const member of page.members) {
   pageParts.push('  ' + value);
 }
 chunks(input.page).parts.push('@Component\nexport struct ' + page.name.text + ' {\n' + pageParts.join('\n\n') + '\n}');
+for (const declaration of valueNodes) {
+  const file = valueOwners.get(declaration.name.text);
+  chunks(file).parts.push(rewrite(declaration, file, 'this'));
+}
 for (const [name, file] of owners) chunks(file).builders.add(name);
 // Anonymous slot builders and structural types belong to their consuming module.
 // Iterate to a fixed point because a helper can reach another source module.

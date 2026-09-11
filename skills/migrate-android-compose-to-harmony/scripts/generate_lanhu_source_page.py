@@ -154,7 +154,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
         source_payload, state_projection = step('project-state', project_source_page,
             source_payload, read_json(args.state_fixture), allow_unresolved=True, api_registry=registry
         )
-    elif discovery is not None or source_payload.get('page_host') or (source_payload.get('style_definitions') or {}).get('tokenMappings') or (source_payload.get('style_definitions') or {}).get('componentDefaults') or getattr(args, 'api_adapters', None) is not None or any(
+    elif any('Composable' not in f.get('annotations', []) for f in source_payload.get('source_functions', [])) or discovery is not None or source_payload.get('page_host') or (source_payload.get('style_definitions') or {}).get('tokenMappings') or (source_payload.get('style_definitions') or {}).get('componentDefaults') or getattr(args, 'api_adapters', None) is not None or any(
         isinstance(node, dict) and (node.get("visibility_condition") or node.get("list_item_context")
                                    or node.get('slot_invocation')
                                    or node.get('component_kind') == 'project_component'
@@ -263,6 +263,7 @@ def generate(args: argparse.Namespace, *, projected_payload=None) -> dict[str, A
                 **({'styleDefinitions': source_payload['style_definitions']}
                    if source_payload.get('style_definitions') is not None else {}),
                 "componentDefinitions": source_payload.get('component_definitions') or [],
+                "sourceProgram": source_payload.get('source_program') or {},
                 "page": {
                     "id": page.get("id"),
                     "state": page.get("state"),

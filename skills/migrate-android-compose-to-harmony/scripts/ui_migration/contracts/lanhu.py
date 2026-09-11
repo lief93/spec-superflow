@@ -431,6 +431,7 @@ def load_lanhu_page_input(
         "generation_warnings": (source_generation.get('warnings', []) if isinstance(source_generation, dict) else []) + style_warnings,
         "font_faces": migration_meta.get("fontFaces", []) if isinstance(migration_meta, dict) else [],
         "component_definitions": migration_meta.get('componentDefinitions', []) if isinstance(migration_meta, dict) else [],
+        "source_program": migration_meta.get('sourceProgram', {}) if isinstance(migration_meta, dict) else {},
         "required_fact_gate": required_fact_gate(list(instances.values())),
         "source_phase_consumption_gate": source_generation.get("phaseConsumptionGate")
         if isinstance(source_generation, dict) else None,
