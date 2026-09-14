@@ -1,0 +1,4 @@
+package captureconstruction
+
+fun combined(seed: Int): String = localChain(seed) + "|" + localRoot(seed) + "|" +
+    innerChain(seed) + "|" + innerRoot(seed) + "|" + initializer(seed) + "|" + collision(seed) + "|" + localDispatch(seed)

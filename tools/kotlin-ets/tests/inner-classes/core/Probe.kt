@@ -13,6 +13,18 @@ import org.jetbrains.kotlin.ir.visitors.*
 fun main(args: Array<String>) {
     val failure = runCatching {
         withKotlinFrontend(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) { session ->
+            if (args.getOrNull(3) == "secondary") {
+                val owner = session.module.files.single().declarations.filterIsInstance<IrClass>().single { it.name.asString() == "Inner" }
+                val binding = checkNotNull(sourceInnerClassBinding(owner))
+                check(owner.declarations.filterIsInstance<IrConstructor>() == listOf(binding.constructor))
+                check(isEtsNativeConstructor(binding.constructor))
+                val factory = owner.declarations.filterIsInstance<IrSimpleFunction>().single { it.origin.name == "ETS_SECONDARY_CONSTRUCTOR" }
+                check(factory.valueParameters.first().origin === JvmLoweredDeclarationOrigin.FIELD_FOR_OUTER_THIS)
+                check(factory.valueParameters.first().type == binding.parameter.type)
+                File(args[2], "secondary.ir").writeText(session.module.dump())
+                println("PASS secondary factory retains original inner constructor and explicit outer parameter")
+                return@withKotlinFrontend
+            }
             if (args.size > 3) error("Unsupported inner class reached target generation")
             val file = session.module.files.single()
             val classes = file.declarations.filterIsInstance<IrClass>()
@@ -52,7 +64,7 @@ fun main(args: Array<String>) {
             println("PASS official inner field, constructor prefix, call receiver threading and original ownership")
         }
     }.exceptionOrNull()
-    if (args.size <= 3) { if (failure != null) throw failure; return }
+    if (args.size <= 3 || args[3] == "secondary") { if (failure != null) throw failure; return }
     check(failure is Unsupported && failure.diagnostic.message.contains(args[3])) { "$failure" }
     check(failure.diagnostic.source.file == args[1] && failure.diagnostic.source.start >= 0)
     println("PASS ${failure.diagnostic}")

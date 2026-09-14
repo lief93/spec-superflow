@@ -38,9 +38,7 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
         override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
         override fun visitClass(declaration: IrClass) { classes.add(declaration); super.visitClass(declaration) }
     })
-    fun root(owner: IrClass): IrConstructor? = owner.primaryConstructor ?: owner.constructors.singleOrNull {
-        ((it.body as? IrBlockBody)?.statements?.firstOrNull() as? IrDelegatingConstructorCall)?.symbol?.owner?.parent !== owner
-    }
+    fun root(owner: IrClass): IrConstructor? = nativeConstructorRoot(owner)
     val selected = classes.filter { owner -> owner.constructors.any() &&
         (root(owner) == null || owner.modality in setOf(Modality.ABSTRACT, Modality.SEALED) && owner.constructors.count() > 1)
     }.toMutableSet()
@@ -61,7 +59,8 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
     if (selected.isEmpty()) return
     selected.forEach { owner ->
         val diagnostics = DiagnosticSink(owner.file.fileEntry.name)
-        if (generateSequence(owner as IrDeclaration) { it.parent as? IrDeclaration }.any { it is IrFunction || it is IrClass && it.isInner })
+        if (generateSequence(owner as IrDeclaration) { it.parent as? IrDeclaration }.any { it is IrFunction || it is IrClass && it.isInner } ||
+            owner.declarations.filterIsInstance<IrField>().any { it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE })
             diagnostics.unsupported(owner, "Constructor dispatch in local or inner classes requires capture-aware allocation")
         val inherited = owner.modality != Modality.FINAL || owner.superTypes.any {
             it.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"

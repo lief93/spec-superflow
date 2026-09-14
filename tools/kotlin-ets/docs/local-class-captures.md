@@ -31,9 +31,10 @@ semantic/contract tests, not ArkTS SDK/native or whole-R2 acceptance.
 - Source locations for official synthetic capture initialization derive from its
   owning field/class, rather than guessing another source statement.
 
-Captured outer type parameters, inner/anonymous classes, secondary constructors,
+Captured outer type parameters, inner/anonymous classes,
 and captures combined with non-Any supertypes still reject with source locations.
 Keep those boundaries distinct from successfully implemented value captures.
+Unique-root secondary construction is subsequently covered by constructor-captures.md.
 
 ## Ownership and checks
 

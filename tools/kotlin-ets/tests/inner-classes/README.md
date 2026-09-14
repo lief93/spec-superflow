@@ -72,10 +72,14 @@ Final consumer `LanguageLowering.kt` SHA-256:
 `59fbaef94806ce338b1d28be5ae6df3e43cf6e09df3cfd6a0b911b103c86b62c`.
 Full source hashes and commands are recorded in each result manifest.
 
-Generic enclosing/inner binders, non-Any inner heritage, secondary constructors,
+Generic enclosing/inner binders, non-Any inner heritage,
 anonymous objects, and local-capture combinations remain excluded
 by the fixed core contract. This lane does not alter that contract, target nodes,
 validation rules, output modules, or the printer.
+
+Unique-root secondary construction is now covered separately in
+`../../docs/constructor-captures.md`; the core and chain probes retain their
+former secondary inputs as positive ownership checks.
 
 R2I adds named nongeneric inner chains in `chains/`; run `node
 tests/inner-classes/chains/run.mjs` from the tool root. See `docs/inner-chains.md`

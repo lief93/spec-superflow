@@ -15,6 +15,15 @@ fun main(args: Array<String>) {
     val files = args.drop(3)
     val failure = runCatching {
         withKotlinModule(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0]) + files) { module ->
+            if (args[2] == "secondary") {
+                val owner = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>().single { it.name.asString() == "Deep" }
+                val binding = checkNotNull(sourceInnerClassBinding(owner))
+                check(!binding.constructor.isPrimary && isEtsNativeConstructor(binding.constructor))
+                check(binding.constructor === owner.constructors.single())
+                val program = EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules())).lower(module)
+                File(output, "Secondary.ets").writeText(emitEtsProgram(program, StandardLibraryRuntime))
+                return@withKotlinModule
+            }
             check(args[2] == "current") { "Old core unexpectedly accepted inner chains" }
             File(output, "lowered.ir").writeText(module.dump())
             val classes = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>()
@@ -61,6 +70,11 @@ fun main(args: Array<String>) {
             File(output, "Combined.ets").writeText(emitEtsProgram(program, StandardLibraryRuntime))
         }
     }.exceptionOrNull()
+    if (args[2] == "secondary") {
+        if (failure != null) throw failure
+        println("PASS former secondary-root boundary with registered outer binding and native allocation")
+        return
+    }
     if (args[2] != "current") {
         check(failure is Unsupported) { "$failure" }
         val expected = if (args[2] == "red") "top-level outer" else args[2]
@@ -68,8 +82,7 @@ fun main(args: Array<String>) {
         val at = failure.diagnostic.source
         check(at.file in files && at.start >= 0 && at.end > at.start)
         val text = File(at.file).readText().substring(at.start, at.end)
-        if (expected == "capture-aware allocation") check(text.startsWith("constructor(")) { text }
-        else check(text.startsWith("inner class") || text.startsWith("object")) { text }
+        check(text.startsWith("inner class") || text.startsWith("object")) { text }
         File(output, "rejection.txt").writeText("${failure.diagnostic}\n$text")
         println("PASS source-linked rejection: ${failure.diagnostic}")
     } else {

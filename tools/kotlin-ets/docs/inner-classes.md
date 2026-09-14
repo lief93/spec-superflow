@@ -5,9 +5,11 @@
 Support named nongeneric inner classes directly inside a nongeneric top-level
 source class, with one primary constructor and Any-only heritage. Preserve the
 outer object's identity; multiple inners share its mutations, not copied values.
-Generic inner/enclosing binders, secondary constructors, derived inner classes,
+Generic inner/enclosing binders, derived inner classes,
 anonymous objects and local-capture combinations remain diagnostics. R2I extends
 named nongeneric inner chains under the contract in `inner-chains.md`.
+Unique-root secondary construction is now covered by `constructor-captures.md`;
+the original primary-only proof below remains historical evidence.
 
 Core provides `sourceInnerClassBinding(IrClass): SourceInnerClassBinding?`.
 The binding records `outer: IrClass`, `field: IrField`,

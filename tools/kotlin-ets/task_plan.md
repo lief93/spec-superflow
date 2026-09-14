@@ -69,7 +69,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, inherited defaults with class-owned helpers, unique-root/multi-entry native construction and protected visibility accepted; remaining capture forms, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, inherited defaults with class-owned helpers, native construction/protected visibility and unique-root local/inner capture composition accepted; remaining multi-entry stored captures, default-provider capture prerequisites, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
@@ -93,9 +93,19 @@ exact argument/type bindings. Class helpers retain source visibility; interface
 helpers remain file-level. Target suite tUqicj passes. See inherited-defaults.md;
 this increment does not add SDK/native or whole-R2 acceptance.
 
-Next close local/inner constructor capture and initializer-popup combinations,
-including the capture prerequisites of inherited defaults. Reuse official
-capture/body/type machinery, not widened visibility or a new capture analyzer.
+Unique-root local/inner constructor capture and initializer popup are now accepted:
+capture run-EnPet9 passes 40 flat + 40 module outcomes, exact official capture/outer
+identities and malformed-prefix rejection. Constructor run-j80b1A retains 90 + 90
+outcomes, six former-negative positives and four precise boundaries. Local capture
+green-yMMZ1X passes 30 outcomes in each output form and eight malformed IR checks;
+inner-chain green-LU6ynq passes 20 outcomes in each form and seven exclusions plus
+the former no-primary-root positive. Core run-iuktB1 and target b4JdhD pass.
+See constructor-captures.md. These are host/IR checks, not SDK/native acceptance.
+
+Next close multi-entry constructors with stored captured fields or inner outer
+links, then the capture prerequisites of inherited defaults. Constructor-only
+local captures already work through the existing dispatcher after official popup.
+Reuse official capture/body/type machinery, not widened visibility or a new capture analyzer.
 Afterwards proceed to virtual overloads and remaining generic bounds/variance
 combinations.
 

@@ -65,10 +65,16 @@ if (!red) {
   verify('modules-check', texts, 'Calls.ets');
   verify('flat-check', new Map([['Combined.ets', readFileSync(join(output, 'Combined.ets'), 'utf8')]]), 'Combined.ets');
   const exclusions = { Anonymous: 'named source class', Derived: 'Any-only', GenericDeep: 'generic binders',
-    GenericInner: 'generic binders', GenericRoot: 'generic binders', LocalOwner: 'top-level outer', Secondary: 'capture-aware allocation', StaticOwner: 'top-level outer' };
+    GenericInner: 'generic binders', GenericRoot: 'generic binders', LocalOwner: 'top-level outer', StaticOwner: 'top-level outer' };
   for (const [name, message] of Object.entries(exclusions)) {
     const dir = join(work, 'negative-' + name); mkdirSync(dir);
     run('negative-' + name, 'java', [...java, dir, message, join(fixtures, 'negative', name + '.kt')]);
   }
+  const secondary = join(work, 'secondary'); mkdirSync(secondary);
+  run('secondary', 'java', [...java, secondary, 'secondary', join(fixtures, 'negative/Secondary.kt')]);
+  const secondaryTs = join(secondary, 'Secondary.ts');
+  writeFileSync(secondaryTs, readFileSync(join(secondary, 'Secondary.ets')));
+  const checked = ts.createProgram([secondaryTs], { strict: true, noEmit: true, target: ts.ScriptTarget.ES2022, types: [] });
+  assert.deepEqual(ts.getPreEmitDiagnostics(checked).map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')), []);
 }
 guard(); result.passed = true; record(); console.log(red ? 'PASS expected source-linked RED' : 'PASS chain identities, 20 JVM/flat/modules outcomes, semantic typecheck and deterministic modules');

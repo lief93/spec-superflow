@@ -22,8 +22,9 @@ const jar = join(work, 'probe.jar');
 run('original-kotlin', 'bash', [compiler, ...fixtures.map(name => join(snapshot, name)), '-d', join(work, 'original.jar')]);
 run('compile', 'bash', [compiler, ...frozen.filter(path => !fixtures.includes(basename(path))), '-d', jar]);
 console.log(run('probe', 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.ProbeKt', cp, join(snapshot, 'Fixture.kt'), work]).trim());
+console.log(run('secondary', 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.ProbeKt', cp, join(snapshot, 'Secondary.kt'), work, 'secondary']).trim());
 for (const [name, message] of [['Generic.kt', 'generic'], ['Derived.kt', 'Any-only'],
-  ['Secondary.kt', 'primary constructor'], ['Chain.kt', 'top-level outer']]) {
+  ['Chain.kt', 'top-level outer']]) {
   console.log(run(name, 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.ProbeKt', cp, join(snapshot, name), work, message]).trim());
 }
 assert.ok(inputs.every(input => hash(input.path) === input.sha256), 'Core changed during probe');

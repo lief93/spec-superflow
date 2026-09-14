@@ -25,6 +25,11 @@ private var IrConstructor.nativeAllocationOwner: IrClass? by irAttribute(followA
 internal fun isEtsNativeConstructor(constructor: IrConstructor): Boolean =
     constructor.isPrimary || isEtsDispatchConstructor(constructor) || constructor.nativeAllocationOwner?.let { it === constructor.parent } == true
 
+internal fun nativeConstructorRoot(owner: IrClass): IrConstructor? = owner.primaryConstructor ?: owner.constructors.singleOrNull {
+    val delegation = (it.body as? IrBlockBody)?.statements?.filterIsInstance<IrDelegatingConstructorCall>()?.singleOrNull()
+    delegation != null && delegation.symbol.owner.parent !== owner
+}
+
 internal fun rejectInheritedInitializerThis(element: IrElement, owner: IrClass, diagnostics: DiagnosticSink,
     allowFieldWrites: Boolean = false) {
     element.acceptVoid(object : IrElementVisitorVoid {
@@ -50,7 +55,7 @@ internal fun rejectInheritedInitializerThis(element: IrElement, owner: IrClass, 
     })
 }
 
-/** Runs after inlining can expand constructor references into calls, before local capture lowering. */
+/** Runs after inlining and official capture/outer binding; factories retain those explicit arguments. */
 internal fun lowerSecondaryConstructors(input: JvmFir2IrPipelineArtifact) {
     val module = input.result.irModuleFragment
     val constructors = mutableListOf<IrConstructor>()
@@ -66,19 +71,20 @@ internal fun lowerSecondaryConstructors(input: JvmFir2IrPipelineArtifact) {
         val owner = constructor.parentAsClass
         val diagnostics = DiagnosticSink(constructor.file.fileEntry.name)
         if (generateSequence(owner as IrDeclaration) { it.parent as? IrDeclaration }.any {
-                it is IrFunction || it is IrClass && it.isInner
+                it is IrFunction || it is IrClass && it.isInner && sourceInnerClassBinding(it) == null
             }) diagnostics.unsupported(constructor, "Secondary constructors in local or inner classes require capture-aware allocation")
         val body = constructor.body as? IrBlockBody
-        val delegation = body?.statements?.firstOrNull() as? IrDelegatingConstructorCall
-        if (delegation == null ||
-            body.statements.filterIsInstance<IrDelegatingConstructorCall>().size != 1)
+        val delegation = body?.statements?.filterIsInstance<IrDelegatingConstructorCall>()?.singleOrNull()
+        val prefix = body?.statements?.takeWhile { it !== delegation }.orEmpty()
+        val outer = sourceInnerClassBinding(owner)?.field
+        if (delegation == null || prefix.any { it !is IrSetField ||
+                it.origin !== IrStatementOrigin.STATEMENT_ORIGIN_INITIALIZER_OF_FIELD_FOR_CAPTURED_VALUE && it.symbol.owner !== outer } ||
+            prefix.isNotEmpty() && delegation.symbol.owner.parent === owner)
             diagnostics.unsupported(constructor, "Secondary constructor requires one direct leading delegation")
     }
     // Preserve the source allocation root, including a secondary that directly calls super.
     constructors.groupBy { it.parentAsClass }.forEach { (owner, secondary) ->
-        val root = owner.primaryConstructor ?: secondary.singleOrNull {
-            ((it.body as IrBlockBody).statements.first() as IrDelegatingConstructorCall).symbol.owner.parent !== owner
-        } ?: DiagnosticSink(owner.file.fileEntry.name).unsupported(owner,
+        val root = nativeConstructorRoot(owner) ?: DiagnosticSink(owner.file.fileEntry.name).unsupported(owner,
             "A source class requires one native allocating constructor root")
         if (!root.isPrimary) root.nativeAllocationOwner = owner
         secondary.filter { it !== root }.forEach { constructor ->

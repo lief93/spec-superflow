@@ -69,7 +69,12 @@ for (const [name, parameters, factoryCount] of [
   assert.equal(declaration.members.filter(ts.isConstructorDeclaration).length, 1);
   const constructor = declaration.members.find(ts.isConstructorDeclaration);
   assert.deepEqual(constructor.parameters.map(p => p.name.text), parameters);
-  assert.equal(declaration.members.filter(node => ts.isMethodDeclaration(node) && isStatic(node)).length, factoryCount);
+  const staticMethods = declaration.members.filter(node => ts.isMethodDeclaration(node) && isStatic(node));
+  const constructorFactories = staticMethods.filter(node => node.type && ts.isTypeReferenceNode(node.type) &&
+    node.type.typeName.getText(tree) === name);
+  assert.equal(constructorFactories.length, factoryCount, name);
+  const helpers = staticMethods.filter(node => !constructorFactories.includes(node));
+  assert.deepEqual(helpers.map(node => node.name.text), name === 'RootBase' ? ['RootBase_result$default'] : []);
   if (name === 'Closed') assert.ok(isPrivate(constructor));
   if (name === 'GenericNative') {
     const factory = declaration.members.find(node => ts.isMethodDeclaration(node) && isStatic(node));
@@ -140,7 +145,7 @@ function load(name) {
 }
 result.moduleActual = evaluate({ ...load('Application'), ...load('Dispatch'), ...load('Visibility') }, load('Construction').Trace); assert.deepEqual(result.moduleActual, result.expected);
 result.regressions = [];
-for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract', 'Protected']) {
+for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract', 'Protected', 'Inner', 'Local']) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
   run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
   run(name, 'bash', [cli, '--mode', 'language', '--out', out, input]);
@@ -148,10 +153,10 @@ for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract', 'Protected'])
   result.regressions.push({ name, sha256: hash(out) });
 }
 result.negatives = [];
-for (const [name, message] of [['Inner', /capture-aware allocation/], ['Local', /capture-aware allocation/],
+for (const [name, message] of [['CapturedDispatch', /capture-aware allocation/],
+  ['DispatchLocalInitializer', /External inline call has no loaded IR body: kotlin\.run/],
   ['DispatchInheritedInitialization', /Using this during inherited initialization/],
-  ['DispatchVirtualBody', /Using this during inherited initialization/],
-  ['DispatchLocalInitializer', /local-class popup/]]) {
+  ['DispatchVirtualBody', /Using this during inherited initialization/]]) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
   run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
   const diagnostic = JSON.parse(run(name, 'bash', [cli, '--mode', 'language', '--out', out, input], 2));

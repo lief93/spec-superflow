@@ -3,11 +3,13 @@
 Cost sample 2, main implements, tests and self-checks without subagents. The
 initial delegated fixture preparation is separately accounted for.
 This extends R2H only to named nongeneric immediate inner owners, for example
-`Outer.Inner.Deep`. Every inner link has one primary constructor and Any-only
+`Outer.Inner.Deep`. The initial proof uses one primary constructor and Any-only
 heritage. The chain ends at a named nongeneric top-level source class. Static
-nested barriers, generic enclosing/inner binders, secondary constructors, derived
+nested barriers, generic enclosing/inner binders, derived
 inner classes, anonymous owners and local/capture combinations remain diagnostics.
 The existing ordinary top-level class gates are unchanged.
+Unique-root secondary constructors and no-primary roots are subsequently covered
+by constructor-captures.md, retaining the same registered immediate outer links.
 
 Reuse the existing official common declaration, member-body and constructor-call
 passes, in the pinned JS phase order, before flattening. The official member-body

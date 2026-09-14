@@ -865,7 +865,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     private fun captureOwner(declaration: IrClass): Boolean = declaration.visibility == DescriptorVisibilities.LOCAL &&
         declaration.kind == ClassKind.CLASS && !declaration.isInner && !declaration.name.isSpecial && sourceFile(declaration) != null &&
-        declaration.constructors.toList().let { it.size == 1 && it.single().isPrimary } &&
+        declaration.constructors.toList().let { it.size == 1 && isEtsNativeConstructor(it.single()) } &&
         declaration.superTypes.all { it.classOrNull?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Any" }
 
     private fun capturedFieldSymbol(field: IrField): EtsSymbol {
@@ -901,9 +901,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     private fun prepareCapturedParameters(function: IrFunction) {
         val owner = function.parent as? IrClass ?: return
-        if (function !is IrConstructor) return
         val inner = innerBinding(owner)
-        val captures = if (inner != null) listOf(inner.parameter)
+        val captures = if (inner != null) function.valueParameters.filter { it.origin === JvmLoweredDeclarationOrigin.FIELD_FOR_OUTER_THIS }
             else if (captureOwner(owner)) function.valueParameters.filter(::isCapturedParameter) else return
         if (captures.isEmpty() || captures.all { it.symbol in capturedParameters }) return
         val occupied = function.valueParameters.filterNot { it in captures }.map { identifier(it) }.toMutableSet()
@@ -949,7 +948,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             sourceFile(owner)?.fileEntry?.name != binding.source.file || sourceFile(binding.outer) !== sourceFile(owner) ||
             field.parent !== owner || field !in owner.declarations || field.origin !== IrDeclarationOrigin.FIELD_FOR_OUTER_THIS ||
             field.isStatic || field.isExternal || !field.isFinal || field.initializer != null || field.type != binding.outer.defaultType ||
-            constructor.parent !== owner || owner.constructors.toList() != listOf(constructor) || !constructor.isPrimary ||
+            constructor.parent !== owner || owner.constructors.toList() != listOf(constructor) || !isEtsNativeConstructor(constructor) ||
             constructor.valueParameters.firstOrNull() !== parameter || parameter.parent !== constructor ||
             parameter.origin !== JvmLoweredDeclarationOrigin.FIELD_FOR_OUTER_THIS || parameter.type != field.type ||
             parameter.defaultValue != null || parameter.varargElementType != null) {

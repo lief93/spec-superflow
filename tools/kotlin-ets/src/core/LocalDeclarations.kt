@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.backend.common.LoweringContext
 import org.jetbrains.kotlin.backend.common.ir.SharedVariablesManager
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.LocalDeclarationsLowering
+import org.jetbrains.kotlin.backend.common.lower.VisibilityPolicy
 import org.jetbrains.kotlin.backend.common.lower.LocalClassPopupLowering
 import org.jetbrains.kotlin.backend.common.lower.ClosureAnnotator
 import org.jetbrains.kotlin.backend.common.lower.SharedVariablesLowering
@@ -90,7 +91,9 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
         override val sharedVariablesManager: SharedVariablesManager = cells
     }
     val shared = SharedVariablesLowering(sharedContext)
-    val local = LocalDeclarationsLowering(context, remapTypesInExtractedLocalFunctions = true)
+    val local = LocalDeclarationsLowering(context, visibilityPolicy = object : VisibilityPolicy {
+        override fun forConstructor(declaration: IrConstructor, inInlineFunctionScope: Boolean) = declaration.visibility
+    }, remapTypesInExtractedLocalFunctions = true)
     for ((body, owner) in work) {
         val diagnostics = DiagnosticSink(owner.fileOrNull?.fileEntry?.name)
         val localClasses = sourceClasses(body).filter { it.visibility == DescriptorVisibilities.LOCAL }
@@ -117,7 +120,7 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
     val inners = classes.filter { it.isInner }
     if (inners.isNotEmpty()) {
         val outerOwners = inners.associateWith { it.parent as IrClass }
-        val constructors = inners.associateWith { it.constructors.single() }
+        val constructors = inners.associateWith { checkNotNull(nativeConstructorRoot(it)) }
         val declarations = InnerClassesLowering(context)
         val members = InnerClassesMemberBodyLowering(context)
         val calls = InnerClassConstructorCallsLowering(context)
@@ -168,9 +171,8 @@ private fun validateInnerClass(declaration: IrClass) {
     if (outer.typeParameters.isNotEmpty() || declaration.typeParameters.isNotEmpty()) {
         diagnostics.unsupported(declaration, "Inner class generic binders are not supported")
     }
-    val constructors = declaration.constructors.toList()
-    if (constructors.size != 1 || !constructors.single().isPrimary) {
-        diagnostics.unsupported(declaration, "Inner classes require one primary constructor")
+    if (nativeConstructorRoot(declaration) == null) {
+        diagnostics.unsupported(declaration, "Inner classes require one native allocating constructor root")
     }
     if (declaration.superTypes.any { !it.isAny() }) {
         diagnostics.unsupported(declaration, "Inner classes require Any-only heritage")

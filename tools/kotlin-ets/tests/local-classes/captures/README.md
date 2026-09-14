@@ -60,9 +60,10 @@ The GREEN production `LanguageLowering.kt` SHA-256 is
 `1d5974b1dcc05de16cf22e47f4c9be8f9d4c5bcf4e8aeec31ead14c1d288afe7`.
 Each result manifest records the complete production hash set and commands.
 
-Captured outer type parameters, inner/anonymous classes, secondary constructors,
-and captured classes with a non-Any supertype remain excluded. Core owns those
-eligibility rejections. No shared target API, arbitrary raw field acceptance,
+Captured outer type parameters, inner/anonymous classes,
+and captured classes with a non-Any supertype remain excluded. Unique-root
+secondary construction is covered separately in `../../../docs/constructor-captures.md`.
+Core owns those eligibility rejections. No shared target API, arbitrary raw field acceptance,
 source-string rewrite, SDK/native run, or round-completion claim is introduced.
 
 ## R2G Review Fix: Emitted Binding Shadows

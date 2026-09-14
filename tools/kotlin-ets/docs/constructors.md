@@ -3,7 +3,7 @@
 ## Architecture
 
 The Kotlin frontend resolves constructor symbols and delegation. After inherited
-defaults and inlining, before local-declaration lowering, the ETS-specific IR pass keeps
+defaults, inlining and official local/inner capture lowering, the ETS-specific IR pass keeps
 one real native allocation root and converts secondary `this(...)` chains to static
 factory methods in the original class. Calls are rewritten by constructor symbol,
 not by spelling, argument names or target overload guesses.
@@ -64,8 +64,9 @@ This is an increment within R2.3, not completion of all constructor forms.
 Multiple native allocation roots, abstract constructor families and superclass
 delegation through secondaries now use the native dispatcher described in
 native-constructor-flow.md. Unique-root source families retain the original
-minimal factory path. Local/inner secondary capture
-combinations, local classes in duplicated initializers and inherited initialization
+minimal factory path. Unique-root local/inner secondary capture combinations and
+local classes in duplicated initializers are covered in constructor-captures.md.
+Multi-entry stored captures/inner links and inherited initialization
 reads/captures of `this` (including secondary bodies) remain source-linked
 diagnostics with no output. Supporting a
 new allocation form must not silently bypass the initialization-safety boundary.
