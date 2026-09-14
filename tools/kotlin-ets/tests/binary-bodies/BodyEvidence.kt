@@ -9,6 +9,26 @@ import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.*
 
 fun main(args: Array<String>) {
+    if (args.getOrNull(3) == "signature-only") {
+        withKotlinFrontend(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) { session ->
+            var checked = 0
+            session.module.acceptVoid(object : IrElementVisitorVoid {
+                override fun visitElement(element: IrElement) {
+                    if (element is IrCall && element.symbol.owner.fqNameWhenAvailable?.asString() == "binarylibrary.binaryTransform") {
+                        val result = session.bodies.resolve(element.symbol) as FunctionBody.Unavailable
+                        check(result.reason == FunctionBody.Reason.NO_SERIALIZED_IR)
+                        check(element.symbol.owner.body == null)
+                        checked++
+                    }
+                    element.acceptChildrenVoid(this)
+                }
+            })
+            check(checked == 2)
+            File(args[2], "signature-body-evidence.txt").writeText("reason=NO_SERIALIZED_IR\ncalls=$checked\nloadedBodies=0\n")
+            println("PASS signature resolution is not body availability")
+        }
+        return
+    }
     if (args.size > 3) {
         val failure = runCatching {
             withKotlinFrontend(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) {
@@ -43,6 +63,8 @@ fun main(args: Array<String>) {
         check(binaryBlocks.all { it.inlinedFunctionSymbol === symbol })
         check(calls.none { it.symbol === symbol }) { "Binary calls must really be inlined" }
         val body = session.bodies.resolve(symbol) as FunctionBody.Available
+        val origin = body.origin as FunctionBody.Origin.SerializedJvmIr
+        check(origin.binaryLocation.endsWith("!/binarylibrary/BinaryLibraryKt.class"))
         check(body.declaration === symbol.owner && body.body === symbol.owner.body)
         check(body.declaration.valueParameters.map { it.name.asString() } == listOf("first", "second", "operation"))
         check(body.declaration.valueParameters[1].defaultValue != null)
@@ -57,7 +79,7 @@ fun main(args: Array<String>) {
             check(it.inlinedFunctionFileEntry.getColumnNumber(0) == -1)
         }
         File(args[2], "production.ir").writeText(session.module.dump())
-        File(args[2], "body-provenance.txt").writeText("source=${body.source}\nidentity=true\nbinaryBlocks=${binaryBlocks.size}\nremainingCalls=0\ndebugLine=-1\ndebugColumn=-1\n")
+        File(args[2], "body-provenance.txt").writeText("origin=$origin\nsource=${body.source}\nidentity=true\nbinaryBlocks=${binaryBlocks.size}\nremainingCalls=0\ndebugLine=-1\ndebugColumn=-1\n")
         borrowed = session.bodies
         println("PASS actual serialized body: original symbol/type/defaults, binary SourceFile provenance, two official inlined blocks")
     }

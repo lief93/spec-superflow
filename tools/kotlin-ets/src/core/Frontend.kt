@@ -16,9 +16,22 @@ import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.util.fileOrNull
 
 sealed interface FunctionBody {
-    data class Available(val declaration: IrFunction, val body: IrBody, val source: SourceSpan) : FunctionBody
+    data class Available(val declaration: IrFunction, val body: IrBody, val source: SourceSpan,
+        val origin: Origin) : FunctionBody
     data class Unavailable(val reason: Reason) : FunctionBody
-    enum class Reason { UNBOUND_SYMBOL, EXTERNAL_DECLARATION, OUTSIDE_MODULE, NO_BODY }
+    sealed interface Origin {
+        data object Source : Origin
+        data class SerializedJvmIr(val binaryLocation: String) : Origin
+    }
+    enum class Reason(val evidence: String) {
+        UNBOUND_SYMBOL("The function symbol is unbound."),
+        EXTERNAL_DECLARATION("The declaration is external and has no source implementation."),
+        OUTSIDE_MODULE("The declaration is outside the source module."),
+        NO_BODY("The source declaration has no function body."),
+        NON_INLINE_BINARY("Loading non-inline JVM binary bodies is not supported."),
+        NO_BINARY_METADATA("JVM binary metadata is unavailable for this declaration."),
+        NO_SERIALIZED_IR("JVM binary metadata contains no serialized IR.")
+    }
 }
 
 fun interface FunctionBodies {
@@ -40,7 +53,8 @@ class KotlinFrontendSession internal constructor(private val fragment: IrModuleF
             else -> {
                 val declaration = symbol.owner
                 declaration.body?.let { body -> FunctionBody.Available(declaration, body,
-                    SourceSpan(declaration.fileOrNull!!.fileEntry.name, declaration.startOffset, declaration.endOffset))
+                    SourceSpan(declaration.fileOrNull!!.fileEntry.name, declaration.startOffset, declaration.endOffset),
+                    FunctionBody.Origin.Source)
                 } ?: FunctionBody.Unavailable(FunctionBody.Reason.NO_BODY)
             }
         }

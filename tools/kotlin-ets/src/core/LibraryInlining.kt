@@ -26,24 +26,10 @@ import org.jetbrains.kotlin.ir.util.remapTypeParameters
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.patchDeclarationParents
 import org.jetbrains.kotlin.ir.visitors.*
-import org.jetbrains.kotlin.load.kotlin.JvmPackagePartSource
-import org.jetbrains.kotlin.load.kotlin.KotlinJvmBinarySourceElement
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.utils.addToStdlib.assignFrom
 
 internal data class UnavailableInlineBody(val symbol: String, val source: SourceSpan, val evidence: String)
-
-private fun binaryBodyEvidence(function: IrFunction): String {
-    val binaryClass = when (val source = function.containerSource) {
-        is JvmPackagePartSource -> source.knownJvmBinaryClass
-        is KotlinJvmBinarySourceElement -> source.binaryClass
-        else -> null
-    } ?: return "JVM binary metadata is unavailable for this declaration."
-    val bytes = binaryClass.classHeader.serializedIr
-        ?: return "JVM binary metadata contains no serialized IR."
-    return "JVM binary metadata contains serialized IR (${bytes.size} bytes), but the serialized dependency " +
-        "format ${binaryClass.classHeader.kind} is outside the supported top-level JVM file-facade body route."
-}
 
 /** Select only bodies supplied by the session's checked source/binary provider. */
 internal fun lowerSourceInlineFunctions(input: JvmFir2IrPipelineArtifact, bodies: FunctionBodies): List<UnavailableInlineBody> {
@@ -52,11 +38,13 @@ internal fun lowerSourceInlineFunctions(input: JvmFir2IrPipelineArtifact, bodies
     module.files.forEach { file ->
         file.acceptChildrenVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) {
-                if (element is IrCall && element.symbol.owner.isInline && element.symbol.owner.body == null &&
-                    bodies.resolve(element.symbol) !is FunctionBody.Available) {
+                if (element is IrCall && element.symbol.owner.isInline && element.symbol.owner.body == null) {
                     val function = element.symbol.owner
-                    unavailable.add(UnavailableInlineBody(function.fqNameWhenAvailable?.asString() ?: function.name.asString(),
-                        SourceSpan(file.fileEntry.name, element.startOffset, element.endOffset), binaryBodyEvidence(function)))
+                    val resolution = bodies.resolve(element.symbol)
+                    if (resolution is FunctionBody.Unavailable) {
+                        unavailable.add(UnavailableInlineBody(function.fqNameWhenAvailable?.asString() ?: function.name.asString(),
+                            SourceSpan(file.fileEntry.name, element.startOffset, element.endOffset), resolution.reason.evidence))
+                    }
                 }
                 element.acceptChildrenVoid(this)
             }

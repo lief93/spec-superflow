@@ -140,9 +140,9 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
         available[symbol]?.let { return it }
         if (!symbol.isBound) return FunctionBody.Unavailable(FunctionBody.Reason.UNBOUND_SYMBOL)
         val function = symbol.owner
-        if (!function.isInline) return FunctionBody.Unavailable(FunctionBody.Reason.OUTSIDE_MODULE)
-        val binary = binary(function) ?: return FunctionBody.Unavailable(FunctionBody.Reason.OUTSIDE_MODULE)
-        if (binary.classHeader.serializedIr == null) return FunctionBody.Unavailable(FunctionBody.Reason.NO_BODY)
+        if (!function.isInline) return FunctionBody.Unavailable(FunctionBody.Reason.NON_INLINE_BINARY)
+        val binary = binary(function) ?: return FunctionBody.Unavailable(FunctionBody.Reason.NO_BINARY_METADATA)
+        if (binary.classHeader.serializedIr == null) return FunctionBody.Unavailable(FunctionBody.Reason.NO_SERIALIZED_IR)
         fun fail(message: String): Nothing = throw Unsupported(Diagnostic("UNSUPPORTED",
             "Binary inline body ${symbolName(function)}: $message", callSites[symbol]
                 ?: SourceSpan(binary.location, UNDEFINED_OFFSET, UNDEFINED_OFFSET)))
@@ -205,7 +205,8 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
             dependencies.forEach { visit(it, fail) }
             val entry = provenance.getValue(function.symbol)
             available[function.symbol] = FunctionBody.Available(function, body,
-                SourceSpan(entry.name, body.startOffset, body.endOffset))
+                SourceSpan(entry.name, body.startOffset, body.endOffset),
+                FunctionBody.Origin.SerializedJvmIr(binary.location))
         } finally {
             visiting.remove(function.symbol)
         }

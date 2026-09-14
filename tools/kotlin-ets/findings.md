@@ -13,9 +13,10 @@ transitive serialized inline loading and typed UI modules have since progressed.
 - FunctionBodies is the borrowed official-body contract. BinaryBodies resolves
   a bounded serialized JVM-inline graph; LibraryInlining uses official inlining.
   There is no general KLIB-body loader or ordinary JVM-bytecode translator here.
-- The next dependency contract must distinguish a missing/unavailable body from
-  an intentional target API replacement. A signature or adapter registration
-  alone is not a loaded body and must never be reported as one.
+- R2.1 now distinguishes source/serialized origins and precise unavailable-body
+  reasons; inline diagnostics consume the provider result. A checked target
+  replacement is not a Kotlin body. Actual signature-only and replacement tests
+  prove that distinction. See docs/binary-bodies.md for evidence and R2.2 gaps.
 
 ## Historical observations
 

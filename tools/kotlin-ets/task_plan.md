@@ -66,7 +66,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 
 | Order | Remaining work | Required evidence |
 | --- | --- | --- |
-| R2.1 | Dependency-body contract and reachable ownership: distinguish source bodies, supported serialized bodies, signature-only dependencies and explicit target replacements; identify linking/format gaps using actual official loaders | Binary-only consumers with producer sources absent; transitive owner/body identity; missing-body diagnostics; no fabricated implementations |
+| R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 | Complete the selected dependency linking family under that contract, including generic/member substitutions and call-site binding; investigate KLIB through a separate official-loader proof, not the JVM signature reader | JVM/ETS same-input results, real loaded body provenance, cross-file/runtime closure, unsupported formats explicitly rejected |
 | R2.3 | Remaining declaration/call semantics: class property overrides, inherited default arguments, constructor forms, virtual overloads and remaining generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
@@ -74,14 +74,15 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 
 ## Next action
 
-Start R2.1 from docs/backend-reuse-audit.md and the actual FunctionBodies,
-BinaryBodies and LibraryInlining implementations. Fix the body/ownership and
-replacement contract before implementing another dependency exception. Record
-exact gaps and tests in the existing dependency documents; do not start another
-page-specific feature or automatically select class property overrides merely
-because interface properties were the last change.
+Continue R2.2 from docs/backend-reuse-audit.md, docs/binary-bodies.md and the
+actual BinaryBodies/memberClass loader. First isolate generic member signature,
+receiver and body identity prerequisites against official deserialization and
+inlining; do not merely delete the current guard. Investigate KLIB through its
+official loader separately. Keep exact linking/format gaps and evidence explicit;
+do not start page-specific features or jump to class property overrides.
 
-After R2.1 acceptance, proceed to R2.2, then R2.3, R2.4 and the R2 gate. R3-R7
+R2.1 is accepted for the documented bounded body/replacement contract, not a
+general dependency linker. Proceed to R2.2, then R2.3, R2.4 and the R2 gate. R3-R7
 retain the deliverables above; each receives its finite implementation/test queue
 when its prerequisites are accepted. No claim that pending stages are implemented.
 
@@ -91,6 +92,6 @@ when its prerequisites are accepted. No claim that pending stages are implemente
   target type/name checks. Push succeeded, including preceding 44fb21a.
 - 153c5c4: interface properties; 40 JVM/host results, 11 source-linked boundaries,
   complete target suite including eight new negative cases. No SDK/native claim.
-  Its two recorded push attempts failed; confirm a later push before marking published.
+  Published by the subsequent successful push through 2d038ee.
 - Per-increment evidence lives in the corresponding docs and test .work results.
   Do not use historical Next action/worker instructions as the active queue.

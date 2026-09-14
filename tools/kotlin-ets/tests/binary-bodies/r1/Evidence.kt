@@ -39,6 +39,9 @@ fun main(args: Array<String>) {
         blocks.forEach { block ->
             val symbol = block.inlinedFunctionSymbol!!
             val body = session.bodies.resolve(symbol) as FunctionBody.Available
+            val origin = body.origin as FunctionBody.Origin.SerializedJvmIr
+            check(body.source.file == origin.binaryLocation + "#SourceFile=" +
+                block.inlinedFunctionFileEntry.name.substringAfter("#SourceFile="))
             check(body.declaration === symbol.owner && body.body === symbol.owner.body)
             check(body.source.file == block.inlinedFunctionFileEntry.name)
             check(body.source.start >= 0 && body.source.end > body.source.start)

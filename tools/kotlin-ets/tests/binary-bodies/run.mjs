@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -24,7 +24,10 @@ function run(label, command, args, expected = 0) {
 }
 const compiler = join(root, 'tests/stdlib/compiler.sh');
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim();
-const library = join(here, 'BinaryLibrary.kt');
+const producer = join(work, 'producer');
+mkdirSync(producer);
+const library = join(producer, 'BinaryLibrary.kt');
+writeFileSync(library, readFileSync(join(here, 'BinaryLibrary.kt')));
 const application = join(here, 'Application.kt');
 const provenance = [];
 for (const kind of ['signature', 'serialized']) {
@@ -33,13 +36,18 @@ for (const kind of ['signature', 'serialized']) {
   provenance.push({ kind, jar, sha256: createHash('sha256').update(readFileSync(jar)).digest('hex') });
 }
 writeFileSync(join(work, 'provenance.json'), JSON.stringify(provenance, null, 2));
+rmSync(producer, { recursive: true });
+assert.equal(existsSync(library), false);
 const oracle = join(work, 'oracle.jar');
 const serialized = provenance[1].jar;
 const evidence = join(work, 'evidence.jar');
 run('evidence-build', 'bash', [compiler, ...['Frontend.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt',
   'LocalDeclarations.kt', 'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt'].map(name => join(root, 'src/core', name)),
-  join(root, 'src/target/Tree.kt'), join(here, 'BodyEvidence.kt'), '-d', evidence]);
+  ...['Tree.kt', 'TypeSubstitution.kt', 'Validator.kt', 'Traversal.kt'].map(name => join(root, 'src/target', name)),
+  join(here, 'BodyEvidence.kt'), '-d', evidence]);
 console.log(run('body-evidence', 'java', ['-cp', `${cp}:${evidence}`, 'dev.ets.BodyEvidenceKt', `${cp}:${serialized}`, application, work]).trim());
+console.log(run('signature-body-evidence', 'java', ['-cp', `${cp}:${evidence}`, 'dev.ets.BodyEvidenceKt',
+  `${cp}:${provenance[0].jar}`, application, work, 'signature-only']).trim());
 const strip = join(work, 'strip.jar');
 run('strip-build', 'bash', [compiler, join(here, 'StripSource.kt'), '-d', strip]);
 const noSource = join(work, 'no-source.jar');

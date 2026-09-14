@@ -1,5 +1,56 @@
 # Serialized JVM inline bodies
 
+## R2.1 body and replacement contract
+
+`FunctionBodies` describes borrowed Kotlin implementations, not target API
+coverage. Its results now explicitly carry these distinctions:
+
+| Result | Meaning | Consumer |
+| --- | --- | --- |
+| `Available` / `Origin.Source` | Actual source declaration and body in the current frontend module | Official lowering and ETS language lowering |
+| `Available` / `Origin.SerializedJvmIr(binaryLocation)` | Actual loaded and checked body, with the resolved binary owner and serialized source span | Official common inliner |
+| `Unavailable` | A precise reason: unbound, external, source without body, non-inline binary route, missing binary metadata or missing serialized IR | Diagnose or let an explicit target rule handle the call |
+| Checked `CallResult` from `adaptCall` | A target value, statement effect or UI replacement, validated for its consuming context | Typed target tree; never reported as a Kotlin body |
+
+An adapter being registered does not prove it handled a particular call. A
+successful replacement also does not change body availability. Value, statement
+and UI replacements retain the shared type/context checks in `Contract.kt`.
+There is no additional dependency dispatcher or expression parser.
+
+`LibraryInlining` takes unavailable-body evidence from the provider rather than
+re-reading metadata and guessing which format failed. A body that exists but
+fails supported linking/ownership checks still raises a source-linked error;
+it is not silently accepted or replaced with an empty body.
+
+Reference: pinned Kotlin 2.1.20 `InlineFunctionResolver` selects actual resolved
+declarations; `JsInlineFunctionResolver` allows external inlining, while
+`ExternalDependenciesGenerator` asks providers to bind reachable symbols until
+stable. Binding a declaration does not by itself load a usable implementation.
+We keep the actual JVM deserializer/common inliner route, not the JS-specific
+KLIB loader or JS runtime assumptions.
+
+Remaining linking work belongs to R2.2: generic/member substitutions beyond the
+current bounded route and a separate official KLIB loader proof. Ordinary JVM
+bytecode, non-inline helpers, constructors/stateful binary members and arbitrary
+Android services are not newly supported by this contract change.
+
+R2.1 binary evidence (2026-09-14):
+
+- `tests/language/.work/typed-etvKp3`: source body identity/origin, checked value,
+  statement and UI adapters, and unavailable binary body status before/after
+  successful target replacement pass.
+- `tests/binary-bodies/.work/policy-trUFhB`: producer source copied to a temporary
+  directory, compiled, then removed before consumers run. Actual binary origin,
+  signature-only reason and unchanged missing-source/helper rejection checks
+  pass. Public CLI generation and two JVM/DevEco-TypeScript-host results agree.
+- `tests/binary-bodies/.work/r1-V3lFKr`: same-facade, cross-facade and second-JAR
+  transitive body/symbol/origin checks pass; missing body/JAR/SourceFile and
+  dependency-cycle negatives pass. This suite is frontend evidence, not ETS runtime.
+- `policy-3FnnAA` is retained failed evidence: the old test compilation list
+  omitted the target validator now required by `Contract.kt`. Both binary test
+  runners now include that shared dependency; no production check was bypassed.
+- No SDK, ArkVM or visual acceptance is claimed for this increment.
+
 This records the initial binary-body vertical slice. The current R1 transitive
 extension and its separate evidence are in [r1-binary-reachability.md](r1-binary-reachability.md).
 

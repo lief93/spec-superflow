@@ -16,6 +16,7 @@ fun main(args: Array<String>) {
         val functions = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>().associateBy { it.name.asString() }
         val diagnostics = DiagnosticSink(file.fileEntry.name)
         val helperBody = session.bodies.resolve(functions.getValue("helper").symbol) as FunctionBody.Available
+        check(helperBody.origin == FunctionBody.Origin.Source)
         check(helperBody.declaration === functions.getValue("helper"))
         check(helperBody.body === functions.getValue("helper").body)
         check(helperBody.source.file == args[2])
@@ -98,6 +99,9 @@ fun main(args: Array<String>) {
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
             override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement> {
                 check(symbolName(call.symbol.owner) in setOf("java.time.Instant.now", "java.lang.System.gc"))
+                val body = session.bodies.resolve(call.symbol) as FunctionBody.Unavailable
+                check(body.reason == FunctionBody.Reason.NON_INLINE_BINARY)
+                check(call.symbol.owner.body == null)
                 effectCalls++
                 return listOf(EtsExpressionStatement(EtsLiteral(19, EtsTypes.NUMBER, plain.source(call))))
             }
@@ -151,6 +155,10 @@ fun main(args: Array<String>) {
         }
         val numberCall = sourceCall("adapted")
         val unitCall = sourceCall("directEffect")
+        check(session.bodies.resolve(unitCall.symbol) ==
+            FunctionBody.Unavailable(FunctionBody.Reason.NON_INLINE_BINARY)) {
+            "Successful target replacement must not fabricate a Kotlin body"
+        }
         val trace = mutableListOf<String>()
         fun recordingRule(name: String, value: EtsExpression? = null,
             statements: List<EtsStatement>? = null, ui: List<EtsStatement>? = null) = object : CallRule {

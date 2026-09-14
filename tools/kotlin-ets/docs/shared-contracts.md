@@ -12,15 +12,20 @@ The integration owner controls changes to these contracts and their tests.
 passes. `session.bodies: FunctionBodies` resolves an `IrFunctionSymbol`, never a
 method-name string, to:
 
-- `FunctionBody.Available`: the actual declaration, linked body and source span.
+- `FunctionBody.Available`: the actual declaration, linked body, source span and
+  typed `Origin.Source` or `Origin.SerializedJvmIr(binaryLocation)` provenance.
 - `FunctionBody.Unavailable`: an unbound symbol, external declaration,
-  declaration outside the source module, or declaration without a body.
+  declaration without a source body, non-inline binary loading boundary,
+  missing binary metadata or missing serialized IR. The reason supplies the
+  evidence used by inline diagnostics, rather than duplicating metadata checks.
 
 The provider exposes source-module bodies and checked serialized JVM inline
 bodies through the same interface. A resolved JAR signature alone is unavailable.
 The bounded binary path requires actual serialized IR, SourceFile provenance and
 linked canonical symbols; see [binary-bodies.md](binary-bodies.md). The official
-inliner consumes both paths. Adapters may handle calls without available bodies.
+inliner consumes both paths. Adapters may handle calls without available bodies;
+only a checked `CallResult` establishes a target replacement, and that does not
+turn an unavailable Kotlin implementation into an available body.
 
 The session and its body resolver reject access after the callback completes.
 Compiler objects returned by them are borrowed: callers must not retain them.

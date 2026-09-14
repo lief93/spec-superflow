@@ -1,5 +1,24 @@
 # Execution progress
 
+## 2026-09-14: R2.1 dependency-body contract
+
+- Available bodies now distinguish source IR from serialized JVM IR and retain
+  actual binary owner location. Missing-body reasons separate non-inline binary
+  loading, missing metadata and missing serialized IR from source declarations.
+- LibraryInlining consumes provider evidence instead of duplicating metadata
+  inspection and reporting an outdated file-facade-only explanation.
+- Checked target CallResult remains separate. Tests prove successful adapter
+  handling neither changes unavailable body status nor fabricates Kotlin IR.
+- Re-read pinned official InlineFunctionResolver, JsInlineFunctionResolver and
+  ExternalDependenciesGenerator. Actual deserialization/common inlining remains
+  reused; no new parser, dependency dispatcher or bytecode translator.
+- Passing: typed-etvKp3; policy-trUFhB (two JVM/host outcomes, producer source
+  removed before consumption); r1-V3lFKr (transitive same/cross-facade and JAR
+  identities, missing dependency/source and cycle boundaries). No SDK/native run.
+- Retained failed policy-3FnnAA: test runner lacked shared target validator files.
+  Corrected test compilation inputs; no production validation bypass.
+- Main-only self-check and scoped diff check. R2 remains incomplete; next is R2.2.
+
 ## 2026-09-14: restore the overall ordered plan
 
 - task_plan.md is now the sole active queue. Its contradictory historical R2H,

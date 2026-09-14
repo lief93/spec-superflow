@@ -30,7 +30,8 @@ assert.deepEqual(run('jvm', 'java', ['-cp', `${cp}:${library}:${oracle}`, 'consu
 const evidence = join(work, 'evidence.jar');
 run('evidence-build', 'bash', [compiler, ...['Frontend.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt',
   'LocalDeclarations.kt', 'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt'].map(name => join(root, 'src/core', name)),
-  join(root, 'src/target/Tree.kt'), join(here, 'Evidence.kt'), '-d', evidence]);
+  ...['Tree.kt', 'TypeSubstitution.kt', 'Validator.kt', 'Traversal.kt'].map(name => join(root, 'src/target', name)),
+  join(here, 'Evidence.kt'), '-d', evidence]);
 function inspect(label, jars, mode = '2') {
   const dir = join(work, label);
   mkdirSync(dir);
