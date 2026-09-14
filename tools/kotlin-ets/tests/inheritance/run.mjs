@@ -107,8 +107,19 @@ run('generic-method-interface-proof', process.execPath,
   [join(here, 'methods/interface-proof.mjs'), genericMethodInput]);
 result.supportedGenericMethod = { input: genericMethodInput, sha256: hash(genericMethodInput),
   proofLog: join(work, 'generic-method-interface-proof.stdout') };
+const covarianceInput = join(here, 'UnsupportedCovariance.kt'), covarianceOutput = join(work, 'Covariance.ets');
+const secondaryInput = join(here, 'UnsupportedSecondary.kt');
+run('covariance-jvm-build', 'bash', [compiler, covarianceInput, secondaryInput, join(here, 'CovarianceOracle.kt'), '-d', join(work, 'covariance.jar')]);
+const covarianceExpected = run('covariance-jvm', 'java', ['-cp', `${join(work, 'covariance.jar')}:${cp}`, 'CovarianceOracleKt']).trim().split('\n');
+run('covariance-target', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', covarianceOutput, covarianceInput, secondaryInput]);
+const covarianceJs = ts.transpileModule(readFileSync(covarianceOutput, 'utf8'), { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
+const covarianceActual = vm.runInNewContext(covarianceJs.outputText + '\n[new NarrowFactory().create() instanceof NarrowResult, new NarrowFactory().create() instanceof NarrowResult, new SecondaryChild().value]',
+  { exports: {} }, { timeout: 1000 });
+assert.deepEqual(Array.from(covarianceActual, String), covarianceExpected);
+result.supportedFormerDeclarations = { inputs: [covarianceInput, secondaryInput], path: covarianceOutput, sha256: hash(covarianceOutput), expected: covarianceExpected };
 const negatives = readdirSync(here).filter(name => name.startsWith('Unsupported') && name.endsWith('.kt') &&
-  join(here, name) !== genericMethodInput).sort();
+  ![genericMethodInput, covarianceInput, secondaryInput].includes(join(here, name))).sort();
 const defaultOutput = join(work, 'SupportedDefaultArgument.ets');
 run('supported-default-argument', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', defaultOutput,
   join(here, 'SupportedDefaultArgument.kt')]);

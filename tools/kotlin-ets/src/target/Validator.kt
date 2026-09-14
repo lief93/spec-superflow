@@ -81,7 +81,7 @@ class EtsValidator {
         return etsSubstitute(declared, declaration.typeParameters.map { it.id }.zip(owner.arguments).toMap())
     }
 
-    private fun sameMethodSignature(actual: EtsType, expected: EtsType): Boolean {
+    private fun overrideSignature(actual: EtsType, expected: EtsType, at: SourceSpan, covariantReturn: Boolean): Boolean {
         if (actual == expected) return true
         if (actual !is EtsFunctionType || expected !is EtsFunctionType ||
             actual.typeParameters.size != expected.typeParameters.size) return false
@@ -91,7 +91,12 @@ class EtsValidator {
         if (actual.typeParameters.zip(expected.typeParameters).any { (a, b) ->
                 a.upperBound?.let { etsSubstitute(it, substitutions) } != b.upperBound
             }) return false
-        return etsInstantiate(actual, arguments) == expected.copy(typeParameters = emptyList())
+        val rebound = etsInstantiate(actual, arguments)
+        if (rebound.parameters != expected.parameters) return false
+        return if (!covariantReturn) rebound.result == expected.result
+        else withTypeParameters(expected.typeParameters, at, signature = true) {
+            assignable(rebound.result, expected.result)
+        }
     }
 
     private fun boundReceiver(value: EtsMember): EtsNamedType {
@@ -160,12 +165,13 @@ class EtsValidator {
                     }
                     value.overrides.forEach { id ->
                         val (owner, original) = inherited.firstOrNull { it.second.symbol.id == id } ?: reject(value, "Unbound target override identity")
-                        if (original.name != value.name || original.kind != value.kind || !sameMethodSignature(memberType(owner, original), value.symbol.type) ||
+                        if (original.name != value.name || original.kind != value.kind ||
+                            !overrideSignature(value.symbol.type, memberType(owner, original), value.source, value.kind == EtsFunctionKind.METHOD) ||
                             value.static || value.visibility.ordinal > original.visibility.ordinal || original.visibility == EtsVisibility.PRIVATE)
                             reject(value, "Target override signature differs")
                     }
                     inherited.filter { it.second.name == value.name && it.second.kind == value.kind }.forEach { (owner, original) ->
-                        if (!sameMethodSignature(memberType(owner, original), value.symbol.type) || original.static != value.static ||
+                        if (!overrideSignature(value.symbol.type, memberType(owner, original), value.source, value.kind == EtsFunctionKind.METHOD) || original.static != value.static ||
                             value.visibility.ordinal > original.visibility.ordinal) reject(value, "Incompatible inherited target method")
                     }
                 }
@@ -210,7 +216,9 @@ class EtsValidator {
                     if (implementation == null || (implementation.abstract && !declaration.abstract) ||
                         classes.getValue(resolved.first.symbolId!!).kind == EtsClassKind.INTERFACE ||
                         implementation.static || implementation.visibility.ordinal > requirement.visibility.ordinal ||
-                        implementation.kind != requirement.kind || !sameMethodSignature(memberType(resolved.first, implementation), memberType(owner, requirement))) {
+                        implementation.kind != requirement.kind ||
+                        !overrideSignature(memberType(resolved.first, implementation), memberType(owner, requirement), implementation.source,
+                            implementation.kind == EtsFunctionKind.METHOD)) {
                         reject(declaration, "Missing ${if (declaration.abstract) "abstract target declaration" else "concrete target implementation"}: ${requirement.name}")
                     }
                 }

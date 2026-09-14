@@ -17,7 +17,8 @@ function files(path) {
     ? files(join(path, entry.name)) : [join(path, entry.name)]).sort();
 }
 const original = join(here, '../overloads/negatives/BridgeJoin.kt');
-const inputs = [...files(join(root, 'src')), ...files(here), original].map(path => ({ path, sha256: hash(path) }));
+const covariance = join(here, '../overloads/negatives/Covariance.kt');
+const inputs = [...files(join(root, 'src')), ...files(here), original, covariance].map(path => ({ path, sha256: hash(path) }));
 const result = { inputs, commands: [], passed: false };
 const record = () => writeFileSync(join(work, 'result.json'), JSON.stringify(result, null, 2));
 function run(label, command, args, status = 0) {
@@ -28,7 +29,7 @@ function run(label, command, args, status = 0) {
   assert.equal(r.error, undefined); assert.equal(r.status, status, r.stdout + r.stderr);
   return r.stdout;
 }
-const sources = [original, join(here, 'Cases.kt'), join(here, 'FakeJoin.kt')];
+const sources = [original, covariance, ...['Cases.kt', 'FakeJoin.kt', 'CovariantCases.kt'].map(name => join(here, name))];
 const compiler = join(root, 'tests/stdlib/compiler.sh'), cli = join(root, 'kotlin-ets');
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim(), jar = join(work, 'oracle.jar');
 run('jvm-build', 'bash', [compiler, ...sources, join(here, 'Oracle.kt'), '-d', jar]);
@@ -43,7 +44,8 @@ function check(paths) {
 function evaluate(exports) {
   const context = vm.createContext({ exports });
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed =>
-    ['bridgeJoin', 'inheritedBridge', 'bridgeEffects', 'voidBridge', 'genericBridge', 'nullableBridge', 'fakeBridge', 'inheritedComposition', 'bareBridge'].map(name =>
+    ['bridgeJoin', 'inheritedBridge', 'bridgeEffects', 'voidBridge', 'genericBridge', 'nullableBridge', 'fakeBridge', 'inheritedComposition', 'bareBridge',
+      'covariantDispatch', 'covariantBounds', 'covariantNullable', 'covariantJoined'].map(name =>
       String(vm.runInContext(`exports.${name}(${seed})`, context, { timeout: 1000 }))));
 }
 const code = readFileSync(out, 'utf8'), flatTs = join(work, 'Bridges.ts');
@@ -54,7 +56,7 @@ result.actual = evaluate(context.exports); record(); assert.deepEqual(result.act
 const modules = join(work, 'modules'), reversed = join(work, 'reversed');
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['BridgeJoin.ets', 'Cases.ets', 'FakeJoin.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['BridgeJoin.ets', 'Cases.ets', 'Covariance.ets', 'CovariantCases.ets', 'FakeJoin.ets']);
 result.modules = readdirSync(modules).sort().map(name => ({ name, path: join(modules, name), sha256: hash(join(modules, name)) }));
 for (const { name, path } of result.modules) {
   assert.equal(readFileSync(path, 'utf8'), readFileSync(join(reversed, name), 'utf8'));
@@ -69,11 +71,18 @@ function load(name) {
   vm.runInNewContext(code, { exports, require(specifier) { assert.ok(specifier.startsWith('./')); return load(specifier.slice(2)); } }, { timeout: 1000 });
   return exports;
 }
-result.moduleActual = evaluate({ ...load('BridgeJoin'), ...load('Cases'), ...load('FakeJoin') }); assert.deepEqual(result.moduleActual, result.expected);
+result.moduleActual = evaluate({ ...load('BridgeJoin'), ...load('Cases'), ...load('FakeJoin'), ...load('CovariantCases') }); assert.deepEqual(result.moduleActual, result.expected);
 const proof = join(work, 'proof.jar');
 run('ir-build', 'bash', [compiler, ...files(join(root, 'src')).filter(path => path.endsWith('.kt')),
   join(here, 'Probe.kt'), '-d', proof]);
 result.irEvidence = run('ir-proof', 'java', ['-cp', `${proof}:${cp}`, 'dev.ets.bridges.ProbeKt', cp, work, ...sources]).trim();
+const invalid = join(here, 'InvalidCovariantOverride.kt'), invalidOut = join(work, 'InvalidCovariantOverride.ets');
+run('invalid-override-jvm', 'bash', [compiler, invalid, '-d', join(work, 'invalid.jar')], 1);
+result.invalidOverride = JSON.parse(run('invalid-override-target', 'java', ['-cp', `${proof}:${cp}`, 'dev.ets.MainKt',
+  '--mode', 'language', '--classpath', cp, '--out', invalidOut, invalid], 1));
+assert.equal(result.invalidOverride.code, 'COMPILATION_REJECTED');
+assert.match(readFileSync(join(work, 'invalid-override-target.stderr'), 'utf8'), /return type|subtype/i);
+assert.equal(existsSync(invalidOut), false);
 const bottom = join(here, 'UnsupportedBottomText.kt'), bottomOut = join(work, 'BottomText.ets');
 run('bottom-jvm', 'bash', [compiler, bottom, '-d', join(work, 'bottom.jar')]);
 result.bottomBoundary = JSON.parse(run('bottom-target', 'java', ['-cp', `${proof}:${cp}`, 'dev.ets.MainKt',

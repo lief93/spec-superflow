@@ -9,5 +9,9 @@ fun main() {
         println(fakeBridge(seed))
         println(inheritedComposition(seed))
         println(bareBridge(seed))
+        println(covariantDispatch(seed))
+        println(covariantBounds(seed))
+        println(covariantNullable(seed))
+        println(covariantJoined(seed))
     }
 }

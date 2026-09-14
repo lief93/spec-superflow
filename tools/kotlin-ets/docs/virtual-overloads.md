@@ -16,6 +16,10 @@ Pinned Kotlin 2.1.20 sources inspected:
   ownership to the common algorithm without a JS backend context. Both are now
   called directly. findConcreteSuperDeclaration resolves concrete fake-override
   implementations; the resulting ETS calls still use virtual member dispatch.
+- fir/analysis/checkers/declaration/FirOverrideChecker.kt: the already-executed
+  official frontend substitutes paired method binders and checks return subtyping;
+  mutable-property overrides require equality. The ETS backend does not add a
+  second Kotlin override resolver or transplant JS erased-return conventions.
 
 The existing OverloadNaming prepass connects real source declarations through
 official override edges. A second identity-based grouping finds the overload
@@ -29,7 +33,8 @@ Top-level/package-private overload allocation remains on its existing path.
 
 Declarations and calls consume this one mapping. Canonical source symbol IDs,
 parameter names and method sourceName remain unchanged. The typed target checker
-continues to require exact override signatures and matching call identities.
+continues to require invariant override parameters/bounds and matching call
+identities. Ordinary method results may covary through supported target heritage.
 An Int and a Double overload may both have target number parameters but still
 have different source IDs and target names; runtime argument inspection is not
 used to rediscover Kotlin overload selection.
@@ -64,7 +69,7 @@ The target validator now rejects a class that relies on an interface signature
 alone as if it were an inherited class member. A historical bounded-receiver
 fixture was corrected to declare that method; its inherited-generic check remains.
 
-External inherited slots, covariant override results and private method shadowing
+External inherited slots, covariant property overrides and private method shadowing
 also retain explicit diagnostics. Existing unsupported overloaded extension,
 context, vararg, suspend and reified forms are not enabled by this change.
 The new test initially hit unsupported Double.plus in a method body. Floating
@@ -76,6 +81,21 @@ Bottom-typed nullable string conversion is also outside this increment:
 UnsupportedBottomText.kt retains a source-linked kotlin.Nothing? refusal. Nullable
 String values still pass through generic/nullable bridge tests. R3 owns the
 remaining string-conversion runtime semantics.
+
+Ordinary method return covariance now preserves the original result type. Source
+override relationships and class/method substitutions still come from official IR.
+After type mapping, the target checker rebinds method-owned generic identities,
+requires equal parameter types and bounds, and verifies that the implementation
+result is assignable to each inherited result. Call/member identity checks are
+unchanged. This accepts source class/interface heritage, nullable-to-nonnullable
+refinement, and a method type parameter bounded by the inherited result type.
+It composes with the existing common bridge planner, including fake inherited
+implementations. A method with no slot conflict acquires no forwarding wrapper.
+No cast, result erasure, body cloning or new runtime helper is needed.
+
+Source generic declaration variance, use-site projections, multiple bounds and
+covariant property storage/accessors remain separate R2.3 requirements. Invariant
+source generic arguments have not been made covariant by this method-return change.
 
 ## Evidence
 
@@ -146,3 +166,34 @@ acceptance is implied.
 Inherited-default run-OHKB8f additionally passes 65 flat + 65 module outcomes,
 three boundaries and 29 official helper calls. All accepted frozen compiler/test
 inputs were rechecked before commit.
+
+## Covariant method-result evidence
+
+RED run-yctBp5 compiles/runs the original JVM sources, then hits the old exact
+return-signature guard. Target g2LHgs independently reproduces the target-layer
+refusal. Frozen run-j3vMHT passes 65 flat + 65 module JVM/ETS-host outcomes over
+63 pinned inputs, with five-file reversed-input determinism. The probe checks
+19 actual common bridge edges (six inherited), original return types and method
+parameters, four corrupted-target refusals, and absence of extra methods for
+nonconflicting covariant overrides. Invalid numeric, nullable and generic return
+overrides are refused by official FIR before any target output; the numeric case
+also prevents treating erased Int/Double target numbers as valid Kotlin overrides.
+
+Target RFklC1 passes the complete suite, including nine covariance-specific
+negative contracts. The overload regression run-CxQNDW retains 30 + 30 outcomes
+and its original flat/module hashes; Covariance.kt is an unchanged-source positive
+and is actually exercised by the composed bridge oracle. Generic/source receiver
+substitution, nullable results, abstract/interface views and inherited concrete
+bridges share the same code path. This remains host/IR evidence, not SDK/native.
+
+- Bridges.ets: a2613fb507efee8e381ea351c72a993a9789e49fb281308625791eb6cceeec33
+- Covariance.ets: 136b11f34d477cc72294d09fa559cb9476dc3fb9f885cb0c1d99bd4ed5dddb5b
+- CovariantCases.ets: a5207dfd6c5765314e97fe1b107e9a9a21721d2e6754d30e07be6ca9022bd6d0
+- The three existing BridgeJoin/Cases/FakeJoin module hashes are unchanged.
+
+Legacy inheritance run-GpvtJg passes its 50 JVM/host cases and seven remaining
+source-linked boundaries. Both the unchanged original covariance fixture and the
+previously supported secondary-constructor fixture now have explicit JVM/target
+outcome checks (true, true, 0), rather than obsolete expected failures. run-UTj2a9
+preserves the stale-secondary-negative failure. All passing source/test hashes
+were checked again before publication.

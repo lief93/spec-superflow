@@ -18,7 +18,8 @@ fun main(args: Array<String>) {
         val owners = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>()
         val methods = owners.flatMap { it.declarations.filterIsInstance<IrSimpleFunction>() }
             .filter { !it.isFakeOverride && it.correspondingPropertySymbol == null }
-        val program = EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules())).lower(module)
+        val backend = EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules()))
+        val program = backend.lower(module)
         val classes = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>()
         val targets = classes.flatMap { it.members }.filterIsInstance<EtsFunction>()
         fun id(function: IrSimpleFunction) = etsFunctionSymbol(function.name.asString(), emptyList(), EtsTypes.VOID,
@@ -26,6 +27,12 @@ fun main(args: Array<String>) {
         val declarations = methods.associateWith { original -> targets.single { it.symbol.id == id(original) } }
         for ((method, implementation) in declarations) {
             check(implementation.parameters.map { it.symbol.name } == method.valueParameters.map { it.name.asString() })
+            check(implementation.returnType == backend.language.type(method.returnType))
+        }
+        for (name in listOf("SpecificProducer", "IdentityProducer", "PresentProducer")) {
+            val owner = classes.single { it.name == name }
+            check(owner.members.filterIsInstance<EtsFunction>().count { it.kind == EtsFunctionKind.METHOD } == 1)
+            check(owner.members.filterIsInstance<EtsFunction>().none { it.sourceName?.startsWith("<bridge:") == true })
         }
         var edges = 0
         var inheritedEdges = 0

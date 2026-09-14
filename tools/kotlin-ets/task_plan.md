@@ -69,7 +69,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition and source virtual-overload bridges accepted; remaining covariant overrides and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition, source virtual-overload bridges and bounded method-result covariance accepted; remaining readonly-property covariance and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
@@ -157,7 +157,16 @@ abstract-entry contract. See virtual-overloads.md for scope and hashes.
 Inherited-default run-OHKB8f retains 65 + 65 results, three boundaries and 29
 helper calls. Final frozen inputs are unchanged; no SDK/native acceptance follows.
 
-Next implement remaining covariant overrides and generic bounds/variance
+Bounded method-result covariance now relies on official FIR override checking
+and the existing official IR substitutions/bridge planner. The target checker
+keeps parameters and method bounds invariant, and checks result assignability.
+Frozen run-j3vMHT passes 65 + 65 JVM/host outcomes, 19 actual bridge edges (six
+inherited), original names/return types, five-file determinism and malformed-target
+refusals. Official FIR rejects three invalid override forms before output. Target
+RFklC1 and overload run-CxQNDW (30 + 30, unchanged original output hashes) pass.
+See virtual-overloads.md; no SDK/native or whole-R2 claim.
+
+Next implement readonly-property covariance and generic bounds/variance
 combinations, inspecting the pinned common/JS type substitution and override
 contracts first. External inherited slots, private shadowing and the documented
 unsupported receiver/parameter families remain explicit, not silently enabled.

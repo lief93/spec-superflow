@@ -75,7 +75,7 @@ run('ir-build', 'bash', [compiler, ...files(join(root, 'src')).filter(path => pa
 result.irEvidence = run('ir-proof', 'java', ['-cp', `${proof}:${cp}`, 'dev.ets.virtualoverloads.ProbeKt', cp, work, ...sources]).trim();
 result.negatives = [];
 result.formerNegatives = [];
-for (const [name, reason] of [['External', /external inherited declarations/], ['Covariance', /covariance is not supported/],
+for (const [name, reason] of [['External', /external inherited declarations/], ['Covariance', null],
   ['PrivateShadow', /Private method name shadowing/], ['BridgeJoin', null]]) {
   const input = join(here, 'negatives', name + '.kt'), output = join(work, name + '.ets');
   const jvmSources = [input, ...(name === 'BridgeJoin' ? [join(here, 'BridgeOracle.kt')] : [])];

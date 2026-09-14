@@ -496,8 +496,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 function.valueParameters.any { it.defaultValue != null }) {
                 diagnostics.unsupported(function, "Extension and default-argument inherited methods are not supported")
             }
-            if (overrides.any { !sameInheritedSignature(function, it, parentClass) }) {
-                diagnostics.unsupported(function, "Inherited signatures must match exactly; covariance is not supported")
+            if (overrides.any { !supportedInheritedSignature(function, it, parentClass) }) {
+                diagnostics.unsupported(function, "Inherited parameters and bounds must match; covariant properties are not supported")
             }
         }
         // Interface properties are target field contracts, not abstract methods.
@@ -745,8 +745,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             overloadNaming.bridges(method).forEach { (from, to) ->
                 if (sourceFile(from) == null || sourceFile(to) == null)
                     diagnostics.unsupported(declaration, "Inherited bridges require source-owned declarations")
-                if (!sameInheritedSignature(to, from, declaration))
-                    diagnostics.unsupported(declaration, "Inherited signatures must match exactly; covariance is not supported")
+                if (!supportedInheritedSignature(to, from, declaration))
+                    diagnostics.unsupported(declaration, "Inherited bridge parameters and bounds must match")
                 val (implementation, destination) = inheritedBridgeSignature(to, declaration)
                 members.add(etsVirtualBridge(implementation, thisReference(declaration, declaration),
                     overloadNaming.name(from), listOf(functionSymbol(from).id), destination))
@@ -834,14 +834,17 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         rejectInheritedInitializerThis(element, declaration, diagnostics)
     }
 
-    private fun sameInheritedSignature(function: IrSimpleFunction, overridden: IrSimpleFunction, receiver: IrClass): Boolean {
+    private fun supportedInheritedSignature(function: IrSimpleFunction, overridden: IrSimpleFunction, receiver: IrClass): Boolean {
         if (overridden.typeParameters.size != function.typeParameters.size) return false
         val actual = ownerSubstitution(function.parentAsClass, receiver.defaultType, receiver)
         val expected = ownerSubstitution(overridden.parentAsClass, receiver.defaultType, receiver)
         val methodParameters = makeTypeParameterSubstitutionMap(overridden, function)
         // Instantiate class edges before rebinding the paired method parameters.
         fun instantiated(type: IrType): IrType = expected.substitute(type).substitute(methodParameters)
-        return instantiated(overridden.returnType) == actual.substitute(function.returnType) &&
+        // FIR already checked Kotlin override compatibility. The target validator checks
+        // covariant method results after type mapping; accessor/storage contracts stay exact.
+        return (function.correspondingPropertySymbol == null ||
+            instantiated(overridden.returnType) == actual.substitute(function.returnType)) &&
             overridden.valueParameters.map { instantiated(it.type) } == function.valueParameters.map { actual.substitute(it.type) } &&
             overridden.typeParameters.zip(function.typeParameters).all { (original, current) ->
                 original.superTypes.map(::instantiated) == current.superTypes.map(actual::substitute)
