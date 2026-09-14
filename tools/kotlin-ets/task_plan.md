@@ -84,9 +84,19 @@ determinism, source/target interval checks and official invalid-use refusals.
 Target aUczhk passes eleven capture refusals; probe-zMFhD7 retains 40 bounded
 receiver results. SDK constructors-sdk-cMLKGn checks all seven unchanged modules
 and compiles ABC/HAP. See declaration-variance.md for limitations and hashes.
-Next, exercise generic-call/callback and capture-bound compositions before
-R2.4 ownership closure; recursive captures and external collection projections
-are not implicitly covered. No native/UI or whole-R2 completion is claimed.
+Generic-call/callback consumption is now implemented for one source-owned
+container occurrence per captured binder. Frozen run-AHwTko passes 160 flat +
+160 module JVM/host results and eight-file determinism; target tpwiM0 passes
+thirteen capture refusals. SDK constructors-sdk-G9rHZ7 checks all eight unchanged
+modules and compiles ABC/HAP. See declaration-variance.md for the FIR/IR contract.
+
+Next action is R2.4 ownership/import/export/provenance closure over these existing
+declaration families, not another expansion of generic edge cases. R2.3 is not
+silently marked complete: capture-bound and copied/inline-call compositions not
+proved by this batch remain explicit verification gaps in the R2 gate. Recursive
+captures and external collection projections remain unsupported. Before closing
+R2, report each remaining gap against the agreed bounded contract. No native/UI
+or whole-R2 completion is claimed.
 
 Protected constructor visibility is accepted for the documented source family.
 The target contract now uses EtsVisibility for methods, fields and constructors;
@@ -220,9 +230,8 @@ unchanged modules and compiles ABC/HAP. No business-class reparenting or wrapper
 See declaration-variance.md. R2.4 must also check generated-constraint member
 provenance against original declarations and the owning bound locations.
 
-Next implement use-site projection combinations,
-inspecting the pinned common/JS type substitution and override
-contracts first. External inherited slots, private shadowing and the documented
+The next action above supersedes earlier projection-expansion instructions.
+External inherited slots, private shadowing and the documented
 unsupported receiver/parameter families remain explicit, not silently enabled.
 R2.3 is not complete. R2.4 and the combined SDK/native R2 gate remain queued
 before R3-R7; these host checks do not satisfy that gate.

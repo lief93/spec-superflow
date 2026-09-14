@@ -3,6 +3,7 @@ import { broadBound, narrowBound, classBound, nominalBound } from '../modules/Bo
 import { independent, independentGeneric, independentClass, independentSelf, independentChain, independentDiamond, originalMultiple } from '../modules/Independent';
 import { classInterface, interfaceClass, classInterfaceReturn, classInterfaceHolder, classInterfaceMutation } from '../modules/ClassBounds';
 import { projectedRead, projectedWrite, projectedStar, projectedBound, projectedNested } from '../modules/Projections';
+import { projectedGeneric, projectedVisit, projectedReplace, projectedLater } from '../modules/ProjectionCalls';
 
 @Entry
 @Component
@@ -14,6 +15,7 @@ struct Index {
       Text(`${independent(7)},${independentGeneric(7)},${independentClass(7)},${independentSelf(7)},${independentChain(7)},${independentDiamond(7)},${originalMultiple(7)}`)
       Text(`${classInterface(7)},${interfaceClass(7)},${classInterfaceReturn(7)},${classInterfaceHolder(7)},${classInterfaceMutation(7)}`)
       Text(`${projectedRead(7)},${projectedWrite(7)},${projectedStar(7)},${projectedBound(7)},${projectedNested(7)}`)
+      Text(`${projectedGeneric(7)},${projectedVisit(7)},${projectedReplace(7)},${projectedLater(7)}`)
     }
   }
 }

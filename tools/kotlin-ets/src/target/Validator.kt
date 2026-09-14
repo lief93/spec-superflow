@@ -739,7 +739,9 @@ class EtsValidator {
                     generic
                 } else {
                     typeArguments(generic.typeParameters, value.typeArguments, value.source)
-                    etsInstantiate(generic, value.typeArguments)
+                    if (!etsSupportsCapturedCall(generic, value.typeArguments)) reject(value,
+                        "Captured generic call requires a single source-owned container occurrence")
+                    etsReadType(etsInstantiate(generic, value.typeArguments)) as EtsFunctionType
                 }
                 if (generic.typeParameters.isNotEmpty() &&
                     (signature.result != value.type || value.arguments.size != signature.parameters.size)) {

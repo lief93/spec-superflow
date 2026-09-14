@@ -27,19 +27,20 @@ function run(label, command, args, status = 0) {
 const compiler = join(root, 'tests/stdlib/compiler.sh'), cli = join(root, 'kotlin-ets');
 const originalMultiple = join(here, '../bounds/UnsupportedMultipleBounds.kt');
 result.inputs.push({ path: originalMultiple, sha256: hash(originalMultiple) });
-const sources = ['Models.kt', 'Cases.kt', 'Bounds.kt', 'Independent.kt', 'ClassBounds.kt', 'Projections.kt'].map(p => join(here, p)).concat(originalMultiple);
+const sources = ['Models.kt', 'Cases.kt', 'Bounds.kt', 'Independent.kt', 'ClassBounds.kt', 'Projections.kt', 'ProjectionCalls.kt'].map(p => join(here, p)).concat(originalMultiple);
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim(), jar = join(work, 'oracle.jar');
 run('jvm-build', 'bash', [compiler, ...sources, join(here, 'Oracle.kt'), '-d', jar]);
 result.expected = run('jvm-run', 'java', ['-cp', `${jar}:${cp}`, 'declarationvariance.OracleKt']).trimEnd().split('\n');
-assert.equal(result.expected.length, 140);
+assert.equal(result.expected.length, 160);
 const proof = join(work, 'proof.jar');
-run('ir-build', 'bash', [compiler, ...implementations, join(here, 'Probe.kt'), join(here, 'SourceTypesProbe.kt'), '-d', proof]);
+run('ir-build', 'bash', [compiler, ...implementations, join(here, 'Probe.kt'), join(here, 'SourceTypesProbe.kt'), join(here, 'FirCaptureProbe.kt'), '-d', proof]);
+result.firCapture = run('fir-capture-probe', 'java', ['-cp', `${proof}:${cp}`, 'dev.ets.variance.fir.FirCaptureProbeKt', cp, ...sources]);
 result.sourceTypes = run('source-types-probe', 'java', ['-cp', `${proof}:${cp}`, 'dev.ets.variance.types.SourceTypesProbeKt', cp, ...sources]);
 const flat = join(work, 'Variance.ets'), modules = join(work, 'modules'), reversed = join(work, 'reversed');
 run('flat', 'bash', [cli, '--mode', 'language', '--out', flat, ...sources]);
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['Bounds.ets', 'Cases.ets', 'ClassBounds.ets', 'Independent.ets', 'Models.ets', 'Projections.ets', 'UnsupportedMultipleBounds.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['Bounds.ets', 'Cases.ets', 'ClassBounds.ets', 'Independent.ets', 'Models.ets', 'ProjectionCalls.ets', 'Projections.ets', 'UnsupportedMultipleBounds.ets']);
 result.modules = readdirSync(modules).sort().map(name => ({ name, path: join(modules, name), sha256: hash(join(modules, name)) }));
 const tsFiles = [flat, ...result.modules.map(m => m.path)].map(path => {
   const target = path.replace(/\.ets$/, '.ts'); writeFileSync(target, readFileSync(path)); return target;
@@ -60,13 +61,14 @@ function evaluate(exports) {
     ['covariance', 'contravariance', 'nested', 'property', 'mixed', 'nullable', 'broadBound', 'narrowBound', 'classBound', 'nominalBound',
       'independent', 'independentGeneric', 'independentClass', 'independentSelf', 'independentChain', 'independentDiamond', 'originalMultiple',
       'classInterface', 'interfaceClass', 'classInterfaceReturn', 'classInterfaceHolder', 'classInterfaceMutation',
-      'projectedRead', 'projectedWrite', 'projectedStar', 'projectedBound', 'projectedNested'].map(name =>
+      'projectedRead', 'projectedWrite', 'projectedStar', 'projectedBound', 'projectedNested',
+      'projectedGeneric', 'projectedVisit', 'projectedReplace', 'projectedLater'].map(name =>
       String(vm.runInContext(`exports.${name}(${seed})`, context, { timeout: 1000 }))).concat(
       String(vm.runInContext(`(() => { const cell = new exports.Cell(new exports.Specific(${seed})); return exports.project(cell) === cell; })()`, context, { timeout: 1000 }))));
 }
 result.actual = evaluate(load(flat)); result.moduleActual = evaluate({ ...load(join(modules, 'Cases.ets')),
   ...load(join(modules, 'Bounds.ets')), ...load(join(modules, 'Independent.ets')), ...load(join(modules, 'ClassBounds.ets')),
-  ...load(join(modules, 'Projections.ets')), ...load(join(modules, 'Models.ets')) });
+  ...load(join(modules, 'Projections.ets')), ...load(join(modules, 'Models.ets')), ...load(join(modules, 'ProjectionCalls.ets')) });
 assert.deepEqual(result.actual, result.expected); assert.deepEqual(result.moduleActual, result.expected);
 for (const { name, path } of result.modules) assert.equal(readFileSync(path, 'utf8'), readFileSync(join(reversed, name), 'utf8'));
 result.ir = run('ir-probe', 'java', ['-cp', `${proof}:${cp}`, 'dev.ets.variance.ProbeKt', cp, ...sources]);
@@ -86,4 +88,4 @@ const projectionErrors = readFileSync(join(work, 'invalid-projection.stderr'), '
 for (const name of ['writeOut', 'writeStar', 'readIn', 'invariant']) assert.ok(projectionErrors.includes(`fun ${name}(`), name);
 for (const input of result.inputs) assert.equal(hash(input.path), input.sha256);
 result.output = { path: flat, sha256: hash(flat) }; result.passed = true; record();
-console.log('PASS 140 flat + 140 module JVM/host variance/bound/projection results, deterministic seven-file output and official variance/bound/projection refusals');
+console.log('PASS 160 flat + 160 module JVM/host variance/bound/projection results, deterministic eight-file output and official variance/bound/projection refusals');

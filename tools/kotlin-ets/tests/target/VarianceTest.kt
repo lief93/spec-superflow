@@ -59,8 +59,8 @@ private fun checkCapturedArguments() {
     val input = EtsCapturedType(top, d)
     val star = EtsCapturedType(top, EtsTypes.NEVER)
     fun applied(argument: EtsType) = (cell.symbol.type as EtsNamedType).copy(arguments = listOf(argument))
-    fun validate(function: EtsFunction) = EtsValidator().validate(EtsProgram(listOf(
-        EtsFile("Projections.kt", listOf(animal, dog, cell, function)))))
+    fun validate(function: EtsFunction, others: List<EtsDeclaration> = emptyList()) = EtsValidator().validate(EtsProgram(listOf(
+        EtsFile("Projections.kt", listOf(animal, dog, cell, function) + others))))
     fun conversion(from: EtsType, to: EtsType) {
         val p = EtsSymbol("input", "input", applied(from), at)
         validate(EtsFunction("convert", listOf(EtsParameter(p)), applied(to), listOf(EtsReturn(EtsReference(p), at)), at))
@@ -101,5 +101,33 @@ private fun checkCapturedArguments() {
     val callback = EtsFunctionType(listOf(out), input)
     check(etsReadType(callback) == EtsFunctionType(listOf(EtsTypes.NEVER), top))
     check(etsReadType(callback, write = true) == EtsFunctionType(listOf(a), d))
+    val binder = EtsTypeParameter("get:T", "T")
+    val ref = EtsTypeParameterType(binder.id, binder.name)
+    val box = EtsSymbol("get:cell", "cell", applied(ref), at)
+    val get = EtsFunction("get", listOf(EtsParameter(box)), ref, listOf(EtsReturn(
+        EtsMember(EtsReference(box), "value", ref, at, field.symbol.id), at)), at, typeParameters = listOf(binder))
+    val receiver = EtsSymbol("call:cell", "cell", applied(out), at)
+    val call = EtsCall(EtsReference(get.symbol), listOf(EtsReference(receiver)), a, at, listOf(out))
+    val invoke = EtsFunction("invoke", listOf(EtsParameter(receiver)), a, listOf(EtsReturn(call, at)), at)
+    validate(invoke, listOf(get))
+    val second = box.copy(id = "get:second", name = "second")
+    val repeated = get.copy(parameters = get.parameters + EtsParameter(second))
+    reject("Intervals cannot establish shared existential identity") {
+        validate(invoke.copy(body = listOf(EtsReturn(call.copy(callee = EtsReference(repeated.symbol),
+            arguments = listOf(EtsReference(receiver), EtsReference(receiver))), at))), listOf(repeated))
+    }
+    val duplicated = (get.symbol.type as EtsFunctionType).copy(parameters = listOf(applied(EtsFunctionType(listOf(ref), ref))))
+    check(!etsSupportsCapturedCall(duplicated, listOf(out)))
+    check(!etsSupportsCapturedCall((get.symbol.type as EtsFunctionType).copy(parameters = listOf(ref)), listOf(out)))
+    val argument = EtsSymbol("callback:value", "value", a, at)
+    val body = listOf(EtsReturn(EtsReference(argument), at))
+    val wide = EtsLambda(emptyList(), body, top, at)
+    val narrowed = etsContextualLambda(wide, EtsFunctionType(emptyList(), a)) as EtsLambda
+    check(narrowed.body === wide.body && narrowed.returnType == a)
+    validate(EtsFunction("callback", listOf(EtsParameter(argument)), narrowed.type, listOf(EtsReturn(narrowed, at)), at))
+    val invalid = etsContextualLambda(wide, EtsFunctionType(emptyList(), d)) as EtsLambda
+    reject("Contextual lambda narrowing must check its return body") {
+        validate(EtsFunction("callback", listOf(EtsParameter(argument)), invalid.type, listOf(EtsReturn(invalid, at)), at))
+    }
     println("PASS captured read/write intervals, callback polarity and $refusals source-linked refusals")
 }

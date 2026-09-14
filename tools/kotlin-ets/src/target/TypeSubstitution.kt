@@ -35,3 +35,30 @@ fun etsInstantiate(signature: EtsFunctionType, arguments: List<EtsType>): EtsFun
     val substitutions = signature.typeParameters.map { it.id }.zip(arguments).toMap()
     return etsSubstitute(signature.copy(typeParameters = emptyList()), substitutions) as EtsFunctionType
 }
+
+/** Recheck the unchanged lambda body against its resolved call-site result type. */
+fun etsContextualLambda(value: EtsExpression, expected: EtsType): EtsExpression =
+    if (value is EtsLambda && expected is EtsFunctionType &&
+        value.parameters.map { it.symbol.type } == expected.parameters)
+        value.copy(returnType = expected.result) else value
+
+/** An interval is not the shared existential identity needed by repeated input binders. */
+fun etsSupportsCapturedCall(signature: EtsFunctionType, arguments: List<EtsType>): Boolean {
+    fun occurrences(type: EtsType, id: String): Int = when (type) {
+        is EtsTypeParameterType -> if (type.id == id) 1 else 0
+        is EtsNamedType -> type.arguments.sumOf { occurrences(it, id) }
+        is EtsNullableType -> occurrences(type.inner, id)
+        is EtsCapturedType -> occurrences(type.readType, id) + occurrences(type.writeType, id)
+        is EtsFunctionType -> if (type.typeParameters.any { it.id == id }) 0 else
+            type.parameters.sumOf { occurrences(it, id) } + occurrences(type.result, id)
+        is EtsTupleType -> type.elements.sumOf { occurrences(it, id) }
+        is EtsRecordType -> type.fields.values.sumOf { occurrences(it, id) }
+    }
+    return signature.typeParameters.zip(arguments).all { (parameter, argument) ->
+        if (argument !is EtsCapturedType) true else {
+            val uses = signature.parameters.filter { occurrences(it, parameter.id) > 0 }
+            val container = uses.singleOrNull() as? EtsNamedType
+            container != null && container.symbolId != null && !container.external && occurrences(container, parameter.id) == 1
+        }
+    }
+}

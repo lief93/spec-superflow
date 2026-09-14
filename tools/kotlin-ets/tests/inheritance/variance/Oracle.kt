@@ -29,6 +29,10 @@ fun main() {
         println(projectedStar(seed))
         println(projectedBound(seed))
         println(projectedNested(seed))
+        println(projectedGeneric(seed))
+        println(projectedVisit(seed))
+        println(projectedReplace(seed))
+        println(projectedLater(seed))
         val cell = Cell(Specific(seed))
         println(project(cell) === cell)
     }

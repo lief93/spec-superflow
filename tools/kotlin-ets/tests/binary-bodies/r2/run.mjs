@@ -32,7 +32,7 @@ run('oracle-build', 'bash', [compiler, '-classpath', `${cp}:${library}`, join(he
 const expected = run('jvm', 'java', ['-cp', `${cp}:${library}:${oracle}`, 'genericconsumer.OracleKt']).trim().split('\n');
 assert.deepEqual(expected, ['3/5/5/9/6/IDBOIG', '0/2/2/0/6/IDBOIG', '-2147483647/-2147483645/-2147483645/-2147483645/6/IDBOIG']);
 const core = ['Frontend.kt', 'Constructors.kt', 'ConstructorDispatch.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt', 'LocalDeclarations.kt',
-  'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt'].map(name => join(root, 'src/core', name));
+  'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt', 'CallCaptures.kt', 'GenericBounds.kt'].map(name => join(root, 'src/core', name));
 const evidence = join(work, 'evidence.jar');
 writeFileSync(join(work, 'identity.json'), JSON.stringify([...core, ...sources.map(name => join(here, name)), library,
   join(here, 'Application.kt'), join(here, 'Evidence.kt'), join(root, 'src/target/Tree.kt')].map(path => ({ path, sha256: hash(path) })), null, 2));

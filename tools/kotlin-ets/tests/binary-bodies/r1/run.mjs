@@ -29,7 +29,7 @@ assert.deepEqual(run('jvm', 'java', ['-cp', `${cp}:${library}:${oracle}`, 'consu
   ['27/2/:1:2', '-15/2/:-2:-1', '-1/2/:2147483647:-2147483648']);
 const evidence = join(work, 'evidence.jar');
 run('evidence-build', 'bash', [compiler, ...['Frontend.kt', 'Constructors.kt', 'ConstructorDispatch.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt',
-  'LocalDeclarations.kt', 'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt'].map(name => join(root, 'src/core', name)),
+  'LocalDeclarations.kt', 'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt', 'CallCaptures.kt', 'GenericBounds.kt'].map(name => join(root, 'src/core', name)),
   ...['Tree.kt', 'TypeSubstitution.kt', 'Validator.kt', 'Traversal.kt'].map(name => join(root, 'src/target', name)),
   join(here, 'Evidence.kt'), '-d', evidence]);
 function inspect(label, jars, mode = '2') {

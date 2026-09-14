@@ -293,10 +293,18 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             parent is IrClass -> EtsMember(classReference(parent, call), symbol.name, signature, source(call), symbol.id)
             else -> EtsReference(symbol.copy(type = signature), source(call))
         }
+        val captures = sourceTypes?.callCaptures(call).orEmpty()
         val typeArguments = owner.typeParameters.indices.map { index ->
-            type(call.getTypeArgument(index) ?: diagnostics.unsupported(call, "Missing resolved generic type argument"))
+            captures[index]?.let { EtsCapturedType(type(it.readType), it.writeType?.let(::type) ?: EtsTypes.NEVER) }
+                ?: type(call.getTypeArgument(index) ?: diagnostics.unsupported(call, "Missing resolved generic type argument"))
         }
-        return EtsCall(callee, arguments(call, scope), type(call.type), source(call), typeArguments)
+        if (!etsSupportsCapturedCall(signature, typeArguments)) diagnostics.unsupported(call,
+            "Captured generic calls require one source-owned container occurrence per captured binder")
+        val instantiated = etsReadType(etsInstantiate(signature, typeArguments)) as EtsFunctionType
+        val arguments = arguments(call, scope).mapIndexed { index, value ->
+            instantiated.parameters.getOrNull(index)?.let { etsContextualLambda(value, it) } ?: value
+        }
+        return EtsCall(callee, arguments, type(call.type), source(call), typeArguments)
     }
 
     private fun arguments(call: IrFunctionAccessExpression, scope: Scope): List<EtsExpression> {

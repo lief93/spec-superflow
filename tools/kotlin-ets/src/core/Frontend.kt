@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.config.Services
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.expressions.IrBody
+import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
@@ -47,11 +48,12 @@ fun interface FunctionBodies {
 interface SourceTypes {
     fun capture(type: IrSimpleType): IrSimpleType
     fun isSubtypeOf(actual: IrType, expected: IrType): Boolean
+    fun callCaptures(call: IrCall): Map<Int, SourceCapture>
 }
 
 /** Borrowed official IR, valid only inside withKotlinFrontend. No serialized IR interchange. */
 class KotlinFrontendSession internal constructor(private val fragment: IrModuleFragment, private val binaryBodies: FunctionBodies,
-    private val typeSystem: IrTypeSystemContext) {
+    private val typeSystem: IrTypeSystemContext, private val callCaptures: CallCaptures) {
     private var active = true
     private val files = fragment.files.toSet()
     private fun checkActive() = check(active) { "Kotlin frontend session is closed" }
@@ -64,6 +66,10 @@ class KotlinFrontendSession internal constructor(private val fragment: IrModuleF
         override fun isSubtypeOf(actual: IrType, expected: IrType): Boolean {
             checkActive()
             return actual.isSubtypeOf(expected, typeSystem)
+        }
+        override fun callCaptures(call: IrCall): Map<Int, SourceCapture> {
+            checkActive()
+            return callCaptures.arguments(call)
         }
     }
     val types: SourceTypes get() { checkActive(); return typeQueries }
@@ -115,7 +121,7 @@ fun <T> withKotlinFrontend(arguments: List<String>, emit: (KotlinFrontendSession
             "Kotlin FIR2IR diagnostics prohibit target output"
         }
         val frontend = KotlinFrontendSession(translated.result.irModuleFragment, BinaryBodies(translated),
-            IrTypeSystemContextImpl(translated.result.irBuiltIns))
+            IrTypeSystemContextImpl(translated.result.irBuiltIns), CallCaptures(analyzed.result, translated.result))
         session = frontend
         val unavailableInlineBodies = lowerSourceInlineFunctions(translated, frontend.bodies)
         lowerLocalDeclarations(translated)

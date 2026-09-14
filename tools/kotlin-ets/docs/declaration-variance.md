@@ -227,7 +227,49 @@ projection semantics, reified operations or source referential-equality lowering
 Identity is checked by JVM/host test callers around the same emitted project
 function, not by pretending that Kotlin EQEQEQ lowering has been implemented.
 
-## Use-site capture evidence
+## Generic-call and callback consumption
+
+The official FIR2IR converter approximates a captured function type argument to
+its upper bound. Applying that approximation before target argument validation
+loses the distinction between Cell<out Value> and invariant Cell<Value>.
+CallCaptures records the original FIR capture before lowering, associates it
+with the exact official function symbol and source span, and follows IR
+attributeOwnerId through ordinary copies. Bound comparison and FIR-to-IR type
+conversion still use the pinned official implementations. Changed symbols or
+generic arity are rejected rather than guessed.
+
+This is an interval-based consumer, not a general existential type solver.
+It supports one source-owned container occurrence per captured input binder;
+multiple input occurrences are refused because identical bounds do not prove
+identical existential identity. Callback result annotations can be contextualized
+from the resolved parameter type only while preserving and validating the actual
+lambda body. A void or incompatible return cannot satisfy an object result.
+
+Source getCell/Channel methods and parameters retain their names, ordinary
+declarations and calling structure. No runtime wrapper or cast is introduced.
+Nested function-type captures, multiple independent capture bounds, and capture
+metadata requiring remapping across inline/local transformations are not proved
+by this batch. Exact FIR/IR association is required; lack of association produces
+a source-linked diagnostic. This prepass currently visits all input function
+calls, so an unsupported capture can reject an input before reachability pruning.
+These are explicit limitations, not complete generic-call support.
+
+RED run-PiXcGm exposes invariant argument rejection after FIR2IR approximation;
+run-mzC3OA exposes the widened factory lambda annotation. Frozen run-AHwTko
+passes 160 JVM/flat-host and 160 JVM/module-host outcomes, strict host typing,
+eight-file reverse-input determinism and the official FIR/IR association probe.
+Target tpwiM0 passes thirteen capture/return-contract refusals and the full target
+suite. SDK constructors-sdk-G9rHZ7 checks all eight unchanged modules and builds
+ABC/HAP. None of these establish native behavior, UI parity or whole-R2 acceptance.
+
+Inline regression run-VAv7Dg passes official body-inlining evidence, JVM/host
+results, named/default argument effects and the binary-body diagnostic. Earlier
+run-jbjSiR failed before semantic execution because the probe compilation list
+omitted CallCaptures and GenericBounds. The explicit frontend probe source lists
+now include both files; other runners' source-list updates are mechanical and
+do not constitute rerunning all of their semantic suites.
+
+## Property-projection evidence
 
 RED run-aUEER9 reaches the former out-projection rejection after the JVM oracle.
 run-T7FxgG separately proves official capture/subtype queries and closed-session
