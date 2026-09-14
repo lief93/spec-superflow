@@ -160,10 +160,11 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
 private fun validateInnerClass(declaration: IrClass) {
     val diagnostics = DiagnosticSink(declaration.fileOrNull?.fileEntry?.name)
     val outer = declaration.parent as? IrClass
-    if (outer == null || outer.parent !is IrFile || outer.kind != ClassKind.CLASS ||
-        outer.isInner || outer.isAnonymousObject || declaration.isAnonymousObject || declaration.kind != ClassKind.CLASS) {
+    if (outer == null || (outer.parent !is IrFile && !outer.isInner) || outer.kind != ClassKind.CLASS ||
+        outer.isAnonymousObject || declaration.isAnonymousObject || declaration.kind != ClassKind.CLASS) {
         diagnostics.unsupported(declaration, "Inner classes require a named top-level outer source class")
     }
+    if (outer.isInner) validateInnerClass(outer)
     if (outer.typeParameters.isNotEmpty() || declaration.typeParameters.isNotEmpty()) {
         diagnostics.unsupported(declaration, "Inner class generic binders are not supported")
     }

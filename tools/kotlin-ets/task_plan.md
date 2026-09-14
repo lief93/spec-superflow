@@ -5,6 +5,16 @@ evidence, not the current backlog. Use the existing non-spec development workflo
 
 ## Acceptance contract
 
+### Latest correction: main alone (2026-09-14)
+
+The user explicitly means THIS main assistant implements, tests and self-checks.
+No developer or independent-review subagents. This supersedes all older fixed
+reviewer and delegated single-developer policies below. Parfit was interrupted
+for handoff; preserve its edits and verify writers stopped before main resumes.
+Keep required tests and tested/self-checked commit-push authorization. Continue
+actual cost recording, but mark sample 2 as mixed setup until handoff; capture a
+fresh main-only baseline and do not claim a pure solo benchmark for the whole batch.
+
 ### Cost-first execution trial (2026-09-14)
 
 The user now prioritizes quota over urgency. Measure at most the next two bounded
@@ -41,7 +51,24 @@ only the accepted batch and its required dependencies; exclude unrelated dirty
 files, generated scratch output and any unreviewed work. Verify the pushed commit
 against the remote branch. Release/publishing beyond Git remains separately gated.
 
-### Current mainline: adapter modules accepted; serial cost sample next (2026-09-14)
+### Current mainline: R2I inner chains, serial cost sample 2 (2026-09-14)
+
+R2I is now accepted after main-only implementation, tests and self-check. See
+docs/inner-chains.md and docs/cost-sample-inner-chains.md. Publish this finite slice
+before selecting the next remaining R2 declaration/dependency requirement. Do not
+repeat R2I or reinstate subagents. This is not whole-R2 or seven-round completion.
+
+Adapter modules committed/pushed as `71ef3c4`; remote hash independently verified.
+R2I is now taken over by MAIN as the ONLY developer: extend ordinary nongeneric
+inner classes to named inner chains, retaining actual immediate outer identity.
+Main implements, tests and self-checks. No developer or reviewer subagents.
+Before edits, fix the finite contract after inspecting official common/JS phases.
+JVM/flat/module parity must cover parent/grandparent state, receiver evaluation,
+argument order and lexical naming; generics, derived/anonymous/local-capture and
+secondary-constructor combinations remain explicit diagnostics. Preserve R2H
+negative identity checks. Cost baseline: `.work/cost-trial/inner-chains/dispatch-start.json`.
+
+### Previous priority: independent adapter modules
 
 R2H passed fixed review and main acceptance, committed and pushed as `ee9c81a`.
 The user prioritizes independent adapter additions before another language slice.

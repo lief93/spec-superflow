@@ -638,7 +638,12 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         }
         val members = mutableListOf<EtsClassMember>()
         captures.forEach { members.add(EtsField(capturedFieldSymbol(it), private = true)) }
-        inner?.let { members.add(EtsField(outerFieldSymbol(it.field), private = true)) }
+        inner?.let {
+            // Flattened descendants still traverse this registered outer link.
+            val sharedLink = sourceFile(declaration)?.declarations?.filterIsInstance<IrClass>()
+                ?.any { child -> sourceInnerClassBinding(child)?.outer === declaration } == true
+            members.add(EtsField(outerFieldSymbol(it.field), private = !sharedLink))
+        }
         if (singleton) {
             val classType = classType(declaration)
             val field = synthetic("__etsSingleton", EtsNullableType(classType), declaration)
@@ -892,17 +897,18 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     private fun rejectInner(binding: SourceInnerClassBinding, element: IrElement, message: String): Nothing =
         throw Unsupported(Diagnostic("UNSUPPORTED", message, innerSource(binding, element)))
 
-    private fun innerBinding(owner: IrClass): SourceInnerClassBinding? {
+    private fun innerBinding(owner: IrClass, visited: MutableSet<IrClass> = mutableSetOf()): SourceInnerClassBinding? {
         val binding = sourceInnerClassBinding(owner)
         if (binding == null) {
             if (owner.isInner) diagnostics.unsupported(owner, "Inner class has no registered source binding")
             return null
         }
+        if (!visited.add(owner)) rejectInner(binding, owner, "Invalid registered inner class binding cycle")
         val field = binding.field
         val constructor = binding.constructor
         val parameter = binding.parameter
         if (!owner.isInner || owner.kind != ClassKind.CLASS || owner.name.isSpecial || owner.typeParameters.isNotEmpty() ||
-            owner.superTypes.any { !it.isAny() } || binding.outer.isInner || binding.outer.kind != ClassKind.CLASS ||
+            owner.superTypes.any { !it.isAny() } || binding.outer.kind != ClassKind.CLASS ||
             binding.outer.name.isSpecial || binding.outer.typeParameters.isNotEmpty() || binding.outer.parent !is IrFile ||
             sourceFile(owner)?.fileEntry?.name != binding.source.file || sourceFile(binding.outer) !== sourceFile(owner) ||
             field.parent !== owner || field !in owner.declarations || field.origin !== IrDeclarationOrigin.FIELD_FOR_OUTER_THIS ||
@@ -913,6 +919,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             parameter.defaultValue != null || parameter.varargElementType != null) {
             rejectInner(binding, owner, "Invalid registered inner class binding")
         }
+        if (binding.outer.isInner) innerBinding(binding.outer, visited)
         return binding
     }
 

@@ -987,3 +987,16 @@
   roles, including review/fix. See docs/cost-sample-adapter-modules.md for limits.
   No measured serial baseline, so no numeric speedup claim. Next sample switches
   to one developer plus the same fixed reviewer; main coordinates only.
+- User corrected that policy: main itself must develop/test/self-check, with NO
+  developer or reviewer subagents. Parfit stopped with no production edits or
+  running commands; preserved contract and uncompiled fixtures were handed over.
+- R2I main-only acceptance: RED `red-8095mq`, GREEN `green-ipRKeg` (20 JVM vs
+  flat/modules outcomes, actual TS semantic checks, eight exclusions), R2H
+  `green-oQQeaz` (20 outcomes/14 malformed checks), core `run-4zZ7IX` all pass.
+  Five immediate outer links preserve shared mutations; intermediate registered
+  fields are accessible after flattening, leaf links remain private. All 64
+  inputs match frozen GREEN hashes. No SDK/native or entire-round claim.
+- Cost sample 2 records delegated preparation separately. Main-only execution
+  was 7m36s, 24,087 uncached input / 3,572,096 cached input / 6,072 output tokens;
+  both agent counters remained unchanged. Different workload and reused prepared
+  fixtures prevent causal savings claims. Continue main-only per user correction.

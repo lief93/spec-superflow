@@ -73,6 +73,10 @@ Final consumer `LanguageLowering.kt` SHA-256:
 Full source hashes and commands are recorded in each result manifest.
 
 Generic enclosing/inner binders, non-Any inner heritage, secondary constructors,
-inner chains, anonymous objects, and local-capture combinations remain excluded
+anonymous objects, and local-capture combinations remain excluded
 by the fixed core contract. This lane does not alter that contract, target nodes,
 validation rules, output modules, or the printer.
+
+R2I adds named nongeneric inner chains in `chains/`; run `node
+tests/inner-classes/chains/run.mjs` from the tool root. See `docs/inner-chains.md`
+for semantic typechecking, immediate outer-link and multi-level mutation evidence.

@@ -1,4 +1,4 @@
 package innerchain
 class Outer {
-    inner class Inner { inner class Deeper }
+    class Nested { inner class Deeper }
 }
