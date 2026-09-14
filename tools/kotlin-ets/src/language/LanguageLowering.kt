@@ -2,6 +2,7 @@
 package dev.ets
 
 import java.util.IdentityHashMap
+import org.jetbrains.kotlin.backend.common.bridges.findConcreteSuperDeclaration
 import org.jetbrains.kotlin.backend.common.lower.BOUND_RECEIVER_PARAMETER
 import org.jetbrains.kotlin.backend.common.lower.BOUND_VALUE_PARAMETER
 import org.jetbrains.kotlin.backend.common.lower.LocalDeclarationsLowering
@@ -12,6 +13,7 @@ import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.utils.NameTable
+import org.jetbrains.kotlin.ir.backend.js.lower.IrBasedFunctionHandle
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
@@ -224,7 +226,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             }
         }
         val resolved = call.symbol.owner
-        val owner = if (resolved.isFakeOverride) resolved.collectRealOverrides().singleOrNull()
+        val owner = if (resolved.isFakeOverride) (resolved.collectRealOverrides().singleOrNull()
+            ?: if (resolved.modality != Modality.ABSTRACT) findConcreteSuperDeclaration(IrBasedFunctionHandle(resolved))?.function else null)
             ?: diagnostics.unsupported(call, "Ambiguous inherited declaration: ${symbolName(resolved)}") else resolved
         val parent = owner.parent
         val receiver = call.dispatchReceiver
@@ -493,25 +496,13 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 function.valueParameters.any { it.defaultValue != null }) {
                 diagnostics.unsupported(function, "Extension and default-argument inherited methods are not supported")
             }
-            if (overrides.any { overridden ->
-                    if (overridden.typeParameters.size != function.typeParameters.size) return@any true
-                    val owner = overridden.parent as? IrClass
-                        ?: diagnostics.unsupported(function, "Inherited method requires a class declaration")
-                    val substitution = ownerSubstitution(owner, parentClass.defaultType, function)
-                    val methodParameters = makeTypeParameterSubstitutionMap(overridden, function)
-                    // Class edges are instantiated first; only the paired method symbols are then rebound.
-                    fun instantiated(type: IrType): IrType = substitution.substitute(type).substitute(methodParameters)
-                    instantiated(overridden.returnType) != function.returnType ||
-                        overridden.valueParameters.map { instantiated(it.type) } != function.valueParameters.map { it.type } ||
-                        overridden.typeParameters.zip(function.typeParameters).any { (original, current) ->
-                            original.superTypes.map(::instantiated) != current.superTypes
-                        }
-                }) {
+            if (overrides.any { !sameInheritedSignature(function, it, parentClass) }) {
                 diagnostics.unsupported(function, "Inherited signatures must match exactly; covariance is not supported")
             }
         }
         // Interface properties are target field contracts, not abstract methods.
-        val overrideIds = overrides.filter { property == null || (it.parent as? IrClass)?.kind != ClassKind.INTERFACE }
+        val overrideIds = overrides.filter { if (property == null) overloadNaming.name(it) == emittedName
+            else (it.parent as? IrClass)?.kind != ClassKind.INTERFACE }
             .map { functionSymbol(it).id }.distinct()
         val kind = when {
             property?.getter == function -> EtsFunctionKind.GETTER
@@ -738,7 +729,42 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         declaration.declarations.filterIsInstance<IrSimpleFunction>().filter { !it.isFakeOverride }.forEach { method ->
             if (declaration.isData && method.origin == IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER &&
                 method.name.asString() in setOf("equals", "hashCode")) return@forEach
-            members.add(function(method, scope))
+            val implementation = function(method, scope)
+            members.add(implementation)
+            if (method.correspondingPropertySymbol == null && method.dispatchReceiverParameter != null) {
+                overloadNaming.bridges(method).forEach { (from, to) ->
+                    check(to === method) { "A real source method must own its bridge implementation" }
+                    members.add(etsVirtualBridge(implementation, thisReference(declaration, method),
+                        overloadNaming.name(from), listOf(functionSymbol(from).id)))
+                }
+            }
+        }
+        declaration.declarations.filterIsInstance<IrSimpleFunction>().filter {
+            it.isFakeOverride && it.modality != Modality.ABSTRACT && it.correspondingPropertySymbol == null
+        }.forEach { method ->
+            overloadNaming.bridges(method).forEach { (from, to) ->
+                if (sourceFile(from) == null || sourceFile(to) == null)
+                    diagnostics.unsupported(declaration, "Inherited bridges require source-owned declarations")
+                if (!sameInheritedSignature(to, from, declaration))
+                    diagnostics.unsupported(declaration, "Inherited signatures must match exactly; covariance is not supported")
+                val (implementation, destination) = inheritedBridgeSignature(to, declaration)
+                members.add(etsVirtualBridge(implementation, thisReference(declaration, declaration),
+                    overloadNaming.name(from), listOf(functionSymbol(from).id), destination))
+            }
+        }
+        val inheritedEntries = base?.declarations.orEmpty().filterIsInstance<IrSimpleFunction>()
+            .filter { it.correspondingPropertySymbol == null }.flatMap { it.allOverridden(includeSelf = true) }
+            .filter { !it.isFakeOverride && sourceFile(it) != null }.map(overloadNaming::name).toSet()
+        val declaredEntries = members.filterIsInstance<EtsFunction>().map { it.name }.toMutableSet()
+        declaration.declarations.filterIsInstance<IrSimpleFunction>().filter {
+            it.isFakeOverride && it.modality == Modality.ABSTRACT && it.correspondingPropertySymbol == null
+        }.flatMap { it.allOverridden() }.filter { !it.isFakeOverride && sourceFile(it) != null }.forEach { original ->
+            val name = overloadNaming.name(original)
+            if (name !in inheritedEntries && declaredEntries.add(name)) {
+                val (signature, _) = inheritedBridgeSignature(original, declaration)
+                members.add(etsVirtualBridge(signature.copy(abstract = true), thisReference(declaration, declaration),
+                    name, listOf(functionSymbol(original).id)))
+            }
         }
         EtsClass(classNaming.name(declaration), members, source(declaration), typeParameters = typeParameters,
             baseClass = baseType, interfaces = interfaces, abstract = declaration.modality == Modality.ABSTRACT,
@@ -806,6 +832,36 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     private fun rejectInitializationThis(element: IrElement, declaration: IrClass) {
         rejectInheritedInitializerThis(element, declaration, diagnostics)
+    }
+
+    private fun sameInheritedSignature(function: IrSimpleFunction, overridden: IrSimpleFunction, receiver: IrClass): Boolean {
+        if (overridden.typeParameters.size != function.typeParameters.size) return false
+        val actual = ownerSubstitution(function.parentAsClass, receiver.defaultType, receiver)
+        val expected = ownerSubstitution(overridden.parentAsClass, receiver.defaultType, receiver)
+        val methodParameters = makeTypeParameterSubstitutionMap(overridden, function)
+        // Instantiate class edges before rebinding the paired method parameters.
+        fun instantiated(type: IrType): IrType = expected.substitute(type).substitute(methodParameters)
+        return instantiated(overridden.returnType) == actual.substitute(function.returnType) &&
+            overridden.valueParameters.map { instantiated(it.type) } == function.valueParameters.map { actual.substitute(it.type) } &&
+            overridden.typeParameters.zip(function.typeParameters).all { (original, current) ->
+                original.superTypes.map(::instantiated) == current.superTypes.map(actual::substitute)
+            }
+    }
+
+    private fun inheritedBridgeSignature(method: IrSimpleFunction, owner: IrClass): Pair<EtsFunction, EtsSymbol> {
+        val substitution = ownerSubstitution(method.parentAsClass, owner.defaultType, owner)
+        val bindings = method.parentAsClass.typeParameters.associate {
+            typeParameterType(it).id to type(substitution.substitute(it.defaultType))
+        }
+        val destination = functionSymbol(method).let { it.copy(type = etsSubstitute(it.type, bindings)) }
+        val signature = destination.type as EtsFunctionType
+        val at = source(owner)
+        val parameters = method.valueParameters.mapIndexed { index, parameter ->
+            EtsParameter(EtsSymbol("bridge-parameter:${at.file}:${at.start}:$index", identifier(parameter), signature.parameters[index], at))
+        }
+        return EtsFunction(destination.name, parameters, signature.result, emptyList(), at,
+            kind = EtsFunctionKind.METHOD, visibility = memberVisibility(method.visibility),
+            typeParameters = signature.typeParameters) to destination
     }
 
     private fun functionSymbol(function: IrSimpleFunction): EtsSymbol {

@@ -48,9 +48,13 @@ fun checkBoundedReceiverContract() {
     reject("Bound chain cycle", consume(listOf(u.copy(upperBound = tType), t.copy(upperBound = uType))))
     val parentParameter = EtsTypeParameter("Parent:P", "P")
     val parentType = EtsTypeParameterType(parentParameter.id, parentParameter.name)
-    val parent = EtsClass("Parent", emptyList(), span(8), abstract = true,
+    val parentRead = read.copy(returnType = parentType, source = span(14), overrides = listOf(read.symbol.id))
+    val parent = EtsClass("Parent", listOf(parentRead), span(8), abstract = true,
         typeParameters = listOf(parentParameter), interfaces = listOf(named(readable, parentType)))
-    validate(consume(listOf(t.copy(upperBound = named(parent, EtsTypes.NUMBER)))), listOf(readable, parent))
+    validate(consume(listOf(t.copy(upperBound = named(parent, EtsTypes.NUMBER))), member.copy(symbolId = parentRead.symbol.id)), listOf(readable, parent))
+    val middle = EtsClass("Middle", emptyList(), span(15), abstract = true,
+        baseClass = named(parent, EtsTypes.NUMBER))
+    validate(consume(listOf(t.copy(upperBound = named(middle))), member.copy(symbolId = parentRead.symbol.id)), listOf(readable, parent, middle))
     val selfParameter = EtsTypeParameter("Self:S", "S")
     val selfType = EtsTypeParameterType(selfParameter.id, selfParameter.name)
     val self = EtsFunction("self", emptyList(), selfType, emptyList(), span(9),

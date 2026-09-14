@@ -203,13 +203,15 @@ class EtsValidator {
                     if (propertyType != memberType(owner, requirement)) reject(declaration, "Target property type differs from interface")
                 }
             }
-            if (declaration.kind == EtsClassKind.CLASS && !declaration.abstract) {
+            if (declaration.kind == EtsClassKind.CLASS) {
                 inherited.filter { it.second.abstract }.forEach { (owner, requirement) ->
                     val resolved = member(instance(declaration), requirement.name, setter = requirement.kind == EtsFunctionKind.SETTER)
                     val implementation = resolved?.second as? EtsFunction
-                    if (implementation == null || implementation.abstract || implementation.static || implementation.visibility.ordinal > requirement.visibility.ordinal ||
+                    if (implementation == null || (implementation.abstract && !declaration.abstract) ||
+                        classes.getValue(resolved.first.symbolId!!).kind == EtsClassKind.INTERFACE ||
+                        implementation.static || implementation.visibility.ordinal > requirement.visibility.ordinal ||
                         implementation.kind != requirement.kind || !sameMethodSignature(memberType(resolved.first, implementation), memberType(owner, requirement))) {
-                        reject(declaration, "Missing concrete target implementation: ${requirement.name}")
+                        reject(declaration, "Missing ${if (declaration.abstract) "abstract target declaration" else "concrete target implementation"}: ${requirement.name}")
                     }
                 }
             }

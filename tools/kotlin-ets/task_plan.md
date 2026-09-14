@@ -69,7 +69,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, class-owned default helpers, native construction/protected visibility, local/inner constructor captures, default-provider capture composition and non-observing stored-capture heritage accepted; remaining virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition and source virtual-overload bridges accepted; remaining covariant overrides and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
@@ -146,12 +146,21 @@ source overloads erase to the same target type. See virtual-overloads.md.
 Inherited-default run-Clbp2s also passes 65 + 65 results, three boundaries and
 29 exact helper calls on this compiler version.
 
-Next finish virtual-overload joined-slot bridges using common generateBridges
-and public IrBasedFunctionHandle, then remaining generic bounds/variance
-combinations. BridgeJoin.kt is JVM-valid but still explicitly unsupported: one
-implementation must preserve two independent inherited call slots. Keep resolved
-declaration/call identities and target override validation consistent; do not
-route by source spelling or replace a virtual call with a static implementation.
+Source joined-slot bridges now directly reuse common generateBridges,
+IrBasedFunctionHandle and findConcreteSuperDeclaration. Typed ETS forwarding
+preserves the original body and virtual dispatch; abstract contracts receive
+only required declarations. Frozen bridge run-SXU2DE passes 45 + 45 results,
+14 official edges (four inherited), four target refusals and a separate R3
+bottom-string boundary. Overload run-7fboeZ retains 30 + 30, 18 override edges,
+24 calls and unchanged output hashes. Target CzNQES passes the strengthened
+abstract-entry contract. See virtual-overloads.md for scope and hashes.
+Inherited-default run-OHKB8f retains 65 + 65 results, three boundaries and 29
+helper calls. Final frozen inputs are unchanged; no SDK/native acceptance follows.
+
+Next implement remaining covariant overrides and generic bounds/variance
+combinations, inspecting the pinned common/JS type substitution and override
+contracts first. External inherited slots, private shadowing and the documented
+unsupported receiver/parameter families remain explicit, not silently enabled.
 R2.3 is not complete. R2.4 and the combined SDK/native R2 gate remain queued
 before R3-R7; these host checks do not satisfy that gate.
 

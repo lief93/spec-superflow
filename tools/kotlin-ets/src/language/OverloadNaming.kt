@@ -4,8 +4,11 @@ package dev.ets
 import java.util.Collections
 import java.util.IdentityHashMap
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.backend.js.utils.NameTable
+import org.jetbrains.kotlin.backend.common.bridges.generateBridges
+import org.jetbrains.kotlin.ir.backend.js.lower.IrBasedFunctionHandle
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.util.allOverridden
@@ -25,6 +28,23 @@ class OverloadNaming {
                 SourceSpan(file.fileEntry.name, function.startOffset, function.endOffset)))
         }
         return names[function] ?: function.name.asString()
+    }
+
+    fun bridges(function: IrSimpleFunction): List<Pair<IrSimpleFunction, IrSimpleFunction>> {
+        if (function.modality == Modality.ABSTRACT) {
+            // Common emits no abstract bridge bodies. ETS still requires declarations
+            // for the inherited entries that a source abstract override joins.
+            return function.allOverridden().filter { !it.isFakeOverride && name(it) != name(function) }
+                .distinctBy(::name).map { it to function }
+        }
+        return generateBridges(IrBasedFunctionHandle(function)) {
+            BridgeSignature(it.function, name(it.function))
+        }.map { it.from.function to it.to.function }
+    }
+
+    private class BridgeSignature(val function: IrSimpleFunction, private val name: String) {
+        override fun equals(other: Any?): Boolean = other is BridgeSignature && name == other.name
+        override fun hashCode(): Int = name.hashCode()
     }
 
     private fun prepare(module: IrModuleFragment) {
@@ -119,9 +139,14 @@ class OverloadNaming {
             .filter { it.correspondingPropertySymbol == null }.groupBy { it.name }.values }
         val edges = scopes.flatten().map { declarations(it).filter { method -> method in real } }
         // The frontend has already resolved overrides, including interface joins.
-        val families = components(methods.map(::listOf) + edges)
-        families.filter { family -> family.groupBy { it.parent }.values.any { it.size > 1 } }.forEach { family ->
-            family.forEach { unsupported[it] = "Virtual overload joins require separate target bridges" }
+        val families = components(methods.map(::listOf) + edges).flatMap { family ->
+            if (family.groupBy { it.parent }.values.none { it.size > 1 }) listOf(family)
+            else {
+                // A generic override can implement two independent ancestor slots.
+                // Choose one body spelling; common generateBridges retains the other entries.
+                val roots = family.filter { declarations(it).none { parent -> parent !== it && parent in real } }.toSet()
+                family.groupBy { declarations(it).filter { parent -> parent in roots }.minWith(order) }.values.toList()
+            }
         }
         val representatives = families.flatMap { family -> family.map { it to family.minWith(order) } }.toMap()
         val byRepresentative = families.associateBy { it.minWith(order) }

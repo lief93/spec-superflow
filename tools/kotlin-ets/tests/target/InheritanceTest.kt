@@ -64,5 +64,8 @@ fun checkInheritanceContract() {
     val concreteChild = child.copy(members = child.members + baseMethod.copy(source = span(11),
         overrides = listOf(signature.symbol.id)))
     EtsPrinter().program(program(contract, abstractBase, concreteChild))
+    check(runCatching {
+        EtsPrinter().program(program(contract, abstractBase.copy(members = listOf(ctor))))
+    }.exceptionOrNull() is InvalidTarget) { "Abstract class must declare or inherit its interface method entries" }
     println("PASS target inheritance contract and negative cases")
 }
