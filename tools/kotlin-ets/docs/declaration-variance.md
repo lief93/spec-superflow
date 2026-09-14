@@ -61,10 +61,18 @@ Class-owned binders and class-plus-interface bounds use the same proof. Bounds
 with different generic instantiations that Kotlin itself rejects never reach
 this pass. No bound is selected merely because it is first or is a class.
 
-Independent constraints remain intact and are diagnosed by the existing target
-boundary. They require a separate representation: the pinned ArkTS SDK explicitly
-rejects intersection syntax (arkts-no-intersection-types). JS runtime erasure
-does not prove that discarding such constraints is a valid typed ETS contract.
+Independent source-interface constraints use a generated named interface extending
+all bounds. The pinned ArkTS SDK rejects intersection syntax
+(arkts-no-intersection-types); JS runtime erasure does not justify dropping bounds.
+Independent class/interface combinations and use-site projections remain pending.
+
+The late IR pass uses official copyTypeParameters, IrTypeSubstitutor and NameTable.
+Free source binders and their bound dependencies are copied and rebound; recursive
+bounds refer to the generated constraint with the original type arguments. Source
+classes are neither wrapped nor modified to implement a helper. The explicit
+ETS_BOUND_CONSTRAINT origin survives as typed target constraint metadata. Only
+that generated interface admits a conjunction of its parent contracts; ordinary
+source interfaces retain their nominal validation. Runtime objects are unchanged.
 
 ## Evidence
 
@@ -124,3 +132,26 @@ native runtime or whole-R2 acceptance.
 run-TcrMlQ separately records invalid test constraints refused by official Kotlin
 itself (inconsistent generic ancestors and two class bounds); it is not counted
 as the target regression RED. The successful fixture uses legal source bounds.
+
+## Independent-interface-bound evidence
+
+RED run-YLFDKS passes the JVM oracle, then reaches the original multiple-bound
+guard in the unchanged UnsupportedMultipleBounds.kt. Frozen run-1PJVr3 passes
+85 flat + 85 module JVM/host outcomes over 64 pinned inputs, strict host types,
+five-file reversed-input determinism, actual IR/target ownership and seven
+two-parent constraint checks. Cases include independent method/class bounds,
+free generic binders, recursive self bounds, chained binders and a diamond.
+Official FIR rejects the missing-bound call and all three prior variance errors.
+The original three module hashes remain unchanged. probe-rdbzxT retains all
+40 bounded-receiver outcomes; the exact old multiple-bound negative is now an
+explicit positive, while the nullable-bound and invalid-cycle refusals remain.
+
+Target VAWcMq passes the complete target suite, including eight missing-parent,
+nominal-interface and malformed-constraint refusals. SDK constructors-sdk-nHowwC
+checks all five unchanged generated modules and compiles ABC/HAP. Its consumer
+calls every public fixture. This is not native runtime or whole-R2 acceptance.
+Source/test and generated-module hashes were rechecked before publication.
+
+- Variance.ets: 0b24cecee12f1fa1230ef373a3b27829edb565e9b48d740ccee5243f0cc23d3e
+- Independent.ets: 1bdd6703333a9334e373cfd936d9f458cae3940f44cdc21593b06eb01bed1577
+- UnsupportedMultipleBounds.ets: a5646854deb496dded7778f347513a91b5d952e25384a9097199684c250537a1

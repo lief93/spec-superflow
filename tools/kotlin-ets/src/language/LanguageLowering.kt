@@ -612,7 +612,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 } }
             return@withFile EtsClass(classNaming.name(declaration), signatures, source(declaration),
                 kind = EtsClassKind.INTERFACE, interfaces = interfaces, typeParameters = typeParameters,
-                sourceName = identifier(declaration).takeUnless { it == classNaming.name(declaration) })
+                sourceName = identifier(declaration).takeUnless { it == classNaming.name(declaration) },
+                constraint = declaration.origin === ETS_BOUND_CONSTRAINT)
         }
         val constructors = declaration.declarations.filterIsInstance<IrConstructor>()
         if (constructors.size != 1 || !isEtsNativeConstructor(constructors.single())) {

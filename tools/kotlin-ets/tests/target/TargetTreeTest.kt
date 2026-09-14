@@ -25,6 +25,7 @@ fun main() {
     checkCovariantReturnContract()
     checkCovariantPropertyContract()
     checkDeclarationVariance()
+    checkBoundConstraints()
     checkOverloadIdentityContract()
     checkClassIdentityContract()
     checkStrictBindingContract()

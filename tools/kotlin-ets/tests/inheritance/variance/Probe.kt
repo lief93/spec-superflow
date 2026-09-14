@@ -20,6 +20,15 @@ fun main(args: Array<String>) {
             })
         }
         EtsValidator().validate(program, perFileNames = true)
+        val constraints = sources.filter { it.origin === ETS_BOUND_CONSTRAINT }
+        check(constraints.size == 7)
+        for (source in constraints) {
+            val target = targets.single { it.name == source.name.asString() }
+            check(target.constraint && target.kind == EtsClassKind.INTERFACE)
+            check(target.interfaces.size == source.superTypes.size && target.interfaces.size == 2)
+            check(target.members.isEmpty())
+        }
+        check(targets.filter { it.constraint }.size == constraints.size)
         val functions = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>()
         val bound = targets.single { it.name == "SpecificSource" }.symbol.type
         for (name in listOf("broadFirst", "narrowFirst")) {
@@ -33,6 +42,6 @@ fun main(args: Array<String>) {
             if (it === producer) producer.copy(typeParameters = producer.typeParameters.map { p -> p.copy(variance = EtsVariance.INVARIANT) }) else it
         }) })
         check(runCatching { EtsValidator().validate(corrupted, perFileNames = true) }.exceptionOrNull() is InvalidTarget)
-        println("PASS official IR declaration variance/names/ownership, canonical redundant bounds and erased-metadata refusal")
+        println("PASS official IR declaration variance/names/ownership, canonical bounds, seven named two-parent constraints and erased-metadata refusal")
     }
 }

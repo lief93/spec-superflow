@@ -15,7 +15,7 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>) {
             file.acceptChildrenVoid(object : IrElementVisitorVoid {
                 override fun visitElement(element: IrElement) {
                     if (element is IrDeclarationWithName && element.name.asString().startsWith("__ets") &&
-                        element.origin !== ETS_SHARED_VARIABLE_CELL) {
+                        element.origin !== ETS_SHARED_VARIABLE_CELL && element.origin !== ETS_BOUND_CONSTRAINT) {
                         diagnostics.unsupported(element, "Source name collides with reserved __ets target helpers")
                     }
                     element.acceptChildrenVoid(this)

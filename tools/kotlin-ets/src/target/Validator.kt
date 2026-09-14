@@ -36,6 +36,11 @@ class EtsValidator {
         if (actual is EtsTypeParameterType && actual.id !in seen) {
             return genericScope[actual.id]?.upperBound?.let { assignable(it, expected, seen + actual.id) } == true
         }
+        if (expected is EtsNamedType && !expected.external && classes[expected.symbolId]?.constraint == true) {
+            val key = "constraint:${expected.symbolId}"
+            if (key in seen) return false
+            return parents(expected).all { assignable(actual, it, seen + key) }
+        }
         if (actual is EtsNamedType && expected is EtsNamedType && !actual.external && !expected.external &&
             actual.symbolId != null && actual.symbolId == expected.symbolId && actual.name == expected.name) {
             val parameters = classes[actual.symbolId]?.typeParameters ?: return false
@@ -180,6 +185,9 @@ class EtsValidator {
             }
         }
         classes.values.forEach { declaration ->
+            if (declaration.constraint && (declaration.kind != EtsClassKind.INTERFACE || declaration.baseClass != null ||
+                    declaration.interfaces.distinct().size < 2 || declaration.members.isNotEmpty()))
+                reject(declaration, "Invalid target bound constraint")
             if (declaration.component && (parents(declaration).isNotEmpty() || declaration.kind != EtsClassKind.CLASS || declaration.abstract)) {
                 reject(declaration, "Invalid component heritage")
             }

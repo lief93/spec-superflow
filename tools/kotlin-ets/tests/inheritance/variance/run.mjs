@@ -25,16 +25,18 @@ function run(label, command, args, status = 0) {
   assert.equal(r.error, undefined); assert.equal(r.status, status, r.stdout + r.stderr); return r.stdout;
 }
 const compiler = join(root, 'tests/stdlib/compiler.sh'), cli = join(root, 'kotlin-ets');
-const sources = ['Models.kt', 'Cases.kt', 'Bounds.kt'].map(p => join(here, p));
+const originalMultiple = join(here, '../bounds/UnsupportedMultipleBounds.kt');
+result.inputs.push({ path: originalMultiple, sha256: hash(originalMultiple) });
+const sources = ['Models.kt', 'Cases.kt', 'Bounds.kt', 'Independent.kt'].map(p => join(here, p)).concat(originalMultiple);
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim(), jar = join(work, 'oracle.jar');
 run('jvm-build', 'bash', [compiler, ...sources, join(here, 'Oracle.kt'), '-d', jar]);
 result.expected = run('jvm-run', 'java', ['-cp', `${jar}:${cp}`, 'declarationvariance.OracleKt']).trimEnd().split('\n');
-assert.equal(result.expected.length, 50);
+assert.equal(result.expected.length, 85);
 const flat = join(work, 'Variance.ets'), modules = join(work, 'modules'), reversed = join(work, 'reversed');
 run('flat', 'bash', [cli, '--mode', 'language', '--out', flat, ...sources]);
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['Bounds.ets', 'Cases.ets', 'Models.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['Bounds.ets', 'Cases.ets', 'Independent.ets', 'Models.ets', 'UnsupportedMultipleBounds.ets']);
 result.modules = readdirSync(modules).sort().map(name => ({ name, path: join(modules, name), sha256: hash(join(modules, name)) }));
 const tsFiles = [flat, ...result.modules.map(m => m.path)].map(path => {
   const target = path.replace(/\.ets$/, '.ts'); writeFileSync(target, readFileSync(path)); return target;
@@ -52,10 +54,12 @@ function load(path) {
 function evaluate(exports) {
   const context = vm.createContext({ exports });
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed =>
-    ['covariance', 'contravariance', 'nested', 'property', 'mixed', 'nullable', 'broadBound', 'narrowBound', 'classBound', 'nominalBound'].map(name =>
+    ['covariance', 'contravariance', 'nested', 'property', 'mixed', 'nullable', 'broadBound', 'narrowBound', 'classBound', 'nominalBound',
+      'independent', 'independentGeneric', 'independentClass', 'independentSelf', 'independentChain', 'independentDiamond', 'originalMultiple'].map(name =>
       String(vm.runInContext(`exports.${name}(${seed})`, context, { timeout: 1000 }))));
 }
-result.actual = evaluate(load(flat)); result.moduleActual = evaluate({ ...load(join(modules, 'Cases.ets')), ...load(join(modules, 'Bounds.ets')) });
+result.actual = evaluate(load(flat)); result.moduleActual = evaluate({ ...load(join(modules, 'Cases.ets')),
+  ...load(join(modules, 'Bounds.ets')), ...load(join(modules, 'Independent.ets')) });
 assert.deepEqual(result.actual, result.expected); assert.deepEqual(result.moduleActual, result.expected);
 for (const { name, path } of result.modules) assert.equal(readFileSync(path, 'utf8'), readFileSync(join(reversed, name), 'utf8'));
 const proof = join(work, 'proof.jar');
@@ -65,6 +69,10 @@ const invalidOut = join(work, 'Invalid.ets');
 result.invalid = JSON.parse(run('invalid', 'bash', [cli, '--mode', 'language', '--out', invalidOut, join(here, 'Invalid.kt')], 1));
 assert.equal(result.invalid.code, 'COMPILATION_REJECTED'); assert.equal(existsSync(invalidOut), false);
 assert.equal((readFileSync(join(work, 'invalid.stderr'), 'utf8').match(/\[TYPE_VARIANCE_CONFLICT_ERROR\]/g) ?? []).length, 3);
+const missingBound = join(work, 'InvalidIndependent.ets');
+result.invalidBound = JSON.parse(run('missing-bound', 'bash', [cli, '--mode', 'language', '--out', missingBound,
+  join(here, 'InvalidIndependent.kt')], 1));
+assert.equal(result.invalidBound.code, 'COMPILATION_REJECTED'); assert.equal(existsSync(missingBound), false);
 for (const input of result.inputs) assert.equal(hash(input.path), input.sha256);
 result.output = { path: flat, sha256: hash(flat) }; result.passed = true; record();
-console.log('PASS 50 flat + 50 module JVM/host variance/bound results, deterministic three-file output and three official source refusals');
+console.log('PASS 85 flat + 85 module JVM/host variance/bound results, deterministic five-file output, three variance errors and missing-bound official refusal');

@@ -12,5 +12,12 @@ fun main() {
         println(narrowBound(seed))
         println(classBound(seed))
         println(nominalBound(seed))
+        println(independent(seed))
+        println(independentGeneric(seed))
+        println(independentClass(seed))
+        println(independentSelf(seed))
+        println(independentChain(seed))
+        println(independentDiamond(seed))
+        println(originalMultiple(seed))
     }
 }
