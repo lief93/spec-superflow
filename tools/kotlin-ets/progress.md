@@ -1,5 +1,24 @@
 # Execution progress
 
+## 2026-09-14: restore the overall ordered plan
+
+- task_plan.md is now the sole active queue. Its contradictory historical R2H,
+  parallel-worker and publication instructions were preserved separately in
+  docs/execution-history-20260914.md, not deleted or treated as current work.
+- Overall state remains R2 incomplete. R3 general semantics, R4 UI behavior,
+  R5 visual fidelity, R6 real-project integration and R7 acceptance remain gated.
+- Next is R2.1 dependency-body ownership/replacement contract, followed by actual
+  linking-family completion, remaining declaration semantics, module closure and
+  the R2 integration gate. Do not let the last property change replace this queue.
+- Re-read FunctionBodies, BinaryBodies and LibraryInlining: source bodies and
+  bounded serialized inline bodies exist; non-inline/transitive body, generic
+  member, constructor and format gaps are not implemented merely by this inventory.
+- Recent completed source commits are 72e3379 and 153c5c4; the latter's push failed
+  in the previous turn. This planning correction adds no language/runtime feature
+  and does not claim a new semantic or native test result.
+- Main alone, no agents or timers. Subsequent entries below are historical;
+  old reviewer/worker/automation instructions must not be replayed.
+
 ## 2026-09-14: user-requested control migration verification and commit gate
 
 - Re-ran resource materialization (15 negatives), launcher (8 tests), basic

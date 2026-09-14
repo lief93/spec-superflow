@@ -1,618 +1,96 @@
 # Kotlin to ETS implementation plan
 
-This is the current execution plan. Earlier parallel-batch documents are historical
-evidence, not the current backlog. Use the existing non-spec development workflow.
+This is the sole active execution queue. Follow the overall compiler plan, not
+the most recently discovered page/property/API limitation. Historical evidence
+and superseded instructions are in docs/execution-history-20260914.md.
 
-## Acceptance contract
+## Objective and architecture
 
-### Latest priority: reuse audit and declaration consumers
+Official Kotlin frontend/IR -> semantic lowering -> typed ETS target tree ->
+validated ETS/modules/resources. Standard-library/runtime implementations and
+platform/framework adapters participate in this chain. Compose is a framework
+adapter, not a separate expression parser or snapshot page generator.
 
-The user requests architecture-level reuse rather than more isolated API gates.
-Read docs/backend-reuse-audit.md (source inspection at 44fb21a). Pause the proposed
-generic-binary-member increment. Next fix the declaration/call normalization
-contract against actual official common/JS phases and ETS consumers. The contract
-is now in docs/declaration-call-contract.md. Its first consumer family is inherited
-final properties (storage, custom accessors and generic heritage), sharing official
-real-override resolution and receiver substitution. Abstract interface property
-signatures and final field/accessor implementations now pass the target suite and
-40-result JVM/host regression (tests/inheritance/.work/run-rbZMBr).
-Class property overrides, top-level initialization, inherited defaults and
-constructors remain pending.
-Main alone; no agents or scheduled wakeups.
-R2I is locally committed as 44fb21a; recent push retries failed connecting to
-GitHub. Do not claim it is remotely published until push/remote confirmation.
+Preserve source declarations, method/parameter names, evaluation order, return
+values and UI state behavior. Required target naming/slot/runtime bridges must
+be minimal and source-linked. Preview inputs never erase program conditions.
+Unsupported semantics are diagnosed, not replaced with empty UI or default values.
 
-### Latest correction: main alone (2026-09-14)
+## Operating rules
 
-The user explicitly means THIS main assistant implements, tests and self-checks.
-No developer or independent-review subagents. This supersedes all older fixed
-reviewer and delegated single-developer policies below. Parfit was interrupted
-for handoff; preserve its edits and verify writers stopped before main resumes.
-Keep required tests and tested/self-checked commit-push authorization. Continue
-actual cost recording, but mark sample 2 as mixed setup until handoff; capture a
-fresh main-only baseline and do not claim a pure solo benchmark for the whole batch.
+- Main assistant implements, tests and self-checks, one requirement at a time.
+  No developer/reviewer subagents and no scheduled wakeups.
+- Inspect pinned Kotlin common/JS implementations before designing new language
+  machinery. Reuse compatible stages; do not transplant JS runtime conventions
+  or write API-name string substitutions to approximate language semantics.
+- Freeze production and test inputs before acceptance tests. Preserve failed
+  evidence. Run focused semantic/target/module tests for each increment; full
+  SDK/native/visual integration at round gates or substantial shared-contract changes.
+- Commit and push passing, self-checked work without routine reconfirmation.
+  Exclude unrelated dirty files. A failed push is not publication.
+- Continue to the next queued requirement after acceptance; no ad hoc control
+  expansion or repeated page integration in the middle of language work.
+- Keep company data inside its permitted environment. Label host, SDK, ArkVM,
+  interaction and visual evidence separately; never equate compilation with parity.
 
-### Cost-first execution trial (2026-09-14)
+## Overall order
 
-The user now prioritizes quota over urgency. Measure at most the next two bounded
-requirements before retaining parallel implementation. Do not repeat a requirement
-just to benchmark it. Leave the current R2H review undisturbed. At each NEW
-requirement boundary record usage counters before dispatch and after acceptance
-for main, Parfit and Aristotle separately; record wall time, test/build wait,
-coordination and rework. Compare a normal two-lane batch with a single-developer
-batch when reasonably comparable; independent review and acceptance stay identical.
-Different workloads are observational evidence, not a controlled speedup estimate.
-
-Read only event_msg/token_count telemetry from the three local rollout logs, not
-conversation bodies. Use total_token_usage deltas; separate input, cached input,
-uncached input (input minus cached), and output. Reasoning output is a subset of
-output, not another summand. Mark missing/reset counters unavailable; do not infer
-tokens or billing from account-wide quota percentages. Report actual usage, not
-a fabricated credit conversion or hypothetical serial token total.
-
-After the first batch report measured costs; stop the parallel trial early if
-coordination/duplication clearly outweighs useful overlap. After two batches,
-unless evidence clearly justifies parallel overhead, automatically use ONE
-persistent developer (Parfit) with main coordinating and Aristotle reviewing the
-frozen result. Do not add agents or interrupt active turns for ordinary work.
-Keep autonomous continuation and tested/reviewed commit-push enabled. Avoid
-frequent empty polling and repeated whole-history reads. See docs/cost-trial.md.
-
-### Current publication authorization (2026-09-14)
-
-The user now authorizes commit and push after each batch passes its required
-tests, the fixed independent reviewer, and main acceptance of functionality and
-evidence. This supersedes all older commit/push-paused notes below, which are
-historical. Do not wait for another routine user confirmation. Freeze and commit
-only the accepted batch and its required dependencies; exclude unrelated dirty
-files, generated scratch output and any unreviewed work. Verify the pushed commit
-against the remote branch. Release/publishing beyond Git remains separately gated.
-
-### Current mainline: R2I inner chains, serial cost sample 2 (2026-09-14)
-
-R2I is now accepted after main-only implementation, tests and self-check. See
-docs/inner-chains.md and docs/cost-sample-inner-chains.md. Publish this finite slice
-before selecting the next remaining R2 declaration/dependency requirement. Do not
-repeat R2I or reinstate subagents. This is not whole-R2 or seven-round completion.
-
-Adapter modules committed/pushed as `71ef3c4`; remote hash independently verified.
-R2I is now taken over by MAIN as the ONLY developer: extend ordinary nongeneric
-inner classes to named inner chains, retaining actual immediate outer identity.
-Main implements, tests and self-checks. No developer or reviewer subagents.
-Before edits, fix the finite contract after inspecting official common/JS phases.
-JVM/flat/module parity must cover parent/grandparent state, receiver evaluation,
-argument order and lexical naming; generics, derived/anonymous/local-capture and
-secondary-constructor combinations remain explicit diagnostics. Preserve R2H
-negative identity checks. Cost baseline: `.work/cost-trial/inner-chains/dispatch-start.json`.
-
-### Previous priority: independent adapter modules
-
-R2H passed fixed review and main acceptance, committed and pushed as `ee9c81a`.
-The user prioritizes independent adapter additions before another language slice.
-Follow `docs/adapter-module-contract.md`: main owns the public typed API and CLI/UI
-wiring; Parfit owns build-time SPI discovery, launcher, examples and user guide.
-No hot loading, new parsing engine or centralized per-control registration edits.
-Heavy builds remain serialized. Freeze both writers before Aristotle reviews.
-
-Independent adapter modules are now accepted: discovery 15 checks, eight fresh
-CLI cases, JVM parity, real Compose slots/modifiers, SDK ABC/HAP and fixed review
-PASS after one default-modifier finding. Main verified all 63 frozen input hashes.
-Publish this bounded batch before starting another requirement. The next approved
-backlog requirement uses Parfit as the ONLY developer, main coordination, same
-Aristotle reviewer. Do not dispatch two writers for the second cost sample.
-
-This is cost sample one, limited parallelism. Dispatch counters are saved in
-`.work/cost-trial/adapter-modules/dispatch-start.json` (08:08 UTC). Record end
-counters after acceptance and distinguish setup from implementation. Do not claim
-a measured speedup without a comparable serial baseline. Completed cost report:
-`docs/cost-sample-adapter-modules.md` (29m28s, uncached input 326,312, cached input
-12,904,960, output 52,170; excludes setup and publication).
-
-### Previous mainline: R2H ordinary inner classes (2026-09-14)
-
-Accepted R2E-R2G was committed and pushed as `2cf0b8f`; remote branch
-`andorid-to-hormony` was independently checked with ls-remote. R2H contract and
-disjoint ownership are fixed in `docs/inner-classes.md`. Main owns core eligibility,
-official phase ordering and identity registration; Parfit owns the typed language
-consumer and behavioral checks. Only the explicitly bounded inner-class subset is
-in scope. Heavy builds remain serialized; review follows writer freeze.
-
-Aristotle's second R2G review passes requirements and code quality with no
-actionable findings; main accepts the documented finite capture subset and
-JVM/flat/module evidence. Both GREEN manifests match all 48 production hashes.
-Publish accepted R2E-R2G changes and required tests/docs now that the user has
-unpaused Git. Then fix the next declaration contract before implementation.
-This is not whole-R2, SDK/native, or seven-round acceptance.
-
-R2F is accepted by main after Aristotle's second read-only review: requirements
-PASS, code-quality PASS, no actionable findings. Final order `run-8jK5ze`, core
-`run-zFdVRA`, shadow `shadow-green-Ableh3`, and nested `green-wl8Wgl` match current
-production. This accepts the finite nesting/noncapturing slice, not whole R2.
-
-R2G now consumes official local-class value capture lowering. Contract and
-ownership are fixed in `docs/local-class-captures.md` before parallel edits.
-Main owns capture eligibility/core IR evidence; Parfit owns target field and
-constructor consumption plus JVM/flat/module behavior tests. Captured generic
-binders, inner/anonymous classes and captured-class inheritance are later gates.
-
-#### Completed R2F context
-
-R2E is accepted for its finite subset after Aristotle's third read-only review:
-requirements PASS, code quality PASS, no actionable findings. Final evidence is
-owning modules `run-znizDA` (44 JVM/module cases), naming
-`r2e-green-mtJgpg`, and binary replay `run-8BBxfT/replay-lQQe6j`. Main accepts
-the documented functionality and focused evidence. This is not whole-R2 or
-native/SDK acceptance, and commit/push remain paused.
-
-R2F's shared contract is fixed in `docs/nested-declarations.md` and its target
-tests pass. Main has implemented official local popup plus bounded non-inner
-nested placement and effective source linkage. Core probe `run-YfdkCV` passes
-ownership/export checks and source-linked capture/inner rejection cases. Parfit
-owns language naming/type/reference consumers and JVM/flat/module parity tests.
-Whole-chain parity and independent review are still pending. Capturing classes,
-inner classes and anonymous objects remain separate gates.
-
-#### Completed R2E review history
-
-Independent reviewer Aristotle (`01a09e31-7ded-72d3-a8af-60e6aeda911c`)
-requested changes on the frozen focused results: cross-file source inline
-references to private helpers (main), same-package private/public overload
-import collisions (Parfit), and receiver-dependent binary default-argument
-coverage (main). Fix and re-run affected checks, then return the frozen result
-to the same reviewer before starting R2F. Earlier passing results remain bounded
-evidence, not acceptance of these combinations.
-
-Second review closed the original import/default findings, but found generated
-accessor name collisions for same-file overloaded private helpers. Main owns the
-official NameTable allocation keyed by original helper identity and the module
-regression; R2F remains queued until this combination passes the fixed reviewer.
-
-User returned to the seven-round plan. The completed priority increments below
-are historical side work, not the next queue. Do not start more controls or
-page-specific fixes while closing the R2 declaration/dependency work.
-
-Parallel ownership for this finite increment:
-- Dependency (main took over after Tesla hit a usage limit): actual serialized final-class member inline loading;
-  `core/BinaryBodies.kt`, `tests/binary-bodies/r2e`, and its evidence document.
-- Language/output (Parfit): cross-file top-level overload identity and minimal
-  collision handling; `language/OverloadNaming.kt`, `output/Modules.kt`, and
-  `tests/modules/overloads` additions. Shared-tree changes require coordination.
-- Main: source top-level private/internal visibility in `core/Backend.kt`,
-  owning module tests, scope reconciliation and serial final verification.
-
-Use official compiler implementations and resolved declaration identities.
-Heavy builds are serialized. Baseline tests may run on an immutable source
-snapshot; final checks run only after production writers freeze. No new native
-page cycle for this increment. Independent review is required by the current
-workflow; commit/push remain paused.
-
-Still-open R2 work is not erased by this increment: nested/local classes,
-additional generic/inherited declarations, virtual overloads, binary constructor
-and reified bodies, and dependency-format boundaries. Local functions already
-use official lifting; do not report them as entirely missing. R2D's two legacy
-owning-suite checks and the deferred combined integration gate are evidence
-tasks, not substitutes for this remaining implementation. The two legacy owning
-checks are now complete; combined integration remains deferred to the R2 gate.
-
-R2E frozen results:
-- Split-file overloads: r2e-green-Nl91IP, 15 JVM cases in flat/module forms,
-  five private-scope module cases, exact identities and deterministic output.
-- Source visibility/modules: run-dQ29nj, 28 JVM/module cases and output guards.
-- Generic-method owning regression: probe-nuHwF6, 35 JVM/host cases, historical
-  member-overload positive and all 16 frontend/unsupported rejection fixtures.
-- Actual binary members: run-NKWEt6 plus replay-hn4M5d, five official inline
-  blocks and three JVM/host pairs with explicit external receiver type mapping.
-- Historical binary overloads: public-xuabox, nine public CLI/JVM/host pairs
-  and three selected-body rejection cases; existing producer hashes verified.
-- Historical top-level overload: run-RQpn5s / overload-top-AWX1rN, five unchanged
-  source JVM/public CLI/host pairs. No new SDK/native or independent review.
-
-Next R2 work starts with a bounded declaration inventory: distinguish class
-nesting from nested generic type arguments, inspect official local-class lifting
-and JS nested declaration handling, and fix target ownership/capture contracts
-before parallel production edits. Do not simply remove the current local-class
-guard or synthesize class bodies. Nested/local declarations, virtual overloads
-and binary constructors/reified bodies remain separate increments. No next-round
-implementation or whole-R2 acceptance is implied by the focused results above.
-
-### Current completed increment: bounded images and materialized resources (2026-09-14)
-
-The legacy inventory now drives control priority. Image, Icon and bounded Coil 2
-literal-URL AsyncImage each have their own rule file (15 control families total).
-Painter resources use the shared CallRule type/value contract, not a private
-image expression parser. Static R identity, conditional resource selection and
-Painter method parameters reach native Image. Stable size modifiers, explicit
-SrcIn tint, alpha, description and bounded ContentScale are supported.
-The separate asset tool reuses the existing pure vector converter and copies
-bitmaps; it does not consume page JSON. Qualified/ambiguous resources, unsupported
-vector metadata and missing media reject. Resources still need installation into
-the target module's media directory; no automatic target-project mutation.
-
-Focused resource/real-IR negatives, shared type/slot/state regression, basic
-controls, launcher checks and the public materializer -> public compiler ->
-unchanged ETS/media SDK build passed. No install/network/visual run. ImageVector,
-default inherited tint, complete intrinsic sizing and request-object/loader
-semantics remain unsupported. See docs/compose-images.md and its evidence.
-Fresh pre-commit verification subsequently passed at the user's request; see
-docs/control-migration-verification.md. Independent review and device/visual
-acceptance were not performed by that verification turn.
-
-### Current completed increment: per-control rules and basic controls (2026-09-14)
-
-User requested broader Compose coverage and one control family per file.
-All twelve control families are now in src/ui/controls; shared CallRule dispatch,
-typed values, ordered modifiers and target validation/printing remain common.
-Added BasicText, horizontal/vertical dividers, Checkbox and Switch with explicit
-parameter limits. Real-IR positives/negatives, emitted Boolean callback execution,
-the typed state/slot/Pager regression and one minimal SDK compile passed.
-The regenerated original Page.ets is byte-identical to accepted native-06.
-No install or visual equivalence claim for new controls; unsupported styles,
-nullable selection callbacks and effectful divider thickness reject explicitly.
-See docs/compose-basic-controls.md. No new review/commit/push in this increment.
-
-### Current completed increment: unified API dispatch (2026-09-14)
-
-User requested that Compose not maintain an independent adaptation pipeline.
-Shared adaptCall now selects Value/Statements/Ui through the same CallRule
-contract. Independent scoped control rules and backend library rules share
-priority/type-consumption handling. Layout/Text/Button and ArkUI signature
-construction were extracted; structural Modifier/state/slot handling is still
-framework-specific and not claimed fully decomposed. Focused language and typed
-UI tests passed; one regenerated fixture is byte-identical to accepted native-06.
-See docs/unified-api-rules.md. No new control coverage or private Onboarding
-acceptance is implied; no full integration cycle was run.
-
-### Immediate user priority: Gradle project inputs (2026-09-14)
-
-Before expanding further language/Compose work, expose the new backend through
-`--project --module --variant/--compile-task`. Collect actual source files,
-transitive classpath and Android SDK inputs using the project's compile task,
-not hand-maintained JAR lists. Main owns launcher/core source-list input/docs;
-existing dependency worker owns init script and focused real Gradle checks.
-Acceptance: launcher failure/no-overwrite tests, real task/transitive input
-collection, and one public project-to-ETS run. No page installation or visual
-integration is required for this input-boundary increment. Never claim internal
-Onboarding support from a collector or simple fixture pass.
-
-Status: this input-boundary increment is complete. Seven launcher checks, real
-JVM/Android collector checks (six negatives), public project-to-ETS generation
-and host execution, and public Android collect-only passed. Evidence is in
-docs/gradle-project-inputs.md. Next private-project run should use this entry to
-identify actual backend gaps; general project source pruning/compiler-plugin
-equivalence and broader Compose support are not implied by this acceptance.
-
-### Verification cadence (latest user instruction, 2026-09-14)
-
-This overrides earlier per-sub-batch SDK/native requirements below; their past
-results remain historical evidence. Small increments run focused semantic,
-contract, negative and affected-module tests only. Run minimal actual SDK
-compilation when a target syntax/legality change requires it, not a full page.
-Full cross-module regression, combined SDK, installation, interaction and visual
-comparison are milestone gates: completion of an architectural stage such as R2
-or R3, final acceptance, or a substantial cross-module contract/behavior change.
-Do not treat each R2A/R2B-style increment as a full-integration milestone.
-Track deferred integration separately and never report unrun tests as passed.
-
-- Product: a Kotlin to ETS compiler backend with Compose to native ArkUI adaptation,
-  not a screenshot-to-layout generator or a JavaScript intermediary.
-- Preserve source method and parameter names, declaration boundaries, argument
-  bindings, evaluation order, return values and UI state behavior where ETS permits.
-- Renaming or bridges required by reserved words, collisions, overloads, closures
-  or ArkUI slots must be minimal, source-linked and reported. Do not manufacture
-  render/preview aliases to claim structural fidelity.
-- Preserve all supported conditions and state updates. A preview initial value
-  cannot replace a program condition. Never silently invent empty content slots,
-  default values or stub method bodies for unsupported semantics.
-- UI acceptance covers layout, typography, colors, resources, insets, modifier
-  order, gestures and state linkage, not just compilation or unresolved counts.
-- Same inputs must produce matching observable results in Kotlin and generated
-  code. Host execution, actual ETS SDK compilation, ArkVM execution and native
-  screenshot/gesture evidence are separate levels and must be labeled as such.
-- Full Kotlin/JVM, every Android service and arbitrary binary bytecode translation
-  are not presumed supported. Unsupported dependencies must name their ownership,
-  source location and required implementation instead of silently degrading.
-
-## Existing baseline
-
-The shared compiler contracts and typed UI representation migration are complete
-for the documented subset. Binary inline loading, loops and collections have
-bounded implementations, not universal coverage. See docs/typed-ui-integration.md.
-
-Fresh native baseline: /private/tmp/kotlin-ets-native-20260914-01/comparison.html.
-Both builds/installs, seven paired states, five touch boundary probes and the
-declared numerical image/geometry thresholds passed. The selected bounds differ
-by 2px; this is not pixel identity or evidence for arbitrary business pages.
-
-## Ordered integration rounds
-
-Rounds integrate in order. Independent work inside a round runs in parallel with
-disjoint write ownership. A lane being done does not make a round accepted.
-
-| Round | Deliverable | Dependency | Status |
+| Stage | Deliverable | Current state | Exit gate |
 | --- | --- | --- | --- |
-| R0 | Inventory existing capabilities/evidence and fix acceptance/ownership | Existing backend | Complete for planning; no new capability claimed |
-| R1 | Transitive serialized inline dependencies; initial interface/inheritance semantics; bounded collection expansion; UI multi-file ownership | R0/shared contracts | Accepted for the explicitly bounded R1A/R1B cases; remaining limitations retained in later rounds |
-| R2 | Generic/member dependency linking; generic dispatch, overloads, nested/local declarations; module visibility and name fidelity | R1 accepted | R2A/B/C/E/F/G accepted finite slices; R2D owning regressions closed; R2H inner-class contract fixed; combined integration deferred, whole round incomplete |
-| R3 | Broader language/library semantics: nullability, casts, exceptions/finally, equality, numeric families and collection protocols | R2 accepted | Pending |
-| R4 | Compose structure/state completeness: nested slots, reactive derived values, event captures, conditional/repeated UI and list/pager linkage | R3 accepted | Pending |
-| R5 | UI fidelity: ordered modifiers, measurement, constraints, text/style inheritance, themes/resources, density/font scale and runtime insets | R4 accepted | Pending |
-| R6 | Real-project integration: reproducible dependency inventory, library replacement policy, business component/slot adapters, flat configurable output | R5 accepted | Pending |
-| R7 | Fixed multi-page acceptance suite, native semantic checks, capability diagnostics and repeatable release evidence | R6 accepted | Pending |
+| R0 | Architecture, shared interfaces and acceptance contract | Complete for agreed baseline | One typed compiler pipeline and explicit evidence levels |
+| R1 | Initial dependency, language, library and module closure | Accepted for documented R1A/B subset | Existing frozen semantic/SDK/native baseline |
+| R2 | Declarations, dependency bodies/linking, generic dispatch and module identity | In progress; queue below | Every remaining R2 item has implementation and composition evidence, then combined SDK/native gate |
+| R3 | Control flow, nullability/casts, exceptions/finally, equality, numeric and collection semantics | Pending R2 | Same-input normal/error/effect results and runtime/module closure |
+| R4 | Compose structure and live UI state, slots/events/repetition/list/pager linkage | Pending R3 | Source boundaries preserved and state/interaction tests pass |
+| R5 | Modifier order, constraints/measurement, typography/theme/resources/density/insets | Pending R4 | Matched environment, numerical layout/image checks, no relaxed thresholds |
+| R6 | Real offline project dependencies, business adapters/slots and configurable flat output | Pending R5 | Reproducible existing-project build, explicit replacement policy, safe output ownership |
+| R7 | Fixed multi-page acceptance and release evidence | Pending R6 | Structure, behavior, interaction and visual acceptance with reproducible commands |
 
-Each round starts with an explicit finite case list. Split a round into named
-sub-batches when necessary; do not mark the whole round complete because one
-positive fixture works. The acceptance contract remains the common objective.
+This is bounded Kotlin/Compose support, not a promise to decompile arbitrary JVM
+bytecode or translate every Android service. Unsupported format/runtime boundaries
+must be explicit. Do not quietly move an unfinished agreed item to a later round.
 
-## R1 parallel work packages
+## Current stage: R2
 
-One integration owner (current task) fixes contract changes, owns common files,
-assembles results and accepts evidence. Reuse workers when their scope matches.
+Accepted evidence already covers generic source heritage/methods, nonvirtual
+overloads, cross-file names/visibility, named local/nested declarations, supported
+captures/inner chains, bounded serialized inline dependencies and independent
+adapter modules. Do not repeat those implementations.
 
-| Lane | Bounded first increment | Owns | Required evidence |
-| --- | --- | --- | --- |
-| Dependency | Entry inline calls another real serialized inline body; resolve reachable declarations using official identities/inliner, not only direct application calls | core/BinaryBodies.kt, core/LibraryInlining.kt, dependency tests/docs | Binary-only consumer vs JVM; missing helper/cycle/provenance negatives; no fabricated body |
-| Language | Explicit supported subset of interface, class inheritance and member dispatch, including inherited signatures | language/, focused language tests/docs | Dispatch/override/argument/return parity and source-linked unsupported cases; no name-only dispatch |
-| Stdlib | Select a finite missing collection family after checking current coverage; reuse loaded bodies or shared typed runtime | stdlib/, focused stdlib tests/docs | Empty/mutation/order/bounds cases, cross-file values, resolved-call identity rejection |
-| Output | UI source-file ownership and imports through the existing EtsProgram/module output, preserving method boundaries | output/, focused output tests/docs; UI changes coordinated | Actual multi-file UI SDK input; name/parameter/collision tests, no printed-source parsing |
+Recent declaration consumers: inherited final properties and abstract interface
+property contracts with final field/accessor implementations. See
+docs/declaration-call-contract.md. These do not complete R2.
 
-Main owns Contract.kt, Tree.kt, Validator.kt, Traversal.kt, Printer.kt, Backend.kt,
-CLI wiring and cross-lane integration tests. Workers propose needed shared changes
-before depending on them. Never concurrently edit the same file. Main performs
-shared contract work locally while workers implement independent established APIs.
+Execute the following remaining work in order. Each row is an architectural
+deliverable, not permission to create an unbounded sequence of tiny API patches.
 
-## Later-round detail
-
-### R2: declarations and libraries
-
-- Separate source bodies, serialized supported bodies and explicitly replaced APIs.
-- Reachable dependency graph, generic substitution, member inline and library
-  format/version checks. Prototype KLIB loading separately; do not label ordinary
-  JVM signatures as KLIB/IR or promise bytecode decompilation.
-- Inheritance/interface dispatch, overload identity, constructors, accessors,
-  generic bounds/variance and nested/local declarations have distinct tests.
-- Cross-file imports/exports, visibility and collisions must be determined by
-  symbols; preserve names unless target syntax makes it impossible.
-
-### R3: general semantics
-
-- Control flow, labeled jumps, early/non-local returns and closures retain ordering
-  and capture behavior. Reuse verified official common lowering where possible.
-- Null/safe calls/Elvis, casts/type tests, structural/referential equality,
-  exceptions and finally need same-input semantic and error-path tests.
-- Define supported Int/Long/Float/Double/Char/array/list/set/map/sequence families,
-  their runtime representation and mutation/iteration contracts explicitly.
-- Standard-library extensions such as map/filter/repeat/let use resolved symbols,
-  loaded implementations or typed adapters, never source-string substitutions.
-
-### R4: UI semantics
-
-- Ordinary methods/models and Compose calls use one language lowering and target
-  tree. UI adaptation owns controls, attributes, slots and platform effects only.
-- Preserve component calls and source methods. Keep inline UI inline where ArkUI
-  permits; required builder bridges are documented and kept minimal.
-- State initialization/read/write, derived expressions, bindings, slots and
-  captured callbacks remain live. Sliding changes page, indicator and button.
-- UI coroutine effects need an explicit supported scheduling/cancellation subset.
-  Network, storage, analytics and other external effects require target adapters;
-  never translate suspend into async while pretending cancellation is equivalent.
-
-### R5: visual semantics
-
-- Modifier order and parent constraints govern layout, clipping, painting, input
-  and semantics. No arbitrary wrapper or default layout to hide unsupported rules.
-- Fixed source dp maps to target vp under ordinary density. Custom source density,
-  measurement and font metrics require explicit tested runtime behavior.
-- Text size/weight/line height/tracking/baseline, inherited colors/default styles,
-  images and resources, shapes/borders, scrolling and system insets are tested
-  individually and in composed cases, including alternative viewport/font scale.
-- Compare the same state/locale/theme/environment. Retain original screenshots,
-  trees, input hashes and numeric metrics; do not loosen gates to obtain green.
-
-### R6: project integration
-
-- Real dependency/classpath inventory is reproducible and offline-friendly.
-- Business reuse is explicit for ambiguous types/slots; content must never become
-  an empty callback merely because parameter matching failed.
-- Project adapters consume/return typed values or effects through the shared
-  contract. Target imports, resources and required helper ownership are validated.
-- Separate intermediate artifacts from configurable page/component directories;
-  flat output where requested, no hidden generated source tree or overwrite of
-  user-owned files. Legacy Python migration remains a separate implementation.
-
-### R7: acceptance and delivery
-
-- Fixed fixtures for language, library and UI interactions plus public multi-page
-  examples; no company files leave the internal network.
-- Compare source/target declarations, parameter bindings, outputs/errors, native
-  interaction and images. Report last-correct/first-wrong artifact and owning layer.
-- Publish capability coverage and remaining unsupported cases, not a misleading
-  global percentage. A release is not accepted solely from one simple page.
-- Keep review/commit/push paused unless the user changes that instruction. User
-  absence is not release approval; do not commit unrelated existing modifications.
-
-## Autonomous continuation
-
-- User requests parallel work and automatic next rounds while away. Do not wait
-  for a routine "continue" once a bounded increment passes its focused checks.
-- At each continuation read this plan and progress.md, reconcile worker status and
-  local changes, and finish the current batch before dispatching the next one.
-- Reuse existing agents; do not create separate user-facing tasks. Requeue ordinary
-  work behind active agents, interrupt only invalidating user corrections.
-- Freeze all production writers before combined tests; serialize heavy JVM/SDK
-  builds to avoid overload. Parallel design/editing is not parallel SDK saturation.
-- Keep commands and evidence tied to actual input/output hashes. Failed attempts
-  remain visible; do not mark a lane done from interrupted or stale evidence.
-- Each production increment runs focused semantic/contract/affected-module tests.
-  Full SDK/native integration follows the milestone cadence above, not every
-  increment. Only adb emulator-5560 and hdc 127.0.0.1:15557 are authorized when
-  native tests are due. Never use AI image inspection or patch ETS.
-- Record progress/evidence per round. Routine engineering choices do not require
-  user input. Stop for an unresolved user-owned semantic choice, unavailable
-  permission/dependency, unsafe change, explicit user pause or exhausted limits.
-- No work outside this plan, no purchase/publication, no company-data upload.
-  Stop automated continuation when all rounds are accepted or progress genuinely
-  requires the user. Disable the matching heartbeat then; do not idle-poll forever.
+| Order | Remaining work | Required evidence |
+| --- | --- | --- |
+| R2.1 | Dependency-body contract and reachable ownership: distinguish source bodies, supported serialized bodies, signature-only dependencies and explicit target replacements; identify linking/format gaps using actual official loaders | Binary-only consumers with producer sources absent; transitive owner/body identity; missing-body diagnostics; no fabricated implementations |
+| R2.2 | Complete the selected dependency linking family under that contract, including generic/member substitutions and call-site binding; investigate KLIB through a separate official-loader proof, not the JVM signature reader | JVM/ETS same-input results, real loaded body provenance, cross-file/runtime closure, unsupported formats explicitly rejected |
+| R2.3 | Remaining declaration/call semantics: class property overrides, inherited default arguments, constructor forms, virtual overloads and remaining generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
+| R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
 ## Next action
 
-Implement the bounded R2H contract in docs/inner-classes.md. Main first proves
-official core lowering; Parfit implements the language consumer in its disjoint
-lane. After core freeze, transfer the serial build slot for JVM/flat/module
-checks, then freeze all writers for Aristotle. Do not redispatch accepted R2A-G.
+Start R2.1 from docs/backend-reuse-audit.md and the actual FunctionBodies,
+BinaryBodies and LibraryInlining implementations. Fix the body/ownership and
+replacement contract before implementing another dependency exception. Record
+exact gaps and tests in the existing dependency documents; do not start another
+page-specific feature or automatically select class property overrides merely
+because interface properties were the last change.
 
-## Historical round evidence
+After R2.1 acceptance, proceed to R2.2, then R2.3, R2.4 and the R2 gate. R3-R7
+retain the deliverables above; each receives its finite implementation/test queue
+when its prerequisites are accepted. No claim that pending stages are implemented.
 
-R1B passed full UI T87aMi, actual SDK apqWX0 (30 unchanged generated files) and
-fresh native -03: seven states, five touch boundaries, Hypium, unchanged gates.
-Page-owned generated/evaluate-once/slot bridges remain a documented R4 boundary;
-source recursion and general Compose are not claimed supported.
+## Latest evidence and publication
 
-R2A finite case list:
-- Dependencies: non-reified generic top-level serialized inline bodies, including
-  one transitive generic helper. Use official decoding/substitution/inliner. Keep
-  reified/member/unsupported format cases explicit until their own later batch.
-- Language: invariant source generic class/interface heritage, concrete and
-  parameterized parent arguments, non-generic member dispatch and constructor
-  forwarding. No variance/default-interface-body/overload/nested-class expansion
-  in this increment. Test concrete and generic through-base/interface calls.
-- Standard library: existing List map/filter/Iterator chains and Array iterator,
-  get/set through generic helper signatures and across files. Array map/filter
-  remain unsupported in this increment. Fix only demonstrated type/runtime
-  closure gaps, without adding an unrelated collection family or UI resolver.
-- Output: typed generic heritage/member imports and source name/parameter fidelity
-  through multi-file output plus actual SDK inputs. No aliases to bypass identity.
-
-Main owns generic target heritage substitution/validation and shared contracts;
-existing EtsNamedType.arguments/typeParameters are the verified data interface.
-R2A accepted: public generic heritage 31 pairs, binary inline 6 pairs, generic
-stdlib 32 pairs and existing regression suites passed. Combined SDK BUb5bb
-checked 37 unchanged generated files. Native -04 passed fresh generation, both
-builds/installs, Hypium, seven states and five boundaries at unchanged tolerances.
-This is not completion of all R2 declaration/library capabilities.
-
-R2B finite case list:
-- Main shared contract: resolve source-owned members on a type-parameter receiver
-  through its declared nonnullable class/interface upper bound. Preserve canonical
-  member identity and substituted signature; reject unknown/mismatched members
-  and cyclic or unavailable bound resolution rather than bypassing validation.
-  Existing EtsTypeParameter.upperBound/EtsMember/EtsNamedType remain the contract.
-- Dependency: actual serialized top-level generic extension bodies with nonnullable
-  Any bounds, extension receiver evaluation and a transitive generic helper. Add
-  original JVM/body-identity/call-site tests first; change loading only for proven
-  gaps. No binary member/constructor/reified/unsupported-format expansion.
-- Language: source generic parameters bounded by a source-owned class/interface,
-  including instantiated generic ancestors and type-parameter bound chains; call
-  nongeneric member methods while preserving source names and evaluation order.
-  No multiple bounds, variance, generic member methods or overloads in this batch.
-- Stdlib: existing List map/filter and Iterator passed through those source-bounded
-  generic helpers across files. Check callback/member ordering, source-object
-  identity and exact helper closure; no new collection family or expression engine.
-- Output: bound-type imports, visibility, names and signatures across files using
-  the existing typed target tree; verify correct and malformed members and run
-  unchanged modules through the real SDK. No new UI text or alias escape path.
-- Integration-discovered language legality: normalize official inlined extension
-  receiver temporaries via their IR origin; repair strict-mode eval/arguments
-  value bindings with collision-safe symbol naming while retaining legal member
-  names and source identity. Keep original failed public-replay evidence. General
-  object equality remains R3, not an extra dependency adapter in this batch.
-
-Reuse the four existing workers with the same module ownership and new bounded
-fixture directories. Main implements focused bound-receiver target RED/GREEN
-before granting heavy compiler slots. Workers may prepare disjoint source/library
-fixtures now and must propose any additional contract requirement first. After
-freeze run combined semantic/SDK regressions and fresh native -05 before accepting
-R2B or dispatching another batch. Review/commit/push remain paused.
-Do not dispatch duplicate workers during heartbeat continuations.
-
-R2B accepted: final bounded public language RDPJrE, extension replay k7DNH6,
-stdlib qpy2tK, target yAJ7zK and frozen language/UI regressions passed. Combined
-SDK RmCrqG checked 44 unchanged generated modules (including older regression
-inputs). Fresh native -05 passed both builds/installs, Hypium, seven states and
-five touch probes; selected geometry2px, original image thresholds unchanged.
-Owned Harmony emulator stopped and its starter process reaped.
-
-R2C contract preparation:
-- Main: generic inherited method signatures compare method-owned binders by
-  position after class substitution, preserving free identities and exact bounds,
-  argument/result types and canonical override/member identities. No variance or
-  name-only identity. Tree.kt remains the data contract unless evidence requires
-  an explicit extension.
-- Language: inventory bounded generic member declarations and interface/base
-  overrides before implementing on the fixed contract.
-- Dependencies: inventory actual serialized inline default-expression bodies and
-  transitive linkage; do not fabricate ordinary binary class implementations.
-- Stdlib/output: inventory existing collection families through generic methods,
-  cross-file imports, names and target legality. No new UI or collection family.
-R2C finite implementation cases after inventory:
-- Language: standalone generic method control, generic interface implementation
-  with differently named binders, base/fake-override calls across ancestry,
-  simultaneous class/method substitution including callbacks, method-bound chains,
-  a generic method on a bounded receiver, and receiver/argument/callback order and
-  alias identity. Existing exact obsolete negatives become positives only after
-  their unchanged source has focused/public proof. No overloads, member extension,
-  inherited default args, variance, super calls or nested classes in this batch.
-- Dependencies: two actual binary JAR layouts with an Any-bound generic extension
-  default value calling a second-JAR helper; omitted/explicit/named arguments,
-  primitive/source-object results, identity/mutation and source provenance. Keep
-  the conservative requirement to load unused default dependencies explicit;
-  call-sensitive dependency policy is deferred, not silently relaxed.
-- Stdlib: existing List map/filter/filterNot/Iterator through generic class/member
-  helpers, cross-file callback result types, mutation/order/error/identity and
-  exact helper closure. No new runtime family without a demonstrated closure gap.
-- Output: generic method declarations/calls/bounds and class substitution across
-  modules, source names and canonical imports, malformed signatures rejected and
-  unchanged target modules tested by actual SDK.
-Main target signature RED vNSeVt then GREEN CqlL5v; nongeneric bounded-call extra
-type-argument RED r8u7lt is being fixed separately. Existing Tree contract unchanged.
-Workers implement disjoint fixtures/owned code in parallel, with no JVM slot until
-granted. After freeze run regression/SDK and fresh native -06. Review/commit/push
-remain paused.
-
-R2C accepted for the finite cases above: focused/public generic member language,
-actual binary default-body replay, generic-method stdlib/module contracts and
-frozen language/UI regressions passed. Dedicated SDK MLKL9o checked eight modules;
-combined SDK oAEsGZ checked 52 unchanged generated modules, including explicitly
-labeled older regression inputs. Fresh native-06 passed generation, both builds,
-installs, Hypium 1/1, seven matched states and five touch probes. Original image
-thresholds passed; selected geometry delta was 2px. Owned Harmony emulator stopped
-and starter session5444 reaped. R2 as a whole remains incomplete.
-
-R2D next bounded contract inventory (read-only before implementation):
-- Language: source top-level and non-inherited member overloads; use official
-  resolved symbols and inspect Kotlin JS/common naming implementation. Preserve
-  unique source names; minimally disambiguate only unavoidable target collisions.
-- Dependencies: actual serialized inline overload identities across JAR layouts,
-  static selection and provenance; no ordinary JVM body fabrication.
-- Stdlib: existing collection families through overload helpers/callbacks,
-  evaluation order, identity and exact cross-file runtime closure.
-- Output: typed declaration/call/import identities and ETS legality for overloaded
-  names. Shared naming contract must be fixed before production edits.
-No runtime typeof dispatcher for source numeric overloads that both lower to ETS
-number. Inherited virtual overloads, constructor overloads, variance and nested
-classes are outside this increment. Reuse the four workers; JVM/SDK slots stay
-serialized. Review/commit/push remain paused.
-
-R2D finite implementation grants after inventory:
-- Shared target contract: optional sourceName on EtsFunction/function-symbol
-  construction preserves original source identity; emitted name remains explicit.
-  Duplicate identity guards and exact references are green in target lyjtCh.
-- Language: top-level arity and Int/Double/String overloads; calls before
-  declarations; nonvirtual final-class methods; generic/concrete static selection
-  inside generic forwarders; generic-class/member substitution; recursive sibling
-  calls, capture/effect order, suffix/local-name collisions and reversed source
-  list input. One declaring IrFile per top-level group; callers may be other
-  files. Reuse official NameTable with declaration keys, not target-type strings.
-- Dependency: Int/Double actual serialized inline entry/helper overloads with
-  distinct markers, omitted/named argument effects, one/two-JAR layouts and
-  reversed classpath. Missing selected Double body must not use available Int
-  sibling. Duplicate-artifact classpath shadowing is documented, not a new policy.
-- Stdlib: existing map/filter/Iterator through those pure overloads and callbacks;
-  cross-file order, identity, mutation/error behavior and exact runtime closure.
-- Output: sourceName canonical IDs, unique emitted bindings, both overload imports
-  from one owner file, member ownership and same-source provenance; negatives for
-  genuinely inconsistent IDs/names/types/visibility. Do not call another valid
-  same-ETS-signature overload a type error; source IR/JVM traces catch that bug.
-Main target compilation complete/reaped. Leibniz exclusively owns the next
-focused baseline/current language job chain once its fixtures/source are ready;
-all other compiler jobs remain queued. This is not a full frozen SDK/native slot.
-Do not start final frozen acceptance while workers edit.
+- 72e3379: inherited properties; 66 JVM/host results across inheritance suites;
+  target type/name checks. Push succeeded, including preceding 44fb21a.
+- 153c5c4: interface properties; 40 JVM/host results, 11 source-linked boundaries,
+  complete target suite including eight new negative cases. No SDK/native claim.
+  Its two recorded push attempts failed; confirm a later push before marking published.
+- Per-increment evidence lives in the corresponding docs and test .work results.
+  Do not use historical Next action/worker instructions as the active queue.

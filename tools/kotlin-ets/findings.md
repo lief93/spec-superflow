@@ -1,5 +1,24 @@
 # Implementation findings
 
+## Current architecture findings, 2026-09-14
+
+The sole active queue is task_plan.md. Entries below this section are historical
+observations, not an inventory of current unsupported features. In particular,
+transitive serialized inline loading and typed UI modules have since progressed.
+
+- The old plan mixed accepted increments with obsolete Next action and worker
+  instructions. It is archived in docs/execution-history-20260914.md.
+- Current source audit: docs/backend-reuse-audit.md. Declaration consumers and
+  their latest evidence: docs/declaration-call-contract.md.
+- FunctionBodies is the borrowed official-body contract. BinaryBodies resolves
+  a bounded serialized JVM-inline graph; LibraryInlining uses official inlining.
+  There is no general KLIB-body loader or ordinary JVM-bytecode translator here.
+- The next dependency contract must distinguish a missing/unavailable body from
+  an intentional target API replacement. A signature or adapter registration
+  alone is not a loaded body and must never be reported as one.
+
+## Historical observations
+
 - BinaryBodies.kt currently inventories inline calls in application files and
   registers owners from that inventory per binary facade. This does not establish
   general reachable serialized inline/helper dependency loading.
