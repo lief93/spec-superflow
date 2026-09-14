@@ -16,7 +16,7 @@ const consumer = join(here, 'SdkIndex.ets'), ability = join(root, 'tests/languag
 const inputs = [...previous.inputs, ...[consumer, ability, fileURLToPath(import.meta.url),
   join(here, '../modules/ui-sdk-evidence.mjs')].map(path => ({ path, sha256: hash(path) }))];
 const modules = previous.modules;
-assert.equal(modules.length, 5);
+assert.equal(modules.length, 6);
 for (const input of [...inputs, ...modules]) assert.equal(hash(input.path), input.sha256, input.path);
 const sdk = '/Applications/DevEco-Studio.app/Contents';
 const seed = process.env.KOTLIN_ETS_SDK_SEED ?? '/private/tmp/kotlin-ets-native-20260913-07/harmony';
@@ -59,4 +59,4 @@ for (const input of [...inputs, ...modules]) assert.equal(hash(input.path), inpu
 for (const input of modules) assert.equal(hash(join(ets, 'modules', input.name)), input.sha256);
 assert.equal(hash(join(ets, 'pages/Index.ets')), hash(consumer));
 assert.equal(hash(join(ets, 'entryability/EntryAbility.ets')), hash(ability));
-result.passed = true; record(); console.log('PASS five unchanged public Kotlin-to-ETS modules checked and compiled to SDK ABC/HAP');
+result.passed = true; record(); console.log('PASS six unchanged public Kotlin-to-ETS modules checked and compiled to SDK ABC/HAP');

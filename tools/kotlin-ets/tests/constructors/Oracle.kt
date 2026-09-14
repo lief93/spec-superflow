@@ -18,6 +18,7 @@ fun main() {
         println(dispatchGeneric(seed))
         println(dispatchDefaults(seed))
         println(dispatchEarly(seed))
+        println(protectedConstruction(seed))
         val trace = Trace()
         try {
             failure(trace, seed)

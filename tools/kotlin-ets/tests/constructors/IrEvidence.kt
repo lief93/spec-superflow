@@ -13,7 +13,7 @@ fun main(args: Array<String>) {
             .flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
             .filter { it.attributeOwnerId is IrConstructor }
             .filterNot { it.parentAsClass.constructors.any(::isEtsDispatchConstructor) }
-        check(factories.size == 17) { "Expected seventeen source secondary factories, got ${factories.size}" }
+        check(factories.size == 18) { "Expected eighteen source secondary factories, got ${factories.size}" }
         val classes = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>()
         val roots = classes.flatMap { it.constructors.toList() }.filterNot { it.isPrimary || isEtsDispatchConstructor(it) }
         check(roots.size == 7) { "Expected seven original secondary allocation roots, got ${roots.size}" }
@@ -23,7 +23,7 @@ fun main(args: Array<String>) {
             check(it.parameters.all { parameter -> parameter.parent === it })
         }
         val dispatchers = classes.flatMap { it.constructors.toList() }.filter(::isEtsDispatchConstructor)
-        check(dispatchers.size == 6) { "Expected six multi-entry native constructors, got ${dispatchers.size}" }
+        check(dispatchers.size == 8) { "Expected eight multi-entry native constructors, got ${dispatchers.size}" }
         dispatchers.forEach { constructor ->
             check(!constructor.isPrimary && isEtsNativeConstructor(constructor))
             check(constructor.parentAsClass.constructors.single() === constructor)
@@ -82,6 +82,13 @@ fun main(args: Array<String>) {
                 }
             }
         })
-        println("PASS seventeen single-root factories, seven original secondary native roots, six multi-entry native constructors, exact cross-class super symbols and remapped constructor parameters")
+        val protectedOwners = classes.filter { it.name.asString() in setOf("Guarded", "GuardedRoot", "GuardedGeneric") }
+        check(protectedOwners.size == 3)
+        protectedOwners.forEach { owner ->
+            check(owner.constructors.single().visibility == org.jetbrains.kotlin.descriptors.DescriptorVisibilities.PROTECTED)
+            val entries = owner.declarations.filterIsInstance<IrSimpleFunction>().filter { it.dispatchReceiverParameter == null }
+            check(entries.isNotEmpty() && entries.all { it.visibility == org.jetbrains.kotlin.descriptors.DescriptorVisibilities.PROTECTED })
+        }
+        println("PASS eighteen single-root factories, seven original secondary native roots, eight multi-entry native constructors, protected entry ownership, exact cross-class super symbols and remapped constructor parameters")
     }
 }

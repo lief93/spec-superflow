@@ -63,9 +63,6 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
         val diagnostics = DiagnosticSink(owner.file.fileEntry.name)
         if (generateSequence(owner as IrDeclaration) { it.parent as? IrDeclaration }.any { it is IrFunction || it is IrClass && it.isInner })
             diagnostics.unsupported(owner, "Constructor dispatch in local or inner classes requires capture-aware allocation")
-        owner.constructors.firstOrNull { it.visibility == DescriptorVisibilities.PROTECTED }?.let {
-            diagnostics.unsupported(it, "Protected secondary constructors require protected target member visibility")
-        }
         val inherited = owner.modality != Modality.FINAL || owner.superTypes.any {
             it.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"
         }
@@ -95,6 +92,7 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
     val providers = selected.flatMap { it.constructors.toList() }.toSet()
     val defaults = MaskedDefaultArgumentFunctionFactory(context)
     val defaultGenerator = object : DefaultArgumentStubGenerator<CommonBackendContext>(context, defaults) {
+        override fun defaultArgumentStubVisibility(function: IrFunction) = function.visibility
         override fun useConstructorMarker(function: IrFunction) = false
         override fun getOriginForCallToImplementation() = IrStatementOrigin.DEFAULT_DISPATCH_CALL
         override fun IrBlockBodyBuilder.selectArgumentOrDefault(flag: IrExpression, parameter: IrValueParameter, default: IrExpression): IrValueDeclaration =
@@ -104,6 +102,7 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
     }
     module.files.forEach(defaultGenerator::lower)
     val injector = object : DefaultParameterInjector<CommonBackendContext>(context, defaults) {
+        override fun defaultArgumentStubVisibility(function: IrFunction) = function.visibility
         override fun useConstructorMarker(function: IrFunction) = false
         override fun shouldReplaceWithSyntheticFunction(functionAccess: IrFunctionAccessExpression): Boolean =
             functionAccess.symbol.owner in providers && super.shouldReplaceWithSyntheticFunction(functionAccess)
@@ -153,7 +152,7 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
         isPrimary = false
         visibility = if (owner.modality == Modality.FINAL || originals.filter { it.parent === owner }.all {
             it.visibility == DescriptorVisibilities.PRIVATE
-        }) DescriptorVisibilities.PRIVATE else DescriptorVisibilities.PUBLIC
+        }) DescriptorVisibilities.PRIVATE else DescriptorVisibilities.PROTECTED
         returnType = owner.defaultType
     }.apply {
         dispatchOwner = owner

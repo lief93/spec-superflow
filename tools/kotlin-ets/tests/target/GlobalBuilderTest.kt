@@ -25,7 +25,7 @@ fun checkGlobalBuilderContract() {
     listOf(
         label.copy(returnType = EtsTypes.NUMBER),
         label.copy(static = true),
-        label.copy(private = true),
+        label.copy(visibility = EtsVisibility.PRIVATE),
         label.copy(kind = EtsFunctionKind.METHOD),
         label.copy(build = true),
         label.copy(builder = false),

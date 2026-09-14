@@ -65,7 +65,7 @@ if (!red) {
   verify('modules-check', texts, 'Calls.ets');
   verify('flat-check', new Map([['Combined.ets', readFileSync(join(output, 'Combined.ets'), 'utf8')]]), 'Combined.ets');
   const exclusions = { Anonymous: 'named source class', Derived: 'Any-only', GenericDeep: 'generic binders',
-    GenericInner: 'generic binders', GenericRoot: 'generic binders', LocalOwner: 'top-level outer', Secondary: 'primary constructor', StaticOwner: 'top-level outer' };
+    GenericInner: 'generic binders', GenericRoot: 'generic binders', LocalOwner: 'top-level outer', Secondary: 'capture-aware allocation', StaticOwner: 'top-level outer' };
   for (const [name, message] of Object.entries(exclusions)) {
     const dir = join(work, 'negative-' + name); mkdirSync(dir);
     run('negative-' + name, 'java', [...java, dir, message, join(fixtures, 'negative', name + '.kt')]);

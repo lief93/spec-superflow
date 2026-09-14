@@ -143,9 +143,9 @@ class EtsValidator {
                 .map { owner to it } }
             declaration.members.forEach { value ->
                 if (declaration.kind == EtsClassKind.INTERFACE) when (value) {
-                    is EtsFunction -> if (!value.abstract || value.kind != EtsFunctionKind.METHOD)
+                    is EtsFunction -> if (!value.abstract || value.kind != EtsFunctionKind.METHOD || value.visibility != EtsVisibility.PUBLIC)
                         reject(value, "Only abstract method signatures are supported in interfaces")
-                    is EtsField -> if (value.initializer != null || value.private || value.static || value.state)
+                    is EtsField -> if (value.initializer != null || value.visibility != EtsVisibility.PUBLIC || value.static || value.state)
                         reject(value, "Interface property must be a public instance signature")
                 }
                 if (value is EtsFunction) {
@@ -161,10 +161,12 @@ class EtsValidator {
                     value.overrides.forEach { id ->
                         val (owner, original) = inherited.firstOrNull { it.second.symbol.id == id } ?: reject(value, "Unbound target override identity")
                         if (original.name != value.name || original.kind != value.kind || !sameMethodSignature(memberType(owner, original), value.symbol.type) ||
-                            value.static || value.private || original.private) reject(value, "Target override signature differs")
+                            value.static || value.visibility.ordinal > original.visibility.ordinal || original.visibility == EtsVisibility.PRIVATE)
+                            reject(value, "Target override signature differs")
                     }
                     inherited.filter { it.second.name == value.name && it.second.kind == value.kind }.forEach { (owner, original) ->
-                        if (!sameMethodSignature(memberType(owner, original), value.symbol.type) || original.static != value.static) reject(value, "Incompatible inherited target method")
+                        if (!sameMethodSignature(memberType(owner, original), value.symbol.type) || original.static != value.static ||
+                            value.visibility.ordinal > original.visibility.ordinal) reject(value, "Incompatible inherited target method")
                     }
                 }
             }
@@ -175,7 +177,7 @@ class EtsValidator {
                     val implementation = resolved.second
                     val propertyType = when (implementation) {
                         is EtsField -> {
-                            if (implementation.private || implementation.static || (!requirement.readonly && implementation.readonly))
+                            if (implementation.visibility != EtsVisibility.PUBLIC || implementation.static || (!requirement.readonly && implementation.readonly))
                                 reject(declaration, "Incompatible target property access")
                             if (declaration.kind == EtsClassKind.CLASS && !declaration.abstract &&
                                 classes.getValue(resolved.first.symbolId!!).kind == EtsClassKind.INTERFACE)
@@ -183,7 +185,7 @@ class EtsValidator {
                             memberType(resolved.first, implementation)
                         }
                         is EtsFunction -> {
-                            if (implementation.kind != EtsFunctionKind.GETTER || implementation.private || implementation.static ||
+                            if (implementation.kind != EtsFunctionKind.GETTER || implementation.visibility != EtsVisibility.PUBLIC || implementation.static ||
                                 (implementation.abstract && !declaration.abstract))
                                 reject(declaration, "Target property requires an implemented getter or an abstract class")
                             val getterType = (memberType(resolved.first, implementation) as EtsFunctionType).result
@@ -191,7 +193,7 @@ class EtsValidator {
                                 val setter = member(instance(declaration), requirement.symbol.name, setter = true)
                                     ?: reject(declaration, "Writable target property requires a setter")
                                 val function = setter.second as EtsFunction
-                                if (function.private || function.static || (function.abstract && !declaration.abstract) ||
+                                if (function.visibility != EtsVisibility.PUBLIC || function.static || (function.abstract && !declaration.abstract) ||
                                     (memberType(setter.first, function) as EtsFunctionType).parameters != listOf(getterType))
                                     reject(declaration, "Incompatible target property setter")
                             }
@@ -205,7 +207,7 @@ class EtsValidator {
                 inherited.filter { it.second.abstract }.forEach { (owner, requirement) ->
                     val resolved = member(instance(declaration), requirement.name, setter = requirement.kind == EtsFunctionKind.SETTER)
                     val implementation = resolved?.second as? EtsFunction
-                    if (implementation == null || implementation.abstract || implementation.static || implementation.private ||
+                    if (implementation == null || implementation.abstract || implementation.static || implementation.visibility.ordinal > requirement.visibility.ordinal ||
                         implementation.kind != requirement.kind || !sameMethodSignature(memberType(resolved.first, implementation), memberType(owner, requirement))) {
                         reject(declaration, "Missing concrete target implementation: ${requirement.name}")
                     }
@@ -356,11 +358,27 @@ class EtsValidator {
         return scope
     }
 
+    private fun derivesFrom(declaration: EtsClass, ownerId: String?): Boolean =
+        declaration.symbol.id == ownerId || ancestors(instance(declaration)).any { it.symbolId == ownerId }
+
+    private fun memberAccess(owner: EtsNamedType, member: EtsClassMember, receiver: EtsNamedType, node: EtsNode) {
+        if (member.visibility == EtsVisibility.PUBLIC || currentClass?.symbol?.id == owner.symbolId) return
+        val current = currentClass
+        val static = when (member) { is EtsFunction -> member.static; is EtsField -> member.static }
+        if (member.visibility == EtsVisibility.PROTECTED && current != null && derivesFrom(current, owner.symbolId) &&
+            (static || receiver.symbolId?.let { classes[it] }?.let { derivesFrom(it, current.symbol.id) } == true)) return
+        reject(node, "Invalid target member access: ${member.visibility}")
+    }
+
     private fun constructorArguments(classType: EtsNamedType, arguments: List<EtsExpression>, node: EtsNode) {
         val declaration = classType.symbolId?.let { classes[it] } ?: reject(node, "Unknown target constructor class")
         val constructor = declaration.members.filterIsInstance<EtsFunction>()
             .singleOrNull { it.kind == EtsFunctionKind.CONSTRUCTOR }
             ?: reject(node, "Source class requires one target constructor")
+        if (constructor.visibility != EtsVisibility.PUBLIC && currentClass?.symbol?.id != declaration.symbol.id &&
+            !(constructor.visibility == EtsVisibility.PROTECTED && node is EtsSuperConstructorCall &&
+                currentClass?.let { derivesFrom(it, declaration.symbol.id) } == true))
+            reject(node, "Invalid target constructor access: ${constructor.visibility}")
         val substitutions = typeArguments(declaration.typeParameters, classType.arguments, node.source)
         if (arguments.size > constructor.parameters.size ||
             constructor.parameters.drop(arguments.size).any { it.defaultValue == null }) reject(node, "Target constructor argument count differs")
@@ -372,7 +390,9 @@ class EtsValidator {
     }
 
     private fun function(function: EtsFunction, outer: Map<String, EtsSymbol>) {
-        if (function.abstract && (function.body.isNotEmpty() || function.static || function.private || function.exported ||
+        if (function.visibility != EtsVisibility.PUBLIC && (currentClass == null || function.exported))
+            reject(function, "Target member visibility requires class ownership")
+        if (function.abstract && (function.body.isNotEmpty() || function.static || function.visibility == EtsVisibility.PRIVATE || function.exported ||
             function.builder || function.build || function.kind !in setOf(EtsFunctionKind.METHOD, EtsFunctionKind.GETTER, EtsFunctionKind.SETTER) || currentClass == null ||
             function.parameters.any { it.defaultValue != null })) reject(function, "Invalid abstract method signature")
         if (function.overrides.isNotEmpty() && currentClass == null) reject(function, "Override requires a target class")
@@ -380,7 +400,7 @@ class EtsValidator {
             (function.builder && function.build))) reject(function, "Invalid target UI method")
         if (function.builder) {
             val expectedKind = if (currentClass == null) EtsFunctionKind.FUNCTION else EtsFunctionKind.METHOD
-            if (function.kind != expectedKind || (currentClass == null && function.private)) reject(function, "Invalid target builder ownership")
+            if (function.kind != expectedKind || (currentClass == null && function.visibility != EtsVisibility.PUBLIC)) reject(function, "Invalid target builder ownership")
         }
         if (function.build && (currentClass == null || function.kind != EtsFunctionKind.METHOD)) reject(function, "Build requires a component method")
         if (function.build && (function.name != "build" || function.parameters.isNotEmpty())) reject(function, "Invalid component build signature")
@@ -565,6 +585,7 @@ class EtsValidator {
                 if (declaration != null) {
                     val (owner, member) = member(receiverType, value.name)
                         ?: reject(value, "Unknown target class member: ${value.name}")
+                    memberAccess(owner, member, receiverType, value)
                     if (bounded && value.symbolId == null) reject(value, "Bounded target member requires declaration identity")
                     value.symbolId?.let { id ->
                         val actual = when (member) { is EtsFunction -> member.symbol.id; is EtsField -> member.symbol.id }
@@ -656,10 +677,15 @@ class EtsValidator {
                 if (value.target !is EtsReference && value.target !is EtsMember) reject(value, "Target assignment is not addressable")
                 visit(value.target); visit(value.value); expect(value.value, value.target.type)
                 val target = value.target as? EtsMember
-                val receiver = target?.receiver?.type as? EtsNamedType
+                val receiver = target?.let { if (it.receiver.type is EtsTypeParameterType) boundReceiver(it) else it.receiver.type as? EtsNamedType }
                 if (receiver?.symbolId in classes) {
                     val resolved = member(receiver!!, target!!.name)!!
                     val field = resolved.second as? EtsField
+                    if (resolved.second is EtsFunction) {
+                        val setter = member(receiver, target.name, setter = true)
+                            ?: reject(value, "Cannot assign a getter-only target property")
+                        memberAccess(setter.first, setter.second, receiver, value)
+                    }
                     if (field?.readonly == true && (initializingClass?.symbol?.id != resolved.first.symbolId ||
                         (target.receiver as? EtsReference)?.symbol?.name != "this")) {
                         reject(value, "Cannot assign a readonly target property")

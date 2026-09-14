@@ -36,7 +36,8 @@ sealed interface EtsNode { val source: SourceSpan }
 sealed interface EtsExpression : EtsNode { val type: EtsType }
 sealed interface EtsStatement : EtsNode
 sealed interface EtsDeclaration : EtsNode
-sealed interface EtsClassMember : EtsNode
+enum class EtsVisibility { PUBLIC, PROTECTED, PRIVATE }
+sealed interface EtsClassMember : EtsNode { val visibility: EtsVisibility }
 
 data class EtsLiteral(val value: Any?, override val type: EtsType, override val source: SourceSpan) : EtsExpression
 data class EtsUndefined(override val source: SourceSpan) : EtsExpression { override val type = EtsTypes.UNDEFINED }
@@ -91,14 +92,14 @@ enum class EtsFunctionKind { FUNCTION, METHOD, CONSTRUCTOR, GETTER, SETTER }
 data class EtsFunction(val name: String, val parameters: List<EtsParameter>, val returnType: EtsType,
     val body: List<EtsStatement>, override val source: SourceSpan,
     val kind: EtsFunctionKind = EtsFunctionKind.FUNCTION, val exported: Boolean = false,
-    val private: Boolean = false, val static: Boolean = false,
+    override val visibility: EtsVisibility = EtsVisibility.PUBLIC, val static: Boolean = false,
     val typeParameters: List<EtsTypeParameter> = emptyList(), val builder: Boolean = false,
     val build: Boolean = false, val abstract: Boolean = false,
     val overrides: List<String> = emptyList(), val sourceName: String? = null) : EtsDeclaration, EtsStatement, EtsClassMember {
     val symbol get() = etsFunctionSymbol(name, parameters.map { it.symbol.type }, returnType, source, typeParameters, sourceName ?: name, kind)
 }
 data class EtsField(val symbol: EtsSymbol, val initializer: EtsExpression? = null,
-    val private: Boolean = false, val static: Boolean = false,
+    override val visibility: EtsVisibility = EtsVisibility.PUBLIC, val static: Boolean = false,
     override val source: SourceSpan = symbol.source, val state: Boolean = false,
     val readonly: Boolean = false) : EtsClassMember
 enum class EtsClassKind { CLASS, INTERFACE }

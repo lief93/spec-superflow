@@ -39,12 +39,12 @@ fun main(args: Array<String>) {
                 val field = target.members.filterIsInstance<EtsField>().single { it.symbol.id == member.symbolId }
                 check(field.symbol.type == outer.symbol.type && ctor.parameters.first().symbol.type == outer.symbol.type)
                 check((write.value as EtsReference).symbol == ctor.parameters.first().symbol)
-                check(field.private == bindings.values.none { it.outer === owner })
+                check((field.visibility == EtsVisibility.PRIVATE) == bindings.values.none { it.outer === owner })
                 check(ctor.parameters.drop(1).map { it.symbol.name } == binding.constructor.valueParameters.drop(1).map { it.name.asString() })
                 check(nodes.filterIsInstance<EtsMember>().filter { it.symbolId == field.symbol.id }
                     .all { it.name == field.symbol.name && it.type == field.symbol.type })
                 check(binding.field.type.classOrNull?.owner === binding.outer)
-                records += "${target.name}\t${target.symbol.id}\t${outer.symbol.id}\t${field.symbol}\tprivate=${field.private}"
+                records += "${target.name}\t${target.symbol.id}\t${outer.symbol.id}\t${field.symbol}\tprivate=${field.visibility == EtsVisibility.PRIVATE}"
             }
             check(nodes.filterIsInstance<EtsMember>().any { it.receiver is EtsMember &&
                 bindings.keys.any { owner -> it.type == targets.getValue(etsClassSymbol(owner.name.asString(), span(owner)).id).symbol.type } })
@@ -68,7 +68,8 @@ fun main(args: Array<String>) {
         val at = failure.diagnostic.source
         check(at.file in files && at.start >= 0 && at.end > at.start)
         val text = File(at.file).readText().substring(at.start, at.end)
-        check(text.startsWith("inner class") || text.startsWith("object")) { text }
+        if (expected == "capture-aware allocation") check(text.startsWith("constructor(")) { text }
+        else check(text.startsWith("inner class") || text.startsWith("object")) { text }
         File(output, "rejection.txt").writeText("${failure.diagnostic}\n$text")
         println("PASS source-linked rejection: ${failure.diagnostic}")
     } else {

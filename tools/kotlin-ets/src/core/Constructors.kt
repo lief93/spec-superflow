@@ -65,8 +65,6 @@ internal fun lowerSecondaryConstructors(input: JvmFir2IrPipelineArtifact) {
     constructors.forEach { constructor ->
         val owner = constructor.parentAsClass
         val diagnostics = DiagnosticSink(constructor.file.fileEntry.name)
-        if (constructor.visibility == DescriptorVisibilities.PROTECTED)
-            diagnostics.unsupported(constructor, "Protected secondary constructors require protected target member visibility")
         if (generateSequence(owner as IrDeclaration) { it.parent as? IrDeclaration }.any {
                 it is IrFunction || it is IrClass && it.isInner
             }) diagnostics.unsupported(constructor, "Secondary constructors in local or inner classes require capture-aware allocation")

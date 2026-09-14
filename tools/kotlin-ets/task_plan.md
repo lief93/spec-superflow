@@ -69,11 +69,31 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, inherited defaults, unique-root and multi-entry native construction accepted; remaining capture/visibility forms, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, inherited defaults, unique-root/multi-entry native construction and protected constructor visibility accepted; remaining default-helper ownership/capture forms, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
 ## Next action
+
+Protected constructor visibility is accepted for the documented source family.
+The target contract now uses EtsVisibility for methods, fields and constructors;
+source IR visibility drives both factories and official default-stub hooks.
+Target tests.9W0mnW includes twelve visibility refusals. Frozen run-VDrnEa passes
+90 flat + 90 module JVM/host outcomes, five boundaries, reversed-input determinism
+and original constructor symbol/permission checks. SDK constructors-sdk-HfxCh4
+checks and compiles six unchanged modules to ABC/HAP. No device/native/UI or
+whole-R2 completion follows. See docs/constructors.md for hashes and RED cases.
+Inner-chain green-weKarR also retains 20 JVM/flat/module outcomes, source owner
+links, strict types, deterministic output and eight precise exclusions.
+
+Next close non-public inherited-method default helper ownership (currently
+file-level helpers cannot legally consume protected/private members), then
+local/inner constructor capture and initializer-popup combinations. Keep helpers
+under the correct source owner using official default/body/type machinery; do
+not widen member visibility to make a file-level helper compile. Afterwards
+proceed to virtual overloads and remaining generic bounds/variance combinations.
+
+Earlier native-constructor milestone:
 
 Public source multi-entry constructor dispatch is accepted for the documented
 family. It reuses common default stubs/injection, initializer
@@ -89,9 +109,6 @@ modules to ABC/HAP. This is not native runtime or whole-R2 acceptance.
 See docs/native-constructor-flow.md and docs/constructors.md. Never use JS
 newTarget/prototype allocation or bypass target validation.
 
-Continue R2.3 with protected secondary visibility and local/inner constructor
-capture/initializer-popup combinations. Then proceed
-to virtual overloads and remaining source generic bounds/variance combinations.
 Use the inspected official constructor, delegation and initializer contracts.
 Do not replace constructor semantics with a renamed function: preserve delegation,
 allocation, field/init order, argument effects and source ownership.

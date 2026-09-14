@@ -122,8 +122,14 @@ class EtsPrinter {
             indent(statements(value.body)) + "})"
     } }
 
+    private fun visibility(value: EtsVisibility): String = when (value) {
+        EtsVisibility.PUBLIC -> ""
+        EtsVisibility.PROTECTED -> "protected "
+        EtsVisibility.PRIVATE -> "private "
+    }
+
     fun function(value: EtsFunction): List<String> {
-        val prefix = (if (value.exported) "export " else "") + (if (value.private) "private " else "") +
+        val prefix = (if (value.exported) "export " else "") + visibility(value.visibility) +
             (if (value.static) "static " else "") + (if (value.abstract) "abstract " else "") + when (value.kind) {
                 EtsFunctionKind.FUNCTION -> "function "
                 EtsFunctionKind.GETTER -> "get "
@@ -142,7 +148,7 @@ class EtsPrinter {
             is EtsFunction -> if (value.kind == EtsClassKind.INTERFACE)
                 listOf("${member.name}${typeParameters(member.typeParameters)}(${parameters(member.parameters)}): ${type(member.returnType)};")
                 else function(member)
-            is EtsField -> listOf((if (member.state) "@State " else "") + (if (member.private) "private " else "") + (if (member.static) "static " else "") +
+            is EtsField -> listOf((if (member.state) "@State " else "") + visibility(member.visibility) + (if (member.static) "static " else "") +
                 (if (member.readonly) "readonly " else "") +
                 "${member.symbol.name}: ${type(member.symbol.type)}" +
                 (member.initializer?.let { " = ${expression(it)}" } ?: "") + ";")

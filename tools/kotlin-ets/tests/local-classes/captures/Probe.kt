@@ -66,7 +66,7 @@ fun main(args: Array<String>) {
                 val parameterIndex = constructor.valueParameters.indexOfFirst { it.symbol == (write.value as IrGetValue).symbol }
                 check(parameterIndex >= 0 && bound(constructor.valueParameters[parameterIndex]))
                 check((assignment.value as EtsReference).symbol == emitted.parameters[parameterIndex].symbol)
-                check(field.private && !field.static && field.initializer == null)
+                check(field.visibility == EtsVisibility.PRIVATE && !field.static && field.initializer == null)
                 check(field.source == span(write.symbol.owner) && field.source == span(owner))
                 check(field.symbol.type == backend.language.type(write.symbol.owner.type))
                 check(member.type == field.symbol.type && member.name == field.symbol.name)

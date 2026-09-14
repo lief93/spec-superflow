@@ -30,7 +30,7 @@ fun checkInterfacePropertyContract() {
     reject("Missing setter", impl = implementation.copy(members = listOf(getter, ctor)))
     reject("Wrong setter type", impl = implementation.copy(members = listOf(getter,
         setter.copy(parameters = listOf(next.copy(symbol = next.symbol.copy(type = EtsTypes.STRING)))), ctor)))
-    reject("Private implementation", impl = implementation.copy(members = listOf(storage.copy(private = true), ctor)))
+    reject("Private implementation", impl = implementation.copy(members = listOf(storage.copy(visibility = EtsVisibility.PRIVATE), ctor)))
     reject("Initialized interface", api = contract.copy(members = listOf(requirement.copy(initializer = EtsLiteral(0, number, at)))))
     val receiver = EtsParameter(EtsSymbol("receiver", "receiver", contractType, at))
     val write = EtsFunction("write", listOf(receiver), EtsTypes.VOID, listOf(EtsExpressionStatement(EtsAssignment(

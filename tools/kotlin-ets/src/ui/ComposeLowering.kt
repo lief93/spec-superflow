@@ -330,7 +330,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 val initial = argument(factory, "value") ?: diagnostics.unsupported(factory, "Missing state value")
                 val field = fieldName(name, variable)
                 fields += EtsField(EtsSymbol("ui:field:$field", field, language.type(initial.type), language.source(variable)),
-                    expression(initial, scope()), private = true, state = true)
+                    expression(initial, scope()), visibility = EtsVisibility.PRIVATE, state = true)
                 states[variable.symbol] = field
             }
             "androidx.compose.foundation.pager.rememberPagerState" -> {
@@ -343,10 +343,10 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     ?: EtsLiteral(0, EtsTypes.NUMBER, language.source(call))
                 val field = fieldName(name + "_currentPage", variable)
                 fieldName(name + "_controller", variable)
-                fields += EtsField(EtsSymbol("ui:field:$field", field, EtsTypes.NUMBER, language.source(variable)), initial, private = true, state = true)
+                fields += EtsField(EtsSymbol("ui:field:$field", field, EtsTypes.NUMBER, language.source(variable)), initial, visibility = EtsVisibility.PRIVATE, state = true)
                 val controllerType = EtsNamedType("SwiperController")
                 fields += EtsField(EtsSymbol("ui:field:${name}_controller", "${name}_controller", controllerType, language.source(variable)),
-                    EtsNew(controllerType, emptyList(), language.source(variable)), private = true)
+                    EtsNew(controllerType, emptyList(), language.source(variable)), visibility = EtsVisibility.PRIVATE)
                 pagers[variable.symbol] = Pager(name, count, scope.fork())
             }
             else -> {

@@ -15,6 +15,7 @@ fun main() {
     checkPrinterPrecedence()
     checkAccessorContract()
     checkConstructorFlowContract()
+    checkVisibilityContract()
     checkInheritanceContract()
     checkInterfacePropertyContract()
     checkVirtualPropertyContract()

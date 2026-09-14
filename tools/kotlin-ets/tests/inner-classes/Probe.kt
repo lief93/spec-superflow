@@ -59,7 +59,7 @@ fun main(args: Array<String>) {
             val member = assignment.target as EtsMember
             val field = target.members.filterIsInstance<EtsField>().single { it.symbol.id == member.symbolId }
             val outer = targets.getValue(etsClassSymbol(binding.outer.name.asString(), span(binding.outer)).id)
-            check(field.private && !field.static && field.initializer == null && field.symbol.type == outer.symbol.type)
+            check(field.visibility == EtsVisibility.PRIVATE && !field.static && field.initializer == null && field.symbol.type == outer.symbol.type)
             check(field.source == generatedSpan(binding, binding.field))
             check(constructor.parameters.first().symbol.type == outer.symbol.type)
             check(constructor.parameters.first().symbol.source == generatedSpan(binding, binding.parameter))

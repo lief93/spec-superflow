@@ -22,7 +22,10 @@ they are not virtual inherited method defaults. Native private primary
 constructors remain private and are called from their owning class's factory.
 Private secondary factories and private class methods also retain target private
 visibility, rather than exposing an additional public construction path. Protected
-secondary constructors remain diagnosed until target member visibility supports them.
+primary/secondary entries now retain protected target visibility, including the
+official default-argument stubs. Extensible dispatcher protocols are protected;
+final-class protocols remain private. A superclass delegation never substitutes
+a factory that allocates a base instance for the derived instance.
 
 When the source has no primary constructor, the unique constructor directly
 delegating to a superclass is its native allocation root. Its original IR body,
@@ -61,7 +64,7 @@ This is an increment within R2.3, not completion of all constructor forms.
 Multiple native allocation roots, abstract constructor families and superclass
 delegation through secondaries now use the native dispatcher described in
 native-constructor-flow.md. Unique-root source families retain the original
-minimal factory path. Protected secondaries, local/inner secondary capture
+minimal factory path. Local/inner secondary capture
 combinations, local classes in duplicated initializers and inherited initialization
 reads/captures of `this` (including secondary bodies) remain source-linked
 diagnostics with no output. Supporting a
@@ -77,7 +80,7 @@ R2 SDK/native gate remains pending.
 
 After a successful frozen run, use
 `node tools/kotlin-ets/tests/constructors/sdk.mjs /absolute/run-evidence` to check
-the generated five modules unchanged with the real SDK. The verifier checks
+the generated six modules unchanged with the real SDK. The verifier checks
 source/output hashes, semantic checker records, runtime module coverage and
 ABC/HAP artifacts; this is compilation evidence, not native behavior acceptance.
 
@@ -129,3 +132,59 @@ match. SDK constructors-sdk-jxO1FE compiles the same five modules unchanged and
 records clean checker inputs, runtime module coverage and ABC/HAP artifacts.
 No device/runtime/UI-equivalence or whole-R2 acceptance is claimed. Detailed
 contract, intermediate failures and final hashes are in native-constructor-flow.md.
+
+## Typed member visibility
+
+`EtsFunction` and `EtsField` share `EtsClassMember.visibility`, using
+`EtsVisibility.PUBLIC/PROTECTED/PRIVATE` instead of a private boolean. The printer
+only renders this contract; it does not infer permissions from names. Kotlin
+declaration visibility comes from official IR. Internal declarations continue to
+use the existing module-export policy; this is not Kotlin friend-module support.
+
+Target validation checks allocation separately from member access: protected
+constructors permit same-owner allocation and direct derived `super`, not external
+`new`; private constructors permit only same-owner allocation. Protected instance
+members require an owning/subclass scope and a compatible derived receiver;
+unrelated and sibling receivers are rejected. Static access, interface contracts,
+override narrowing and setter permissions are checked through declaration owners.
+Properties whose getter/setter permissions differ use existing accessor lowering
+and private backing storage, rather than publishing a writable field.
+
+Official `ES6ConstructorLowering.generateCreateFunction` retains source constructor
+visibility. Common `DefaultArgumentStubGenerator.defaultArgumentStubVisibility`
+defaults to public: the ETS constructor pass overrides that hook (and its injector
+counterpart) with the source visibility. It still reuses the official masked
+argument evaluation, injection, initializer lowering and inliner unchanged.
+
+Non-public inherited-method default helpers currently still use file-level helper
+placement; their remaining ownership composition must be closed separately in
+R2.3. The new access validator must reject an inaccessible call rather than widen
+its source member. Companion/nested-class access privileges and general local/inner
+secondary capture are not claimed by this increment.
+
+Visibility RED target-tests.hnXlFY proves that the former validator admitted an
+external call to a private constructor. Source run-PspbN9 then caught backing
+storage colliding with the accessor name; run-upeoy8 caught a public default stub
+for a protected constructor. These are retained failures, not accepted runs.
+Target GREEN target-tests.9W0mnW passes the full target suite including twelve
+source-linked visibility refusals and the prior constructor-flow cases.
+
+Final frozen source run-VDrnEa passes 90 flat + 90 multi-file JVM/ETS-host results,
+four former-negative positive regressions (including Protected), five remaining
+boundaries and deterministic six-module output. IR proof checks eighteen original
+single-root factories, seven secondary native roots, eight native dispatchers,
+protected entry ownership and exact constructor parameter/super symbols. All 74
+input hashes match. Flat output SHA-256 is
+`ac72e487bf1ac1c9e526bd0ab1c789bfdaa092d7326e750c88ce42ad71127dbf`.
+SDK constructors-sdk-HfxCh4 checks all six unchanged modules and records clean
+semantic checker coverage and ABC/HAP artifacts. This is not device execution or
+the combined R2/native/UI gate.
+
+Inner-chain regression green-weKarR passes 20 JVM results against both flat and
+module output, strict host types, reversed-input determinism, owner-link checks
+and eight source-linked exclusions. Earlier green-5fhmyw failed only its stale
+secondary-constructor diagnostic expectation: the earlier capture-aware allocation
+guard now reports the constructor span instead of the old primary-only class
+guard. The updated test requires that exact reason and constructor span; no
+exclusion is skipped. Main self-check and `git diff --check` pass. No independent
+reviewer or device run is claimed.

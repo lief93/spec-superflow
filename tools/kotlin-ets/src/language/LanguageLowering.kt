@@ -528,7 +528,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             if (function.body != null) diagnostics.unsupported(function, "Abstract method cannot have a body")
             return@withFile EtsFunction(emittedName, parameters, type(function.returnType), emptyList(),
                 source(function), kind = kind, typeParameters = genericParameters,
-                abstract = true, overrides = overrideIds, sourceName = sourceName)
+                abstract = true, visibility = memberVisibility(function.visibility), overrides = overrideIds, sourceName = sourceName)
         }
         val body = function.body ?: diagnostics.unsupported(function, "Function has no source body: ${symbolName(function)}")
         val previousDepth = expressionDepth
@@ -539,7 +539,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             EtsFunction(emittedName, parameters,
                 type(function.returnType), lines, source(function), kind,
                 static = function.parent is IrClass && function.dispatchReceiverParameter == null,
-                private = parentClass != null && function.visibility == DescriptorVisibilities.PRIVATE,
+                visibility = if (parentClass == null) EtsVisibility.PUBLIC else memberVisibility(function.visibility),
                 typeParameters = genericParameters, overrides = overrideIds, sourceName = sourceName)
         } finally {
             returnTargets.removeAt(returnTargets.lastIndex)
@@ -650,19 +650,19 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             }
         }
         val members = mutableListOf<EtsClassMember>()
-        captures.forEach { members.add(EtsField(capturedFieldSymbol(it), private = true)) }
+        captures.forEach { members.add(EtsField(capturedFieldSymbol(it), visibility = EtsVisibility.PRIVATE)) }
         inner?.let {
             // Flattened descendants still traverse this registered outer link.
             val sharedLink = sourceFile(declaration)?.declarations?.filterIsInstance<IrClass>()
                 ?.any { child -> sourceInnerClassBinding(child)?.outer === declaration } == true
-            members.add(EtsField(outerFieldSymbol(it.field), private = !sharedLink))
+            members.add(EtsField(outerFieldSymbol(it.field), visibility = if (sharedLink) EtsVisibility.PUBLIC else EtsVisibility.PRIVATE))
         }
         if (singleton) {
             val classType = classType(declaration)
             val field = synthetic("__etsSingleton", EtsNullableType(classType), declaration)
             val nullValue = EtsLiteral(null, EtsTypes.NULL, source(declaration))
             val access = EtsMember(classReference(declaration, declaration), field.name, field.type, source(declaration))
-            members.add(EtsField(field, nullValue, private = true, static = true))
+            members.add(EtsField(field, nullValue, visibility = EtsVisibility.PRIVATE, static = true))
             members.add(EtsFunction("__etsGetInstance", emptyList(), classType, listOf(
                 EtsIf(listOf(EtsBranch(EtsBinary("===", access, nullValue, EtsTypes.BOOLEAN, source(declaration)),
                     listOf(EtsExpressionStatement(EtsAssignment(access, EtsNew(classType, emptyList(), source(declaration)), source(declaration)))))), source(declaration)),
@@ -672,7 +672,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         fields.forEach { property -> withElement(property) {
             property.backingField?.let { field ->
                 members.add(EtsField(synthetic(fieldName(field), type(field.type), property),
-                    private = requiresAccessor(property), readonly = !property.isVar))
+                    visibility = if (requiresAccessor(property)) EtsVisibility.PRIVATE else memberVisibility(property.visibility), readonly = !property.isVar))
             }
             if (requiresAccessor(property)) {
                 listOfNotNull(property.getter, property.setter).forEach { members.add(function(it, scope)) }
@@ -734,7 +734,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             else -> initialization.addAll(statement(child, scope))
         } } } finally { nativeInitialization = previousInitialization }
         members.add(EtsFunction("constructor", parameterText, EtsTypes.VOID, initialization, source(constructor),
-            kind = EtsFunctionKind.CONSTRUCTOR, private = singleton || constructor.visibility == DescriptorVisibilities.PRIVATE))
+            kind = EtsFunctionKind.CONSTRUCTOR, visibility = if (singleton) EtsVisibility.PRIVATE else memberVisibility(constructor.visibility)))
         declaration.declarations.filterIsInstance<IrSimpleFunction>().filter { !it.isFakeOverride }.forEach { method ->
             if (declaration.isData && method.origin == IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER &&
                 method.name.asString() in setOf("equals", "hashCode")) return@forEach
@@ -827,7 +827,14 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         property.getter?.overriddenSymbols.orEmpty().flatMap { it.owner.collectRealOverrides() }
             .any { (it.parent as? IrClass)?.kind != ClassKind.INTERFACE }
 
-    private fun requiresAccessor(property: IrProperty): Boolean = hasCustomAccessor(property) || isVirtualProperty(property)
+    private fun memberVisibility(visibility: org.jetbrains.kotlin.descriptors.DescriptorVisibility): EtsVisibility = when {
+        DescriptorVisibilities.isPrivate(visibility) -> EtsVisibility.PRIVATE
+        visibility == DescriptorVisibilities.PROTECTED -> EtsVisibility.PROTECTED
+        else -> EtsVisibility.PUBLIC
+    }
+
+    private fun requiresAccessor(property: IrProperty): Boolean = hasCustomAccessor(property) || isVirtualProperty(property) ||
+        property.setter?.visibility?.let { it != property.visibility } == true
 
     private fun fieldName(field: IrField): String {
         if (hasCaptureOrigin(field)) return capturedFieldSymbol(field).name
@@ -837,7 +844,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         if (property != null && isVirtualProperty(property)) {
             return "__etsField_${classNaming.name(field.parent as IrClass)}_${identifier(property)}"
         }
-        return if (property != null && hasCustomAccessor(property)) "__etsField_${identifier(property)}" else identifier(field)
+        return if (property != null && requiresAccessor(property)) "__etsField_${identifier(property)}" else identifier(field)
     }
 
     private fun bind(value: IrValueDeclaration, scope: Scope): EtsSymbol {

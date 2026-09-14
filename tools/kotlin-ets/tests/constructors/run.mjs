@@ -29,7 +29,7 @@ function run(label, command, args, expectedStatus = 0) {
   assert.equal(value.status, expectedStatus, value.stdout + value.stderr);
   return value.stdout;
 }
-const sources = ['Construction.kt', 'Application.kt', 'Roots.kt', 'SupportedNoPrimary.kt', 'Dispatch.kt'].map(name => join(here, name));
+const sources = ['Construction.kt', 'Application.kt', 'Roots.kt', 'SupportedNoPrimary.kt', 'Dispatch.kt', 'Visibility.kt'].map(name => join(here, name));
 const compiler = join(root, 'tests/stdlib/compiler.sh'), cli = join(root, 'kotlin-ets');
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim(), jar = join(work, 'oracle.jar');
 run('jvm-build', 'bash', [compiler, ...sources, join(here, 'Oracle.kt'), '-d', jar]);
@@ -54,6 +54,7 @@ assert.deepEqual(factories.map(node => node.parameters.map(p => p.name.text)), [
 assert.ok(factories.every(node => node.name.text !== 'new_Chain'), 'Original method names must win');
 const secret = tree.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'Secret');
 const isPrivate = node => node.modifiers?.some(m => m.kind === ts.SyntaxKind.PrivateKeyword);
+const isProtected = node => node.modifiers?.some(m => m.kind === ts.SyntaxKind.ProtectedKeyword);
 assert.ok(isPrivate(secret.members.find(ts.isConstructorDeclaration)));
 assert.ok(isPrivate(secret.members.find(node => node.name?.text === 'adjusted')));
 assert.equal(secret.members.filter(node => ts.isMethodDeclaration(node) && isPrivate(node) &&
@@ -88,8 +89,17 @@ for (const [name, privateEntry] of [['MultipleRoots', true], ['DispatchDefaults'
   const constructors = declaration.members.filter(ts.isConstructorDeclaration);
   assert.equal(constructors.length, 1);
   assert.equal(Boolean(isPrivate(constructors[0])), privateEntry);
+  assert.equal(Boolean(isProtected(constructors[0])), !privateEntry);
   assert.equal(constructors[0].parameters[0].name.text, '__constructor');
 }
+for (const name of ['Guarded', 'GuardedRoot', 'GuardedGeneric']) {
+  const declaration = tree.statements.find(node => ts.isClassDeclaration(node) && node.name.text === name);
+  assert.ok(isProtected(declaration.members.find(ts.isConstructorDeclaration)));
+  assert.ok(declaration.members.filter(node => ts.isMethodDeclaration(node) && isStatic(node)).every(isProtected));
+}
+const guarded = tree.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'Guarded');
+assert.ok(isProtected(guarded.members.find(node => ts.isGetAccessorDeclaration(node) && node.name.text === 'hidden')));
+assert.ok(isPrivate(guarded.members.find(node => ts.isSetAccessorDeclaration(node) && node.name.text === 'hidden')));
 const options = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS };
 const context = vm.createContext({ exports: {} });
 vm.runInContext(ts.transpileModule(code, { compilerOptions: options }).outputText, context, { timeout: 1000 });
@@ -98,7 +108,7 @@ function evaluate(exports, Trace) {
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed => {
     const values = ['construct', 'generic', 'inherited', 'captured', 'defaults', 'privateChain', 'reference',
       'nativeRoot', 'genericRoot', 'inheritedRoot', 'privateRoot', 'dispatchRoots', 'dispatchInheritance',
-      'dispatchGeneric', 'dispatchDefaults', 'dispatchEarly'].map(name =>
+      'dispatchGeneric', 'dispatchDefaults', 'dispatchEarly', 'protectedConstruction'].map(name =>
       String(vm.runInContext(`exports.${name}(${seed})`, scope, { timeout: 1000 })));
     const trace = new Trace(); let outcome = 'ok';
     try { exports.failure(trace, seed); } catch (e) {
@@ -111,7 +121,7 @@ result.actual = evaluate(context.exports, context.exports.Trace); record(); asse
 const modules = join(work, 'modules'), reversed = join(work, 'reversed');
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Construction.ets', 'Dispatch.ets', 'Roots.ets', 'SupportedNoPrimary.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Construction.ets', 'Dispatch.ets', 'Roots.ets', 'SupportedNoPrimary.ets', 'Visibility.ets']);
 result.modules = readdirSync(modules).sort().map(name => ({ name, path: join(modules, name), sha256: hash(join(modules, name)) }));
 for (const name of readdirSync(modules)) {
   assert.equal(readFileSync(join(modules, name), 'utf8'), readFileSync(join(reversed, name), 'utf8'));
@@ -128,9 +138,9 @@ function load(name) {
   } }, { timeout: 1000 });
   return exports;
 }
-result.moduleActual = evaluate({ ...load('Application'), ...load('Dispatch') }, load('Construction').Trace); assert.deepEqual(result.moduleActual, result.expected);
+result.moduleActual = evaluate({ ...load('Application'), ...load('Dispatch'), ...load('Visibility') }, load('Construction').Trace); assert.deepEqual(result.moduleActual, result.expected);
 result.regressions = [];
-for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract']) {
+for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract', 'Protected']) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
   run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
   run(name, 'bash', [cli, '--mode', 'language', '--out', out, input]);
@@ -138,8 +148,7 @@ for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract']) {
   result.regressions.push({ name, sha256: hash(out) });
 }
 result.negatives = [];
-for (const [name, message] of [['Protected', /protected target member visibility/],
-  ['Inner', /capture-aware allocation/], ['Local', /capture-aware allocation/],
+for (const [name, message] of [['Inner', /capture-aware allocation/], ['Local', /capture-aware allocation/],
   ['DispatchInheritedInitialization', /Using this during inherited initialization/],
   ['DispatchVirtualBody', /Using this during inherited initialization/],
   ['DispatchLocalInitializer', /local-class popup/]]) {
