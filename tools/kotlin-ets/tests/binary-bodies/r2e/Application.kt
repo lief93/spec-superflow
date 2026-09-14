@@ -54,5 +54,11 @@ fun scenario(receiver: FinalMember, peer: PeerMember, seed: Int): String {
     }
     val seventh = receiver.choose<String?>(value = null, fallback = "fallback", useFallback = true) { it }
     val eighth = receiver.choose(value = "text") { it }
-    return "$first/$second/$third/$fourth/$fifth/$sixth/$seventh/$eighth/${effects.count}/${effects.trace}"
+    val ninth = effects.receiver(receiver).extend(value = effects.value(seed, "M")) { value ->
+        effects.count += 1
+        effects.trace += "N"
+        value + 4
+    }
+    val tenth = receiver.extend<String?>(value = null) { it }
+    return "$first/$second/$third/$fourth/$fifth/$sixth/$seventh/$eighth/$ninth/$tenth/${effects.count}/${effects.trace}"
 }

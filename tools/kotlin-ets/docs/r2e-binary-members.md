@@ -15,6 +15,15 @@ Checks now also require the original parameter parent and index after decoding.
 Tests compose a generic member, generic helper, a default referencing an earlier
 generic parameter, Int/String/nullable-String instantiations and callback effects.
 
+Stateless member extension functions now use that same path. Their extension
+receiver remains a separate original parameter from the class dispatch receiver;
+the shared `types()` registration already includes both. The official common
+`FunctionInlining.buildParameterToArgument` binds `callee.parameters` to
+`callSite.arguments` and defers default expressions until after explicit
+arguments. Its parameter substitutor handles a default reading extension `this`.
+Only the previous blanket extension-receiver guard changed; no ETS receiver
+binding, default evaluator or extra inliner was introduced.
+
 The implementation reuses `JvmIrDeserializerImpl`, the official symbol table,
 public signature computer and common function inliner. It seeds original FIR
 receiver/class/function symbols and validates their identity after decoding.
@@ -30,7 +39,7 @@ and caller span instead of trying to name/emit a fabricated class.
 Ordinary class members are removed from the loader's canonical intrinsic set for
 these admitted owners. An inline body calling an ordinary method must reject,
 not silently assume that its body is already linked. Class state, inheritance,
-inner/generic/value/data classes, member extension/context receivers, reified
+inner/generic/value/data classes, context receivers, reified
 bodies and binary constructor calls remain outside this finite increment.
 
 ## Loading is not class replacement
@@ -44,6 +53,21 @@ serialized bodies. This proves the embedding API composition, not a new command
 line project-adapter loader. Unmapped command-line generation must still reject.
 
 ## Tests and evidence
+
+### R2.2 member extension receiver increment
+
+- `run-6YVxSz`: new JVM oracle cases pass, but the old extension-receiver guard
+  rejects the transitive `FinalMember.extend -> selectFrom` body. Genuine RED.
+- `run-KLzVJm`: twenty real official inline blocks (ten direct/ten transitive),
+  original dispatch/extension receiver and generic classifier ownership,
+  serialized body provenance, source-copy deletion, signature-only refusal and
+  all seven existing unsupported cases pass. Existing non-extension cases stay.
+- `run-KLzVJm/replay-SCNjcq`: full frozen backend passes strict host typechecking,
+  three JVM/ETS-host result/effect-trace pairs and unmapped-CLI rejection with
+  source spans/no output. New cases use Int and nullable String extension
+  receivers, a default `fallback = this`, callback effects and Int overflow.
+- No binary class/state/context support or SDK/native result is implied.
+- Shared contract regression `tests/language/.work/typed-0x4NnJ` passes.
 
 ### R2.2 generic member increment
 
@@ -78,7 +102,7 @@ node tests/binary-bodies/r2e/replay.mjs tests/binary-bodies/r2e/.work/run-REPLAC
 ```
 
 The focused test builds real producer JARs and removes the producer source copy
-before consuming them. It now checks fourteen official inline blocks, canonical receiver
+before consuming them. It now checks twenty official inline blocks, canonical receiver
 identities, signature-only refusal, six unsupported member cases and a missing
 `SourceFile` diagnostic. A separate JVM oracle records argument/callback order.
 The target replay compares the same inputs and effect trace using generated ETS

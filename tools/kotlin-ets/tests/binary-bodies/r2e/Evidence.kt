@@ -41,7 +41,7 @@ fun main(args: Array<String>) {
                     element.acceptChildrenVoid(this)
                 }
             })
-            check(count == 8) { "Expected eight unavailable member calls, got $count" }
+            check(count == 10) { "Expected ten unavailable member calls, got $count" }
             println("PASS signature-only member bodies remain unavailable")
             return@withKotlinFrontend
         }
@@ -53,7 +53,7 @@ fun main(args: Array<String>) {
                 element.acceptChildrenVoid(this)
             }
         })
-        check(blocks.size == 14) { "Expected eight direct and six transitive expansions, got ${blocks.size}" }
+        check(blocks.size == 20) { "Expected ten direct and ten transitive expansions, got ${blocks.size}" }
         val scenario = session.module.files.single().declarations.filterIsInstance<IrSimpleFunction>().single { it.name.asString() == "scenario" }
         val receivers = scenario.valueParameters.take(2).map { it.type.classOrNull!! }.toSet()
         check(receivers.size == 2)
@@ -72,13 +72,18 @@ fun main(args: Array<String>) {
             }
             val loaded = session.bodies.resolve(function.symbol) as FunctionBody.Available
             check(loaded.origin is FunctionBody.Origin.SerializedJvmIr)
-            if (function.name.asString() in setOf("choose", "relay")) {
+            if (function.name.asString() in setOf("choose", "relay", "extend", "selectFrom")) {
                 val parameter = function.typeParameters.single()
                 check(parameter.name.asString() == "T")
                 check(parameter.parent === function)
                 check(function.returnType.classifierOrNull === parameter.symbol)
                 check(function.valueParameters.first().type.classifierOrNull === parameter.symbol)
                 check(parameter.superTypes.single().isNullableAny())
+                if (function.name.asString() == "selectFrom") {
+                    check(function.extensionReceiverParameter!!.type.classifierOrNull === parameter.symbol)
+                    check(function.extensionReceiverParameter!!.parent === function)
+                    check(function.valueParameters.first().defaultValue != null)
+                }
             }
             check(loaded.declaration === function && loaded.body === function.body)
             check(loaded.source.file == block.inlinedFunctionFileEntry.name)
@@ -93,6 +98,6 @@ fun main(args: Array<String>) {
         check(memberOwners == receivers)
         File(args[2], "production.ir").writeText(session.module.dump())
         File(args[2], "bodies.txt").writeText(report.joinToString("\n"))
-        println("PASS fourteen official member blocks, generic binders/defaults, original receiver classifiers and binary provenance")
+        println("PASS twenty official member blocks, generic extension receivers/defaults, original receiver classifiers and binary provenance")
     }
 }

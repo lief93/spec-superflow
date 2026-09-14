@@ -220,8 +220,8 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
             owner.superTypes.any { it.classOrNull != context.irBuiltIns.anyClass }) {
             fail("binary inline members require a non-generic top-level final class with no inheritance")
         }
-        if (function.contextReceiverParametersCount != 0 || function.extensionReceiverParameter != null) {
-            fail("binary inline member context/extension receivers are not supported")
+        if (function.contextReceiverParametersCount != 0) {
+            fail("binary inline member context receivers are not supported")
         }
         if ((owner.source as? KotlinJvmBinarySourceElement)?.binaryClass != binary) {
             fail("binary inline member class ownership does not match resolved FIR ownership")

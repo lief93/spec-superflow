@@ -26,6 +26,10 @@ transitive serialized inline loading and typed UI modules have since progressed.
   Official moduleFragmentToUniqueName is only an optional JS output-name map;
   actual module ownership must follow resolver/library descriptor identity.
   Public KLIB session/phase/runtime integration remains separate and unfinished.
+- Member extension/default binding was already present in the official common
+  inliner and our registered signature types. The missing integration was a
+  blanket guard, not a missing substitution algorithm. Actual serialized
+  generic extension bodies now pass both IR identity and JVM/ETS-host checks.
 
 ## Historical observations
 

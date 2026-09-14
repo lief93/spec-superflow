@@ -1,5 +1,23 @@
 # Execution progress
 
+## 2026-09-14: R2.2 member extension receivers
+
+- Re-read official FunctionInlining's unified parameter/argument pairing,
+  default deferral and parameter substitution. Existing body registration already
+  includes dispatch and extension types; no new binding implementation needed.
+- RED run-6YVxSz passed the original Kotlin/JVM cases then hit our blanket
+  extension-receiver guard. Removed only that guard; context/class-state and
+  existing declaration/format checks remain unchanged.
+- Frozen run-KLzVJm passes twenty actual official blocks, original receiver and
+  generic ownership, source-copy deletion, signature-only refusal and seven
+  existing boundaries. replay-SCNjcq passes strict host types and three JVM/ETS
+  result/effect pairs, including fallback=this, nullable generic and overflow.
+  Unmapped CLI still rejects with source evidence and no output.
+- typed-0x4NnJ passes the shared symbol/default-slot, body-provider and adapter
+  value/statement/UI contract regressions after this change.
+- KLIB/backend proof was committed and pushed as 6b679ff before this increment.
+  This remains bounded R2.2 work, not full R2 or SDK/native acceptance.
+
 ## 2026-09-14: R2.2 official KLIB/backend proof
 
 - Reused official ModulesStructure/loadIr/JsIrLinker, with partial linkage

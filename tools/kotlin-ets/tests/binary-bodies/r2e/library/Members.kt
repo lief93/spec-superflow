@@ -7,6 +7,8 @@ class FinalMember {
     inline fun <T> choose(value: T, fallback: T = value, useFallback: Boolean = false, action: (T) -> T): T =
         relay(action(if (useFallback) fallback else value))
     inline fun <T> relay(value: T): T = value
+    inline fun <T> extend(value: T, action: (T) -> T): T = value.selectFrom(action = action)
+    inline fun <T> T.selectFrom(fallback: T = this, action: (T) -> T): T = relay(action(fallback))
 }
 
 class PeerMember {

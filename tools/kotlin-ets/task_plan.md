@@ -82,10 +82,14 @@ The separate official KLIB proof now loads real bodies and links three modules
 through the same ETS backend; see docs/klib-loader-proof.md. Public KLIB input,
 session/body-origin and phase-context integration are not implemented by that
 proof. The JVM signature reader is not a KLIB frontend.
-Next verify supported stateless member extension-receiver binding through the
-existing official deserializer/inliner before widening its guard. Keep remaining
-bounds/receiver/format gaps explicit; do not start page-specific features or
-jump to class property overrides.
+Stateless member extension-receiver binding now also reuses that existing
+deserializer/inliner: run-KLzVJm plus replay-SCNjcq validate both receiver
+identities, generic defaults and result/effect order. Only its blanket guard was
+removed; see docs/r2e-binary-members.md.
+Next close the bounded generic upper-bound/call-site combinations under the
+same dependency-body contract. KLIB production session/phase integration remains
+separate from its accepted proof. Keep receiver/state/format exclusions explicit;
+do not start page-specific features or jump to class property overrides.
 
 R2.1 is accepted for the documented bounded body/replacement contract, not a
 general dependency linker. Proceed to R2.2, then R2.3, R2.4 and the R2 gate. R3-R7
