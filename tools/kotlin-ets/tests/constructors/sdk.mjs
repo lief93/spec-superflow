@@ -7,16 +7,18 @@ import { spawnSync } from 'node:child_process';
 import { verifyModuleCoverage } from '../modules/ui-sdk-evidence.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '../..');
-assert.ok(process.argv[2], 'Pass a successful constructors/run.mjs evidence directory');
+assert.ok(process.argv[2], 'Pass successful module evidence; optionally an explicit SDK consumer');
 const evidence = resolve(process.argv[2]);
 const previous = JSON.parse(readFileSync(join(evidence, 'result.json'), 'utf8'));
 assert.equal(previous.passed, true);
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
-const consumer = join(here, 'SdkIndex.ets'), ability = join(root, 'tests/language/SdkEntryAbility.ets');
+const consumer = process.argv[3] ? resolve(process.argv[3]) : join(here, 'SdkIndex.ets');
+const ability = join(root, 'tests/language/SdkEntryAbility.ets');
 const inputs = [...previous.inputs, ...[consumer, ability, fileURLToPath(import.meta.url),
   join(here, '../modules/ui-sdk-evidence.mjs')].map(path => ({ path, sha256: hash(path) }))];
 const modules = previous.modules;
-assert.equal(modules.length, 6);
+if (!process.argv[3]) assert.equal(modules.length, 6);
+assert.ok(modules.length > 0);
 for (const input of [...inputs, ...modules]) assert.equal(hash(input.path), input.sha256, input.path);
 const sdk = '/Applications/DevEco-Studio.app/Contents';
 const seed = process.env.KOTLIN_ETS_SDK_SEED ?? '/private/tmp/kotlin-ets-native-20260913-07/harmony';
@@ -59,4 +61,4 @@ for (const input of [...inputs, ...modules]) assert.equal(hash(input.path), inpu
 for (const input of modules) assert.equal(hash(join(ets, 'modules', input.name)), input.sha256);
 assert.equal(hash(join(ets, 'pages/Index.ets')), hash(consumer));
 assert.equal(hash(join(ets, 'entryability/EntryAbility.ets')), hash(ability));
-result.passed = true; record(); console.log('PASS six unchanged public Kotlin-to-ETS modules checked and compiled to SDK ABC/HAP');
+result.passed = true; record(); console.log(`PASS ${modules.length} unchanged public Kotlin-to-ETS modules checked and compiled to SDK ABC/HAP`);

@@ -55,7 +55,12 @@ vm.runInNewContext(compiled.outputText, context, { timeout: 1000 });
 const actual = [-7, 0, 3, 29].flatMap(seed => [context.exports.functionCases(seed), context.exports.classCases(seed), context.exports.localCases(seed)]);
 assert.deepEqual(actual, expected);
 writeFileSync(join(work, 'comparison.json'), JSON.stringify({ expected, actual }, null, 2));
-for (const name of ['Reified', 'Star', 'Variance']) {
+const varianceOut = join(work, 'Variance.ets');
+run('Variance', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', varianceOut, join(here, 'Variance.kt')]);
+const varianceJs = ts.transpileModule(readFileSync(varianceOut, 'utf8'), { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+assert.equal(vm.runInNewContext(varianceJs + '\nnew Unsupported(7).value', { exports: {} }, { timeout: 1000 }), 7);
+for (const name of ['Reified', 'Star']) {
   const rejected = join(work, name + '.ets');
   const diagnostic = JSON.parse(run(name, 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', rejected,
     join(here, name + '.kt')], 2));
@@ -63,4 +68,4 @@ for (const name of ['Reified', 'Star', 'Variance']) {
   assert.ok(diagnostic.source.start >= 0);
   assert.ok(!existsSync(rejected));
 }
-console.log(`PASS ${actual.length} same-source JVM/ETS generic cases, names/defaults/accessors/lifted locals and 3 fail-closed boundaries`);
+console.log(`PASS ${actual.length} same-source JVM/ETS generic cases, unchanged variance positive, names/defaults/accessors/lifted locals and 2 fail-closed boundaries`);

@@ -58,6 +58,13 @@ assert.ok(existsSync(supportedOut));
 // Reuse this compiled production entry point for focused negatives, not a public launcher claim.
 for (const input of fixtures.filter(path => path.includes('/Unsupported'))) {
   const name = input.slice(input.lastIndexOf('/') + 1), out = join(work, name + '.ets');
+  if (name === 'UnsupportedVariance.kt') {
+    run(name, 'java', ['-cp', `${jar}:${cp}`, 'dev.ets.MainKt', '--mode', 'language', '--classpath', cp, '--out', out, input]);
+    const js = ts.transpileModule(readFileSync(out, 'utf8'), { compilerOptions: {
+      target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+    assert.equal(vm.runInNewContext(js + '\nvariant({ read() { return 7; } })', { exports: {} }, { timeout: 1000 }), 7);
+    continue;
+  }
   const value = run(name, 'java', ['-cp', `${jar}:${cp}`, 'dev.ets.MainKt', '--mode', 'language', '--classpath', cp, '--out', out, input], 2);
   const diagnostic = JSON.parse(value.stdout);
   assert.equal(diagnostic.code, 'UNSUPPORTED');
@@ -77,4 +84,4 @@ assert.ok(identifiesInput(invalidTarget.stderr)); assert.equal(existsSync(reject
 for (const input of result.inputs) assert.equal(hash(input.path), input.sha256, `Changed during verification: ${input.path}`);
 result.output = { path: output, sha256: hash(output) };
 result.passed = true; record();
-console.log('PASS focused 40 same-input JVM/host cases, migrated generic-member positive, three source-linked negatives and JVM/frontend cycle rejection; not a public launcher or SDK run');
+console.log('PASS focused 40 same-input JVM/host cases, generic-member and unchanged variance positives, two source-linked negatives and JVM/frontend cycle rejection; not a public launcher or SDK run');

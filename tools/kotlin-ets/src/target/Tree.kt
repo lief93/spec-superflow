@@ -6,7 +6,9 @@ sealed interface EtsType
 data class EtsNamedType(val name: String, val arguments: List<EtsType> = emptyList(), val symbolId: String? = null,
     val external: Boolean = false) : EtsType
 data class EtsRecordType(val name: String, val fields: Map<String, EtsType>) : EtsType
-data class EtsTypeParameter(val id: String, val name: String, val upperBound: EtsType? = null)
+enum class EtsVariance { INVARIANT, IN, OUT }
+data class EtsTypeParameter(val id: String, val name: String, val upperBound: EtsType? = null,
+    val variance: EtsVariance = EtsVariance.INVARIANT)
 data class EtsTypeParameterType(val id: String, val name: String) : EtsType
 data class EtsFunctionType(val parameters: List<EtsType>, val result: EtsType,
     val typeParameters: List<EtsTypeParameter> = emptyList()) : EtsType

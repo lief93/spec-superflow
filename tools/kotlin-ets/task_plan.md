@@ -174,8 +174,17 @@ six-file determinism, 19 bridge edges, two property-identity refusals and four
 official invalid-override refusals. Legacy run-iSM7AH and target GAopcC pass;
 all frozen inputs were rechecked. See virtual-overloads.md. No SDK/native claim.
 
-Next implement generic bounds/variance combinations, inspecting the pinned
-common/JS type substitution and override
+Source declaration-site IN/OUT is now accepted for the documented family.
+Official FIR validates source positions; the typed ETS tree preserves variance,
+and the target validates mapped usage and nominal argument assignability without
+runtime wrappers or casts. run-EGmIHJ passes 30 + 30 outcomes, strict host types,
+two-file determinism, official IR metadata/identity checks and three FIR refusals.
+Target CvNTnK and regressions run-Q0nOFp, probe-wKg0i8 and cli-tsbVXo pass.
+SDK constructors-sdk-YlGtpt checks both unchanged modules and produces ABC/HAP.
+See declaration-variance.md. This is SDK legality, not native or whole-R2 parity.
+
+Next implement remaining generic bounds/use-site projection combinations,
+inspecting the pinned common/JS type substitution and override
 contracts first. External inherited slots, private shadowing and the documented
 unsupported receiver/parameter families remain explicit, not silently enabled.
 R2.3 is not complete. R2.4 and the combined SDK/native R2 gate remain queued

@@ -1086,15 +1086,20 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     private fun typeParameters(declaration: IrTypeParametersContainer): List<EtsTypeParameter> =
         declaration.typeParameters.map { parameter ->
-            if (parameter.isReified || parameter.variance != org.jetbrains.kotlin.types.Variance.INVARIANT) {
-                diagnostics.unsupported(parameter, "Reified and variant type parameters are not supported")
+            if (parameter.isReified) {
+                diagnostics.unsupported(parameter, "Reified type parameters are not supported")
             }
             val bound = parameter.superTypes.singleOrNull()
                 ?: diagnostics.unsupported(parameter, "Multiple generic upper bounds are not supported")
             val reference = typeParameterType(parameter)
             EtsTypeParameter(reference.id, reference.name,
                 if (bound.classOrNull?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Any" && bound.isNullable()) null
-                else withElement(parameter) { type(bound) })
+                else withElement(parameter) { type(bound) },
+                if (declaration !is IrClass) EtsVariance.INVARIANT else when (parameter.variance) {
+                    org.jetbrains.kotlin.types.Variance.INVARIANT -> EtsVariance.INVARIANT
+                    org.jetbrains.kotlin.types.Variance.IN_VARIANCE -> EtsVariance.IN
+                    org.jetbrains.kotlin.types.Variance.OUT_VARIANCE -> EtsVariance.OUT
+                })
         }
 
     private fun receiverSubstitution(owner: IrClass?, receiver: IrExpression?): Map<String, EtsType> {

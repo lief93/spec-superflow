@@ -36,6 +36,19 @@ class EtsValidator {
         if (actual is EtsTypeParameterType && actual.id !in seen) {
             return genericScope[actual.id]?.upperBound?.let { assignable(it, expected, seen + actual.id) } == true
         }
+        if (actual is EtsNamedType && expected is EtsNamedType && !actual.external && !expected.external &&
+            actual.symbolId != null && actual.symbolId == expected.symbolId && actual.name == expected.name) {
+            val parameters = classes[actual.symbolId]?.typeParameters ?: return false
+            if (actual.arguments.size != parameters.size || expected.arguments.size != parameters.size) return false
+            return parameters.indices.all { index ->
+                val a = actual.arguments[index]; val b = expected.arguments[index]
+                when (parameters[index].variance) {
+                    EtsVariance.INVARIANT -> a == b
+                    EtsVariance.OUT -> assignable(a, b, seen)
+                    EtsVariance.IN -> assignable(b, a, seen)
+                }
+            }
+        }
         if (actual is EtsNamedType && !actual.external && actual.symbolId != null && actual.symbolId !in seen) {
             return classes[actual.symbolId]?.let { declaration ->
                 val substitutions = declaration.typeParameters.map { it.id }.zip(actual.arguments).toMap()
@@ -46,6 +59,42 @@ class EtsValidator {
     }
 
     private fun parents(declaration: EtsClass): List<EtsNamedType> = listOfNotNull(declaration.baseClass) + declaration.interfaces
+
+    private fun varianceContract(declaration: EtsClass) {
+        val parameters = declaration.typeParameters.associateBy { it.id }
+        if (parameters.values.all { it.variance == EtsVariance.INVARIANT }) return
+        // Target-only position check: source legality is already checked by official FIR.
+        fun position(type: EtsType, direction: Int, at: SourceSpan) {
+            when (type) {
+                is EtsTypeParameterType -> parameters[type.id]?.let {
+                    if (it.variance == EtsVariance.OUT && direction != 1 || it.variance == EtsVariance.IN && direction != -1)
+                        throw InvalidTarget(at, "Target type parameter used in incompatible variance position: ${it.name}")
+                }
+                is EtsNullableType -> position(type.inner, direction, at)
+                is EtsNamedType -> type.arguments.forEachIndexed { index, argument ->
+                    val variance = classes[type.symbolId]?.typeParameters?.getOrNull(index)?.variance
+                    position(argument, when (variance) { EtsVariance.OUT -> direction; EtsVariance.IN -> -direction; else -> 0 }, at)
+                }
+                is EtsFunctionType -> {
+                    type.parameters.forEach { position(it, -direction, at) }
+                    position(type.result, direction, at)
+                    type.typeParameters.forEach { it.upperBound?.let { bound -> position(bound, -direction, at) } }
+                }
+                is EtsRecordType -> type.fields.values.forEach { position(it, 0, at) }
+                is EtsTupleType -> type.elements.forEach { position(it, 0, at) }
+            }
+        }
+        parents(declaration).forEach { position(it, 1, declaration.source) }
+        declaration.typeParameters.forEach { it.upperBound?.let { bound -> position(bound, 1, declaration.source) } }
+        declaration.members.filter { it.visibility != EtsVisibility.PRIVATE }.forEach { member -> when (member) {
+            is EtsField -> if (!member.static) position(member.symbol.type, if (member.readonly) 1 else 0, member.source)
+            is EtsFunction -> if (!member.static && member.kind != EtsFunctionKind.CONSTRUCTOR) {
+                member.parameters.forEach { position(it.symbol.type, -1, member.source) }
+                position(member.returnType, 1, member.source)
+                member.typeParameters.forEach { it.upperBound?.let { bound -> position(bound, -1, member.source) } }
+            }
+        } }
+    }
 
     private fun instance(declaration: EtsClass): EtsNamedType =
         (declaration.symbol.type as EtsNamedType).copy(arguments = declaration.typeParameters.map { EtsTypeParameterType(it.id, it.name) })
@@ -290,8 +339,12 @@ class EtsValidator {
             }
             is EtsNullableType -> type(type.inner, source)
             is EtsTupleType -> type.elements.forEach { type(it, source) }
-            is EtsFunctionType -> withTypeParameters(type.typeParameters, source, signature = true) {
-                type.parameters.forEach { type(it, source) }; type(type.result, source)
+            is EtsFunctionType -> {
+                if (type.typeParameters.any { it.variance != EtsVariance.INVARIANT })
+                    throw InvalidTarget(source, "Function type parameters cannot declare variance")
+                withTypeParameters(type.typeParameters, source, signature = true) {
+                    type.parameters.forEach { type(it, source) }; type(type.result, source)
+                }
             }
         }
     }
@@ -346,6 +399,7 @@ class EtsValidator {
                         if (member is EtsField && member.state && (!declaration.component || member.static)) reject(member, "State field requires a component instance")
                     }
                     withTypeParameters(declaration.typeParameters, declaration.source) { }
+                    varianceContract(declaration)
                     declaration.members.forEach { member ->
                     val static = when (member) { is EtsFunction -> member.static; is EtsField -> member.static }
                     withTypeParameters(if (static) emptyList() else declaration.typeParameters, declaration.source) { when (member) {
@@ -408,6 +462,8 @@ class EtsValidator {
     }
 
     private fun function(function: EtsFunction, outer: Map<String, EtsSymbol>) {
+        if (function.typeParameters.any { it.variance != EtsVariance.INVARIANT })
+            reject(function, "Function type parameters cannot declare variance")
         if (function.visibility != EtsVisibility.PUBLIC && (currentClass == null || function.exported))
             reject(function, "Target member visibility requires class ownership")
         if (function.abstract && (function.body.isNotEmpty() || function.static || function.visibility == EtsVisibility.PRIVATE || function.exported ||

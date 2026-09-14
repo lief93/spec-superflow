@@ -93,7 +93,7 @@ It composes with the existing common bridge planner, including fake inherited
 implementations. A method with no slot conflict acquires no forwarding wrapper.
 No cast, result erasure, body cloning or new runtime helper is needed.
 
-Source generic declaration variance, use-site projections and multiple bounds
+Use-site projections and multiple independent bounds
 remain separate R2.3 requirements. Invariant
 source generic arguments have not been made covariant by this method-return change.
 
