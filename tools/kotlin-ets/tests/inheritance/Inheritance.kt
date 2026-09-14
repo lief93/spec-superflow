@@ -103,3 +103,22 @@ fun propertyDispatch(seed: Int): String {
     leaf.value = read + 1
     return "${effects.trace}:${leaf.trace}:${base.value}:${base.computed}"
 }
+
+interface PropertyView<T> { val value: T }
+interface MutablePropertyView<T> : PropertyView<T> { var current: T }
+class StoredView(override val value: Int, override var current: Int) : MutablePropertyView<Int>
+class ComputedView(initial: Int) : MutablePropertyView<Int> {
+    private var stored: Int = initial
+    override val value: Int get() = stored + 1
+    override var current: Int
+        get() = stored
+        set(next) { stored = next + 2 }
+}
+fun propertyInterface(seed: Int): String {
+    val stored: MutablePropertyView<Int> = StoredView(seed, seed)
+    val computed: MutablePropertyView<Int> = ComputedView(seed)
+    stored.current = seed + 3
+    computed.current = seed + 3
+    val read: PropertyView<Int> = computed
+    return "${stored.value}:${stored.current}:${read.value}:${computed.current}"
+}

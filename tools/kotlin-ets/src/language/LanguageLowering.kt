@@ -509,7 +509,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 diagnostics.unsupported(function, "Inherited signatures must match exactly; covariance is not supported")
             }
         }
-        val overrideIds = overrides.map { functionSymbol(it).id }.distinct()
+        // Interface properties are target field contracts, not abstract methods.
+        val overrideIds = if (property != null) emptyList() else overrides.map { functionSymbol(it).id }.distinct()
         if (parentClass?.kind == ClassKind.INTERFACE && function.body != null) {
             diagnostics.unsupported(function, "Default interface method bodies are not supported")
         }
@@ -596,11 +597,22 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val interfaces = parents.filter { it.classOrNull?.owner?.kind == ClassKind.INTERFACE }.map { type(it) as EtsNamedType }
         if (hasInheritance(declaration)) validateInheritedMembers(declaration)
         if (isInterface) {
-            declaration.declarations.firstOrNull { it !is IrSimpleFunction }?.let {
-                diagnostics.unsupported(it, "Only method signatures are supported in interfaces")
+            declaration.declarations.firstOrNull { it !is IrSimpleFunction && it !is IrProperty }?.let {
+                diagnostics.unsupported(it, "Only method and property signatures are supported in interfaces")
             }
-            return@withFile EtsClass(classNaming.name(declaration), declaration.declarations.filterIsInstance<IrSimpleFunction>()
-                .filterNot { it.isFakeOverride }.map { function(it, Scope()) }, source(declaration),
+            val signatures = declaration.declarations.filterNot { (it as? IrOverridableDeclaration<*>)?.isFakeOverride == true }
+                .map { member -> when (member) {
+                    is IrSimpleFunction -> function(member, Scope())
+                    is IrProperty -> {
+                        if (member.backingField != null || member.isDelegated ||
+                            listOfNotNull(member.getter, member.setter).any { it.body != null || it.extensionReceiverParameter != null }) {
+                            diagnostics.unsupported(member, "Interface property requires abstract non-extension accessors")
+                        }
+                        EtsField(synthetic(identifier(member), type(member.getter!!.returnType), member), readonly = !member.isVar)
+                    }
+                    else -> diagnostics.unsupported(member, "Unsupported interface declaration")
+                } }
+            return@withFile EtsClass(classNaming.name(declaration), signatures, source(declaration),
                 kind = EtsClassKind.INTERFACE, interfaces = interfaces, typeParameters = typeParameters,
                 sourceName = identifier(declaration).takeUnless { it == classNaming.name(declaration) })
         }
@@ -653,7 +665,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         fields.forEach { property -> withElement(property) {
             property.backingField?.let { field ->
                 members.add(EtsField(synthetic(fieldName(field), type(field.type), property),
-                    private = hasCustomAccessor(property)))
+                    private = hasCustomAccessor(property), readonly = !property.isVar))
             }
             if (hasCustomAccessor(property)) {
                 listOfNotNull(property.getter, property.setter).forEach { members.add(function(it, scope)) }
@@ -764,7 +776,12 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         fun visit(klass: IrClass) {
             if (!visited.add(klass)) return
             klass.declarations.filterIsInstance<IrProperty>().filterNot { it.isFakeOverride }.forEach { property ->
-                if (property.modality != Modality.FINAL || property.getter?.overriddenSymbols?.isNotEmpty() == true) {
+                if (klass.kind == ClassKind.INTERFACE) return@forEach
+                val overrides = property.getter?.overriddenSymbols.orEmpty().flatMap { it.owner.collectRealOverrides() }
+                val interfaceImplementation = overrides.isNotEmpty() &&
+                    overrides.all { (it.parent as? IrClass)?.kind == ClassKind.INTERFACE } &&
+                    (klass.modality == Modality.FINAL || property.modality == Modality.FINAL)
+                if (!interfaceImplementation && (property.modality != Modality.FINAL || overrides.isNotEmpty())) {
                     withFile(property) {
                         diagnostics.unsupported(property, "Overridden and abstract properties are not supported in inheritance")
                     }

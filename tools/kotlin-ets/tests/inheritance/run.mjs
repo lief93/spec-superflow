@@ -59,13 +59,18 @@ vm.runInContext(compiled.outputText, context, { timeout: 1000 });
 result.actual = [];
 for (const seed of [0, -3, 7, -2147483648, 2147483647]) {
   for (const invocation of [`dispatch(${seed})`, `abstractDispatch(${seed})`, `callEffects(${seed})`,
-    `constructorEffects(${seed})`, `selected(true,${seed})`, `selected(false,${seed})`, `propertyDispatch(${seed})`]) {
+    `constructorEffects(${seed})`, `selected(true,${seed})`, `selected(false,${seed})`, `propertyDispatch(${seed})`, `propertyInterface(${seed})`]) {
     result.actual.push(String(vm.runInContext('exports.' + invocation, context, { timeout: 1000 })));
   }
 }
 record(); assert.deepEqual(result.actual, result.expected);
 assert.match(code, /get computed\(\)/);
 assert.match(code, /set computed\(next: T\)/);
+assert.match(code, /interface PropertyView<T>\s*\{\s*readonly value: T;/);
+const interfaceOutput = join(work, 'SupportedInterfaceProperty.ets');
+run('supported-interface-property', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
+  '--out', interfaceOutput, join(here, 'SupportedInterfaceProperty.kt')]);
+assert.match(readFileSync(interfaceOutput, 'utf8'), /readonly value: number;/);
 const inheritedOutput = join(work, 'SupportedInheritedProperty.ets');
 run('supported-inherited-property', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
   '--out', inheritedOutput, join(here, 'SupportedInheritedProperty.kt')]);

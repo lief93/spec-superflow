@@ -24,6 +24,7 @@ class EtsValidator {
     private var globalFunctions = emptyMap<String, EtsFunction>()
     private var currentClass: EtsClass? = null
     private var allowedSuper: EtsSuperConstructorCall? = null
+    private var initializingClass: EtsClass? = null
     private fun reject(node: EtsNode, message: String): Nothing = throw InvalidTarget(node.source, message)
     private fun expect(value: EtsExpression, type: EtsType) {
         if (!assignable(value.type, type)) reject(value, "Target type mismatch: ${value.type}; expected $type")
@@ -59,13 +60,13 @@ class EtsValidator {
         listOf(it) + ancestors(it)
     }.distinct()
 
-    private fun member(instance: EtsNamedType, name: String): Pair<EtsNamedType, EtsClassMember>? {
+    private fun member(instance: EtsNamedType, name: String, setter: Boolean = false): Pair<EtsNamedType, EtsClassMember>? {
         val declaration = classes.getValue(instance.symbolId!!)
         declaration.members.firstOrNull { when (it) {
-            is EtsFunction -> it.name == name && it.kind != EtsFunctionKind.SETTER
-            is EtsField -> it.symbol.name == name
+            is EtsFunction -> it.name == name && (it.kind == EtsFunctionKind.SETTER) == setter
+            is EtsField -> !setter && it.symbol.name == name
         } }?.let { return instance to it }
-        return parents(instance).firstNotNullOfOrNull { member(it, name) }
+        return parents(instance).firstNotNullOfOrNull { member(it, name, setter) }
     }
 
     private fun memberType(owner: EtsNamedType, value: EtsClassMember): EtsType {
@@ -138,8 +139,12 @@ class EtsValidator {
                 .filterIsInstance<EtsFunction>().filter { !it.static && it.kind != EtsFunctionKind.CONSTRUCTOR }
                 .map { owner to it } }
             declaration.members.forEach { value ->
-                if (declaration.kind == EtsClassKind.INTERFACE && (value !is EtsFunction || !value.abstract ||
-                    value.kind != EtsFunctionKind.METHOD)) reject(value, "Only abstract method signatures are supported in interfaces")
+                if (declaration.kind == EtsClassKind.INTERFACE) when (value) {
+                    is EtsFunction -> if (!value.abstract || value.kind != EtsFunctionKind.METHOD)
+                        reject(value, "Only abstract method signatures are supported in interfaces")
+                    is EtsField -> if (value.initializer != null || value.private || value.static || value.state)
+                        reject(value, "Interface property must be a public instance signature")
+                }
                 if (value is EtsFunction) {
                     if (value.abstract && declaration.kind == EtsClassKind.CLASS && !declaration.abstract) reject(value, "Abstract method requires an abstract class")
                     value.overrides.forEach { id ->
@@ -150,6 +155,38 @@ class EtsValidator {
                     inherited.filter { it.second.name == value.name && it.second.kind == value.kind }.forEach { (owner, original) ->
                         if (!sameMethodSignature(memberType(owner, original), value.symbol.type) || original.static != value.static) reject(value, "Incompatible inherited target method")
                     }
+                }
+            }
+            inheritedTypes.filter { classes.getValue(it.symbolId!!).kind == EtsClassKind.INTERFACE }.forEach { owner ->
+                classes.getValue(owner.symbolId!!).members.filterIsInstance<EtsField>().forEach { requirement ->
+                    val resolved = member(instance(declaration), requirement.symbol.name)
+                        ?: reject(declaration, "Missing target property: ${requirement.symbol.name}")
+                    val implementation = resolved.second
+                    val propertyType = when (implementation) {
+                        is EtsField -> {
+                            if (implementation.private || implementation.static || (!requirement.readonly && implementation.readonly))
+                                reject(declaration, "Incompatible target property access")
+                            if (declaration.kind == EtsClassKind.CLASS && !declaration.abstract &&
+                                classes.getValue(resolved.first.symbolId!!).kind == EtsClassKind.INTERFACE)
+                                reject(declaration, "Missing concrete target property: ${requirement.symbol.name}")
+                            memberType(resolved.first, implementation)
+                        }
+                        is EtsFunction -> {
+                            if (implementation.kind != EtsFunctionKind.GETTER || implementation.private || implementation.static || implementation.abstract)
+                                reject(declaration, "Target property requires a concrete getter")
+                            val getterType = (memberType(resolved.first, implementation) as EtsFunctionType).result
+                            if (!requirement.readonly) {
+                                val setter = member(instance(declaration), requirement.symbol.name, setter = true)
+                                    ?: reject(declaration, "Writable target property requires a setter")
+                                val function = setter.second as EtsFunction
+                                if (function.private || function.static || function.abstract ||
+                                    (memberType(setter.first, function) as EtsFunctionType).parameters != listOf(getterType))
+                                    reject(declaration, "Incompatible target property setter")
+                            }
+                            getterType
+                        }
+                    }
+                    if (propertyType != memberType(owner, requirement)) reject(declaration, "Target property type differs from interface")
                 }
             }
             if (declaration.kind == EtsClassKind.CLASS && !declaration.abstract) {
@@ -348,6 +385,8 @@ class EtsValidator {
             reject(function, "Target setter requires one parameter and a void result")
         }
         val previousSuper = allowedSuper
+        val previousInitializer = initializingClass
+        initializingClass = currentClass.takeIf { function.kind == EtsFunctionKind.CONSTRUCTOR }
         allowedSuper = null
         val delegations = mutableListOf<EtsSuperConstructorCall>()
         walkEts(function) { if (it is EtsSuperConstructorCall) delegations.add(it) }
@@ -360,7 +399,7 @@ class EtsValidator {
         try { withTypeParameters(function.typeParameters, function.source) {
             bindingName(function.name, function.source); type(function.returnType, function.source)
             statements(function.body, parameters(function.parameters, outer), function.returnType, emptySet(), function.parameters.map { it.symbol.name }.toSet(), function.builder || function.build)
-        } } finally { allowedSuper = previousSuper }
+        } } finally { allowedSuper = previousSuper; initializingClass = previousInitializer }
     }
 
     private fun statements(values: List<EtsStatement>, outer: Map<String, EtsSymbol>, result: EtsType, loops: Set<String>, occupiedNames: Set<String> = emptySet(), ui: Boolean = false) {
@@ -542,6 +581,16 @@ class EtsValidator {
             is EtsAssignment -> {
                 if (value.target !is EtsReference && value.target !is EtsMember) reject(value, "Target assignment is not addressable")
                 visit(value.target); visit(value.value); expect(value.value, value.target.type)
+                val target = value.target as? EtsMember
+                val receiver = target?.receiver?.type as? EtsNamedType
+                if (receiver?.symbolId in classes) {
+                    val resolved = member(receiver!!, target!!.name)!!
+                    val field = resolved.second as? EtsField
+                    if (field?.readonly == true && (initializingClass?.symbol?.id != resolved.first.symbolId ||
+                        (target.receiver as? EtsReference)?.symbol?.name != "this")) {
+                        reject(value, "Cannot assign a readonly target property")
+                    }
+                }
             }
             is EtsCast -> visit(value.value)
             is EtsArray -> value.elements.forEach { visit(it); expect(it, value.elementType) }
@@ -549,7 +598,12 @@ class EtsValidator {
                 if (value.fields.keys != value.type.fields.keys) reject(value, "Target object fields differ from its record type")
                 value.fields.forEach { (name, child) -> visit(child); expect(child, value.type.fields.getValue(name)) }
             }
-            is EtsLambda -> statements(value.body, parameters(value.parameters, scope), value.returnType, emptySet(), value.parameters.map { it.symbol.name }.toSet())
+            is EtsLambda -> {
+                val previous = initializingClass
+                initializingClass = null
+                try { statements(value.body, parameters(value.parameters, scope), value.returnType, emptySet(), value.parameters.map { it.symbol.name }.toSet()) }
+                finally { initializingClass = previous }
+            }
         }
     }
 

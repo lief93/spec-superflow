@@ -9,5 +9,6 @@ fun main() {
         println(selected(true, seed))
         println(selected(false, seed))
         println(propertyDispatch(seed))
+        println(propertyInterface(seed))
     }
 }

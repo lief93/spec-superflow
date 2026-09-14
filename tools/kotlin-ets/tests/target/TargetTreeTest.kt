@@ -15,6 +15,7 @@ fun main() {
     checkPrinterPrecedence()
     checkAccessorContract()
     checkInheritanceContract()
+    checkInterfacePropertyContract()
     checkGenericInheritanceContract()
     checkBoundedReceiverContract()
     checkGenericMethodContract()

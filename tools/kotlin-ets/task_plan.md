@@ -13,8 +13,11 @@ generic-binary-member increment. Next fix the declaration/call normalization
 contract against actual official common/JS phases and ETS consumers. The contract
 is now in docs/declaration-call-contract.md. Its first consumer family is inherited
 final properties (storage, custom accessors and generic heritage), sharing official
-real-override resolution and receiver substitution. Interface/overridden properties,
-top-level initialization, inherited defaults and constructors remain pending.
+real-override resolution and receiver substitution. Abstract interface property
+signatures and final field/accessor implementations now pass the target suite and
+40-result JVM/host regression (tests/inheritance/.work/run-rbZMBr).
+Class property overrides, top-level initialization, inherited defaults and
+constructors remain pending.
 Main alone; no agents or scheduled wakeups.
 R2I is locally committed as 44fb21a; recent push retries failed connecting to
 GitHub. Do not claim it is remotely published until push/remote confirmation.

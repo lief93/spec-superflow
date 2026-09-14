@@ -143,6 +143,7 @@ class EtsPrinter {
                 listOf("${member.name}${typeParameters(member.typeParameters)}(${parameters(member.parameters)}): ${type(member.returnType)};")
                 else function(member)
             is EtsField -> listOf((if (member.state) "@State " else "") + (if (member.private) "private " else "") + (if (member.static) "static " else "") +
+                (if (member.readonly) "readonly " else "") +
                 "${member.symbol.name}: ${type(member.symbol.type)}" +
                 (member.initializer?.let { " = ${expression(it)}" } ?: "") + ";")
         } }
