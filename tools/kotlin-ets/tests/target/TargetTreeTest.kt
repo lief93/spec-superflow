@@ -23,6 +23,7 @@ fun main() {
     checkBoundedReceiverContract()
     checkGenericMethodContract()
     checkCovariantReturnContract()
+    checkCovariantPropertyContract()
     checkOverloadIdentityContract()
     checkClassIdentityContract()
     checkStrictBindingContract()

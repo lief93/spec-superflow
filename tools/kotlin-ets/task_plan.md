@@ -69,7 +69,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition, source virtual-overload bridges and bounded method-result covariance accepted; remaining readonly-property covariance and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition, source virtual-overload bridges and bounded method/readonly-property covariance accepted; remaining generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
@@ -166,8 +166,16 @@ refusals. Official FIR rejects three invalid override forms before output. Targe
 RFklC1 and overload run-CxQNDW (30 + 30, unchanged original output hashes) pass.
 See virtual-overloads.md; no SDK/native or whole-R2 claim.
 
-Next implement readonly-property covariance and generic bounds/variance
-combinations, inspecting the pinned common/JS type substitution and override
+Readonly-property covariance is now accepted with writable contracts invariant.
+Official FIR decides Kotlin override legality; the target checks mapped result
+assignability and exact declared field/getter identities, including cross-file
+reads through generic bounds. Frozen run-n2dIZP passes 70 + 70 JVM/host outcomes,
+six-file determinism, 19 bridge edges, two property-identity refusals and four
+official invalid-override refusals. Legacy run-iSM7AH and target GAopcC pass;
+all frozen inputs were rechecked. See virtual-overloads.md. No SDK/native claim.
+
+Next implement generic bounds/variance combinations, inspecting the pinned
+common/JS type substitution and override
 contracts first. External inherited slots, private shadowing and the documented
 unsupported receiver/parameter families remain explicit, not silently enabled.
 R2.3 is not complete. R2.4 and the combined SDK/native R2 gate remain queued

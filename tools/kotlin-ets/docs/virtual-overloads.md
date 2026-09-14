@@ -69,7 +69,7 @@ The target validator now rejects a class that relies on an interface signature
 alone as if it were an inherited class member. A historical bounded-receiver
 fixture was corrected to declare that method; its inherited-generic check remains.
 
-External inherited slots, covariant property overrides and private method shadowing
+External inherited slots and private method shadowing
 also retain explicit diagnostics. Existing unsupported overloaded extension,
 context, vararg, suspend and reified forms are not enabled by this change.
 The new test initially hit unsupported Double.plus in a method body. Floating
@@ -93,9 +93,24 @@ It composes with the existing common bridge planner, including fake inherited
 implementations. A method with no slot conflict acquires no forwarding wrapper.
 No cast, result erasure, body cloning or new runtime helper is needed.
 
-Source generic declaration variance, use-site projections, multiple bounds and
-covariant property storage/accessors remain separate R2.3 requirements. Invariant
+Source generic declaration variance, use-site projections and multiple bounds
+remain separate R2.3 requirements. Invariant
 source generic arguments have not been made covariant by this method-return change.
+
+Readonly property contracts now apply the same return-subtyping check. Interface
+readonly fields and getter-only class entries can be refined; writable ancestors
+still require exactly the same property type and complete accessor pairs. A
+subclass may expose a narrower writable property through an inherited readonly
+view, as Kotlin permits, without enabling writes through that view. Stored,
+computed and abstract getter implementations retain their existing storage and
+virtual access behavior.
+
+Property reads/writes now carry the identity of the declared target field or
+getter. Field declarations and consumers share a source-location-based identity;
+the declaration's file, not the caller's file, is authoritative. This also enables
+typed property access through generic bounds without a receiver cast. The target
+identity, receiver substitution, visibility and readonly-assignment checks remain
+enabled. No separate property expression evaluator was added.
 
 ## Evidence
 
@@ -197,3 +212,27 @@ previously supported secondary-constructor fixture now have explicit JVM/target
 outcome checks (true, true, 0), rather than obsolete expected failures. run-UTj2a9
 preserves the stale-secondary-negative failure. All passing source/test hashes
 were checked again before publication.
+
+## Readonly-property evidence
+
+RED run-31qfxR records the old inherited-property guard after JVM success;
+target 1cNlKz independently exposes the exact interface-property type check.
+run-kTKazr exposes a missing bound-member identity, and run-kV6ebq exposes
+caller-file ownership incorrectly used for a cross-file property declaration.
+The fix binds reads to canonical declaration-owned field/getter symbols, not
+casts or a relaxed identity check. Writable ancestor contracts remain invariant.
+
+Frozen run-n2dIZP passes 70 flat + 70 module JVM/ETS-host outcomes over 64 pinned
+inputs and six-file reversed-input determinism. Computed getter effects occur
+twice, exactly as on JVM. The probe retains 19 common bridge edges (six inherited)
+and four bridge refusals, checks uncast generic-bound and cross-file reads, and
+rejects both absent and wrong property identities. Official FIR rejects four
+invalid method/property overrides, including a narrowed writable property.
+Target GAopcC passes eight new readonly/writable contract refusals. Legacy
+run-iSM7AH retains 50 original outcomes, three former-negative positive results
+and seven source-linked boundaries over 72 pinned inputs. Frozen hashes were
+rechecked before commit. These are host/IR checks, not SDK/native/UI acceptance.
+
+- Bridges.ets: 5f6d3941689e09b921d59b15c815f1fd7b3d30cc5af1d51b5aa54e4a16dcef19
+- CovariantProperties.ets: 215096ff8f95c2b2253fbfd61c0ae641745aec0a8eef90f2ee35731fee0c8e8a
+- The five existing module hashes are unchanged from the method-result run.

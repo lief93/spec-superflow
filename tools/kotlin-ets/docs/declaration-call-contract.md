@@ -100,7 +100,12 @@ Official reference: Kotlin 2.1.20 `ir/util/AdditionalIrUtils.kt:overrides`,
 The official accessor inliner deliberately guards virtual properties; ETS also
 retains virtual dispatch rather than replacing those reads with field accesses.
 
-Boundaries remain explicit: covariant property override signatures, explicit `super`
+Readonly field/getter override results may covary through supported target
+heritage; writable property contracts remain invariant. Property references carry
+the declared field/getter identity, including generic-bound and cross-file reads.
+See virtual-overloads.md for the composed covariance evidence.
+
+Boundaries remain explicit: explicit `super`
 member calls, delegated/extension properties, interface default bodies, and `this`
 use during inherited initialization. This increment does not claim all Kotlin
 property or constructor semantics, nor SDK/native acceptance.

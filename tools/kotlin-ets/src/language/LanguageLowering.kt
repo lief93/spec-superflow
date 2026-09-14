@@ -247,7 +247,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             else receiverSubstitution(parent as? IrClass, receiver)
         if (property != null) {
             val propertyType = etsSubstitute(type(property.backingField?.type ?: property.getter!!.returnType), substitutions)
-            val access = receiver?.let { EtsMember(expression(it, scope), identifier(property), propertyType, source(call)) }
+            val symbol = if ((parent as? IrClass)?.kind == ClassKind.INTERFACE || !requiresAccessor(property))
+                propertyField(property) else functionSymbol(property.getter!!)
+            val access = receiver?.let { EtsMember(expression(it, scope), identifier(property), propertyType, source(call), symbol.id) }
                 ?: diagnostics.unsupported(call, "Top-level stored properties are outside the first language slice")
             return if (property.setter?.symbol == owner.symbol)
                 discard(EtsAssignment(access, arguments(call, scope).single(), source(call)), call) else access
@@ -497,7 +499,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 diagnostics.unsupported(function, "Extension and default-argument inherited methods are not supported")
             }
             if (overrides.any { !supportedInheritedSignature(function, it, parentClass) }) {
-                diagnostics.unsupported(function, "Inherited parameters and bounds must match; covariant properties are not supported")
+                diagnostics.unsupported(function, "Inherited parameters, bounds and writable property types must match")
             }
         }
         // Interface properties are target field contracts, not abstract methods.
@@ -604,7 +606,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                             listOfNotNull(member.getter, member.setter).any { it.body != null || it.extensionReceiverParameter != null }) {
                             diagnostics.unsupported(member, "Interface property requires abstract non-extension accessors")
                         }
-                        EtsField(synthetic(identifier(member), type(member.getter!!.returnType), member), readonly = !member.isVar)
+                        EtsField(propertyField(member), readonly = !member.isVar)
                     }
                     else -> diagnostics.unsupported(member, "Unsupported interface declaration")
                 } }
@@ -659,8 +661,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 source(declaration), kind = EtsFunctionKind.METHOD, static = true))
         }
         fields.forEach { property -> withElement(property) {
-            property.backingField?.let { field ->
-                members.add(EtsField(synthetic(fieldName(field), type(field.type), property),
+            if (property.backingField != null) {
+                members.add(EtsField(propertyField(property),
                     visibility = if (requiresAccessor(property)) EtsVisibility.PRIVATE else memberVisibility(property.visibility), readonly = !property.isVar))
             }
             if (requiresAccessor(property)) {
@@ -842,8 +844,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         // Instantiate class edges before rebinding the paired method parameters.
         fun instantiated(type: IrType): IrType = expected.substitute(type).substitute(methodParameters)
         // FIR already checked Kotlin override compatibility. The target validator checks
-        // covariant method results after type mapping; accessor/storage contracts stay exact.
-        return (function.correspondingPropertySymbol == null ||
+        // covariant read results after type mapping; writable contracts stay exact.
+        return (overridden.correspondingPropertySymbol?.owner?.isVar != true ||
             instantiated(overridden.returnType) == actual.substitute(function.returnType)) &&
             overridden.valueParameters.map { instantiated(it.type) } == function.valueParameters.map { actual.substitute(it.type) } &&
             overridden.typeParameters.zip(function.typeParameters).all { (original, current) ->
@@ -883,6 +885,13 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     private fun hasCustomAccessor(property: IrProperty): Boolean =
         listOfNotNull(property.getter, property.setter).any { it.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR }
+
+    private fun propertyField(property: IrProperty): EtsSymbol {
+        val at = declarationSource(property)
+        val name = property.backingField?.let(::fieldName) ?: identifier(property)
+        return EtsSymbol("property:${at.file}:${at.start}:${at.end}:$name", name,
+            type(property.backingField?.type ?: property.getter!!.returnType), at)
+    }
 
     private fun isVirtualProperty(property: IrProperty): Boolean = property.modality != Modality.FINAL ||
         property.getter?.overriddenSymbols.orEmpty().flatMap { it.owner.collectRealOverrides() }

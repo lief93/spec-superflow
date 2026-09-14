@@ -13,5 +13,6 @@ fun main() {
         println(covariantBounds(seed))
         println(covariantNullable(seed))
         println(covariantJoined(seed))
+        println(covariantProperties(seed))
     }
 }

@@ -6,3 +6,9 @@ interface InvalidGenericBase { fun <T> read(value: T): T }
 class InvalidGenericChild : InvalidGenericBase {
     override fun <T> read(value: T): String = "wrong"
 }
+open class InvalidPropertyValue
+class InvalidPropertyNarrow : InvalidPropertyValue()
+open class InvalidWritableBase { open var value: InvalidPropertyValue = InvalidPropertyValue() }
+class InvalidWritableChild : InvalidWritableBase() {
+    override var value: InvalidPropertyNarrow = InvalidPropertyNarrow()
+}

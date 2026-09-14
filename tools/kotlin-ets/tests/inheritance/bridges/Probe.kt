@@ -34,6 +34,21 @@ fun main(args: Array<String>) {
             check(owner.members.filterIsInstance<EtsFunction>().count { it.kind == EtsFunctionKind.METHOD } == 1)
             check(owner.members.filterIsInstance<EtsFunction>().none { it.sourceName?.startsWith("<bridge:") == true })
         }
+        val boundedRead = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>().single { it.name == "boundedRead" }
+        val read = (boundedRead.body.single() as EtsReturn).value as EtsMember
+        val bounded = read.receiver as EtsMember
+        check(bounded.receiver.type is EtsTypeParameterType && bounded.receiver !is EtsCast)
+        val view = classes.single { it.name == "CovariantView" }.members.filterIsInstance<EtsField>().single()
+        val stored = classes.single { it.name == "CovariantValue" }.members.filterIsInstance<EtsField>().single()
+        check(bounded.symbolId == view.symbol.id && read.symbolId == stored.symbol.id)
+        check(view.source.file != stored.source.file)
+        for (wrong in listOf<String?>(null, "wrong:property")) {
+            val changed = program.copy(files = program.files.map { file -> file.copy(declarations = file.declarations.map {
+                if (it === boundedRead) boundedRead.copy(body = listOf(EtsReturn(read.copy(receiver = bounded.copy(symbolId = wrong)), read.source))) else it
+            }) })
+            val failure = runCatching { EtsValidator().validate(changed, perFileNames = true) }.exceptionOrNull()
+            check(failure is InvalidTarget && failure.source.file == boundedRead.source.file)
+        }
         var edges = 0
         var inheritedEdges = 0
         for (method in owners.flatMap { it.declarations.filterIsInstance<IrSimpleFunction>() }.filter { it.correspondingPropertySymbol == null }) {
@@ -95,5 +110,6 @@ fun main(args: Array<String>) {
         }))
         File(args[1], "lowered.ir").writeText(module.dump())
         println("PASS $edges official bridge edges ($inheritedEdges inherited), original method identities/parameters, typed single forwarding and four invalid-target refusals")
+        println("PASS uncast bounded property read, cross-file declaration identities and two identity refusals")
     }
 }
