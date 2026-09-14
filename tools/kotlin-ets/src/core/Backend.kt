@@ -24,9 +24,12 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>) {
         }
     }
 
-    fun lower(module: IrModuleFragment): EtsProgram {
-        validateSource(module)
-        val program = EtsProgram(module.files.map { file ->
+    fun lower(module: IrModuleFragment): EtsProgram = lower(listOf(module))
+
+    /** Modules selected for translation share symbol identity; their IR ownership stays intact. */
+    fun lower(modules: List<IrModuleFragment>): EtsProgram {
+        modules.forEach(::validateSource)
+        val program = EtsProgram(modules.flatMap { it.files }.map { file ->
             diagnostics.currentFile = file.fileEntry.name
             EtsFile(file.fileEntry.name, file.declarations.map { declaration -> when (declaration) {
                 is IrSimpleFunction -> language.function(declaration).copy(

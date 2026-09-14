@@ -78,10 +78,14 @@ Continue R2.2. The bounded method-generic member route now reuses the existing
 official registration/deserializer/inliner and passes frozen IR plus strict host
 type/result checks; see docs/r2e-binary-members.md. Binary provenance is excluded
 from source-owned declaration emission. Do not reimplement generic substitution.
-Next investigate KLIB through its official loader separately, recording actual
-resolved body/symbol ownership and backend prerequisites. The JVM signature
-reader is not a KLIB frontend. Keep remaining bounds/receiver/format gaps explicit;
-do not start page-specific features or jump to class property overrides.
+The separate official KLIB proof now loads real bodies and links three modules
+through the same ETS backend; see docs/klib-loader-proof.md. Public KLIB input,
+session/body-origin and phase-context integration are not implemented by that
+proof. The JVM signature reader is not a KLIB frontend.
+Next verify supported stateless member extension-receiver binding through the
+existing official deserializer/inliner before widening its guard. Keep remaining
+bounds/receiver/format gaps explicit; do not start page-specific features or
+jump to class property overrides.
 
 R2.1 is accepted for the documented bounded body/replacement contract, not a
 general dependency linker. Proceed to R2.2, then R2.3, R2.4 and the R2 gate. R3-R7

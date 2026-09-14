@@ -1,5 +1,21 @@
 # Execution progress
 
+## 2026-09-14: R2.2 official KLIB/backend proof
+
+- Reused official ModulesStructure/loadIr/JsIrLinker, with partial linkage
+  disabled. No parser, linker or deserializer implementation copied into ETS.
+- Added only a multiple-module backend entry; original IR ownership is preserved
+  and existing typed tree/validator/module imports/printer are reused.
+- Final run-MvqSU7 loads three real KLIBs after producer-source deletion, proves
+  five actual non-inline bodies and canonical transitive symbols, emits unchanged
+  output under reversed module order, and passes strict host types/imports plus
+  four JVM/ETS-host pairs. Missing helper rejects with official symbol evidence
+  and no target files. Input, implementation and output hashes are recorded.
+- Source-input module regression run-TP8ttw passes 44 cases and output guards.
+  See docs/klib-loader-proof.md for failures, commands and production gaps.
+- d7b9bba from the preceding increment was successfully pushed this turn.
+  No KLIB public-CLI, SDK/native or whole-R2 completion claim.
+
 ## 2026-09-14: R2.2 generic binary member/backend boundary
 
 - Reused existing official global type-parameter registration,

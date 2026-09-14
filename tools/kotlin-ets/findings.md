@@ -21,6 +21,11 @@ transitive serialized inline loading and typed UI modules have since progressed.
   inliner as top-level generic functions. The new failure was in our backend's
   source-owner query, not a missing Kotlin generic substitution algorithm:
   binary provenance must not qualify as an input source class/module.
+- The separate KLIB proof reuses official loadIr/JsIrLinker to obtain actual
+  non-inline bodies, then reuses the ETS backend's typed tree and module emitter.
+  Official moduleFragmentToUniqueName is only an optional JS output-name map;
+  actual module ownership must follow resolver/library descriptor identity.
+  Public KLIB session/phase/runtime integration remains separate and unfinished.
 
 ## Historical observations
 
