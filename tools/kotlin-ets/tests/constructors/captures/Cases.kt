@@ -55,7 +55,39 @@ fun localDispatch(seed: Int): String {
     return "${first.value}:${second.value}:${trace.text}"
 }
 
+fun localPersistent(seed: Int): String {
+    var state = seed
+    val trace = Trace()
+    class Persistent {
+        val value: Int
+        init { trace.mark("I", state) }
+        constructor(value: Int = trace.mark("D", state)) { this.value = trace.mark("A", value); state += 1 }
+        constructor(value: String) { this.value = trace.mark("B", value.length); state += 2 }
+        constructor(flag: Boolean) : this(if (flag) "xy" else "z") { state += 3 }
+        fun read(): Int = value + state
+    }
+    val first = Persistent(value = seed)
+    val second = Persistent("abc")
+    val third = Persistent(true)
+    val fourth = Persistent()
+    return "${first.read()}:${second.read()}:${third.read()}:${fourth.read()}:${trace.text}"
+}
+
 class Outer(var seed: Int, val trace: Trace) {
+    inner class Multi {
+        val value: Int
+        init { trace.mark("I", seed) }
+        constructor(value: Int = trace.mark("D", seed)) { this.value = trace.mark("A", value) }
+        constructor(value: String) { this.value = trace.mark("B", value.length) }
+        constructor(flag: Boolean) : this(if (flag) "abc" else "x") { trace.mark("C", 0) }
+        fun read(): Int = value + seed
+        inner class Leaf {
+            val extra: Int
+            constructor(extra: Int) { this.extra = extra }
+            constructor(extra: String) { this.extra = extra.length }
+            fun read(): Int = value + seed + extra
+        }
+    }
     inner class Item(val amount: Int) {
         init { trace.mark("I", amount) }
         constructor(label: String, amount: Int = trace.mark("D", seed)) : this(trace.mark("A", amount)) {
@@ -89,6 +121,19 @@ fun innerRoot(seed: Int): String {
     val second = outer.Root(4)
     outer.seed += 1
     return "${first.read()}:${second.read()}:${trace.text}"
+}
+
+fun innerDispatch(seed: Int): String {
+    val trace = Trace()
+    val outer = Outer(seed, trace)
+    val other = Outer(seed + 10, trace)
+    fun receiver(): Outer { trace.mark("R", 0); return outer }
+    val first = receiver().Multi()
+    val second = other.Multi(true)
+    val leaf = first.Leaf("abc")
+    val otherLeaf = second.Leaf(5)
+    outer.seed += 1
+    return "${first.read()}:${second.read()}:${leaf.read()}:${otherLeaf.read()}:${trace.text}"
 }
 
 object Journal {

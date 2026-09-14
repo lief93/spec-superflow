@@ -48,6 +48,12 @@ private var IrClass.originalInnerBinding: SourceInnerClassBinding? by irAttribut
 
 internal fun sourceInnerClassBinding(declaration: IrClass): SourceInnerClassBinding? = declaration.originalInnerBinding
 
+internal fun rebindInnerConstructor(owner: IrClass, constructor: IrConstructor, parameter: IrValueParameter) {
+    val binding = checkNotNull(owner.originalInnerBinding)
+    check(constructor.parent === owner && parameter.parent === constructor && parameter.type == binding.field.type)
+    owner.originalInnerBinding = binding.copy(constructor = constructor, parameter = parameter)
+}
+
 internal fun sourceClassIsExported(declaration: IrClass): Boolean = declaration.originalSourceExported
     ?: (declaration.visibility != DescriptorVisibilities.LOCAL && !DescriptorVisibilities.isPrivate(declaration.visibility))
 
@@ -120,7 +126,7 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
     val inners = classes.filter { it.isInner }
     if (inners.isNotEmpty()) {
         val outerOwners = inners.associateWith { it.parent as IrClass }
-        val constructors = inners.associateWith { checkNotNull(nativeConstructorRoot(it)) }
+        val constructors = inners.associateWith { nativeConstructorRoot(it) ?: it.constructors.first() }
         val declarations = InnerClassesLowering(context)
         val members = InnerClassesMemberBodyLowering(context)
         val calls = InnerClassConstructorCallsLowering(context)
@@ -171,8 +177,8 @@ private fun validateInnerClass(declaration: IrClass) {
     if (outer.typeParameters.isNotEmpty() || declaration.typeParameters.isNotEmpty()) {
         diagnostics.unsupported(declaration, "Inner class generic binders are not supported")
     }
-    if (nativeConstructorRoot(declaration) == null) {
-        diagnostics.unsupported(declaration, "Inner classes require one native allocating constructor root")
+    if (!declaration.constructors.any()) {
+        diagnostics.unsupported(declaration, "Inner classes require a source constructor")
     }
     if (declaration.superTypes.any { !it.isAny() }) {
         diagnostics.unsupported(declaration, "Inner classes require Any-only heritage")

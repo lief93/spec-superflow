@@ -42,7 +42,7 @@ function typecheck(paths) {
 function evaluate(exports) {
   const context = vm.createContext({ exports });
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed =>
-    ['localChain', 'localRoot', 'innerChain', 'innerRoot', 'initializer', 'collision', 'localDispatch', 'combined'].map(name =>
+    ['localChain', 'localRoot', 'innerChain', 'innerRoot', 'initializer', 'collision', 'localDispatch', 'localPersistent', 'innerDispatch', 'combined'].map(name =>
       String(vm.runInContext(`exports.${name}(${seed})`, context, { timeout: 1000 }))));
 }
 const code = readFileSync(out, 'utf8'), flatTs = join(work, 'Captures.ts');

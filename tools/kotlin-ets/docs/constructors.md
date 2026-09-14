@@ -66,7 +66,7 @@ delegation through secondaries now use the native dispatcher described in
 native-constructor-flow.md. Unique-root source families retain the original
 minimal factory path. Unique-root local/inner secondary capture combinations and
 local classes in duplicated initializers are covered in constructor-captures.md.
-Multi-entry stored captures/inner links and inherited initialization
+Multi-entry stored captures/inner links are covered there as well. Inherited initialization
 reads/captures of `this` (including secondary bodies) remain source-linked
 diagnostics with no output. Supporting a
 new allocation form must not silently bypass the initialization-safety boundary.

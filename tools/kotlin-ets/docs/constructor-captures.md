@@ -35,10 +35,34 @@ user parameter names win over generated capture names.
   construction. Official common lowering passes those as parameters without
   retaining captured fields, so the existing dispatcher consumes them directly.
 
-Multiple roots with stored captured fields or inner outer links remain explicit
-diagnostics. Generic inner binders, captured inheritance, anonymous owners and
+Multiple roots with stored captured fields or inner outer links use the checked
+common prefix described below. Generic inner binders, captured inheritance, anonymous owners and
 local/inner inherited-default providers are not newly supported. These remaining
 composition requirements stay in R2, not silently deferred to page adaptation.
+
+## Multi-entry stored captures
+
+Common LocalDeclarationsLowering already writes captured fields at every native
+super root. InnerClassesLowering similarly initializes its outer link only at
+roots, not at this-delegating constructors. The ETS constructor phase consumes
+those exact fields and parameters; it follows resolved delegation symbols and
+parameter arguments to bind the this-delegating entries and official default
+stubs. It does not infer captures from names, source strings or field types.
+
+Every root must have one complete official prefix. Every delegated capture must
+be an unchanged official parameter of the caller, with the exact field type and
+constructor owner. Only after all entries validate are their field writes moved
+to the dispatcher's single prefix. Default argument bodies, source initializers
+and secondary bodies still use the existing common injection/inlining machinery.
+
+Shared capture parameters are passed once to the native dispatcher, not repeated
+in every nullable entry slot. Inner registration is rebound to that exact native
+constructor/outer parameter, preserving the original field and immediate outer
+class identities. Each source factory evaluates the outer receiver once; source
+fields are not copied or made public. The target consumer retains prefix count,
+owner, field and parameter checks, and permits the verified dispatcher branch in
+place of the unique-root direct Any delegation. No target validator bypass or raw
+ETS node is introduced.
 
 ## Verification
 
@@ -95,3 +119,30 @@ validation pass; no separate reviewer was used.
 
 These are host and compiler-IR checks, not ArkTS SDK, device or UI acceptance.
 The combined R2 SDK/native gate remains pending.
+
+### Stored-capture dispatcher evidence
+
+RED run-KceVe9 executes the extended original JVM fixture but hits the former
+single-root inner-class gate. Initial run-5MgGwr passes 50 + 50 host results;
+inspection still found redundant capture slots. The final representation removes
+those repeated slots. run-L6yEVd passes behavior but fails to compile a new probe
+assertion on nullable SourceSpan.file; it is not accepted evidence.
+
+Frozen run-5p3qcZ passes 50 flat + 50 module JVM/ETS-host results, strict types,
+reversed-input determinism and all 57 input hashes. IR proof checks two retained
+local capture fields, two multi-entry outer links, exact common constructor
+parameters, no repeated capture slots, all source call targets, and seven
+malformed-prefix refusals. Tests exercise every new native entry, default masks,
+shared-cell updates before default evaluation, one-time receiver evaluation and
+two levels of outer-object identity across independent instances.
+Flat SHA-256: c9acf2494642da6b2e5fe9263fd0acf42f3ab529e8f8cd188d44daac4f874be7.
+
+Constructor regression run-61KOsX passes 90 + 90 results, seven former-negative
+positive conversions (now including the unchanged CapturedDispatch source), four
+precise exclusions and all 81 frozen hashes. Its flat and six module outputs are
+byte-identical to run-j80b1A. CapturedInheritance explicitly preserves the remaining
+captured-heritage boundary. Inner regression green-MlqNLI passes 20 results in
+both output forms, fourteen malformed bindings and deterministic module output.
+Target suite sW4vki passes constructor flow, visibility, inheritance, generic,
+binding and UI target contracts. Main self-check and git diff whitespace checks
+pass. No independent review, SDK build or device run is claimed for this increment.

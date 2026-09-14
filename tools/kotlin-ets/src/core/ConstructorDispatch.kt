@@ -59,8 +59,9 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
     if (selected.isEmpty()) return
     selected.forEach { owner ->
         val diagnostics = DiagnosticSink(owner.file.fileEntry.name)
-        if (generateSequence(owner as IrDeclaration) { it.parent as? IrDeclaration }.any { it is IrFunction || it is IrClass && it.isInner } ||
-            owner.declarations.filterIsInstance<IrField>().any { it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE })
+        if (generateSequence(owner as IrDeclaration) { it.parent as? IrDeclaration }.any {
+                it is IrFunction || it is IrClass && it.isInner && sourceInnerClassBinding(it) == null
+            })
             diagnostics.unsupported(owner, "Constructor dispatch in local or inner classes requires capture-aware allocation")
         val inherited = owner.modality != Modality.FINAL || owner.superTypes.any {
             it.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"
@@ -108,6 +109,7 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
     }
     module.files.forEach(injector::lower)
     val originals = selected.flatMap { it.constructors.toList() }.sortedWith(compareBy({ it.file.fileEntry.name }, { it.startOffset }))
+    val captures = selected.associateWith { owner -> constructorCaptures(owner, originals.filter { it.parent === owner }) }
     originals.forEach { it.valueParameters.forEach { parameter -> parameter.defaultValue = null } }
     // Move source initializers before inlining so the common inliner binds their parameters too.
     val initialization = InitializersLowering(context)
@@ -155,17 +157,24 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
         returnType = owner.defaultType
     }.apply {
         dispatchOwner = owner
+        val capture = captures.getValue(owner)
+        capture.parameters.values.firstOrNull().orEmpty().forEach { valueParameters += it.copyTo(this) }
+        sourceInnerClassBinding(owner)?.let { rebindInnerConstructor(owner, this, valueParameters.first()) }
         addValueParameter("__constructor", real.irBuiltIns.intType)
         originals.filter { it.parent === owner }.forEachIndexed { index, original ->
-            original.valueParameters.forEach { addValueParameter("__${index}_${it.name}", it.type.makeNullable()) }
+            original.valueParameters.filterNot { it in capture.parameters.getValue(original) }
+                .forEach { addValueParameter("__${index}_${it.name}", it.type.makeNullable()) }
         }
     } }
     fun dispatchArguments(call: IrFunctionAccessExpression, target: IrConstructor, builder: DeclarationIrBuilder): List<IrExpression> {
         val family = originals.filter { it.parent === target.parent }
         val chosen = call.symbol.owner
-        return listOf(builder.irInt(family.indexOf(chosen))) + family.flatMap { constructor ->
-            constructor.valueParameters.mapIndexed { index, parameter ->
-                if (constructor === chosen) call.getValueArgument(index)
+        val captured = captures.getValue(target.parentAsClass).parameters.getValue(chosen as IrConstructor).map { parameter ->
+            call.getValueArgument(parameter.index) ?: DiagnosticSink(chosen.file.fileEntry.name).unsupported(call, "Unbound constructor capture")
+        }
+        return captured + listOf(builder.irInt(family.indexOf(chosen))) + family.flatMap { constructor ->
+            constructor.valueParameters.filterNot { it in captures.getValue(target.parentAsClass).parameters.getValue(constructor) }.map { parameter ->
+                if (constructor === chosen) call.getValueArgument(parameter.index)
                     ?: DiagnosticSink(chosen.file.fileEntry.name).unsupported(call, "Constructor default injection left an unbound argument")
                 else builder.irNull(parameter.type.makeNullable())
             }
@@ -187,16 +196,24 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
     }
     dispatchers.forEach { (owner, dispatcher) ->
         val builder = DeclarationIrBuilder(generators, dispatcher.symbol, owner.startOffset, owner.endOffset)
-        var parameter = 1
+        val capture = captures.getValue(owner)
+        var parameter = capture.fields.size + 1
         dispatcher.body = builder.irBlockBody {
+            capture.fields.forEachIndexed { index, field ->
+                +builder.irSetField(builder.irGet(owner.thisReceiver!!), field, builder.irGet(dispatcher.valueParameters[index]),
+                    origin = if (field.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE)
+                        IrStatementOrigin.STATEMENT_ORIGIN_INITIALIZER_OF_FIELD_FOR_CAPTURED_VALUE else null)
+            }
             +builder.irWhen(real.irBuiltIns.unitType, originals.filter { it.parent === owner }.mapIndexed { index, original ->
                 val call = builder.irCall(initializers.getValue(original)).apply {
                     dispatchReceiver = builder.irGet(owner.thisReceiver!!)
                     original.valueParameters.forEachIndexed { argument, value ->
-                        putValueArgument(argument, builder.irImplicitCast(builder.irGet(dispatcher.valueParameters[parameter++]), value.type))
+                        val capturedIndex = capture.parameters.getValue(original).indexOf(value)
+                        val index = if (capturedIndex >= 0) capturedIndex else parameter++
+                        putValueArgument(argument, builder.irImplicitCast(builder.irGet(dispatcher.valueParameters[index]), value.type))
                     }
                 }
-                builder.irBranch(builder.irEquals(builder.irGet(dispatcher.valueParameters.first()), builder.irInt(index)), call)
+                builder.irBranch(builder.irEquals(builder.irGet(dispatcher.valueParameters[capture.fields.size]), builder.irInt(index)), call)
             } + builder.irElseBranch(builder.irCall(real.irBuiltIns.illegalArgumentExceptionSymbol).apply {
                 putValueArgument(0, builder.irString("Invalid constructor entry"))
             }))
@@ -256,4 +273,61 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
     selected.forEach { it.declarations.removeAll { declaration -> declaration in initializers.values } }
     module.transformChildrenVoid(ReturnableBlockTransformer(real))
     module.patchDeclarationParents()
+}
+
+private data class ConstructorCaptures(val fields: List<IrField>, val parameters: Map<IrConstructor, List<IrValueParameter>>)
+
+/** Consume the official per-root writes and resolved this-delegation bindings, not capture names. */
+private fun constructorCaptures(owner: IrClass, constructors: List<IrConstructor>): ConstructorCaptures {
+    val outer = sourceInnerClassBinding(owner)?.field
+    val fields = listOfNotNull(outer) + owner.declarations.filterIsInstance<IrField>().filter {
+        it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE
+    }
+    if (fields.isEmpty()) return ConstructorCaptures(fields, constructors.associateWith { emptyList() })
+    val diagnostics = DiagnosticSink(owner.file.fileEntry.name)
+    val resolved = linkedMapOf<IrConstructor, List<IrValueParameter>>()
+    val pending = mutableSetOf<IrConstructor>()
+    val prefixes = mutableListOf<Pair<IrBlockBody, List<IrSetField>>>()
+    fun resolve(constructor: IrConstructor): List<IrValueParameter> {
+        resolved[constructor]?.let { return it }
+        if (constructor !in constructors || !pending.add(constructor))
+            diagnostics.unsupported(constructor, "Invalid captured constructor delegation ownership")
+        val body = constructor.body as? IrBlockBody
+            ?: diagnostics.unsupported(constructor, "Captured constructor requires an official body")
+        val call = body.statements.filterIsInstance<IrDelegatingConstructorCall>().singleOrNull()
+            ?: diagnostics.unsupported(constructor, "Captured constructor requires one direct delegation")
+        val writes = body.statements.takeWhile { it is IrSetField }.filterIsInstance<IrSetField>()
+        val parameters = if (call.symbol.owner.parent === owner) {
+            if (writes.isNotEmpty()) diagnostics.unsupported(constructor, "Delegating constructor cannot initialize captured fields twice")
+            resolve(call.symbol.owner).map { parameter ->
+                ((call.getValueArgument(parameter.index) as? IrGetValue)?.symbol?.owner as? IrValueParameter)
+                    ?: diagnostics.unsupported(call, "Constructor delegation must forward the official capture parameter")
+            }
+        } else {
+            if (writes.size != fields.size || writes.map { it.symbol.owner }.toSet() != fields.toSet() ||
+                body.statements.getOrNull(writes.size) !== call)
+                diagnostics.unsupported(constructor, "Captured constructor requires one complete official field prefix")
+            prefixes.add(body to writes)
+            fields.map { field ->
+                val write = writes.single { it.symbol.owner === field }
+                if ((write.receiver as? IrGetValue)?.symbol !== owner.thisReceiver?.symbol ||
+                    field !== outer && write.origin !== IrStatementOrigin.STATEMENT_ORIGIN_INITIALIZER_OF_FIELD_FOR_CAPTURED_VALUE)
+                    diagnostics.unsupported(constructor, "Invalid official capture field initialization")
+                ((write.value as? IrGetValue)?.symbol?.owner as? IrValueParameter)
+                    ?: diagnostics.unsupported(constructor, "Captured field requires an official parameter")
+            }
+        }
+        parameters.zip(fields).forEach { (parameter, field) ->
+            val official = if (field === outer) parameter.origin === org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin.FIELD_FOR_OUTER_THIS
+                else parameter.origin === BOUND_VALUE_PARAMETER || parameter.origin === BOUND_RECEIVER_PARAMETER
+            if (!official || parameter.parent !== constructor || parameter.type != field.type || parameter.defaultValue != null || parameter.varargElementType != null)
+                diagnostics.unsupported(constructor, "Invalid official captured constructor parameter binding")
+        }
+        pending.remove(constructor)
+        resolved[constructor] = parameters
+        return parameters
+    }
+    constructors.forEach(::resolve)
+    prefixes.forEach { (body, writes) -> body.statements.removeAll(writes.toSet()) }
+    return ConstructorCaptures(fields, constructors.associateWith { resolved.getValue(it) })
 }

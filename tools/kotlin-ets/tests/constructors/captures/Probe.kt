@@ -8,6 +8,7 @@ import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.types.makeNotNull
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.*
 
@@ -53,6 +54,25 @@ fun main(args: Array<String>) {
         check(entries.declarations.filterIsInstance<IrField>().none {
             it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE
         })
+        for (name in listOf("Persistent", "Multi", "Leaf")) {
+            val owner = classes.single { it.name.asString() == name }
+            val constructor = owner.constructors.single()
+            check(isEtsDispatchConstructor(constructor) && !constructor.isPrimary)
+            val binding = sourceInnerClassBinding(owner)
+            val fields = if (binding != null) listOf(binding.field) else owner.declarations.filterIsInstance<IrField>().filter {
+                it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE
+            }
+            check(fields.size == if (name == "Persistent") 2 else 1)
+            val writes = (constructor.body as IrBlockBody).statements.takeWhile { it is IrSetField }.map { it as IrSetField }
+            check(writes.map { it.symbol.owner } == fields)
+            writes.forEachIndexed { index, write ->
+                check((write.receiver as IrGetValue).symbol === owner.thisReceiver!!.symbol)
+                check((write.value as IrGetValue).symbol === constructor.valueParameters[index].symbol)
+                check(constructor.valueParameters[index].type == fields[index].type)
+            }
+            check(constructor.valueParameters.drop(fields.size).none { parameter -> fields.any { parameter.type.makeNotNull() == it.type } })
+            if (binding != null) check(binding.constructor === constructor && binding.parameter === constructor.valueParameters.first())
+        }
         val sourceFiles = module.files.toSet()
         module.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
@@ -73,7 +93,24 @@ fun main(args: Array<String>) {
         val write = body.statements.removeAt(0)
         val failure = try { runCatching { lower() }.exceptionOrNull() } finally { body.statements.add(0, write) }
         check(failure is Unsupported && failure.diagnostic.message.contains("official initialization prefix"))
+        for (name in listOf("Persistent", "Multi")) {
+            val declaration = classes.single { it.name.asString() == name }
+            val constructor = declaration.constructors.single()
+            val statements = (constructor.body as IrBlockBody).statements
+            val prefix = statements.first() as IrSetField
+            fun rejected(change: () -> Unit, restore: () -> Unit) {
+                change()
+                val error = try { runCatching { lower() }.exceptionOrNull() } finally { restore() }
+                check(error is Unsupported) { "$name accepted invalid capture initialization: $error" }
+                check(error.diagnostic.source.file == declaration.file.fileEntry.name)
+            }
+            rejected({ statements.removeAt(0) }, { statements.add(0, prefix) })
+            rejected({ statements.add(prefix) }, { statements.removeAt(statements.lastIndex) })
+            val value = prefix.value
+            rejected({ prefix.value = org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl(
+                constructor.startOffset, constructor.endOffset, constructor.valueParameters.last().symbol) }, { prefix.value = value })
+        }
         File(args[1], "lowered.ir").writeText(module.dump())
-        println("PASS four official capture fields, constructor-only captures, two outer bindings, two non-primary native roots, seven factories and missing-prefix rejection")
+        println("PASS official captures, shared dispatcher prefixes, nested outer rebinding, source roots/factories and seven malformed-prefix refusals")
     }
 }

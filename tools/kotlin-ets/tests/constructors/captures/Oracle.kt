@@ -9,6 +9,8 @@ fun main() {
         println(initializer(seed))
         println(collision(seed))
         println(localDispatch(seed))
+        println(localPersistent(seed))
+        println(innerDispatch(seed))
         println(combined(seed))
     }
 }

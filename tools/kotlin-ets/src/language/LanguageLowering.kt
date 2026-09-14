@@ -687,7 +687,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 (write.receiver as? IrGetValue)?.symbol !== declaration.thisReceiver?.symbol ||
                 (write.value as? IrGetValue)?.symbol !== binding.parameter.symbol ||
                 constructorBody.statements.filterIsInstance<IrSetField>().count { it.symbol === binding.field.symbol } != 1 ||
-                constructorBody.statements.getOrNull(1) !is IrDelegatingConstructorCall) {
+                !isEtsDispatchConstructor(constructor) && constructorBody.statements.getOrNull(1) !is IrDelegatingConstructorCall) {
                 rejectInner(binding, constructor, "Inner class requires one registered outer initialization before Any delegation")
             }
             write
