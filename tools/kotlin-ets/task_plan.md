@@ -5,6 +5,32 @@ evidence, not the current backlog. Use the existing non-spec development workflo
 
 ## Acceptance contract
 
+### Cost-first execution trial (2026-09-14)
+
+The user now prioritizes quota over urgency. Measure at most the next two bounded
+requirements before retaining parallel implementation. Do not repeat a requirement
+just to benchmark it. Leave the current R2H review undisturbed. At each NEW
+requirement boundary record usage counters before dispatch and after acceptance
+for main, Parfit and Aristotle separately; record wall time, test/build wait,
+coordination and rework. Compare a normal two-lane batch with a single-developer
+batch when reasonably comparable; independent review and acceptance stay identical.
+Different workloads are observational evidence, not a controlled speedup estimate.
+
+Read only event_msg/token_count telemetry from the three local rollout logs, not
+conversation bodies. Use total_token_usage deltas; separate input, cached input,
+uncached input (input minus cached), and output. Reasoning output is a subset of
+output, not another summand. Mark missing/reset counters unavailable; do not infer
+tokens or billing from account-wide quota percentages. Report actual usage, not
+a fabricated credit conversion or hypothetical serial token total.
+
+After the first batch report measured costs; stop the parallel trial early if
+coordination/duplication clearly outweighs useful overlap. After two batches,
+unless evidence clearly justifies parallel overhead, automatically use ONE
+persistent developer (Parfit) with main coordinating and Aristotle reviewing the
+frozen result. Do not add agents or interrupt active turns for ordinary work.
+Keep autonomous continuation and tested/reviewed commit-push enabled. Avoid
+frequent empty polling and repeated whole-history reads. See docs/cost-trial.md.
+
 ### Current publication authorization (2026-09-14)
 
 The user now authorizes commit and push after each batch passes its required
@@ -15,7 +41,14 @@ only the accepted batch and its required dependencies; exclude unrelated dirty
 files, generated scratch output and any unreviewed work. Verify the pushed commit
 against the remote branch. Release/publishing beyond Git remains separately gated.
 
-### Current mainline: R2G accepted; publish before the next R2 slice (2026-09-14)
+### Current mainline: R2H ordinary inner classes (2026-09-14)
+
+Accepted R2E-R2G was committed and pushed as `2cf0b8f`; remote branch
+`andorid-to-hormony` was independently checked with ls-remote. R2H contract and
+disjoint ownership are fixed in `docs/inner-classes.md`. Main owns core eligibility,
+official phase ordering and identity registration; Parfit owns the typed language
+consumer and behavioral checks. Only the explicitly bounded inner-class subset is
+in scope. Heavy builds remain serialized; review follows writer freeze.
 
 Aristotle's second R2G review passes requirements and code quality with no
 actionable findings; main accepts the documented finite capture subset and
@@ -232,7 +265,7 @@ disjoint write ownership. A lane being done does not make a round accepted.
 | --- | --- | --- | --- |
 | R0 | Inventory existing capabilities/evidence and fix acceptance/ownership | Existing backend | Complete for planning; no new capability claimed |
 | R1 | Transitive serialized inline dependencies; initial interface/inheritance semantics; bounded collection expansion; UI multi-file ownership | R0/shared contracts | Accepted for the explicitly bounded R1A/R1B cases; remaining limitations retained in later rounds |
-| R2 | Generic/member dependency linking; generic dispatch, overloads, nested/local declarations; module visibility and name fidelity | R1 accepted | R2A/B/C/E/F accepted finite slices; R2D owning regressions closed; R2G value capture implementation started; combined integration deferred, whole round incomplete |
+| R2 | Generic/member dependency linking; generic dispatch, overloads, nested/local declarations; module visibility and name fidelity | R1 accepted | R2A/B/C/E/F/G accepted finite slices; R2D owning regressions closed; R2H inner-class contract fixed; combined integration deferred, whole round incomplete |
 | R3 | Broader language/library semantics: nullability, casts, exceptions/finally, equality, numeric families and collection protocols | R2 accepted | Pending |
 | R4 | Compose structure/state completeness: nested slots, reactive derived values, event captures, conditional/repeated UI and list/pager linkage | R3 accepted | Pending |
 | R5 | UI fidelity: ordered modifiers, measurement, constraints, text/style inheritance, themes/resources, density/font scale and runtime insets | R4 accepted | Pending |
@@ -355,10 +388,10 @@ shared contract work locally while workers implement independent established API
 
 ## Next action
 
-Finish R2G value-capture language consumption and focused JVM/ETS checks. Core
-probe `run-mKHYaN` is green; Parfit owns the active language lane. Wait for that
-lane to freeze, run affected regression checks serially, and return to the same
-Aristotle review gate. Do not redispatch accepted R2A-F work from the history below.
+Implement the bounded R2H contract in docs/inner-classes.md. Main first proves
+official core lowering; Parfit implements the language consumer in its disjoint
+lane. After core freeze, transfer the serial build slot for JVM/flat/module
+checks, then freeze all writers for Aristotle. Do not redispatch accepted R2A-G.
 
 ## Historical round evidence
 

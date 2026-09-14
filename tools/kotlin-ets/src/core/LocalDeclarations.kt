@@ -8,7 +8,11 @@ import org.jetbrains.kotlin.backend.common.lower.LocalDeclarationsLowering
 import org.jetbrains.kotlin.backend.common.lower.LocalClassPopupLowering
 import org.jetbrains.kotlin.backend.common.lower.ClosureAnnotator
 import org.jetbrains.kotlin.backend.common.lower.SharedVariablesLowering
+import org.jetbrains.kotlin.backend.common.lower.InnerClassesLowering
+import org.jetbrains.kotlin.backend.common.lower.InnerClassesMemberBodyLowering
+import org.jetbrains.kotlin.backend.common.lower.InnerClassConstructorCallsLowering
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
+import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
 import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFir2IrPipelineArtifact
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.ClassKind
@@ -31,6 +35,18 @@ val ETS_SHARED_VARIABLE_CELL = IrDeclarationOriginImpl("ETS_SHARED_VARIABLE_CELL
 
 private var IrClass.originalSourceExported: Boolean? by irAttribute(followAttributeOwner = true)
 
+internal data class SourceInnerClassBinding(
+    val outer: IrClass,
+    val field: IrField,
+    val constructor: IrConstructor,
+    val parameter: IrValueParameter,
+    val source: SourceSpan,
+)
+
+private var IrClass.originalInnerBinding: SourceInnerClassBinding? by irAttribute(followAttributeOwner = false)
+
+internal fun sourceInnerClassBinding(declaration: IrClass): SourceInnerClassBinding? = declaration.originalInnerBinding
+
 internal fun sourceClassIsExported(declaration: IrClass): Boolean = declaration.originalSourceExported
     ?: (declaration.visibility != DescriptorVisibilities.LOCAL && !DescriptorVisibilities.isPrivate(declaration.visibility))
 
@@ -49,7 +65,8 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
             current = current.parent
         }
         declaration.originalSourceExported = exported
-        if (declaration.parent !is IrFile && (declaration.isInner || declaration.isAnonymousObject || declaration.kind != ClassKind.CLASS)) {
+        if (declaration.isInner) validateInnerClass(declaration)
+        if (declaration.parent !is IrFile && (declaration.isAnonymousObject || declaration.kind != ClassKind.CLASS)) {
             DiagnosticSink(declaration.fileOrNull?.fileEntry?.name).unsupported(declaration,
                 "Nested/local declarations require a non-inner named source class")
         }
@@ -97,6 +114,26 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
     }
     val popup = LocalClassPopupLowering(context)
     module.files.forEach(popup::lower)
+    val inners = classes.filter { it.isInner }
+    if (inners.isNotEmpty()) {
+        val outerOwners = inners.associateWith { it.parent as IrClass }
+        val constructors = inners.associateWith { it.constructors.single() }
+        val declarations = InnerClassesLowering(context)
+        val members = InnerClassesMemberBodyLowering(context)
+        val calls = InnerClassConstructorCallsLowering(context)
+        module.files.forEach(declarations::lower)
+        module.files.forEach(members::lower)
+        module.files.forEach(calls::lower)
+        inners.forEach { inner ->
+            val field = context.innerClassesSupport.getOuterThisField(inner)
+            val constructor = context.innerClassesSupport.getInnerClassConstructorWithOuterThisParameter(constructors.getValue(inner))
+            val parameter = constructor.valueParameters.first()
+            check(field.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS &&
+                parameter.origin === JvmLoweredDeclarationOrigin.FIELD_FOR_OUTER_THIS)
+            inner.originalInnerBinding = SourceInnerClassBinding(outerOwners.getValue(inner), field, constructor, parameter,
+                SourceSpan(inner.fileOrNull!!.fileEntry.name, inner.startOffset, inner.endOffset))
+        }
+    }
     // Mirror JS static class placement, retaining the original symbols, names and source file.
     fun extractNested(declaration: IrClass, file: IrFile) {
         declaration.declarations.filterIsInstance<IrClass>().forEach { nested ->
@@ -118,6 +155,25 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
         file.declarations.addAll(ordered)
     }
     module.patchDeclarationParents()
+}
+
+private fun validateInnerClass(declaration: IrClass) {
+    val diagnostics = DiagnosticSink(declaration.fileOrNull?.fileEntry?.name)
+    val outer = declaration.parent as? IrClass
+    if (outer == null || outer.parent !is IrFile || outer.kind != ClassKind.CLASS ||
+        outer.isInner || outer.isAnonymousObject || declaration.isAnonymousObject || declaration.kind != ClassKind.CLASS) {
+        diagnostics.unsupported(declaration, "Inner classes require a named top-level outer source class")
+    }
+    if (outer.typeParameters.isNotEmpty() || declaration.typeParameters.isNotEmpty()) {
+        diagnostics.unsupported(declaration, "Inner class generic binders are not supported")
+    }
+    val constructors = declaration.constructors.toList()
+    if (constructors.size != 1 || !constructors.single().isPrimary) {
+        diagnostics.unsupported(declaration, "Inner classes require one primary constructor")
+    }
+    if (declaration.superTypes.any { !it.isAny() }) {
+        diagnostics.unsupported(declaration, "Inner classes require Any-only heritage")
+    }
 }
 
 private fun sourceClasses(element: IrElement): List<IrClass> {

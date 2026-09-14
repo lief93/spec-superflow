@@ -5,6 +5,7 @@ import java.util.IdentityHashMap
 import org.jetbrains.kotlin.backend.common.lower.BOUND_RECEIVER_PARAMETER
 import org.jetbrains.kotlin.backend.common.lower.BOUND_VALUE_PARAMETER
 import org.jetbrains.kotlin.backend.common.lower.LocalDeclarationsLowering
+import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.Modality
@@ -30,6 +31,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     private val overloadNaming = OverloadNaming()
     private val classNaming = ClassNaming(overloadNaming)
     private val capturedFields = IdentityHashMap<IrFieldSymbol, EtsSymbol>()
+    private val outerFields = IdentityHashMap<IrFieldSymbol, EtsSymbol>()
     private val capturedParameters = IdentityHashMap<IrValueSymbol, String>()
     private var nextSymbol = 0
     private val loopNames = IdentityHashMap<IrLoop, String>()
@@ -39,7 +41,23 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     private var expressionDepth = 0
     private var currentElement: IrElement? = null
 
-    override fun source(element: IrElement): SourceSpan = sourceSpan(element, diagnostics)
+    override fun source(element: IrElement): SourceSpan {
+        val source = sourceSpan(element, diagnostics)
+        if (source.start >= 0 && source.end >= source.start) return source
+        val declaration = when (element) {
+            is IrGetField -> element.symbol.owner
+            is IrSetField -> element.symbol.owner
+            is IrGetValue -> element.symbol.owner
+            else -> element
+        }
+        val owner = when (declaration) {
+            is IrField -> declaration.parent as? IrClass
+            is IrValueParameter -> (declaration.parent as? IrConstructor)?.parent as? IrClass
+            else -> null
+        }
+        val binding = owner?.let(::sourceInnerClassBinding)
+        return if (binding != null && (declaration === binding.field || declaration === binding.parameter)) binding.source else source
+    }
 
     override fun type(type: IrType): EtsType {
         callRules.firstNotNullOfOrNull { it.mapType(type.makeNotNull(), this) }?.let { mapped ->
@@ -115,7 +133,11 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         }
         is IrGetField -> {
             if (sourceFile(expression.symbol.owner) == null) diagnostics.unsupported(expression, "Unsupported external field")
-            val captured = expression.symbol.owner.takeIf(::hasCaptureOrigin)?.let(::capturedFieldSymbol)
+            val captured = when {
+                hasCaptureOrigin(expression.symbol.owner) -> capturedFieldSymbol(expression.symbol.owner)
+                expression.symbol.owner.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS -> outerFieldSymbol(expression.symbol.owner)
+                else -> null
+            }
             EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
                 captured?.name ?: fieldName(expression.symbol.owner), type(expression.type), source(expression), captured?.id)
         }
@@ -123,6 +145,13 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             if (sourceFile(expression.symbol.owner) == null) diagnostics.unsupported(expression, "Unsupported external field assignment")
             if (hasCaptureOrigin(expression.symbol.owner))
                 diagnostics.unsupported(expression, "Captured field writes require the official constructor prefix")
+            if (expression.symbol.owner.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS) {
+                val owner = expression.symbol.owner.parent as? IrClass
+                    ?: diagnostics.unsupported(expression, "Outer field requires a registered class owner")
+                val binding = innerBinding(owner)
+                    ?: diagnostics.unsupported(owner, "Outer field requires a registered inner class")
+                rejectInner(binding, expression, "Outer field writes require the registered constructor prefix")
+            }
             val target = EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
                 fieldName(expression.symbol.owner), type(expression.symbol.owner.type), source(expression))
             discard(EtsAssignment(target, expression(expression.value, scope), source(expression)), expression)
@@ -548,6 +577,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     override fun clazz(declaration: IrClass): EtsClass = withFile(declaration) {
         reserveNames(declaration)
+        val inner = innerBinding(declaration)
         val typeParameters = typeParameters(declaration)
         val singleton = declaration.kind == org.jetbrains.kotlin.descriptors.ClassKind.OBJECT
         val isInterface = declaration.kind == ClassKind.INTERFACE
@@ -588,8 +618,12 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val captures = declaration.declarations.filterIsInstance<IrField>().filter(::hasCaptureOrigin)
         captures.forEach(::capturedFieldSymbol)
         declaration.declarations.firstOrNull {
-            it !is IrConstructor && it !is IrProperty && it !is IrSimpleFunction && it !is IrAnonymousInitializer && it !in captures
-        }?.let { diagnostics.unsupported(it, "Unsupported nested source class declaration") }
+            it !is IrConstructor && it !is IrProperty && it !is IrSimpleFunction && it !is IrAnonymousInitializer &&
+                it !in captures && it !== inner?.field
+        }?.let {
+            if (inner != null) rejectInner(inner, it, "Unsupported inner class declaration")
+            diagnostics.unsupported(it, "Unsupported nested source class declaration")
+        }
         val scope = Scope()
         declaration.thisReceiver?.let { scope.bindings[it.symbol] = thisReference(declaration, declaration) }
         val parameterText = parameters(constructor, scope)
@@ -604,6 +638,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         }
         val members = mutableListOf<EtsClassMember>()
         captures.forEach { members.add(EtsField(capturedFieldSymbol(it), private = true)) }
+        inner?.let { members.add(EtsField(outerFieldSymbol(it.field), private = true)) }
         if (singleton) {
             val classType = classType(declaration)
             val field = synthetic("__etsSingleton", EtsNullableType(classType), declaration)
@@ -631,8 +666,19 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val capturePrefix = constructorBody.statements.takeWhile {
             it is IrSetField && it.origin === IrStatementOrigin.STATEMENT_ORIGIN_INITIALIZER_OF_FIELD_FOR_CAPTURED_VALUE
         }.filterIsInstance<IrSetField>()
+        val outerWrite = inner?.let { binding ->
+            val write = constructorBody.statements.firstOrNull() as? IrSetField
+            if (write == null || write.symbol !== binding.field.symbol ||
+                (write.receiver as? IrGetValue)?.symbol !== declaration.thisReceiver?.symbol ||
+                (write.value as? IrGetValue)?.symbol !== binding.parameter.symbol ||
+                constructorBody.statements.filterIsInstance<IrSetField>().count { it.symbol === binding.field.symbol } != 1 ||
+                constructorBody.statements.getOrNull(1) !is IrDelegatingConstructorCall) {
+                rejectInner(binding, constructor, "Inner class requires one registered outer initialization before Any delegation")
+            }
+            write
+        }
         if (constructorBody.statements.filterIsInstance<IrDelegatingConstructorCall>().size != 1 ||
-            constructorBody.statements.getOrNull(capturePrefix.size) !is IrDelegatingConstructorCall) {
+            constructorBody.statements.getOrNull(capturePrefix.size + if (outerWrite != null) 1 else 0) !is IrDelegatingConstructorCall) {
             diagnostics.unsupported(constructor, "A primary constructor requires one direct leading delegation")
         }
         if (capturePrefix.isNotEmpty() && (!captureOwner(declaration) || parents.isNotEmpty()) ||
@@ -643,6 +689,15 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             diagnostics.unsupported(constructor, "Captured fields require one official initialization prefix before Any delegation")
         }
         constructorBody.statements.forEach { child -> when (child) {
+            outerWrite -> {
+                val binding = checkNotNull(inner)
+                val field = outerFieldSymbol(binding.field)
+                val at = innerSource(binding, child)
+                val value = scope.bindings.getValue(binding.parameter.symbol) as EtsReference
+                initialization.add(EtsExpressionStatement(EtsAssignment(
+                    EtsMember(thisReference(declaration, binding.field), field.name, field.type, at, field.id),
+                    EtsReference(value.symbol, at), at), at))
+            }
             in capturePrefix -> {
                 val write = child as IrSetField
                 val parameter = (write.value as? IrGetValue)?.symbol?.owner as? IrValueParameter
@@ -749,6 +804,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     private fun fieldName(field: IrField): String {
         if (hasCaptureOrigin(field)) return capturedFieldSymbol(field).name
+        if (field.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS) return outerFieldSymbol(field).name
         val property = field.correspondingPropertySymbol?.owner
         return if (property != null && hasCustomAccessor(property)) "__etsField_${identifier(property)}" else identifier(field)
     }
@@ -804,10 +860,12 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     private fun prepareCapturedParameters(function: IrFunction) {
         val owner = function.parent as? IrClass ?: return
-        if (function !is IrConstructor || !captureOwner(owner)) return
-        val captures = function.valueParameters.filter(::isCapturedParameter)
+        if (function !is IrConstructor) return
+        val inner = innerBinding(owner)
+        val captures = if (inner != null) listOf(inner.parameter)
+            else if (captureOwner(owner)) function.valueParameters.filter(::isCapturedParameter) else return
         if (captures.isEmpty() || captures.all { it.symbol in capturedParameters }) return
-        val occupied = function.valueParameters.filterNot(::isCapturedParameter).map { identifier(it) }.toMutableSet()
+        val occupied = function.valueParameters.filterNot { it in captures }.map { identifier(it) }.toMutableSet()
         val reserved = mutableSetOf<String>()
         sourceFile(owner)!!.module.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) {
@@ -824,6 +882,59 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             val original = identifier(parameter)
             capturedParameters[parameter.symbol] = if (original in occupied) table.declareFreshName(parameter, original)
                 else original.also { table.declareStableName(parameter, it) }
+        }
+    }
+
+    private fun innerSource(binding: SourceInnerClassBinding, element: IrElement): SourceSpan =
+        if (element.startOffset >= 0 && element.endOffset >= element.startOffset)
+            SourceSpan(binding.source.file, element.startOffset, element.endOffset) else binding.source
+
+    private fun rejectInner(binding: SourceInnerClassBinding, element: IrElement, message: String): Nothing =
+        throw Unsupported(Diagnostic("UNSUPPORTED", message, innerSource(binding, element)))
+
+    private fun innerBinding(owner: IrClass): SourceInnerClassBinding? {
+        val binding = sourceInnerClassBinding(owner)
+        if (binding == null) {
+            if (owner.isInner) diagnostics.unsupported(owner, "Inner class has no registered source binding")
+            return null
+        }
+        val field = binding.field
+        val constructor = binding.constructor
+        val parameter = binding.parameter
+        if (!owner.isInner || owner.kind != ClassKind.CLASS || owner.name.isSpecial || owner.typeParameters.isNotEmpty() ||
+            owner.superTypes.any { !it.isAny() } || binding.outer.isInner || binding.outer.kind != ClassKind.CLASS ||
+            binding.outer.name.isSpecial || binding.outer.typeParameters.isNotEmpty() || binding.outer.parent !is IrFile ||
+            sourceFile(owner)?.fileEntry?.name != binding.source.file || sourceFile(binding.outer) !== sourceFile(owner) ||
+            field.parent !== owner || field !in owner.declarations || field.origin !== IrDeclarationOrigin.FIELD_FOR_OUTER_THIS ||
+            field.isStatic || field.isExternal || !field.isFinal || field.initializer != null || field.type != binding.outer.defaultType ||
+            constructor.parent !== owner || owner.constructors.toList() != listOf(constructor) || !constructor.isPrimary ||
+            constructor.valueParameters.firstOrNull() !== parameter || parameter.parent !== constructor ||
+            parameter.origin !== JvmLoweredDeclarationOrigin.FIELD_FOR_OUTER_THIS || parameter.type != field.type ||
+            parameter.defaultValue != null || parameter.varargElementType != null) {
+            rejectInner(binding, owner, "Invalid registered inner class binding")
+        }
+        return binding
+    }
+
+    private fun outerFieldSymbol(field: IrField): EtsSymbol {
+        val owner = field.parent as? IrClass ?: diagnostics.unsupported(field, "Outer field requires a registered class owner")
+        val binding = innerBinding(owner) ?: diagnostics.unsupported(owner, "Outer field requires a registered inner class")
+        if (binding.field !== field) rejectInner(binding, field, "Outer field differs from registered identity")
+        outerFields[field.symbol]?.let { return it }
+        val occupied = mutableSetOf("constructor")
+        owner.declarations.filterIsInstance<IrProperty>().forEach { property ->
+            occupied += identifier(property)
+            property.backingField?.let { occupied += fieldName(it) }
+        }
+        owner.declarations.filterIsInstance<IrSimpleFunction>().filterNot { it.isFakeOverride }.forEach {
+            occupied += functionSymbol(it).name
+        }
+        val original = identifier(field)
+        val table = NameTable<IrField>(reserved = (occupied + original).toMutableSet())
+        val name = if (original in occupied) table.declareFreshName(field, original)
+            else original.also { table.declareStableName(field, it) }
+        return EtsSymbol("language:${nextSymbol++}", name, type(field.type), innerSource(binding, field)).also {
+            outerFields[field.symbol] = it
         }
     }
 

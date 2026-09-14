@@ -1,7 +1,7 @@
 package classboundaries
 
-class Outer(val value: Int) {
+class Outer<T>(val value: T) {
     inner class Inner {
-        fun read(): Int = value
+        fun read(): T = value
     }
 }

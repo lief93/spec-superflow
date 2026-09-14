@@ -926,3 +926,43 @@
   negative evidence. Accepted R2E-R2G changes will be committed together because
   their shared-file dependencies accumulated while Git publication was paused;
   unrelated control-verification documentation and old Python work are excluded.
+- Accepted R2E-G committed as `2cf0b8f` and pushed to origin/andorid-to-hormony;
+  independent ls-remote returned the same full SHA. Initial ls-remote timed out,
+  bounded retry succeeded; push itself had already succeeded. No unrelated files
+  were staged or changed. R2H contract now fixed in docs/inner-classes.md after
+  main/Parfit read-only inventory of official common/JS inner-class passes.
+  Main owns the initial core build slot; Parfit may edit only its consumer/tests.
+- R2H core RED `tests/inner-classes/core/.work/run-5Kfhij` reproduces the prior
+  blanket rejection after original Kotlin compiles. GREEN `run-QEdvBO` proves
+  the three official common passes, registered field/constructor/outer identities,
+  call receiver threading, valid source provenance and four guarded shapes.
+  Existing local-class core regression `run-bizWa3` passes. Ordinary inner support
+  moves to the new positive fixture; the old guard fixture now tests generic
+  enclosing binders. Core/target are frozen, all main test children exited, and
+  Parfit owns the exclusive heavy slot for language RED/GREEN and regressions.
+  This core proof does not yet establish R2H generated-code parity or acceptance.
+- Parfit froze the R2H consumer and released the compiler slot, no children
+  remain. Final inner `green-THZBKn` passes 20 JVM outcomes in flat/modules,
+  fourteen malformed-IR negatives, synthetic-source fallback and deterministic
+  module output. R2G regressions `green-gMBwjK` (30/eight negatives) and
+  `shadow-green-DO0E9b` (15) pass. Main verified all production hashes against
+  those three manifests and froze the full finite batch for Aristotle review.
+  Language hash: `59fbaef94806ce338b1d28be5ae6df3e43cf6e09df3cfd6a0b911b103c86b62c`.
+  No R2H acceptance, SDK/native claim or next requirement until review completes.
+- User changed priority to quota conservation. Measure at most the next two new
+  requirements by per-agent token deltas (cache separated), wall time, waits and
+  rework; no duplicate benchmark work. Real token_count telemetry is available
+  in the three rollout logs. docs/cost-trial.md defines fresh boundary snapshots
+  and conservative interpretation. R2H review continues unchanged; no trial has
+  started yet. If savings are unclear after two batches, switch automatically to
+  one persistent developer plus fixed reviewer; tested/reviewed Git publication
+  and automatic continuation remain enabled.
+- R2H interrupted review resumed on the same frozen sources. Aristotle reports
+  requirements PASS and code quality PASS, no actionable findings. Main accepts
+  the finite ordinary-inner subset and existing core/JVM/flat/module evidence;
+  no SDK/native or whole-R2 acceptance. Commit/push R2H before priority changes.
+- User prioritizes independent adapter modules over the next language slice.
+  Cost observation preparation baseline captured at
+  `.work/cost-trial/adapter-modules/preparation-start.json`; it includes the last
+  R2H reviewer completion, which must be excluded from adapter review costs.
+  A fresh dispatch baseline will separate implementation from this setup.
