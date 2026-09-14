@@ -40,7 +40,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     private val sourceNames = mutableSetOf<String>()
     private var expressionDepth = 0
     private var currentElement: IrElement? = null
-    private data class NativeInitialization(val owner: IrClass, val base: IrClass?, val baseType: EtsNamedType?)
+    private data class NativeInitialization(val owner: IrClass, val base: IrClass?, val baseType: EtsNamedType?,
+        val captures: List<EtsStatement>)
     private var nativeInitialization: NativeInitialization? = null
 
     override fun source(element: IrElement): SourceSpan {
@@ -696,15 +697,17 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             constructorBody.statements.getOrNull(capturePrefix.size + if (outerWrite != null) 1 else 0) !is IrDelegatingConstructorCall)) {
             diagnostics.unsupported(constructor, "A native constructor requires one direct leading delegation")
         }
-        if (capturePrefix.isNotEmpty() && (!captureOwner(declaration) || parents.isNotEmpty()) ||
+        if (capturePrefix.isNotEmpty() && !localCaptureOwner(declaration) ||
             capturePrefix.map { it.symbol.owner }.toSet() != captures.toSet() || capturePrefix.size != captures.size ||
             constructorBody.statements.filterIsInstance<IrSetField>().count {
                 it.origin === IrStatementOrigin.STATEMENT_ORIGIN_INITIALIZER_OF_FIELD_FOR_CAPTURED_VALUE
             } != capturePrefix.size) {
             diagnostics.unsupported(constructor, "Captured fields require one official initialization prefix before Any delegation")
         }
+        if (capturePrefix.isNotEmpty()) validateCapturedHeritage(declaration)
+        val captureInitialization = mutableListOf<EtsStatement>()
         val previousInitialization = nativeInitialization
-        nativeInitialization = NativeInitialization(declaration, base, baseType)
+        nativeInitialization = NativeInitialization(declaration, base, baseType, captureInitialization)
         try { constructorBody.statements.forEach { child -> when (child) {
             outerWrite -> {
                 val binding = checkNotNull(inner)
@@ -724,7 +727,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 }
                 val field = capturedFieldSymbol(write.symbol.owner)
                 val value = scope.bindings.getValue(parameter.symbol) as EtsReference
-                initialization.add(EtsExpressionStatement(EtsAssignment(
+                (if (base == null) initialization else captureInitialization).add(EtsExpressionStatement(EtsAssignment(
                     EtsMember(thisReference(declaration, write.symbol.owner), field.name, field.type, field.source, field.id),
                     EtsReference(value.symbol, field.source), field.source), field.source))
             }
@@ -751,7 +754,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 if (target?.symbol != context.base.symbol || !isEtsNativeConstructor(value.symbol.owner))
                     diagnostics.unsupported(value, "Unsupported constructor delegation")
                 rejectInitializationThis(value, declaration)
-                return listOf(EtsSuperConstructorCall(checkNotNull(context.baseType), arguments(value, scope), source(value)))
+                return listOf(EtsSuperConstructorCall(checkNotNull(context.baseType), arguments(value, scope), source(value))) + context.captures
             }
             if (target?.fqNameWhenAvailable?.asString() != "kotlin.Any") diagnostics.unsupported(value, "Unsupported constructor delegation")
             return emptyList()
@@ -760,13 +763,13 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             diagnostics.unsupported(value, "Initializer does not belong to its native constructor")
         return declaration.declarations.flatMap { initializer -> when (initializer) {
             is IrProperty -> initializer.backingField?.initializer?.expression?.let {
-                if (hasInheritance(declaration)) rejectInitializationThis(it, declaration)
+                if (hasInheritance(declaration)) rejectInheritedInitializerThis(it, declaration, diagnostics, allowFieldReads = true)
                 listOf(EtsExpressionStatement(EtsAssignment(
                     EtsMember(thisReference(declaration, initializer), fieldName(initializer.backingField!!), type(initializer.backingField!!.type), source(initializer)),
                     expression(it, scope), source(initializer))))
             } ?: emptyList()
             is IrAnonymousInitializer -> {
-                if (hasInheritance(declaration)) rejectInitializationThis(initializer.body, declaration)
+                if (hasInheritance(declaration)) rejectInheritedInitializerThis(initializer.body, declaration, diagnostics, allowFieldReads = true)
                 statements(initializer.body, scope.fork())
             }
             else -> emptyList()
@@ -867,23 +870,22 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         declaration.kind == ClassKind.CLASS && !declaration.isInner && !declaration.name.isSpecial && sourceFile(declaration) != null &&
         declaration.constructors.toList().let { it.size == 1 && isEtsNativeConstructor(it.single()) }
 
-    private fun captureOwner(declaration: IrClass): Boolean = localCaptureOwner(declaration) &&
-        declaration.superTypes.all { it.classOrNull?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Any" }
-
     private fun capturedFieldSymbol(field: IrField): EtsSymbol {
         val owner = field.parent as? IrClass
-        if (!hasCaptureOrigin(field) || owner == null || !captureOwner(owner) || field !in owner.declarations ||
+        if (!hasCaptureOrigin(field) || owner == null || !localCaptureOwner(owner) || field !in owner.declarations ||
             field.isStatic || field.isExternal || !field.isFinal || field.initializer != null) {
             diagnostics.unsupported(field, "Unsupported captured field ownership or shape")
         }
         capturedFields[field.symbol]?.let { return it }
         val fields = owner.declarations.filterIsInstance<IrField>().filter(::hasCaptureOrigin)
         val occupied = mutableSetOf("constructor")
-        // A generated private field must not shadow a descendant's source member.
+        owner.getAllSuperclasses().flatMap { it.declarations.filterIsInstance<IrField>() }.filter(::hasCaptureOrigin)
+            .forEach { occupied += capturedFieldSymbol(it).name }
+        // Generated storage must not shadow source members anywhere in its hierarchy.
         sourceFile(owner)!!.module.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
             override fun visitClass(declaration: IrClass) {
-                if (declaration.isSubclassOf(owner)) {
+                if (declaration.isSubclassOf(owner) || owner.isSubclassOf(declaration)) {
                     declaration.declarations.filterIsInstance<IrProperty>().forEach { property ->
                         occupied += identifier(property)
                         property.backingField?.let { occupied += fieldName(it) }

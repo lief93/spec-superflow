@@ -67,7 +67,7 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
             it.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"
         }
         if (inherited) owner.constructors.forEach { constructor ->
-            constructor.body?.let { rejectInheritedInitializerThis(it, owner, diagnostics, allowFieldWrites = true) }
+            constructor.body?.let { rejectInheritedInitializerThis(it, owner, diagnostics, allowFieldWrites = true, allowFieldReads = true) }
         }
         owner.declarations.mapNotNull { declaration -> when (declaration) {
             is IrProperty -> declaration.backingField?.initializer
@@ -75,7 +75,7 @@ internal fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) {
             is IrAnonymousInitializer -> declaration.body
             else -> null
         } }.forEach { initializer ->
-            if (inherited) rejectInheritedInitializerThis(initializer, owner, diagnostics)
+            if (inherited) rejectInheritedInitializerThis(initializer, owner, diagnostics, allowFieldReads = true)
             initializer.acceptVoid(object : IrElementVisitorVoid {
                 override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
                 override fun visitClass(declaration: IrClass) {

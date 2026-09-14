@@ -6,7 +6,7 @@ import { compiler, core, harness, identities, root, sources, hash } from '../bin
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { work, run } = harness(join(here, '.work'));
-const fixtures = ['Fixture.kt', 'Captured.kt', 'CapturedType.kt', 'CapturedBase.kt', 'Inner.kt'];
+const fixtures = ['Fixture.kt', 'Captured.kt', 'CapturedType.kt', 'CapturedBase.kt', 'ObservedBase.kt', 'Inner.kt'];
 const inputs = identities([...core, ...sources(join(root, 'src/target')), join(here, 'Probe.kt'), ...fixtures.map(name => join(here, name))]);
 const snapshot = join(work, 'snapshot');
 mkdirSync(snapshot);
@@ -23,8 +23,9 @@ run('original-kotlin', 'bash', [compiler, ...fixtures.map(name => join(snapshot,
 run('compile', 'bash', [compiler, ...frozen.filter(path => !fixtures.includes(basename(path))), '-d', jar]);
 console.log(run('probe', 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.ProbeKt', cp, join(snapshot, 'Fixture.kt'), work]).trim());
 console.log(run('capture-values', 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.ProbeKt', cp, join(snapshot, 'Captured.kt'), work, 'capture-values']).trim());
+console.log(run('capture-heritage', 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.ProbeKt', cp, join(snapshot, 'CapturedBase.kt'), work, 'capture-heritage']).trim());
 for (const [name, message] of [['CapturedType.kt', 'captured type parameters'],
-  ['CapturedBase.kt', 'Captured local class inheritance'], ['Inner.kt', 'Inner class generic']]) {
+  ['ObservedBase.kt', 'Using this during inherited initialization'], ['Inner.kt', 'Inner class generic']]) {
   console.log(run(name, 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.ProbeKt', cp, join(snapshot, name), work, message]).trim());
 }
 assert.ok(inputs.every(input => hash(input.path) === input.sha256), 'Core contract changed during probe');

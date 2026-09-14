@@ -114,13 +114,6 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
         }
         shared.lower(body, owner)
         local.lower(body, owner)
-        // Official lowering distinguishes stored captures from constructor-only
-        // arguments. Only stored captures would require writing this before super.
-        localClasses.firstOrNull { declaration ->
-            declaration.superTypes.any { !it.isAny() } && declaration.declarations.any {
-                it is IrField && it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE
-            }
-        }?.let { diagnostics.unsupported(it, "Captured local class inheritance requires pre-super field initialization") }
         namedLocals(body).firstOrNull()?.let {
             diagnostics.unsupported(it, "Official local declaration lowering left an unsupported nested function")
         }
@@ -168,6 +161,9 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
         file.declarations.addAll(ordered)
     }
     module.patchDeclarationParents()
+    sourceClasses(module).filter { declaration -> declaration.declarations.any {
+        it is IrField && it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE
+    } }.forEach(::validateCapturedHeritage)
 }
 
 private fun validateInnerClass(declaration: IrClass) {

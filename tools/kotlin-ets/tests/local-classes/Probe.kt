@@ -9,14 +9,15 @@ import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.util.dump
 
 fun main(args: Array<String>) {
-    if (args.getOrNull(3) == "capture-values") {
+    if (args.getOrNull(3) in listOf("capture-values", "capture-heritage")) {
+        val inherited = args[3] == "capture-heritage"
         withKotlinFrontend(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) { session ->
             val file = session.module.files.single()
             val classes = file.declarations.filterIsInstance<IrClass>()
             val captured = classes.filter { owner -> owner.declarations.filterIsInstance<IrField>().any {
                 it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE
             } }
-            check(captured.size == 3)
+            check(captured.size == if (inherited) 1 else 3)
             check(captured.all { !sourceClassIsExported(it) && it.parent === file })
             captured.forEach { owner ->
                 val fields = owner.declarations.filterIsInstance<IrField>()
@@ -36,8 +37,10 @@ fun main(args: Array<String>) {
                 }
                 check(body[writes.size] is IrDelegatingConstructorCall)
             }
-            val counter = captured.single { it.name.asString() == "Counter" }
-            check(counter.declarations.filterIsInstance<IrField>().single().type.classOrNull!!.owner.origin === ETS_SHARED_VARIABLE_CELL)
+            if (!inherited) {
+                val counter = captured.single { it.name.asString() == "Counter" }
+                check(counter.declarations.filterIsInstance<IrField>().single().type.classOrNull!!.owner.origin === ETS_SHARED_VARIABLE_CELL)
+            }
             File(args[2], "captures.ir").writeText(session.module.dump())
             println("PASS official local capture fields, constructor arguments, shared cell identity and source provenance")
         }

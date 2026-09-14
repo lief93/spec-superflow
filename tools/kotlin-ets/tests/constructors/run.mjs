@@ -145,7 +145,7 @@ function load(name) {
 }
 result.moduleActual = evaluate({ ...load('Application'), ...load('Dispatch'), ...load('Visibility') }, load('Construction').Trace); assert.deepEqual(result.moduleActual, result.expected);
 result.regressions = [];
-for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract', 'Protected', 'Inner', 'Local', 'CapturedDispatch']) {
+for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract', 'Protected', 'Inner', 'Local', 'CapturedDispatch', 'CapturedInheritance']) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
   run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
   run(name, 'bash', [cli, '--mode', 'language', '--out', out, input]);
@@ -153,8 +153,7 @@ for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract', 'Protected', 
   result.regressions.push({ name, sha256: hash(out) });
 }
 result.negatives = [];
-for (const [name, message] of [['CapturedInheritance', /Captured local class inheritance/],
-  ['DispatchLocalInitializer', /External inline call has no loaded IR body: kotlin\.run/],
+for (const [name, message] of [['DispatchLocalInitializer', /External inline call has no loaded IR body: kotlin\.run/],
   ['DispatchInheritedInitialization', /Using this during inherited initialization/],
   ['DispatchVirtualBody', /Using this during inherited initialization/]]) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');

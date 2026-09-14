@@ -84,6 +84,35 @@ fun main(args: Array<String>) {
         })
         fun lower() = EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules())).lower(module)
         val program = lower()
+        for ((name, count) in listOf("StoredBase" to 1, "StoredChild" to 1, "StoredEntries" to 2)) {
+            val source = classes.single { it.name.asString() == name }
+            val prefix = (source.constructors.single().body as IrBlockBody).statements.takeWhile { it is IrSetField }
+            check(prefix.size == count) // Official IR keeps its original pre-super capture prefix.
+            val target = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>().single { it.name == name }
+            val fields = target.members.filterIsInstance<EtsField>().filter { it.visibility == EtsVisibility.PRIVATE }
+            check(fields.size == count)
+            val constructor = target.members.filterIsInstance<EtsFunction>().single { it.kind == EtsFunctionKind.CONSTRUCTOR }
+            var supers = 0
+            fun checkStatements(statements: List<EtsStatement>) {
+                statements.forEachIndexed { index, statement ->
+                    if (statement is EtsSuperConstructorCall) {
+                        supers++
+                        val writes = statements.drop(index + 1).take(count).map {
+                            ((it as EtsExpressionStatement).expression as EtsAssignment).target as EtsMember
+                        }
+                        check(writes.map { it.name } == fields.map { it.symbol.name })
+                    }
+                    when (statement) {
+                        is EtsBlock -> checkStatements(statement.statements)
+                        is EtsIf -> statement.branches.forEach { checkStatements(it.body) }
+                        is EtsLoop -> checkStatements(statement.body)
+                        else -> Unit
+                    }
+                }
+            }
+            checkStatements(constructor.body)
+            check(supers == if (name == "StoredEntries") 4 else 1)
+        }
         val collision = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>().single { it.name == "Collision" }
         val factory = collision.members.filterIsInstance<EtsFunction>().single { it.static }
         check(factory.parameters.last().symbol.name == "\$seed")

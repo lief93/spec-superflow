@@ -38,8 +38,9 @@ user parameter names win over generated capture names.
 Multiple roots with stored captured fields or inner outer links use the checked
 common prefix described below. Constructor-only local captures may also be
 forwarded through source inheritance: the official generated field set decides
-whether pre-super storage is required. Generic inner binders, stored captures in
-derived classes and anonymous owners remain unsupported. Local/inner default
+whether pre-super storage is required. Stored captures in named local derived
+classes use the bounded heritage contract below. Generic inner binders, inner
+classes with non-Any heritage and anonymous owners remain unsupported. Local/inner default
 provider composition is documented separately in inherited-defaults.md. Remaining
 initialization work stays in R2, not silently deferred to page adaptation.
 
@@ -66,6 +67,68 @@ fields are not copied or made public. The target consumer retains prefix count,
 owner, field and parameter checks, and permits the verified dispatcher branch in
 place of the unique-root direct Any delegation. No target validator bypass or raw
 ETS node is introduced.
+
+## Stored captures with source heritage
+
+Official common LocalDeclarationsLowering still determines captured field,
+parameter and receiver identities, writes them at super roots in argument order,
+and leaves this-delegating entries without a second prefix. The ETS backend does
+not replace this analysis or rewrite the source IR prefix.
+
+For a named local derived class, the target consumer emits those checked writes
+immediately after each native super call, before the derived initializers. It
+first inspects source ancestors using official getAllSuperclasses and the existing
+inherited-initialization visitor. Ancestor constructor bodies must be available.
+Own final stored fields/default getters and generated capture/outer links may be
+read; arbitrary methods, virtual/custom getters and escaping this are rejected.
+Super-call arguments retain the strict no-this-before-super check. The target
+constructor-flow validator still checks every path; it is not bypassed.
+
+This is a deliberately conservative observation boundary, not general effect
+analysis. A base callback may update a shared captured cell through its explicit
+constructor argument, but must not obtain the not-yet-initialized derived this.
+Exact own stored reads also permit an initialized constructor property to feed
+another source field. No virtual accessor is replaced with a stored read.
+
+Generated capture field names reserve ancestor capture names and both ancestor
+and descendant source member names through existing JS NameTable allocation.
+User fields/methods keep their names and visibility. Multiple native entries,
+default constructors, shared cells and inherited default helpers use this same
+consumer rather than separate capture representations.
+
+Frozen capture run-B1ru9k passes 60 flat + 60 module JVM/ETS-host results, strict
+host types, three-file reversed-input determinism and all 62 input hashes. Its
+IR/target probe checks one capture in each of StoredBase/StoredChild, two in
+StoredEntries, retained pre-super official prefixes, and immediate post-super
+typed writes on all six native paths. Existing seven malformed-prefix refusals
+remain. Four additional JVM-valid source negatives reject transitive virtual
+observation, this escape, secondary-constructor observation and a custom getter,
+with exact file/positive spans and no emitted ETS. The shared-state trace checks
+effects before/during/after super, inherited defaults and source/private capture
+name collisions. Flat SHA-256:
+0c701f36b6e04eac103c9fda699920c286aaffe6ab52ff5fa4425fcb260d2b10.
+
+RED run-CVhvdv preserves the former blanket capture/heritage rejection.
+run-CnnZfK then caught the old guard rejecting an ordinary final-property read
+used to initialize a source field. The test was retained, not replaced by a
+constant. CustomGetterCapture verifies the new permission cannot admit executable
+getters. Earlier green run-L0bDEB predates this stored-read/collision composition.
+
+Constructor regression run-7GLvPv passes 90 flat + 90 module results, eight
+unchanged former-negative positives (including CapturedInheritance), three
+remaining boundaries and existing native-constructor identity checks. Its flat
+SHA remains 497d2c38f363f07b8288ef5ec53946d41ce2ba526c1555ff12f402f2b02773fa.
+Local core run-aoxicY checks the original CapturedBase source as a positive and
+retains captured-type, generic-inner and observing-ancestor negatives.
+Inherited-default regression run-7u6frm retains 65 flat + 65 module results,
+three boundaries and twenty-nine exact helper calls; flat SHA remains
+1e88798274a28a90584a10f797d502d3150b0b92a3423eaee9ea69f9ab1db28c.
+Target suite K3HkGP passes constructor flow (twenty-two refusals), visibility
+(twelve refusals), inheritance/generic/binding and UI builder contracts. All four
+source suites' frozen inputs remain unchanged. Main self-check and whitespace
+checks pass; no separate reviewer was used.
+These are host/compiler-IR checks only; SDK/native and whole-R2 acceptance remain
+pending.
 
 ## Verification
 

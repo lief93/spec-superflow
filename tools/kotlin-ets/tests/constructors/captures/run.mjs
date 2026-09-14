@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -19,15 +19,15 @@ function files(path) {
 const inputs = [...files(join(root, 'src')), ...files(here)].map(path => ({ path, sha256: hash(path) }));
 const result = { inputs, commands: [], passed: false };
 const record = () => writeFileSync(join(work, 'result.json'), JSON.stringify(result, null, 2));
-function run(label, command, args) {
+function run(label, command, args, status = 0) {
   const r = spawnSync(command, args, { encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, JAVA_TOOL_OPTIONS: '-XX:ActiveProcessorCount=2 -XX:+UseSerialGC' } });
   writeFileSync(join(work, label + '.stdout'), r.stdout ?? ''); writeFileSync(join(work, label + '.stderr'), r.stderr ?? '');
   result.commands.push({ label, command, args, status: r.status }); record();
-  assert.equal(r.error, undefined); assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(r.error, undefined); assert.equal(r.status, status, r.stdout + r.stderr);
   return r.stdout;
 }
-const sources = ['Cases.kt', 'Consumer.kt'].map(name => join(here, name));
+const sources = ['Cases.kt', 'Consumer.kt', 'Heritage.kt'].map(name => join(here, name));
 const compiler = join(root, 'tests/stdlib/compiler.sh'), cli = join(root, 'kotlin-ets');
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim(), jar = join(work, 'oracle.jar');
 run('jvm-build', 'bash', [compiler, ...sources, join(here, 'Oracle.kt'), '-d', jar]);
@@ -42,7 +42,8 @@ function typecheck(paths) {
 function evaluate(exports) {
   const context = vm.createContext({ exports });
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed =>
-    ['localChain', 'localRoot', 'innerChain', 'innerRoot', 'initializer', 'collision', 'localDispatch', 'localPersistent', 'innerDispatch', 'combined'].map(name =>
+    ['localChain', 'localRoot', 'innerChain', 'innerRoot', 'initializer', 'collision', 'localDispatch', 'localPersistent', 'innerDispatch',
+      'capturedHeritage', 'capturedHeritageDispatch', 'combined'].map(name =>
       String(vm.runInContext(`exports.${name}(${seed})`, context, { timeout: 1000 }))));
 }
 const code = readFileSync(out, 'utf8'), flatTs = join(work, 'Captures.ts');
@@ -53,7 +54,7 @@ result.actual = evaluate(context.exports); record(); assert.deepEqual(result.act
 const modules = join(work, 'modules'), reversed = join(work, 'reversed');
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['Cases.ets', 'Consumer.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['Cases.ets', 'Consumer.ets', 'Heritage.ets']);
 result.modules = readdirSync(modules).sort().map(name => ({ name, path: join(modules, name), sha256: hash(join(modules, name)) }));
 for (const { name, path } of result.modules) {
   assert.equal(readFileSync(path, 'utf8'), readFileSync(join(reversed, name), 'utf8'));
@@ -68,12 +69,23 @@ function load(name) {
   vm.runInNewContext(code, { exports, require(specifier) { assert.ok(specifier.startsWith('./')); return load(specifier.slice(2)); } }, { timeout: 1000 });
   return exports;
 }
-result.moduleActual = evaluate({ ...load('Cases'), ...load('Consumer') });
+result.moduleActual = evaluate({ ...load('Cases'), ...load('Consumer'), ...load('Heritage') });
 assert.deepEqual(result.moduleActual, result.expected);
 const proof = join(work, 'proof.jar');
 run('ir-build', 'bash', [compiler, ...files(join(root, 'src')).filter(path => path.endsWith('.kt')),
   join(here, 'Probe.kt'), '-d', proof]);
 result.irEvidence = run('ir-proof', 'java', ['-cp', `${proof}:${cp}`, 'dev.ets.captureconstruction.ProbeKt', cp, work, ...sources]).trim();
+result.negatives = [];
+for (const name of ['VirtualCapture', 'EscapedCapture', 'SecondaryCapture', 'CustomGetterCapture']) {
+  const input = join(here, 'negatives', name + '.kt'), output = join(work, name + '.ets');
+  run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
+  const diagnostic = JSON.parse(run(name, 'bash', [cli, '--mode', 'language', '--out', output, input], 2));
+  assert.equal(diagnostic.code, 'UNSUPPORTED');
+  assert.match(diagnostic.message, /Using this during inherited initialization/);
+  assert.equal(diagnostic.source.file, input);
+  assert.ok(diagnostic.source.start >= 0 && diagnostic.source.end > diagnostic.source.start);
+  assert.equal(existsSync(output), false); result.negatives.push(diagnostic);
+}
 for (const input of inputs) assert.equal(hash(input.path), input.sha256, input.path);
 result.output = { path: out, sha256: hash(out) }; result.passed = true; record();
 console.log(`PASS ${result.actual.length} flat + ${result.moduleActual.length} module JVM/ETS-host capture construction results`);

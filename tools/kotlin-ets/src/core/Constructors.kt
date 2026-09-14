@@ -4,8 +4,10 @@ package dev.ets
 import org.jetbrains.kotlin.backend.common.ir.ValueRemapper
 import org.jetbrains.kotlin.backend.common.ir.moveBodyTo
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
+import org.jetbrains.kotlin.backend.common.lower.LocalDeclarationsLowering
 import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFir2IrPipelineArtifact
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.irAttribute
@@ -31,10 +33,20 @@ internal fun nativeConstructorRoot(owner: IrClass): IrConstructor? = owner.prima
 }
 
 internal fun rejectInheritedInitializerThis(element: IrElement, owner: IrClass, diagnostics: DiagnosticSink,
-    allowFieldWrites: Boolean = false) {
+    allowFieldWrites: Boolean = false, allowFieldReads: Boolean = false) {
     element.acceptVoid(object : IrElementVisitorVoid {
         override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
         private fun ownThis(value: IrExpression?) = (value as? IrGetValue)?.symbol == owner.thisReceiver?.symbol
+        override fun visitGetField(expression: IrGetField) {
+            val field = expression.symbol.owner
+            val property = field.correspondingPropertySymbol?.owner
+            val stored = property?.parent === owner && property.modality == Modality.FINAL &&
+                property.getter?.origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR
+            val captured = field.isFinal && (field.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE ||
+                field === sourceInnerClassBinding(owner)?.field)
+            if (allowFieldReads && field.parent === owner && ownThis(expression.receiver) && !field.isStatic && (stored || captured)) return
+            super.visitGetField(expression)
+        }
         override fun visitSetField(expression: IrSetField) {
             if (allowFieldWrites && expression.symbol.owner.parent === owner && ownThis(expression.receiver))
                 expression.value.acceptVoid(this)
@@ -46,6 +58,10 @@ internal fun rejectInheritedInitializerThis(element: IrElement, owner: IrClass, 
                 property.setter?.symbol == expression.symbol && expression.symbol.owner.origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR &&
                 ownThis(expression.dispatchReceiver))
                 expression.symbol.owner.valueParameters.indices.forEach { expression.getValueArgument(it)?.acceptVoid(this) }
+            else if (allowFieldReads && property?.parent === owner && property.modality == Modality.FINAL &&
+                property.getter?.symbol == expression.symbol && expression.symbol.owner.origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR &&
+                ownThis(expression.dispatchReceiver))
+                expression.symbol.owner.valueParameters.indices.forEach { expression.getValueArgument(it)?.acceptVoid(this) }
             else super.visitCall(expression)
         }
         override fun visitGetValue(expression: IrGetValue) {
@@ -53,6 +69,26 @@ internal fun rejectInheritedInitializerThis(element: IrElement, owner: IrClass, 
                 diagnostics.unsupported(expression, "Using this during inherited initialization is not supported")
         }
     })
+}
+
+/** Moving a derived capture write past super is safe only when ancestors cannot observe this. */
+internal fun validateCapturedHeritage(owner: IrClass) {
+    owner.getAllSuperclasses().filter { !it.defaultType.isAny() && it.kind != ClassKind.INTERFACE }
+        .sortedBy { it.fqNameWhenAvailable?.asString() ?: it.name.asString() }.forEach { ancestor ->
+            val sourceDiagnostic = DiagnosticSink(owner.file.fileEntry.name)
+            val diagnostics = DiagnosticSink(ancestor.fileOrNull?.fileEntry?.name ?: owner.file.fileEntry.name)
+            if (!ancestor.constructors.any()) sourceDiagnostic.unsupported(owner, "Captured inheritance requires source ancestor constructors")
+            ancestor.constructors.forEach { constructor ->
+                val body = constructor.body ?: sourceDiagnostic.unsupported(owner, "Captured inheritance requires source ancestor constructor bodies")
+                rejectInheritedInitializerThis(body, ancestor, diagnostics, allowFieldWrites = true, allowFieldReads = true)
+            }
+            ancestor.declarations.mapNotNull { declaration -> when (declaration) {
+                is IrProperty -> declaration.backingField?.initializer
+                is IrField -> declaration.initializer
+                is IrAnonymousInitializer -> declaration.body
+                else -> null
+            } }.forEach { rejectInheritedInitializerThis(it, ancestor, diagnostics, allowFieldReads = true) }
+        }
 }
 
 /** Runs after inlining and official capture/outer binding; factories retain those explicit arguments. */

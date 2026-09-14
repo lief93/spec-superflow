@@ -69,7 +69,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, class-owned default helpers, native construction/protected visibility, local/inner constructor captures and default-provider capture composition accepted; remaining stored-capture heritage initialization, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, class-owned default helpers, native construction/protected visibility, local/inner constructor captures, default-provider capture composition and non-observing stored-capture heritage accepted; remaining virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
@@ -123,13 +123,25 @@ run-su7vhA and constructor run-TjgMb4 pass 50 + 50 and 90 + 90 with unchanged
 flat/module hashes. Local core run-NhO261, source-inline run-l3QFlx and target
 zWviDp pass. See inherited-defaults.md. No SDK/native or whole-R2 acceptance follows.
 
-Next close the remaining bounded stored-capture heritage initialization work.
-Do not silently move observable pre-super field writes after super; reuse the
-official capture identities and existing inherited-initialization checks to
-establish the supported boundary. Constructor capture handling must not be
-rewritten per default provider, and visibility must not be widened.
-Afterwards proceed to virtual overloads and remaining generic bounds/variance
-combinations.
+Bounded stored-capture heritage initialization is now accepted. Official source
+prefixes remain unchanged; the typed ETS consumer places exact captured writes
+after each super only after source ancestor checks prove the supported
+non-observing boundary. Own stored/default reads are distinct from virtual/custom
+getter execution and escaping this. Source names and visibility remain unchanged;
+only generated storage uses collision-safe names. Capture run-B1ru9k passes
+60 + 60 results, four source boundaries and seven malformed-prefix refusals.
+Constructor run-7GLvPv retains 90 + 90, eight former-negative positives and three
+boundaries. Local run-aoxicY, defaults run-7u6frm (65 + 65) and target K3HkGP pass.
+All frozen source/test hashes remain unchanged. See constructor-captures.md.
+This does not support observing pre-super initialization, anonymous owners or
+generic/non-Any inner owners, and does not claim SDK/native or whole-R2 acceptance.
+
+Next implement virtual overloads, then remaining generic bounds/variance
+combinations. Inspect the pinned common/JS override, bridge and name-allocation
+contracts first. Keep resolved declaration/call identities and target override
+validation consistent; do not route by source spelling or replace a virtual call
+with a statically selected implementation. R2.4 and the combined R2 gate remain
+queued before R3-R7.
 
 Earlier native-constructor milestone:
 

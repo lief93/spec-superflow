@@ -11,6 +11,8 @@ fun main() {
         println(localDispatch(seed))
         println(localPersistent(seed))
         println(innerDispatch(seed))
+        println(capturedHeritage(seed))
+        println(capturedHeritageDispatch(seed))
         println(combined(seed))
     }
 }
