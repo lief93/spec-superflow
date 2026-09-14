@@ -59,7 +59,8 @@ vm.runInContext(compiled.outputText, context, { timeout: 1000 });
 result.actual = [];
 for (const seed of [0, -3, 7, -2147483648, 2147483647]) {
   for (const invocation of [`dispatch(${seed})`, `abstractDispatch(${seed})`, `callEffects(${seed})`,
-    `constructorEffects(${seed})`, `selected(true,${seed})`, `selected(false,${seed})`, `propertyDispatch(${seed})`, `propertyInterface(${seed})`]) {
+    `constructorEffects(${seed})`, `selected(true,${seed})`, `selected(false,${seed})`, `propertyDispatch(${seed})`, `propertyInterface(${seed})`,
+    `virtualProperties(${seed})`, `abstractProperties(${seed})`]) {
     result.actual.push(String(vm.runInContext('exports.' + invocation, context, { timeout: 1000 })));
   }
 }
@@ -67,6 +68,18 @@ record(); assert.deepEqual(result.actual, result.expected);
 assert.match(code, /get computed\(\)/);
 assert.match(code, /set computed\(next: T\)/);
 assert.match(code, /interface PropertyView<T>\s*\{\s*readonly value: T;/);
+for (const owner of ['VirtualRoot', 'VirtualMiddle', 'VirtualLeaf']) {
+  const declaration = tree.statements.find(node => ts.isClassDeclaration(node) && node.name.text === owner);
+  assert.ok(declaration.members.some(node => ts.isGetAccessorDeclaration(node) && node.name.text === 'value'));
+  assert.ok(declaration.members.some(node => ts.isSetAccessorDeclaration(node) && node.name.text === 'value'));
+  assert.ok(declaration.members.some(node => ts.isPropertyDeclaration(node) && node.name.text === `__etsField_${owner}_value`));
+}
+const overrideOutput = join(work, 'SupportedPropertyOverride.ets');
+run('supported-property-override', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
+  '--out', overrideOutput, join(here, 'SupportedPropertyOverride.kt')]);
+const overrideJs = ts.transpileModule(readFileSync(overrideOutput, 'utf8'), { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
+assert.equal(vm.runInNewContext(overrideJs.outputText + '\nnew PropertyOverride().value', { exports: {} }, { timeout: 1000 }), 2);
 const interfaceOutput = join(work, 'SupportedInterfaceProperty.ets');
 run('supported-interface-property', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
   '--out', interfaceOutput, join(here, 'SupportedInterfaceProperty.kt')]);

@@ -510,14 +510,21 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             }
         }
         // Interface properties are target field contracts, not abstract methods.
-        val overrideIds = if (property != null) emptyList() else overrides.map { functionSymbol(it).id }.distinct()
+        val overrideIds = overrides.filter { property == null || (it.parent as? IrClass)?.kind != ClassKind.INTERFACE }
+            .map { functionSymbol(it).id }.distinct()
+        val kind = when {
+            property?.getter == function -> EtsFunctionKind.GETTER
+            property?.setter == function -> EtsFunctionKind.SETTER
+            function.parent is IrClass -> EtsFunctionKind.METHOD
+            else -> EtsFunctionKind.FUNCTION
+        }
         if (parentClass?.kind == ClassKind.INTERFACE && function.body != null) {
             diagnostics.unsupported(function, "Default interface method bodies are not supported")
         }
         if (function.modality == Modality.ABSTRACT && parentClass != null) {
             if (function.body != null) diagnostics.unsupported(function, "Abstract method cannot have a body")
             return@withFile EtsFunction(emittedName, parameters, type(function.returnType), emptyList(),
-                source(function), kind = EtsFunctionKind.METHOD, typeParameters = genericParameters,
+                source(function), kind = kind, typeParameters = genericParameters,
                 abstract = true, overrides = overrideIds, sourceName = sourceName)
         }
         val body = function.body ?: diagnostics.unsupported(function, "Function has no source body: ${symbolName(function)}")
@@ -527,12 +534,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         try {
             val lines = statements(body, nested)
             EtsFunction(emittedName, parameters,
-                type(function.returnType), lines, source(function), when {
-                    property?.getter == function -> EtsFunctionKind.GETTER
-                    property?.setter == function -> EtsFunctionKind.SETTER
-                    function.parent is IrClass -> EtsFunctionKind.METHOD
-                    else -> EtsFunctionKind.FUNCTION
-                }, static = function.parent is IrClass && function.dispatchReceiverParameter == null,
+                type(function.returnType), lines, source(function), kind,
+                static = function.parent is IrClass && function.dispatchReceiverParameter == null,
                 typeParameters = genericParameters, overrides = overrideIds, sourceName = sourceName)
         } finally {
             returnTargets.removeAt(returnTargets.lastIndex)
@@ -638,7 +641,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             if (field.isDelegated || field.getter?.extensionReceiverParameter != null) {
                 diagnostics.unsupported(field, "Delegated and extension properties are not supported")
             }
-            if (field.getter == null || (field.backingField == null && !hasCustomAccessor(field))) {
+            if (field.getter == null || (field.backingField == null && !requiresAccessor(field))) {
                 diagnostics.unsupported(field, "Property has neither storage nor a computed getter")
             }
         }
@@ -665,9 +668,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         fields.forEach { property -> withElement(property) {
             property.backingField?.let { field ->
                 members.add(EtsField(synthetic(fieldName(field), type(field.type), property),
-                    private = hasCustomAccessor(property), readonly = !property.isVar))
+                    private = requiresAccessor(property), readonly = !property.isVar))
             }
-            if (hasCustomAccessor(property)) {
+            if (requiresAccessor(property)) {
                 listOfNotNull(property.getter, property.setter).forEach { members.add(function(it, scope)) }
             }
         } }
@@ -771,22 +774,14 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         functions.groupBy { it.name }.values.firstOrNull { it.size > 1 }?.let {
             diagnostics.unsupported(declaration, "Overloaded inherited methods are not supported")
         }
-        val storage = mutableSetOf<String>()
+        val storage = mutableMapOf<String, IrProperty>()
         val visited = mutableSetOf<IrClass>()
         fun visit(klass: IrClass) {
             if (!visited.add(klass)) return
             klass.declarations.filterIsInstance<IrProperty>().filterNot { it.isFakeOverride }.forEach { property ->
                 if (klass.kind == ClassKind.INTERFACE) return@forEach
-                val overrides = property.getter?.overriddenSymbols.orEmpty().flatMap { it.owner.collectRealOverrides() }
-                val interfaceImplementation = overrides.isNotEmpty() &&
-                    overrides.all { (it.parent as? IrClass)?.kind == ClassKind.INTERFACE } &&
-                    (klass.modality == Modality.FINAL || property.modality == Modality.FINAL)
-                if (!interfaceImplementation && (property.modality != Modality.FINAL || overrides.isNotEmpty())) {
-                    withFile(property) {
-                        diagnostics.unsupported(property, "Overridden and abstract properties are not supported in inheritance")
-                    }
-                }
-                if (!storage.add(identifier(property))) {
+                val previous = storage.putIfAbsent(identifier(property), property)
+                if (previous != null && !previous.overrides(property) && !property.overrides(previous)) {
                     diagnostics.unsupported(declaration, "Inherited storage name shadowing is not supported")
                 }
             }
@@ -812,16 +807,31 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val emittedName = if (property == null) overloadNaming.name(function) else originalName
         return etsFunctionSymbol(emittedName,
             (listOfNotNull(function.extensionReceiverParameter) + function.valueParameters).map { type(it.type) },
-            type(function.returnType), declarationSource(function), typeParameters(function), sourceName = originalName)
+            type(function.returnType), declarationSource(function), typeParameters(function), sourceName = originalName,
+            kind = when (function) {
+                property?.getter -> EtsFunctionKind.GETTER
+                property?.setter -> EtsFunctionKind.SETTER
+                else -> EtsFunctionKind.FUNCTION
+            })
     }
 
     private fun hasCustomAccessor(property: IrProperty): Boolean =
         listOfNotNull(property.getter, property.setter).any { it.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR }
 
+    private fun isVirtualProperty(property: IrProperty): Boolean = property.modality != Modality.FINAL ||
+        property.getter?.overriddenSymbols.orEmpty().flatMap { it.owner.collectRealOverrides() }
+            .any { (it.parent as? IrClass)?.kind != ClassKind.INTERFACE }
+
+    private fun requiresAccessor(property: IrProperty): Boolean = hasCustomAccessor(property) || isVirtualProperty(property)
+
     private fun fieldName(field: IrField): String {
         if (hasCaptureOrigin(field)) return capturedFieldSymbol(field).name
         if (field.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS) return outerFieldSymbol(field).name
         val property = field.correspondingPropertySymbol?.owner
+        // Overriding a property changes dispatch, not the identity of each owner's backing field.
+        if (property != null && isVirtualProperty(property)) {
+            return "__etsField_${classNaming.name(field.parent as IrClass)}_${identifier(property)}"
+        }
         return if (property != null && hasCustomAccessor(property)) "__etsField_${identifier(property)}" else identifier(field)
     }
 

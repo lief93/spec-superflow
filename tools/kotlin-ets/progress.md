@@ -1,5 +1,22 @@
 # Execution progress
 
+## 2026-09-14: R2.3 virtual and abstract class properties
+
+- Reused official property/accessor bodies, owner type substitution and
+  IrOverridableDeclaration.overrides. No property parser, copied accessor
+  implementation or common property flatten/reconstruction stage added.
+- ETS now preserves virtual accessor dispatch and distinct owner-qualified
+  backing storage. Same-span default getter/setter symbols have different
+  identities; source property and explicit setter parameter names are retained.
+- RED run-ysfiZb reproduces the old guard, run-8tegtG the accessor identity
+  collision, target wKiGTy the inherited-half masking bug. Final frozen
+  run-L169IC passes 50 JVM/host outcomes and 10 boundaries; target tvmEya passes
+  the full suite; modules run-gA3gRG passes 44 regression outcomes/output guards.
+- Self-check and diff whitespace checks passed. This accepts the documented
+  property family, not entire R2 or SDK/native parity. Next: inherited defaults
+  using the official common/JS phase contracts. No agents or timers used.
+- The preceding R2.2 upper-bound increment was published as df3eaf3.
+
 ## 2026-09-14: R2.2 upper-bound closure, continue through remaining plan
 
 - User requested automatic continuation through all agreed stages, prioritizing

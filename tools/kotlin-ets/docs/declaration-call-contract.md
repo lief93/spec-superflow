@@ -42,11 +42,11 @@ there is no property-name adapter or new target text path.
 
 `tests/inheritance/run.mjs` compares JVM and generated-code execution, including
 receiver/argument effects and custom getter/setter effects. It also checks target
-types and accessor names. The same run retains failures for overridden/abstract
-properties, storage shadowing, unsupported initialization and other inheritance
+types and accessor names. The same run retains failures for unrelated storage
+shadowing, unsupported initialization and other inheritance
 boundaries. Host execution is not an ArkTS SDK or device verification claim.
 
-Still pending: class property overrides, top-level initialization,
+Still pending: top-level initialization,
 inherited defaults, virtual overloads and secondary constructors. This contract
 organizes their implementation; it does not claim they are implemented.
 
@@ -56,9 +56,8 @@ Abstract source interface `val`/`var` declarations now become typed `EtsField`
 signatures, not empty methods. `readonly` preserves a `val` contract; concrete
 stored values retain it as well. Interface inheritance composes generic arguments
 through the existing target heritage substitution. Source class implementations
-can provide stored fields or custom getters/setters. A class implementation must
-be final, or its implementing property must be final; virtual class-property
-overrides remain a separate, unsupported family.
+can provide stored fields or custom getters/setters. Virtual implementations and
+abstract class implementations use the accessor family described below.
 
 The target validator checks required types and public instance access, rejects a
 readonly field or missing setter for a writable contract, and rejects writes
@@ -66,9 +65,44 @@ through readonly fields except direct initialization of an owning instance insid
 its constructor. A constructor's nested lambda does not inherit that permission.
 This uses the same typed target tree and printer as ordinary language output.
 
-Default interface property bodies, extension properties, conflicting real
-declarations and class property overrides remain diagnosed. This is not support
+Default interface property bodies, extension properties and conflicting real
+declarations remain diagnosed. This is not support
 for all Kotlin interface behavior or runtime interface tests.
+
+## Virtual class property consumer
+
+Source class open/abstract `val`/`var` and concrete overrides retain their official
+getter/setter bodies and invariant owner-type substitution. Official
+`IrOverridableDeclaration.overrides` determines whether repeated property names
+in a class chain are related; unrelated private storage shadowing stays rejected.
+No source-name matching, copied getter bodies or property flatten/reconstruction
+pass was introduced.
+
+The ETS consumer emits native accessors for virtual properties, with distinct
+private owner-qualified backing fields. Assigning a derived field in its
+constructor does not invoke a base setter or merge base/derived state. Existing
+final nonvirtual stored properties keep their direct field representation.
+Default accessors have compiler-generated parameter names; explicit setter
+parameters retain their source spelling. Abstract class accessors have signatures
+only, and interface properties retain field contracts.
+
+Getter/setter target symbols include their accessor kind: compiler-generated
+accessors may share both name and source span, but cannot share override identity.
+The target validator checks each half's instantiated signature, requires concrete
+implementations for concrete classes, and rejects partial accessor overrides that
+would mask the inherited half in ETS. Abstract class accessors may implement
+interface contracts, but concrete descendants must provide both required halves.
+
+Official reference: Kotlin 2.1.20 `ir/util/AdditionalIrUtils.kt:overrides`,
+`backend/common/lower/PropertiesLowering.kt`, and
+`backend/common/lower/optimizations/PropertyAccessorInlineLowering.kt`.
+The official accessor inliner deliberately guards virtual properties; ETS also
+retains virtual dispatch rather than replacing those reads with field accesses.
+
+Boundaries remain explicit: covariant override signatures, explicit `super`
+member calls, delegated/extension properties, interface default bodies, and `this`
+use during inherited initialization. This increment does not claim all Kotlin
+property or constructor semantics, nor SDK/native acceptance.
 
 ## Verification, 2026-09-14
 
@@ -95,3 +129,26 @@ Interface-property follow-up:
 - The intervening run `run-N3P6V5` is not green evidence: its input hash guard failed
   after a fixture was renamed while it ran. The frozen run above replaces it.
 - No ArkTS SDK build or native-device claim is made for this follow-up.
+
+Virtual-property follow-up:
+
+- RED `tests/inheritance/.work/run-ysfiZb` reaches the old class-property guard
+  after successful JVM execution. `run-8tegtG` exposes the target identity
+  collision between same-span default getter/setter declarations.
+- Frozen GREEN `tests/inheritance/.work/run-L169IC` passes 50 JVM/ETS-host
+  results at zero, negative, positive and both Int boundaries; strict host type
+  checks; default/custom/abstract generic accessors; interface composition;
+  receiver, argument and accessor effects; distinct backing-field names;
+  the former property-override negative as a positive; and 10 source-linked
+  unsupported boundaries. Earlier `run-xHiaij` passes before the interface
+  composition and target masking checks were added; use the final frozen run.
+- Detached target RED `kotlin-ets-target-tests.wKiGTy` exposes partial-accessor
+  masking. GREEN `kotlin-ets-target-tests.tvmEya` passes the complete suite,
+  including same-span accessor identities, abstract/interface composition,
+  missing halves, wrong identity/type, illegal abstract bodies/classes and
+  concrete parent getter/setter masking rejection.
+- Module regression `tests/modules/.work/run-gA3gRG` passes 44 JVM/module
+  results plus existing ownership/import/output guards. It is a shared-contract
+  regression, not a new virtual-property multi-file acceptance fixture.
+- Self-check and `git diff --check` pass. No SDK/ArkVM/native/UI claim; R2's
+  combined platform gate is still pending.

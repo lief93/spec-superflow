@@ -122,3 +122,62 @@ fun propertyInterface(seed: Int): String {
     val read: PropertyView<Int> = computed
     return "${stored.value}:${stored.current}:${read.value}:${computed.current}"
 }
+
+open class VirtualRoot<T>(initial: T) {
+    open var value: T = initial
+    fun read(): T = value
+    fun write(next: T) { value = next }
+}
+open class VirtualMiddle<T>(initial: T) : VirtualRoot<T>(initial) {
+    override var value: T = initial
+}
+class VirtualLeaf(initial: Int, private val effects: Effects) : VirtualMiddle<Int>(initial) {
+    override var value: Int = initial
+        get() { effects.mark("G"); return field }
+        set(next) { effects.mark("S"); field = next + 1 }
+}
+class VirtualUnchanged(initial: Int) : VirtualMiddle<Int>(initial)
+class VirtualEffects {
+    var trace: String = ""
+    fun receiver(value: VirtualRoot<Int>): VirtualRoot<Int> { trace += "R"; return value }
+    fun argument(value: Int): Int { trace += "A"; return value }
+}
+fun virtualProperties(seed: Int): String {
+    val effects = Effects()
+    val value: VirtualRoot<Int> = VirtualLeaf(seed, effects)
+    val calls = VirtualEffects()
+    calls.receiver(value).value += calls.argument(2)
+    val first = value.read()
+    value.write(seed + 3)
+    val second = value.value
+    val inherited: VirtualRoot<Int> = VirtualUnchanged(seed)
+    inherited.write(seed + 5)
+    return "$first:$second:${inherited.read()}:${effects.trace}:${calls.trace}"
+}
+
+interface PropertiesContract<T> {
+    val title: T
+    var current: T
+}
+abstract class AbstractProperties<T> : PropertiesContract<T> {
+    abstract override val title: T
+    abstract override var current: T
+    fun replace(next: T): T { current = next; return current }
+}
+abstract class AbstractPropertiesMiddle<T> : AbstractProperties<T>() {
+    abstract override val title: T
+    abstract override var current: T
+}
+class ConcreteProperties(override val title: Int, override var current: Int) : AbstractPropertiesMiddle<Int>()
+class ComputedProperties(initial: Int) : AbstractProperties<Int>() {
+    private var stored: Int = initial
+    override val title: Int get() = stored + 1
+    override var current: Int
+        get() = stored
+        set(next) { stored = next + 2 }
+}
+fun abstractProperties(seed: Int): String {
+    val stored: AbstractProperties<Int> = ConcreteProperties(seed, seed)
+    val computed: AbstractProperties<Int> = ComputedProperties(seed)
+    return "${stored.replace(seed + 1)}:${stored.title}:${computed.replace(seed + 3)}:${computed.title}"
+}

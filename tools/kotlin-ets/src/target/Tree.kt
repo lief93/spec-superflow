@@ -95,7 +95,7 @@ data class EtsFunction(val name: String, val parameters: List<EtsParameter>, val
     val typeParameters: List<EtsTypeParameter> = emptyList(), val builder: Boolean = false,
     val build: Boolean = false, val abstract: Boolean = false,
     val overrides: List<String> = emptyList(), val sourceName: String? = null) : EtsDeclaration, EtsStatement, EtsClassMember {
-    val symbol get() = etsFunctionSymbol(name, parameters.map { it.symbol.type }, returnType, source, typeParameters, sourceName ?: name)
+    val symbol get() = etsFunctionSymbol(name, parameters.map { it.symbol.type }, returnType, source, typeParameters, sourceName ?: name, kind)
 }
 data class EtsField(val symbol: EtsSymbol, val initializer: EtsExpression? = null,
     val private: Boolean = false, val static: Boolean = false,
@@ -124,8 +124,12 @@ fun etsDiscard(value: EtsExpression, source: SourceSpan = value.source): EtsExpr
         emptyList(), EtsTypes.VOID, source)
 
 fun etsFunctionSymbol(name: String, parameters: List<EtsType>, result: EtsType, source: SourceSpan,
-    typeParameters: List<EtsTypeParameter> = emptyList(), sourceName: String = name) =
-    EtsSymbol("function:${source.file}:${source.start}:$sourceName", name, EtsFunctionType(parameters, result, typeParameters), source)
+    typeParameters: List<EtsTypeParameter> = emptyList(), sourceName: String = name,
+    kind: EtsFunctionKind = EtsFunctionKind.FUNCTION): EtsSymbol {
+    val accessor = if (kind in setOf(EtsFunctionKind.GETTER, EtsFunctionKind.SETTER)) ":${kind.name}" else ""
+    return EtsSymbol("function:${source.file}:${source.start}:$sourceName$accessor", name,
+        EtsFunctionType(parameters, result, typeParameters), source)
+}
 
 fun etsClassSymbol(name: String, source: SourceSpan, sourceName: String = name): EtsSymbol {
     val id = "class:${source.file}:${source.start}:$sourceName"

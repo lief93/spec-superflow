@@ -57,8 +57,8 @@ overloads, cross-file names/visibility, named local/nested declarations, support
 captures/inner chains, bounded serialized inline dependencies and independent
 adapter modules. Do not repeat those implementations.
 
-Recent declaration consumers: inherited final properties and abstract interface
-property contracts with final field/accessor implementations. See
+Recent declaration consumers: inherited final properties, interface contracts,
+and bounded virtual/abstract class properties with generic accessor dispatch. See
 docs/declaration-call-contract.md. These do not complete R2.
 
 Execute the following remaining work in order. Each row is an architectural
@@ -74,11 +74,18 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 
 ## Next action
 
-Continue R2.3 with source class property overrides. Retain official property,
-getter/setter and backing-field identities; preserve separate base/derived storage
-and virtual accessor dispatch. Do not flatten properties just to reconstruct them
-or invent per-page rules. Then inherited defaults, constructor forms, virtual
-overloads and remaining source generic bounds/variance combinations in that row.
+Continue R2.3 with inherited default arguments, then constructor forms, virtual
+overloads and remaining source generic bounds/variance combinations. The bounded
+virtual/abstract class-property family is accepted: run-L169IC (50 JVM/host
+results), target tvmEya, modules run-gA3gRG (44 regression results). Its explicit
+super, covariance and initialization exclusions remain in the declaration contract.
+
+For defaults, inspect common DefaultArgumentStubGenerator,
+DefaultArgumentFunctionFactory and DefaultParameterInjector plus the JS-specific
+factory/injector. Preserve static default-provider selection followed by virtual
+implementation dispatch, argument/default effect order and generic substitutions.
+Do not just enable ETS defaults on overrides or transplant JS super-context
+intrinsics. Retain official IR/body/parameter identity and the existing target tree.
 
 R2.2's selected binary-inline family and its required separate KLIB proof are
 accepted with the documented exclusions. Public KLIB input/session/phase support

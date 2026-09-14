@@ -16,6 +16,7 @@ fun main() {
     checkAccessorContract()
     checkInheritanceContract()
     checkInterfacePropertyContract()
+    checkVirtualPropertyContract()
     checkGenericInheritanceContract()
     checkBoundedReceiverContract()
     checkGenericMethodContract()

@@ -66,6 +66,9 @@ class EtsValidator {
             is EtsFunction -> it.name == name && (it.kind == EtsFunctionKind.SETTER) == setter
             is EtsField -> !setter && it.symbol.name == name
         } }?.let { return instance to it }
+        if (declaration.members.filterIsInstance<EtsFunction>().any {
+            it.name == name && it.kind in setOf(EtsFunctionKind.GETTER, EtsFunctionKind.SETTER)
+        }) return null
         return parents(instance).firstNotNullOfOrNull { member(it, name, setter) }
     }
 
@@ -147,6 +150,14 @@ class EtsValidator {
                 }
                 if (value is EtsFunction) {
                     if (value.abstract && declaration.kind == EtsClassKind.CLASS && !declaration.abstract) reject(value, "Abstract method requires an abstract class")
+                    if (value.kind in setOf(EtsFunctionKind.GETTER, EtsFunctionKind.SETTER)) {
+                        inherited.filter { it.second.name == value.name &&
+                            it.second.kind in setOf(EtsFunctionKind.GETTER, EtsFunctionKind.SETTER) }.forEach { (_, original) ->
+                            if (declaration.members.filterIsInstance<EtsFunction>().none {
+                                it.name == value.name && it.kind == original.kind
+                            }) reject(value, "Incomplete target accessor override")
+                        }
+                    }
                     value.overrides.forEach { id ->
                         val (owner, original) = inherited.firstOrNull { it.second.symbol.id == id } ?: reject(value, "Unbound target override identity")
                         if (original.name != value.name || original.kind != value.kind || !sameMethodSignature(memberType(owner, original), value.symbol.type) ||
@@ -172,14 +183,15 @@ class EtsValidator {
                             memberType(resolved.first, implementation)
                         }
                         is EtsFunction -> {
-                            if (implementation.kind != EtsFunctionKind.GETTER || implementation.private || implementation.static || implementation.abstract)
-                                reject(declaration, "Target property requires a concrete getter")
+                            if (implementation.kind != EtsFunctionKind.GETTER || implementation.private || implementation.static ||
+                                (implementation.abstract && !declaration.abstract))
+                                reject(declaration, "Target property requires an implemented getter or an abstract class")
                             val getterType = (memberType(resolved.first, implementation) as EtsFunctionType).result
                             if (!requirement.readonly) {
                                 val setter = member(instance(declaration), requirement.symbol.name, setter = true)
                                     ?: reject(declaration, "Writable target property requires a setter")
                                 val function = setter.second as EtsFunction
-                                if (function.private || function.static || function.abstract ||
+                                if (function.private || function.static || (function.abstract && !declaration.abstract) ||
                                     (memberType(setter.first, function) as EtsFunctionType).parameters != listOf(getterType))
                                     reject(declaration, "Incompatible target property setter")
                             }
@@ -191,7 +203,7 @@ class EtsValidator {
             }
             if (declaration.kind == EtsClassKind.CLASS && !declaration.abstract) {
                 inherited.filter { it.second.abstract }.forEach { (owner, requirement) ->
-                    val resolved = member(instance(declaration), requirement.name)
+                    val resolved = member(instance(declaration), requirement.name, setter = requirement.kind == EtsFunctionKind.SETTER)
                     val implementation = resolved?.second as? EtsFunction
                     if (implementation == null || implementation.abstract || implementation.static || implementation.private ||
                         implementation.kind != requirement.kind || !sameMethodSignature(memberType(resolved.first, implementation), memberType(owner, requirement))) {
@@ -361,7 +373,7 @@ class EtsValidator {
 
     private fun function(function: EtsFunction, outer: Map<String, EtsSymbol>) {
         if (function.abstract && (function.body.isNotEmpty() || function.static || function.private || function.exported ||
-            function.builder || function.build || function.kind != EtsFunctionKind.METHOD || currentClass == null ||
+            function.builder || function.build || function.kind !in setOf(EtsFunctionKind.METHOD, EtsFunctionKind.GETTER, EtsFunctionKind.SETTER) || currentClass == null ||
             function.parameters.any { it.defaultValue != null })) reject(function, "Invalid abstract method signature")
         if (function.overrides.isNotEmpty() && currentClass == null) reject(function, "Override requires a target class")
         if ((function.builder || function.build) && (function.returnType != EtsTypes.VOID || function.static ||

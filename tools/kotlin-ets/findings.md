@@ -33,6 +33,18 @@ transitive serialized inline loading and typed UI modules have since progressed.
 - Dependent (`T : R`) and non-null (`T : Any`) binary method bounds also compose
   through the existing official InlinerTypeRemapper. New exact-input tests
   establish coverage instead of adding a second upper-bound/substitution engine.
+- Class property overriding already has authoritative official accessor bodies
+  and override edges. The missing work was ETS storage/dispatch and target
+  identity: generated getter/setter declarations can share a source span, while
+  base/derived backing fields must remain separate. Reuse official `overrides`
+  and preserve accessors; do not inline open property reads into field reads.
+- Target abstract accessors must participate in concrete implementation checks
+  by kind. A derived getter masks a parent's setter in ETS/JS, so resolving each
+  half independently through ancestors can falsely accept an incomplete override.
+- Next inherited-default work must separate the inherited default provider from
+  the eventual virtual implementation. Common default factories already walk
+  override graphs; JS stubs/injectors additionally depend on JS undefined and
+  super-context intrinsics, so copying the whole JS stage is not direct ETS reuse.
 
 ## Historical observations
 

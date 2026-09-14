@@ -10,5 +10,7 @@ fun main() {
         println(selected(false, seed))
         println(propertyDispatch(seed))
         println(propertyInterface(seed))
+        println(virtualProperties(seed))
+        println(abstractProperties(seed))
     }
 }
