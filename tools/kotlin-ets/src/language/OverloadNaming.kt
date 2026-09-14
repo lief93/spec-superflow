@@ -3,15 +3,12 @@ package dev.ets
 
 import java.util.Collections
 import java.util.IdentityHashMap
-import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
-import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.backend.js.utils.NameTable
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrCall
-import org.jetbrains.kotlin.ir.types.classOrNull
-import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import org.jetbrains.kotlin.ir.util.allOverridden
 import org.jetbrains.kotlin.ir.visitors.*
 
 /** Allocate before lowering bodies so resolved calls never depend on visitation order. */
@@ -33,6 +30,7 @@ class OverloadNaming {
     private fun prepare(module: IrModuleFragment) {
         val reserved = mutableSetOf<String>()
         val functions = mutableListOf<IrSimpleFunction>()
+        val classes = mutableListOf<IrClass>()
         val callsByFile = IdentityHashMap<IrFile, MutableSet<IrSimpleFunction>>()
         module.acceptVoid(object : IrElementVisitorVoid {
             private var currentFile: IrFile? = null
@@ -51,6 +49,7 @@ class OverloadNaming {
                 super.visitCall(expression)
             }
             override fun visitElement(element: IrElement) {
+                if (element is IrClass) classes += element
                 if (element is IrDeclarationWithName && !element.name.isSpecial) reserved.add(element.name.asString())
                 if (element is IrSimpleFunction && !element.isFakeOverride && element.correspondingPropertySymbol == null &&
                     (element.parent is IrFile || element.parent is IrClass)) functions += element
@@ -60,7 +59,7 @@ class OverloadNaming {
         val table = NameTable<IrSimpleFunction>(reserved = reserved)
         val sourceOrder = compareBy<IrSimpleFunction>({ sourceFile(it)!!.fileEntry.name }, { it.startOffset }, { it.endOffset })
         val ordered = functions.sortedWith(sourceOrder)
-        val groups = ordered.groupBy {
+        val groups = ordered.filter { it.parent is IrFile }.groupBy {
             val parent = it.parent
             (if (parent is IrFile) parent.packageFqName else parent) to it.name
         }.values.flatMap { group ->
@@ -83,15 +82,13 @@ class OverloadNaming {
                 listOf(shared) + separate
             }
         }
-        for (group in groups) {
-            if (group.size < 2) continue
-            val parent = group.first().parent
+        val memberGroups = memberGroups(classes, ordered.filter { it.parent is IrClass }, sourceOrder)
+        for (slots in (groups.map { it.map(::listOf) } + memberGroups).sortedWith(compareBy { group ->
+            group.firstOrNull()?.firstOrNull()?.let { ordered.indexOf(it) } ?: -1
+        })) {
+            if (slots.size < 2) continue
+            val group = slots.flatten()
             val reason = when {
-                parent is IrClass && (parent.kind != ClassKind.CLASS || parent.modality != Modality.FINAL ||
-                    parent.superTypes.any { it.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any" }) ->
-                    "Overloads require a final class without inheritance"
-                group.any { it.modality != Modality.FINAL || it.overriddenSymbols.isNotEmpty() } ->
-                    "Virtual and overridden overloads are not supported"
                 group.any { it.startOffset < 0 || it.endOffset <= it.startOffset } ->
                     "Overloads require original source declaration positions"
                 group.any { it.extensionReceiverParameter != null || it.contextReceiverParametersCount != 0 ||
@@ -106,9 +103,51 @@ class OverloadNaming {
                 continue
             }
             val original = group.first().name.asString()
-            table.declareStableName(group.first(), original)
-            names[group.first()] = original
-            for (function in group.drop(1)) names[function] = table.declareFreshName(function, original)
+            table.declareStableName(slots.first().first(), original)
+            slots.first().forEach { names[it] = original }
+            for (slot in slots.drop(1)) {
+                val name = table.declareFreshName(slot.first(), original)
+                slot.forEach { names[it] = name }
+            }
         }
+    }
+
+    private fun memberGroups(classes: List<IrClass>, methods: List<IrSimpleFunction>, order: Comparator<IrSimpleFunction>): List<List<List<IrSimpleFunction>>> {
+        val real = methods.toSet()
+        fun declarations(function: IrSimpleFunction) = function.allOverridden(includeSelf = true).filter { !it.isFakeOverride }
+        val scopes = classes.flatMap { owner -> owner.declarations.filterIsInstance<IrSimpleFunction>()
+            .filter { it.correspondingPropertySymbol == null }.groupBy { it.name }.values }
+        val edges = scopes.flatten().map { declarations(it).filter { method -> method in real } }
+        // The frontend has already resolved overrides, including interface joins.
+        val families = components(methods.map(::listOf) + edges)
+        families.filter { family -> family.groupBy { it.parent }.values.any { it.size > 1 } }.forEach { family ->
+            family.forEach { unsupported[it] = "Virtual overload joins require separate target bridges" }
+        }
+        val representatives = families.flatMap { family -> family.map { it to family.minWith(order) } }.toMap()
+        val byRepresentative = families.associateBy { it.minWith(order) }
+        val collisions = scopes.map { scope ->
+            val all = scope.flatMap(::declarations).distinct()
+            if (scope.size > 1 && all.any { it !in real }) all.filter { it in real }.forEach {
+                unsupported[it] = "Overloads involving external inherited declarations require a target bridge"
+            }
+            all.mapNotNull { representatives[it] }.distinct()
+        }
+        return components(representatives.values.distinct().map(::listOf) + collisions).map { group ->
+            group.sortedWith(order).map { byRepresentative.getValue(it).sortedWith(order) }
+        }
+    }
+
+    /** Connected override slots and target spelling conflicts, keyed by IR identity. */
+    private fun components(groups: List<List<IrSimpleFunction>>): List<List<IrSimpleFunction>> {
+        val parents = IdentityHashMap<IrSimpleFunction, IrSimpleFunction>()
+        fun root(value: IrSimpleFunction): IrSimpleFunction {
+            val parent = parents.getOrPut(value) { value }
+            if (parent === value) return value
+            return root(parent).also { parents[value] = it }
+        }
+        groups.forEach { group -> group.firstOrNull()?.let { first ->
+            group.forEach { parents[root(it)] = root(first) }
+        } }
+        return parents.keys.toList().groupBy(::root).values.toList()
     }
 }

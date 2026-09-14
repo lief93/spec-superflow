@@ -136,12 +136,24 @@ All frozen source/test hashes remain unchanged. See constructor-captures.md.
 This does not support observing pre-super initialization, anonymous owners or
 generic/non-Any inner owners, and does not claim SDK/native or whole-R2 acceptance.
 
-Next implement virtual overloads, then remaining generic bounds/variance
-combinations. Inspect the pinned common/JS override, bridge and name-allocation
-contracts first. Keep resolved declaration/call identities and target override
-validation consistent; do not route by source spelling or replace a virtual call
-with a statically selected implementation. R2.4 and the combined R2 gate remain
-queued before R3-R7.
+Non-bridging virtual overloads now reuse official allOverridden and JS NameTable
+to share emitted names along resolved override edges, including generic source
+inheritance and inherited defaults. Frozen run-jawUJj passes 30 + 30 JVM/host
+results, 18 override edges, 24 typed calls and five explicit boundaries.
+Legacy probe-MYKake and public-WOX202 pass, including 45 public-entry results.
+Target qOWcdI preserves exact override/call identity validation even when both
+source overloads erase to the same target type. See virtual-overloads.md.
+Inherited-default run-Clbp2s also passes 65 + 65 results, three boundaries and
+29 exact helper calls on this compiler version.
+
+Next finish virtual-overload joined-slot bridges using common generateBridges
+and public IrBasedFunctionHandle, then remaining generic bounds/variance
+combinations. BridgeJoin.kt is JVM-valid but still explicitly unsupported: one
+implementation must preserve two independent inherited call slots. Keep resolved
+declaration/call identities and target override validation consistent; do not
+route by source spelling or replace a virtual call with a static implementation.
+R2.3 is not complete. R2.4 and the combined SDK/native R2 gate remain queued
+before R3-R7; these host checks do not satisfy that gate.
 
 Earlier native-constructor milestone:
 

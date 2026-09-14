@@ -61,11 +61,14 @@ if (baseline) {
   record(); assert.deepEqual(result.actual, result.expected);
   for (const input of fixtures.filter(path => /\/(Unsupported|Invalid)/.test(path))) {
     const name = input.slice(input.lastIndexOf('/') + 1), invalid = name.startsWith('Invalid');
+    const accepted = ['UnsupportedOpen.kt', 'UnsupportedInherited.kt', 'UnsupportedInterface.kt'].includes(name);
     const original = join(work, name + '.jar'), out = join(work, name + '.ets');
     const jvm = run(name + '-jvm', 'bash', [compiler, input, '-d', original], invalid ? 1 : 0);
     const target = run(name + '-target', 'java', ['-cp', `${jar}:${cp}`, 'dev.ets.MainKt', '--mode', 'language', '--classpath', cp,
-      '--out', out, input], invalid ? 1 : 2);
-    const diagnostic = JSON.parse(target.stdout); assert.equal(existsSync(out), false);
+      '--out', out, input], invalid ? 1 : accepted ? 0 : 2);
+    const diagnostic = JSON.parse(target.stdout);
+    if (accepted) { assert.equal(diagnostic.ok, true); assert.equal(existsSync(out), true); continue; }
+    assert.equal(existsSync(out), false);
     if (invalid) {
       assert.equal(diagnostic.code, 'COMPILATION_REJECTED'); assert.equal(existsSync(original), false);
       for (const stderr of [jvm.stderr, target.stderr]) {

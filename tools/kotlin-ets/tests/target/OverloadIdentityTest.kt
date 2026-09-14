@@ -33,5 +33,23 @@ fun checkOverloadIdentityContract() {
     EtsValidator().validate(program(owner))
     reject("Duplicate member identity", program(owner.copy(members = listOf(
         first.copy(kind = EtsFunctionKind.METHOD), first.copy(name = "different", kind = EtsFunctionKind.METHOD)))))
+    val ctor = EtsFunction("constructor", emptyList(), EtsTypes.VOID, emptyList(), span(60), kind = EtsFunctionKind.CONSTRUCTOR)
+    val base = owner.copy(members = listOf(ctor) + owner.members)
+    val baseType = base.symbol.type as EtsNamedType
+    val override = (owner.members[1] as EtsFunction).copy(source = span(61), overrides = listOf(second.symbol.id))
+    val child = EtsClass("Child", listOf(ctor.copy(source = span(62), body = listOf(EtsSuperConstructorCall(baseType, emptyList(), span(62)))),
+        override), span(63), baseClass = baseType)
+    EtsValidator().validate(program(base, child))
+    reject("Same erased signature, wrong overload override", program(base,
+        child.copy(members = child.members.dropLast(1) + override.copy(overrides = listOf(first.symbol.id)))))
+    reject("Override with stale spelling", program(base,
+        child.copy(members = child.members.dropLast(1) + override.copy(name = "select"))))
+    val receiver = EtsParameter(EtsSymbol("receiver", "receiver", baseType, span(64)))
+    val member = EtsMember(EtsReference(receiver.symbol), second.name, second.symbol.type, span(65), second.symbol.id)
+    val invoke = EtsFunction("invoke", listOf(receiver), EtsTypes.NUMBER,
+        listOf(EtsReturn(EtsCall(member, emptyList(), EtsTypes.NUMBER, span(65)), span(65))), span(66))
+    EtsValidator().validate(program(base, child, invoke))
+    reject("Same erased signature, wrong overload call", program(base, child, invoke.copy(body = listOf(EtsReturn(
+        EtsCall(member.copy(symbolId = first.symbol.id), emptyList(), EtsTypes.NUMBER, span(65)), span(65))))))
     println("PASS overload source identity, emitted spelling and strict declaration/reference binding")
 }

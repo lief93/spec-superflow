@@ -31,7 +31,7 @@ Reference: Kotlin 2.1.20 common lowerings and `JsLoweringPhases.kt`.
 | Default arguments | Common masked factory, stub generation and argument injection; JS injector has interop/inner-class prerequisites | Source inherited defaults use the common masked route with typed static receiver helpers. Ordinary direct defaults stay. See inherited-defaults.md for the bounded contract; no JS undefined/super-context ABI. |
 | Inner/local declarations | Official capture, local popup and inner-class passes generate fields, parameters and rewritten constructor calls | Already reused; consume registered synthetic bindings and validate ownership. |
 | Secondary constructors | JS lowering creates factories, then factory injection rewrites construction | Keep one native allocating root (source primary or unique directly-super-delegating secondary); reuse official IR declaration/body/type/value utilities for source-class static factories. Other allocation families remain pending; see constructors.md. |
-| Virtual bridges | JS bridge construction supplies backend-specific dispatch machinery | Pending virtual overload/covariance design. Preserve current exclusions until declaration and call identities agree. |
+| Virtual bridges | Common generateBridges accepts resolved FunctionHandle graphs; JS supplies its signature and bridge bodies | Non-bridging source overloads share target names along official override edges. Generic joined slots still need ETS forwarding methods; covariance remains excluded. See virtual-overloads.md. |
 
 ## First consumer family
 

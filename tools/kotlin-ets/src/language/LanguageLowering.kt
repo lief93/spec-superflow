@@ -782,17 +782,13 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         }
 
     private fun validateInheritedMembers(declaration: IrClass) {
-        val functions = declaration.declarations.filterIsInstance<IrSimpleFunction>()
-        functions.groupBy { it.name }.values.firstOrNull { it.size > 1 }?.let {
-            diagnostics.unsupported(declaration, "Overloaded inherited methods are not supported")
-        }
         val storage = mutableMapOf<String, IrProperty>()
         val methods = mutableMapOf<String, IrSimpleFunction>()
         val visited = mutableSetOf<IrClass>()
         fun visit(klass: IrClass) {
             if (!visited.add(klass)) return
             klass.declarations.filterIsInstance<IrSimpleFunction>().filter { !it.isFakeOverride && it.correspondingPropertySymbol == null }.forEach { method ->
-                val previous = methods.putIfAbsent(method.name.asString(), method)
+                val previous = methods.putIfAbsent(overloadNaming.name(method), method)
                 if (previous != null && (DescriptorVisibilities.isPrivate(method.visibility) || DescriptorVisibilities.isPrivate(previous.visibility)))
                     diagnostics.unsupported(declaration, "Private method name shadowing in an inheritance hierarchy is not supported")
             }
