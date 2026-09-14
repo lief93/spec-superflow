@@ -41,10 +41,18 @@ transitive serialized inline loading and typed UI modules have since progressed.
 - Target abstract accessors must participate in concrete implementation checks
   by kind. A derived getter masks a parent's setter in ETS/JS, so resolving each
   half independently through ancestors can falsely accept an incomplete override.
-- Next inherited-default work must separate the inherited default provider from
+- Inherited-default work must separate the inherited default provider from
   the eventual virtual implementation. Common default factories already walk
   override graphs; JS stubs/injectors additionally depend on JS undefined and
   super-context intrinsics, so copying the whole JS stage is not direct ETS reuse.
+- The common masked route is reusable for ETS. Static receiver helpers retain
+  recursive calls and user method bodies; forcing every helper through the
+  inliner loses class-generic context and is not a general recursion solution.
+- Common default injection leaves declaration-scoped generic sentinel/call types.
+  Normalize these with official type substitution at the target boundary, not
+  a type-check bypass. `copyAttributes` also does not copy the official
+  default-provider link because that attribute does not follow attributeOwnerId.
+  Explicit source-link checks now exercise this in addition to runtime parity.
 
 ## Historical observations
 

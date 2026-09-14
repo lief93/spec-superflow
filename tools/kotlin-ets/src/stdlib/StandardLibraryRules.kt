@@ -80,6 +80,7 @@ class StandardLibraryRules : CallRule {
                 "kotlin.Int.plus" -> int32(binary("+", receiverNode(), arg(0)))
                 "kotlin.Int.minus" -> int32(binary("-", receiverNode(), arg(0)))
                 "kotlin.Int.times" -> math("imul", listOf(receiverNode(), arg(0)))
+                "kotlin.Int.and" -> binary("&", receiverNode(), arg(0))
                 "kotlin.Int.div" -> external("__etsIntDiv", listOf(EtsTypes.NUMBER, EtsTypes.NUMBER),
                     EtsTypes.NUMBER, listOf(receiverNode(), arg(0)))
                 "kotlin.Int.rem" -> external("__etsIntRem", listOf(EtsTypes.NUMBER, EtsTypes.NUMBER),

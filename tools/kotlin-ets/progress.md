@@ -1,5 +1,27 @@
 # Execution progress
 
+## 2026-09-14: R2.3 inherited default dispatch
+
+- Integrated official common masked default factory/generator/injector. Reused
+  official static receiver/body utilities, generic substitution and JS NameTable
+  for ETS helpers, without JS undefined/prototype/super-context intrinsics.
+- User methods/parameters remain intact. Helpers select the inherited provider,
+  then dispatch virtually; recursive defaults remain calls. Null sentinels use
+  masks, generic call-site types are instantiated, and provider source links
+  survive helper conversion explicitly.
+- Frozen run-SX8Kmd passes 45 JVM/ETS-host outcomes in flat output and the same 45
+  in separate modules, strict types, deterministic reversed-input output, five
+  JVM-valid rejection boundaries, ten official helper origins and 18 call links.
+  All 60 input hashes match. No SDK/native/UI equivalence is claimed.
+- The old default-argument negative is now an explicit supported regression,
+  not a skipped failure. Inheritance run-01X601 passes 50 outcomes, the newly
+  supported historical fixture and nine remaining boundaries. Inline run-oEZoyZ
+  and concatenation run-wjEgjD pass their official IR and JVM/ETS-host checks.
+- Self-check, recorded input hashes and diff whitespace checks pass. The bounded
+  inherited-default family is accepted, not all R2. Next: constructor forms,
+  virtual overloads and remaining generic combinations. No agents/timers used.
+  See docs/inherited-defaults.md for exclusions and the helper ABI.
+
 ## 2026-09-14: R2.3 virtual and abstract class properties
 
 - Reused official property/accessor bodies, owner type substitution and

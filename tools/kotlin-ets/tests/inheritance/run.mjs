@@ -109,6 +109,13 @@ result.supportedGenericMethod = { input: genericMethodInput, sha256: hash(generi
   proofLog: join(work, 'generic-method-interface-proof.stdout') };
 const negatives = readdirSync(here).filter(name => name.startsWith('Unsupported') && name.endsWith('.kt') &&
   join(here, name) !== genericMethodInput).sort();
+const defaultOutput = join(work, 'SupportedDefaultArgument.ets');
+run('supported-default-argument', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', defaultOutput,
+  join(here, 'SupportedDefaultArgument.kt')]);
+const defaultJs = ts.transpileModule(readFileSync(defaultOutput, 'utf8'), { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
+assert.equal(vm.runInNewContext(defaultJs.outputText + '\ncallDefault(new DefaultChild())',
+  { exports: {} }, { timeout: 1000 }), 4);
 for (const name of negatives) {
   const input = join(here, name), out = join(work, name + '.ets');
   const diagnostic = JSON.parse(run(name, 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', out, input], 2));

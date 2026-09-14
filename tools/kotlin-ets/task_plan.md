@@ -58,8 +58,9 @@ captures/inner chains, bounded serialized inline dependencies and independent
 adapter modules. Do not repeat those implementations.
 
 Recent declaration consumers: inherited final properties, interface contracts,
-and bounded virtual/abstract class properties with generic accessor dispatch. See
-docs/declaration-call-contract.md. These do not complete R2.
+bounded virtual/abstract class properties, and inherited default dispatch with
+generic/static-provider composition. See docs/declaration-call-contract.md and
+docs/inherited-defaults.md. These do not complete R2.
 
 Execute the following remaining work in order. Each row is an architectural
 deliverable, not permission to create an unbounded sequence of tiny API patches.
@@ -68,24 +69,26 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 | Remaining declaration/call semantics: class property overrides, inherited default arguments, constructor forms, virtual overloads and remaining generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides and inherited default dispatch accepted; remaining constructor forms, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
 ## Next action
 
-Continue R2.3 with inherited default arguments, then constructor forms, virtual
-overloads and remaining source generic bounds/variance combinations. The bounded
-virtual/abstract class-property family is accepted: run-L169IC (50 JVM/host
-results), target tvmEya, modules run-gA3gRG (44 regression results). Its explicit
-super, covariance and initialization exclusions remain in the declaration contract.
+Continue R2.3 with constructor forms, then virtual overloads and remaining source
+generic bounds/variance combinations. Inspect the official constructor factory,
+delegation and initialization passes before designing the ETS representation.
+Do not replace constructor semantics with a renamed function: preserve delegation,
+allocation, field/init order, argument effects and source ownership.
 
-For defaults, inspect common DefaultArgumentStubGenerator,
-DefaultArgumentFunctionFactory and DefaultParameterInjector plus the JS-specific
-factory/injector. Preserve static default-provider selection followed by virtual
-implementation dispatch, argument/default effect order and generic substitutions.
-Do not just enable ETS defaults on overrides or transplant JS super-context
-intrinsics. Retain official IR/body/parameter identity and the existing target tree.
+Inherited-default GREEN run-SX8Kmd passes 45 flat + 45 multi-file JVM/host results,
+strict target types, five boundaries, deterministic modules and actual common IR
+provider/origin/call links. Inheritance run-01X601 (50 results/nine boundaries),
+inline run-oEZoyZ and concatenation run-wjEgjD pass. The bounded property family
+remains accepted; all default/property exclusions are explicit in the declaration
+contracts. In particular local/inner default providers still need capture/phase
+composition; super, variance and other unsupported forms are not silently enabled.
+No SDK/native or whole-R2 acceptance is claimed by these focused checks.
 
 R2.2's selected binary-inline family and its required separate KLIB proof are
 accepted with the documented exclusions. Public KLIB input/session/phase support

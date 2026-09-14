@@ -22,6 +22,6 @@ const compiler = join(root, 'tests/stdlib/compiler.sh');
 const classpath = run('classpath', 'bash', [compiler, '--classpath']);
 const jar = join(work, 'typed-tests.jar');
 run('compile', 'bash', [compiler, ...['target/Tree.kt', 'target/TypeSubstitution.kt', 'target/Validator.kt', 'target/Traversal.kt', 'core/Contract.kt',
-  'core/Frontend.kt', 'core/OfficialLowerings.kt', 'core/ExpectedNullability.kt', 'core/LibraryInlining.kt', 'core/BinaryBodies.kt', 'core/LocalDeclarations.kt', 'core/ForLoops.kt', 'language/LanguageLowering.kt', 'language/OverloadNaming.kt', 'language/ClassNaming.kt'].map(file => join(root, 'src', file)),
+  'core/Frontend.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt', 'core/ExpectedNullability.kt', 'core/LibraryInlining.kt', 'core/BinaryBodies.kt', 'core/LocalDeclarations.kt', 'core/ForLoops.kt', 'language/LanguageLowering.kt', 'language/OverloadNaming.kt', 'language/ClassNaming.kt'].map(file => join(root, 'src', file)),
   join(here, 'TypedLoweringTest.kt'), '-d', jar]);
 run('test', 'java', ['-cp', `${jar}:${classpath}`, 'dev.ets.TypedLoweringTestKt', join(here, 'TypedSlice.kt'), classpath, join(here, 'TypedHelper.kt')]);

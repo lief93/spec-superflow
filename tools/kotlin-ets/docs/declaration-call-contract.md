@@ -28,7 +28,7 @@ Reference: Kotlin 2.1.20 common lowerings and `JsLoweringPhases.kt`.
 | Family | Official input/output and dependencies | ETS decision |
 | --- | --- | --- |
 | Properties | Common `PropertiesLowering` moves fields/accessors out of `IrProperty`; removes the property container; no target runtime supplied | Preserve the container for ETS property syntax. Consume its compiler-resolved storage/getter/setter relationships directly. Do not run flattening merely to reconstruct the property afterward. |
-| Default arguments | Common stub generation plus JS override patching, argument injection and cleanup; JS injector has interop/inner-class prerequisites | Existing direct ETS defaults stay. Inherited defaults need a separate semantics proof before enabling; do not inject JS stubs without their calling convention. |
+| Default arguments | Common masked factory, stub generation and argument injection; JS injector has interop/inner-class prerequisites | Source inherited defaults use the common masked route with typed static receiver helpers. Ordinary direct defaults stay. See inherited-defaults.md for the bounded contract; no JS undefined/super-context ABI. |
 | Inner/local declarations | Official capture, local popup and inner-class passes generate fields, parameters and rewritten constructor calls | Already reused; consume registered synthetic bindings and validate ownership. |
 | Secondary constructors | JS lowering creates factories, then factory injection rewrites construction | Pending ETS construction/initialization design. A factory is not equivalent to merely renaming a constructor. |
 | Virtual bridges | JS bridge construction supplies backend-specific dispatch machinery | Pending virtual overload/covariance design. Preserve current exclusions until declaration and call identities agree. |
@@ -46,8 +46,8 @@ types and accessor names. The same run retains failures for unrelated storage
 shadowing, unsupported initialization and other inheritance
 boundaries. Host execution is not an ArkTS SDK or device verification claim.
 
-Still pending: top-level initialization,
-inherited defaults, virtual overloads and secondary constructors. This contract
+Still pending: top-level initialization, the inherited-default combinations
+excluded by inherited-defaults.md, virtual overloads and secondary constructors. This contract
 organizes their implementation; it does not claim they are implemented.
 
 ## Interface property consumer

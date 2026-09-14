@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 export const here = dirname(fileURLToPath(import.meta.url));
 export const root = resolve(here, '../../..');
 export const compiler = join(root, 'tests/stdlib/compiler.sh');
-export const core = ['Frontend.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt', 'LocalDeclarations.kt',
+export const core = ['Frontend.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt', 'LocalDeclarations.kt',
   'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt'].map(name => join(root, 'src/core', name));
 export const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 export const identities = paths => paths.map(path => ({ path, sha256: hash(path) }));

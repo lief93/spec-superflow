@@ -28,7 +28,7 @@ run('oracle-build', 'bash', [compiler, '-classpath', `${cp}:${library}`, join(he
 assert.deepEqual(run('jvm', 'java', ['-cp', `${cp}:${library}:${oracle}`, 'consumer.OracleKt']).trim().split('\n'),
   ['27/2/:1:2', '-15/2/:-2:-1', '-1/2/:2147483647:-2147483648']);
 const evidence = join(work, 'evidence.jar');
-run('evidence-build', 'bash', [compiler, ...['Frontend.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt',
+run('evidence-build', 'bash', [compiler, ...['Frontend.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt',
   'LocalDeclarations.kt', 'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt'].map(name => join(root, 'src/core', name)),
   ...['Tree.kt', 'TypeSubstitution.kt', 'Validator.kt', 'Traversal.kt'].map(name => join(root, 'src/target', name)),
   join(here, 'Evidence.kt'), '-d', evidence]);
