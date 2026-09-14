@@ -41,7 +41,7 @@ assert.equal(existsSync(library), false);
 const oracle = join(work, 'oracle.jar');
 const serialized = provenance[1].jar;
 const evidence = join(work, 'evidence.jar');
-run('evidence-build', 'bash', [compiler, ...['Frontend.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt',
+run('evidence-build', 'bash', [compiler, ...['Frontend.kt', 'Constructors.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt',
   'LocalDeclarations.kt', 'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt'].map(name => join(root, 'src/core', name)),
   ...['Tree.kt', 'TypeSubstitution.kt', 'Validator.kt', 'Traversal.kt'].map(name => join(root, 'src/target', name)),
   join(here, 'BodyEvidence.kt'), '-d', evidence]);

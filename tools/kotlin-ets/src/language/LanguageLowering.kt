@@ -484,7 +484,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val parentClass = function.parent as? IrClass
         val overrides = function.overriddenSymbols.flatMap { it.owner.collectRealOverrides() }
             .filter { sourceFile(it) != null }.distinct()
-        if (parentClass != null && hasInheritance(parentClass)) {
+        if (parentClass != null && function.dispatchReceiverParameter != null && hasInheritance(parentClass)) {
             if (function.extensionReceiverParameter != null ||
                 function.valueParameters.any { it.defaultValue != null }) {
                 diagnostics.unsupported(function, "Extension and default-argument inherited methods are not supported")
@@ -536,6 +536,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             EtsFunction(emittedName, parameters,
                 type(function.returnType), lines, source(function), kind,
                 static = function.parent is IrClass && function.dispatchReceiverParameter == null,
+                private = parentClass != null && function.visibility == DescriptorVisibilities.PRIVATE,
                 typeParameters = genericParameters, overrides = overrideIds, sourceName = sourceName)
         } finally {
             returnTargets.removeAt(returnTargets.lastIndex)
@@ -753,7 +754,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             else -> initialization.addAll(statement(child, scope))
         } }
         members.add(EtsFunction("constructor", parameterText, EtsTypes.VOID, initialization, source(constructor),
-            kind = EtsFunctionKind.CONSTRUCTOR, private = singleton))
+            kind = EtsFunctionKind.CONSTRUCTOR, private = singleton || constructor.visibility == DescriptorVisibilities.PRIVATE))
         declaration.declarations.filterIsInstance<IrSimpleFunction>().filter { !it.isFakeOverride }.forEach { method ->
             if (declaration.isData && method.origin == IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER &&
                 method.name.asString() in setOf("equals", "hashCode")) return@forEach

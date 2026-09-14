@@ -1,5 +1,31 @@
 # Execution progress
 
+## 2026-09-14: R2.3 native-primary secondary construction
+
+- Inspected both official JS constructor routes and their phase order. Reused
+  official static declaration creation, body movement, value/type remapping,
+  IR builders and JS NameTable; no JS allocation/prototype runtime was copied.
+- ETS retains the primary constructor and generates one source-class static
+  factory per secondary this-chain entry. Parameter names, source ownership,
+  initialization/delegation effects, generic types, private access and returned
+  instance identity are preserved. Static defaults remain distinct from virtual
+  inherited defaults; the existing instance default mechanism remains in place.
+- Self-check found and reproduced a real order bug: inline constructor references
+  recreated calls to removed constructors, yielding 0 where JVM returned 7.
+  RED run-a0L4bN records five mismatches. Constructor conversion now runs after
+  official inlining, matching the relevant official JS phase dependency.
+- Frozen GREEN run-am3R7S passes 40 flat and 40 multi-file JVM/ETS-host results,
+  strict host types, reversed-input determinism, six JVM-valid/source-linked
+  refusal cases, eleven actual IR factory/source/parameter/visibility bindings
+  and no remaining calls to removed secondary declarations. All inputs match.
+- Final inline run-SrqVTj and local run-JnyUAl pass official IR and JVM/ETS-host
+  regressions. Inherited-default run-Fz614o passed 45 flat + 45 module results
+  before the final constructor phase-order correction; the final constructor
+  fixture also composes inherited defaults with construction. No SDK/native or
+  UI equivalence is claimed. Main alone implemented, tested and self-checked.
+- Accept this documented family, not all R2. Next: remaining allocation and
+  capture/visibility forms, then virtual overloads and generic combinations.
+
 ## 2026-09-14: R2.3 inherited default dispatch
 
 - Integrated official common masked default factory/generator/injector. Reused

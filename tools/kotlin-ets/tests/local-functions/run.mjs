@@ -45,7 +45,7 @@ assert.equal(manifest.expected.length, 4);
 assert.equal(manifest.expected[1], '0:item:10|2:5:9:10:10|1:2:11:3|1:1:RLAD|5|3|new:1');
 const evidence = join(work, 'evidence.jar');
 run('evidence-build', 'bash', [compiler, ...[
-  'core/Frontend.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt', 'core/ExpectedNullability.kt', 'core/LibraryInlining.kt', 'core/BinaryBodies.kt', 'core/LocalDeclarations.kt', 'core/ForLoops.kt',
+  'core/Frontend.kt', 'core/Constructors.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt', 'core/ExpectedNullability.kt', 'core/LibraryInlining.kt', 'core/BinaryBodies.kt', 'core/LocalDeclarations.kt', 'core/ForLoops.kt',
   'core/Contract.kt', 'target/Tree.kt', 'target/Validator.kt', 'target/TypeSubstitution.kt', 'target/Traversal.kt',
 ].map(path => join(root, 'src', path)), join(here, 'LocalEvidence.kt'), '-d', evidence]);
 console.log(run('official-evidence', 'java', ['-cp', `${evidence}:${cp}`, 'dev.ets.LocalEvidenceKt', source, cp, work]).trim());

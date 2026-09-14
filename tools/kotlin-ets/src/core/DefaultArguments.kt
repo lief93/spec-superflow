@@ -29,7 +29,8 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
         override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
             val owner = declaration.parent as? IrClass
-            if (owner != null && !declaration.isFakeOverride && !declaration.isInline && !declaration.isSuspend &&
+            if (owner != null && declaration.dispatchReceiverParameter != null &&
+                !declaration.isFakeOverride && !declaration.isInline && !declaration.isSuspend &&
                 declaration.extensionReceiverParameter == null && declaration.contextReceiverParametersCount == 0 &&
                 declaration.valueParameters.any { it.defaultValue != null } &&
                 (owner.modality != Modality.FINAL || owner.superTypes.any {

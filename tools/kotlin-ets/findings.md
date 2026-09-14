@@ -53,6 +53,23 @@ transitive serialized inline loading and typed UI modules have since progressed.
   a type-check bypass. `copyAttributes` also does not copy the official
   default-provider link because that attribute does not follow attributeOwnerId.
   Explicit source-link checks now exercise this in addition to runtime parity.
+- JS ES6 constructors separate allocation, initializer execution and delegating
+  factory calls. Its newTarget/box/prototype machinery is JS-specific, not an
+  ETS runtime to copy. Real primary + secondary this-chains can instead keep
+  native primary allocation and use source-class static factories, reusing the
+  official declaration/body/value/type utilities and exact constructor symbols.
+- Static factory defaults are not inherited instance defaults. Both default
+  provider selection and inherited-method restrictions must check the receiver
+  kind, not just whether the parent class participates in inheritance.
+- A superclass secondary factory cannot initialize an already allocated derived
+  object by constructing a base object. Abstract/no-primary/capture combinations
+  need a further allocation contract; diagnose them until that is implemented.
+- Official JS performs constructor conversion after inlining. Constructor
+  references reproduce a real phase-order bug if ETS rewrites calls earlier:
+  common inlining creates a fresh call to the old constructor symbol. If the
+  primary constructor has compatible defaults, target type checking alone still
+  accepts wrong behavior. RED run-a0L4bN returns 0 instead of JVM's 7. Move the
+  constructor pass after inlining; require both symbol-link and runtime evidence.
 
 ## Historical observations
 
