@@ -179,3 +179,48 @@ and public CLI collision diagnostics. The CLI collision exit status is now 2
 (INVALID_TARGET), not 1 (generic COMPILATION_REJECTED). The cross-file overload
 runner's equivalent expectation is updated; that full suite was not rerun for
 this diagnostic-only increment. No new SDK/native/UI acceptance is claimed.
+
+## R2.4 ownership and regression closure
+
+The existing official ownership data is sufficient for the checked families;
+no parallel symbol registry or source-location reconstruction was added.
+Kotlin 2.1.20 FakeOverrideCopier anchors generated constraint members at their
+owning bound declaration and retains original override symbols. Default helpers
+use defaultArgumentsOriginalFunction; constructor factories use attributeOwnerId;
+bridge targets follow the official override graph. The additional constraint
+probe checks both the emitted bound location and the original source contracts.
+
+This consolidation exposed a regression in the official-query boundary:
+defaults run-fh7jzS fails because captureFromArguments calls extractTypeParameters
+on an inner class already relocated under an IrFile by official local lowering.
+The original parent-as-IrClass prerequisite no longer holds. SourceTypes now
+returns no-argument/invariant types unchanged before invoking capture, matching
+the official identity branch. Actual in/out/star capture and subtype queries
+still delegate to Kotlin. The session lifetime guard remains first.
+The existing inner-default fixture verifies the relocated parent and identity
+result; no new generic family or target runtime was introduced.
+
+Frozen evidence on the same production inputs:
+
+| Family | Evidence | Checked result |
+| --- | --- | --- |
+| Bounds and projections | variance/run-pNnkNQ | 160 flat + 160 module JVM/host outcomes; eight-file determinism, constraint/member source links and closed-session guards |
+| Inherited defaults | defaults/run-LaKYjq | 65 + 65 outcomes; five-file determinism, original providers, explicit receivers, captured inner methods and 29 call bindings |
+| Constructors | constructors/run-pDvEKk | 90 + 90 outcomes; six-file determinism, 18 factories, seven original roots, eight multi-entry constructors, protected ownership and exact super symbols |
+| Virtual bridges | bridges/run-Bq6qP6 | 70 + 70 outcomes; six-file determinism, 19 official edges, single forwarding, original methods/parameters and property identities |
+| Cross-file overloads | overloads/r2e-green-KOYKS1 | 15 flat + 15 module outcomes and five private-scope outcomes; exact imports, no added aliases, reversed-input equality and two collision refusals |
+| Serialized members | r2e/run-IFMcOW and replay-NJ6rIq | 26 official inline blocks retain binary provenance; three JVM/host outcomes, explicit receiver replacements and seven source-linked unavailable/unsupported boundaries |
+
+The first cross-file invocation stopped at its required exclusive-build-slot
+guard, before compilation. The recorded successful invocation explicitly sets
+KOTLIN_ETS_BUILD_SLOT=1 after the other Kotlin suites finish. Default run-Daao8S
+was stopped after a test import error was noticed; it is not accepted evidence.
+
+Current variance, default and bridge module bytes match their previous accepted
+runs AHwTko, OHKB8f and n2dIZP. Constructor outputs differ from VDrnEa because an
+earlier change moved default helpers into the original classes and updated their
+callers; they cannot inherit that older SDK build claim. Fresh
+constructors-sdk-r7kmWt checks all six unchanged current modules and builds
+ABC/HAP. Input/output hashes were rechecked. This is SDK legality, not native
+execution, UI fidelity or acceptance of all R2 capture compositions. The combined
+R2 gate remains pending.

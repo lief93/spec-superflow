@@ -105,17 +105,29 @@ R2.4 closure checklist (do not expand into new declaration families):
   aP1xTf and frozen run-RF23YJ pass, including 44 JVM/module results, existing
   value/type imports, private declarations and no-overwrite/no-partial-output
   checks. This increment changes diagnostics, not successful module layout.
-- [ ] Generated declaration/member provenance: match existing bound constraints,
-  default/constructor helpers and bridges to original symbols and owning files.
-- [ ] Consolidate existing cross-file name/visibility/identity and reversed-input
-  evidence for the R2 declaration/dependency families; report any uncovered
-  agreed family instead of inventing new generic combinations.
+- [x] Generated declaration/member provenance: existing bound constraints,
+  default/constructor helpers and bridges retain original symbols and owning
+  files. Frozen variance run-pNnkNQ, defaults run-LaKYjq, constructors run-pDvEKk
+  and bridges run-Bq6qP6 pass. Serialized member run-IFMcOW retains binary origin;
+  replay-NJ6rIq passes JVM/host parity with explicit receiver replacements.
+- [x] Consolidate existing cross-file name/visibility/identity and reversed-input
+  evidence for these declaration/dependency families. Cross-file overload
+  r2e-green-KOYKS1 passes original binding/private-scope/collision checks.
+  See declaration-call-contract.md for per-family evidence and output changes;
+  these checks do not cover the remaining R2.3 capture composition gaps.
 - [ ] Run the frozen combined R2 gate with separate host, SDK and native evidence;
   explicitly account for remaining R2.3 composition gaps before stage acceptance.
 
-Current publication issue: commit 5e7bb19 is local; two HTTPS pushes failed with
-GitHub connection timeouts. Retry publication after connectivity recovers; do not
-claim the remote contains local commits. This does not block local R2.4 work.
+Publication recovered: commits through 67bce63 were pushed successfully. The
+earlier HTTPS failures are no longer a publication blocker.
+
+R2.4 regression also exposed an unnecessary official capture query on relocated
+non-generic inner classes. SourceTypes now returns invariant arguments unchanged,
+matching the official identity case before its original-parent prerequisite.
+Real projections still use official capture/subtype queries. SDK
+constructors-sdk-r7kmWt checks all six current constructor modules and builds
+ABC/HAP; no native or whole-R2 acceptance is implied. Next is the frozen R2 gate
+and explicit accounting of existing gaps, not new generic scenario expansion.
 
 Protected constructor visibility is accepted for the documented source family.
 The target contract now uses EtsVisibility for methods, fields and constructors;

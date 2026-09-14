@@ -15,12 +15,14 @@ import org.jetbrains.kotlin.ir.expressions.IrBody
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeSystemContext
 import org.jetbrains.kotlin.ir.types.IrTypeSystemContextImpl
 import org.jetbrains.kotlin.ir.util.fileOrNull
 import org.jetbrains.kotlin.ir.util.isSubtypeOf
 import org.jetbrains.kotlin.types.model.CaptureStatus
+import org.jetbrains.kotlin.types.Variance
 
 sealed interface FunctionBody {
     data class Available(val declaration: IrFunction, val body: IrBody, val source: SourceSpan,
@@ -61,6 +63,9 @@ class KotlinFrontendSession internal constructor(private val fragment: IrModuleF
     private val typeQueries = object : SourceTypes {
         override fun capture(type: IrSimpleType): IrSimpleType {
             checkActive()
+            // Capturing is unnecessary for invariant arguments. Relocated inner owners
+            // no longer satisfy extractTypeParameters' original nesting prerequisite.
+            if (type.arguments.all { it is IrTypeProjection && it.variance == Variance.INVARIANT }) return type
             return typeSystem.captureFromArguments(type, CaptureStatus.FOR_SUBTYPING) ?: type
         }
         override fun isSubtypeOf(actual: IrType, expected: IrType): Boolean {

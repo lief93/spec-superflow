@@ -38,6 +38,14 @@ fun main(args: Array<String>) {
                 } }.filter { it.modality == org.jetbrains.kotlin.descriptors.Modality.ABSTRACT }
                 check(abstractFunctions.isNotEmpty() && abstractFunctions.size == target.members.size)
                 check(abstractFunctions.all { it.isFakeOverride && it.overriddenSymbols.isNotEmpty() })
+                for ((original, emitted) in abstractFunctions.zip(target.members)) {
+                    check(emitted.source == target.source) {
+                        "Generated constraint ${source.name}.${original.name} must point to its owning bound: ${emitted.source}; expected ${target.source}"
+                    }
+                    val contracts = original.collectRealOverrides()
+                    check(contracts.isNotEmpty() && contracts.all { !it.isFakeOverride && sourceFile(it) != null })
+                    check(contracts.all { it.startOffset >= 0 && it.endOffset > it.startOffset })
+                }
             }
         }
         check(targets.filter { it.constraint }.size == constraints.size)

@@ -8,12 +8,22 @@ import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.types.classifierOrNull
+import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.visitors.*
 
 fun main(args: Array<String>) {
-    withKotlinModule(args.drop(1) + listOf("-no-stdlib", "-no-reflect", "-classpath", args[0])) { module ->
+    withKotlinFrontend(args.drop(1) + listOf("-no-stdlib", "-no-reflect", "-classpath", args[0])) { frontend ->
+        val module = frontend.module
+        val relocatedInner = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>().filter { it.isInner }
+        check(relocatedInner.isNotEmpty())
+        for (owner in relocatedInner) {
+            check(owner.parent is IrFile)
+            val type = owner.defaultType
+            check(type.arguments.isEmpty())
+            check(frontend.types.capture(type) === type)
+        }
         val functions = mutableListOf<IrSimpleFunction>()
         module.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
