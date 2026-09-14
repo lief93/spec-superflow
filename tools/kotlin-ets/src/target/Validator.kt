@@ -185,9 +185,14 @@ class EtsValidator {
             }
         }
         classes.values.forEach { declaration ->
-            if (declaration.constraint && (declaration.kind != EtsClassKind.INTERFACE || declaration.baseClass != null ||
-                    declaration.interfaces.distinct().size < 2 || declaration.members.isNotEmpty()))
-                reject(declaration, "Invalid target bound constraint")
+            if (declaration.constraint) {
+                val valid = when (declaration.kind) {
+                    EtsClassKind.INTERFACE -> declaration.baseClass == null && declaration.interfaces.distinct().size >= 2 && declaration.members.isEmpty()
+                    EtsClassKind.CLASS -> declaration.abstract && declaration.baseClass != null && declaration.interfaces.isNotEmpty() &&
+                        declaration.members.all { it is EtsFunction && it.abstract }
+                }
+                if (!valid) reject(declaration, "Invalid target bound constraint")
+            }
             if (declaration.component && (parents(declaration).isNotEmpty() || declaration.kind != EtsClassKind.CLASS || declaration.abstract)) {
                 reject(declaration, "Invalid component heritage")
             }
@@ -209,6 +214,22 @@ class EtsValidator {
             val inherited = inheritedTypes.flatMap { owner -> classes.getValue(owner.symbolId!!).members
                 .filterIsInstance<EtsFunction>().filter { !it.static && it.kind != EtsFunctionKind.CONSTRUCTOR }
                 .map { owner to it } }
+            if (declaration.constraint && declaration.kind == EtsClassKind.CLASS) {
+                declaration.members.filterIsInstance<EtsFunction>().forEach { signature ->
+                    val matches = inheritedTypes.any { owner -> classes.getValue(owner.symbolId!!).members.any { original ->
+                        when (original) {
+                            is EtsFunction -> original.name == signature.name && original.kind == signature.kind &&
+                                overrideSignature(signature.symbol.type, memberType(owner, original), signature.source, false)
+                            is EtsField -> original.symbol.name == signature.name && when (signature.kind) {
+                                EtsFunctionKind.GETTER -> signature.parameters.isEmpty() && signature.returnType == memberType(owner, original)
+                                EtsFunctionKind.SETTER -> !original.readonly && signature.parameters.map { it.symbol.type } == listOf(memberType(owner, original)) && signature.returnType == EtsTypes.VOID
+                                else -> false
+                            }
+                        }
+                    } }
+                    if (!matches) reject(signature, "Constraint cannot invent a member contract")
+                }
+            }
             declaration.members.forEach { value ->
                 if (declaration.kind == EtsClassKind.INTERFACE) when (value) {
                     is EtsFunction -> if (!value.abstract || value.kind != EtsFunctionKind.METHOD || value.visibility != EtsVisibility.PUBLIC)
@@ -248,7 +269,7 @@ class EtsValidator {
                         is EtsField -> {
                             if (implementation.visibility != EtsVisibility.PUBLIC || implementation.static || (!requirement.readonly && implementation.readonly))
                                 reject(declaration, "Incompatible target property access")
-                            if (declaration.kind == EtsClassKind.CLASS && !declaration.abstract &&
+                            if (declaration.kind == EtsClassKind.CLASS && (!declaration.abstract || declaration.constraint) &&
                                 classes.getValue(resolved.first.symbolId!!).kind == EtsClassKind.INTERFACE)
                                 reject(declaration, "Missing concrete target property: ${requirement.symbol.name}")
                             memberType(resolved.first, implementation)

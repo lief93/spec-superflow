@@ -69,7 +69,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition, source virtual-overload bridges, bounded method/readonly-property covariance, declaration variance, redundant bounds and independent source-interface bounds accepted; remaining class/interface bounds and use-site projection combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition, source virtual-overload bridges, bounded method/readonly-property covariance, declaration variance, redundant bounds and independent source-class/interface bounds accepted; remaining use-site projection combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
@@ -198,7 +198,16 @@ target VAWcMq passes eight new negative contracts and the full target suite.
 SDK constructors-sdk-nHowwC checks all five unchanged modules and compiles ABC/HAP.
 See declaration-variance.md. No wrapper, discarded bound or native parity claim.
 
-Next implement independent class/interface bounds and use-site projection combinations,
+Source-class/interface conjunctions now use abstract constraint classes with
+official IrFakeOverrideBuilder member merging and override-linked call binding.
+Frozen run-RPJDce passes 110 + 110 results across six deterministic files and
+actual fake-override checks; target lBVnWQ passes fourteen constraint refusals.
+probe-Nqh7ty retains 40 results. SDK constructors-sdk-8yikIv checks the six
+unchanged modules and compiles ABC/HAP. No business-class reparenting or wrapper.
+See declaration-variance.md. R2.4 must also check generated-constraint member
+provenance against original declarations and the owning bound locations.
+
+Next implement use-site projection combinations,
 inspecting the pinned common/JS type substitution and override
 contracts first. External inherited slots, private shadowing and the documented
 unsupported receiver/parameter families remain explicit, not silently enabled.

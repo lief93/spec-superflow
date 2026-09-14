@@ -9,6 +9,8 @@ import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.backend.js.utils.NameTable
 import org.jetbrains.kotlin.ir.builders.declarations.buildClass
 import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.overrides.FakeOverrideBuilderStrategy
+import org.jetbrains.kotlin.ir.overrides.IrFakeOverrideBuilder
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.util.isSubtypeOf
@@ -42,7 +44,7 @@ internal fun lowerGenericBounds(input: JvmFir2IrPipelineArtifact) {
     val names = NameTable<IrTypeParameter>(reserved = reserved)
     data class Constraint(val source: IrTypeParameter, val bounds: List<IrType>, val helper: IrClass, val free: List<IrTypeParameter>)
     val constraints = parameters.filter { parameter -> parameter.superTypes.size > 1 && parameter.superTypes.all {
-        !it.isNullable() && it.classOrNull?.owner?.let { owner -> owner.kind == ClassKind.INTERFACE && sourceFile(owner) != null } == true
+        !it.isNullable() && it.classOrNull?.owner?.let { owner -> owner.kind in setOf(ClassKind.CLASS, ClassKind.INTERFACE) && sourceFile(owner) != null } == true
     } }.sortedWith(compareBy({ it.file.fileEntry.name }, { it.startOffset }, { it.index })).map { parameter ->
         val free = linkedSetOf<IrTypeParameter>()
         fun collect(type: IrType) {
@@ -58,7 +60,7 @@ internal fun lowerGenericBounds(input: JvmFir2IrPipelineArtifact) {
             endOffset = parameter.endOffset
             origin = ETS_BOUND_CONSTRAINT
             name = Name.identifier(names.declareFreshName(parameter, hint))
-            kind = ClassKind.INTERFACE
+            kind = if (parameter.superTypes.any { it.classOrNull?.owner?.kind == ClassKind.CLASS }) ClassKind.CLASS else ClassKind.INTERFACE
             modality = Modality.ABSTRACT
             visibility = DescriptorVisibilities.PUBLIC
         }.apply { parent = parameter.file }
@@ -73,5 +75,9 @@ internal fun lowerGenericBounds(input: JvmFir2IrPipelineArtifact) {
         free.zip(helper.typeParameters).forEach { (original, copied) -> copied.superTypes = original.superTypes.map(substitution::substitute) }
         helper.createThisReceiverParameter()
         parameter.file.declarations += helper
+    }
+    val overrides = IrFakeOverrideBuilder(types, object : FakeOverrideBuilderStrategy.BindToPrivateSymbols(emptyMap()) {}, emptyList())
+    constraints.filter { it.helper.kind == ClassKind.CLASS }.forEach {
+        overrides.buildFakeOverridesForClass(it.helper, oldSignatures = false)
     }
 }

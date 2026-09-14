@@ -64,7 +64,8 @@ this pass. No bound is selected merely because it is first or is a class.
 Independent source-interface constraints use a generated named interface extending
 all bounds. The pinned ArkTS SDK rejects intersection syntax
 (arkts-no-intersection-types); JS runtime erasure does not justify dropping bounds.
-Independent class/interface combinations and use-site projections remain pending.
+Nonnullable source-class/interface combinations use abstract constraint classes;
+use-site projections remain pending.
 
 The late IR pass uses official copyTypeParameters, IrTypeSubstitutor and NameTable.
 Free source binders and their bound dependencies are copied and rebound; recursive
@@ -155,3 +156,35 @@ Source/test and generated-module hashes were rechecked before publication.
 - Variance.ets: 0b24cecee12f1fa1230ef373a3b27829edb565e9b48d740ccee5243f0cc23d3e
 - Independent.ets: 1bdd6703333a9334e373cfd936d9f458cae3940f44cdc21593b06eb01bed1577
 - UnsupportedMultipleBounds.ets: a5646854deb496dded7778f347513a91b5d952e25384a9097199684c250537a1
+
+## Class and interface conjunctions
+
+ArkTS rejects an interface extending a class. The constraint instead becomes an
+abstract class extending the source base and implementing the interface bounds.
+The original business class still extends its original base; it is not wrapped,
+reparented or instantiated through the constraint. Constructors are unchanged.
+Official IrFakeOverrideBuilder with BindToPrivateSymbols merges inherited
+contracts; only the abstract signatures are emitted. Calls bind to those
+signatures through the official collectRealOverrides relationships. The target
+validator retains exact member identities, validates both parents and refuses
+invented contracts or dropped accessors. External call handling is unchanged.
+The original source inheritance/visibility exclusions still apply.
+
+RED run-iLIvVY executes the JVM oracle before reaching the old multiple-bound
+guard. run-j2kaIN exposes a stale interface-field identity after an abstract
+getter is introduced. Target jtWrhM exposes missing-accessor acceptance; lBVnWQ
+passes after correction, including fourteen constraint refusals and the complete
+target suite. The generator does not bypass either identity or property checks.
+
+Frozen run-RPJDce passes 110 flat + 110 module JVM/host results over 65 pinned
+inputs. It checks six-file reverse-order determinism, official fake-override
+origins/edges and twelve two-parent constraints. Cases cover generic class and
+method binders, reversed bounds, return to the original base, private base
+storage, property reads/writes and method invocation, including Int limits.
+probe-Nqh7ty retains 40 bounded-receiver results and the existing explicit
+nullable-bound/cycle refusals. SDK constructors-sdk-8yikIv checks all six
+unchanged generated modules and compiles ABC/HAP. No native runtime or whole-R2
+acceptance is claimed. Frozen hashes were rechecked before publication.
+
+- Variance.ets: 5fe6690ac0099031bc2059e752ebd8e616c772ef2431ddf8683cf2d75b7d844d
+- ClassBounds.ets: 84fa0c6333d13cf15f563a32b7c88304f4d356b623397706bd94852d08fc7131

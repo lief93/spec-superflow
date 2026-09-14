@@ -226,11 +226,20 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             }
         }
         val resolved = call.symbol.owner
-        val owner = if (resolved.isFakeOverride) (resolved.collectRealOverrides().singleOrNull()
+        val original = if (resolved.isFakeOverride) (resolved.collectRealOverrides().singleOrNull()
             ?: if (resolved.modality != Modality.ABSTRACT) findConcreteSuperDeclaration(IrBasedFunctionHandle(resolved))?.function else null)
             ?: diagnostics.unsupported(call, "Ambiguous inherited declaration: ${symbolName(resolved)}") else resolved
-        val parent = owner.parent
         val receiver = call.dispatchReceiver
+        val constraint = receiver?.takeIf { sourceFile(original) != null }?.type?.let { receiverType ->
+            if ((receiverType as? IrSimpleType)?.classifier?.owner is IrTypeParameter)
+                receiverClassType(receiverType, call).classOrNull?.owner else receiverType.classOrNull?.owner
+        }?.takeIf { it.origin === ETS_BOUND_CONSTRAINT && it.kind == ClassKind.CLASS }
+        val owner = constraint?.declarations?.flatMap { declaration -> when (declaration) {
+            is IrSimpleFunction -> listOf(declaration)
+            is IrProperty -> listOfNotNull(declaration.getter, declaration.setter)
+            else -> emptyList()
+        } }?.singleOrNull { it.modality == Modality.ABSTRACT && original in it.collectRealOverrides() } ?: original
+        val parent = owner.parent
         if (owner.name.asString() == "invoke" && parent is IrClass &&
             parent.fqNameWhenAvailable?.asString()?.startsWith("kotlin.Function") == true && receiver != null) {
             return EtsCall(expression(receiver, scope), arguments(call, scope), type(call.type), source(call))
@@ -594,6 +603,16 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val baseType = parents.singleOrNull { it.classOrNull?.owner == base }?.let { type(it) as EtsNamedType }
         val interfaces = parents.filter { it.classOrNull?.owner?.kind == ClassKind.INTERFACE }.map { type(it) as EtsNamedType }
         if (hasInheritance(declaration)) validateInheritedMembers(declaration)
+        if (!isInterface && declaration.origin === ETS_BOUND_CONSTRAINT) {
+            val signatures = declaration.declarations.flatMap { member -> when (member) {
+                is IrSimpleFunction -> listOf(member)
+                is IrProperty -> listOfNotNull(member.getter, member.setter)
+                else -> emptyList()
+            } }.filter { it.modality == Modality.ABSTRACT }.map { function(it, Scope()) }
+            return@withFile EtsClass(classNaming.name(declaration), signatures, source(declaration),
+                baseClass = baseType, interfaces = interfaces, typeParameters = typeParameters,
+                abstract = true, constraint = true)
+        }
         if (isInterface) {
             declaration.declarations.firstOrNull { it !is IrSimpleFunction && it !is IrProperty }?.let {
                 diagnostics.unsupported(it, "Only method and property signatures are supported in interfaces")

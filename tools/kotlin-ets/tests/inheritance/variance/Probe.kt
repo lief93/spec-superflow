@@ -21,12 +21,23 @@ fun main(args: Array<String>) {
         }
         EtsValidator().validate(program, perFileNames = true)
         val constraints = sources.filter { it.origin === ETS_BOUND_CONSTRAINT }
-        check(constraints.size == 7)
+        check(constraints.size == 12)
         for (source in constraints) {
             val target = targets.single { it.name == source.name.asString() }
-            check(target.constraint && target.kind == EtsClassKind.INTERFACE)
-            check(target.interfaces.size == source.superTypes.size && target.interfaces.size == 2)
-            check(target.members.isEmpty())
+            check(target.constraint)
+            check(target.interfaces.size + (if (target.baseClass != null) 1 else 0) == source.superTypes.size)
+            check(source.superTypes.size == 2)
+            if (target.kind == EtsClassKind.INTERFACE) check(target.members.isEmpty())
+            else {
+                check(target.abstract && target.members.all { it is EtsFunction && it.abstract })
+                val abstractFunctions = source.declarations.flatMap { declaration -> when (declaration) {
+                    is IrSimpleFunction -> listOf(declaration)
+                    is IrProperty -> listOfNotNull(declaration.getter, declaration.setter)
+                    else -> emptyList()
+                } }.filter { it.modality == org.jetbrains.kotlin.descriptors.Modality.ABSTRACT }
+                check(abstractFunctions.isNotEmpty() && abstractFunctions.size == target.members.size)
+                check(abstractFunctions.all { it.isFakeOverride && it.overriddenSymbols.isNotEmpty() })
+            }
         }
         check(targets.filter { it.constraint }.size == constraints.size)
         val functions = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>()
@@ -42,6 +53,6 @@ fun main(args: Array<String>) {
             if (it === producer) producer.copy(typeParameters = producer.typeParameters.map { p -> p.copy(variance = EtsVariance.INVARIANT) }) else it
         }) })
         check(runCatching { EtsValidator().validate(corrupted, perFileNames = true) }.exceptionOrNull() is InvalidTarget)
-        println("PASS official IR declaration variance/names/ownership, canonical bounds, seven named two-parent constraints and erased-metadata refusal")
+        println("PASS official IR declaration variance/names/ownership, canonical bounds, twelve named two-parent constraints, actual fake overrides and erased-metadata refusal")
     }
 }

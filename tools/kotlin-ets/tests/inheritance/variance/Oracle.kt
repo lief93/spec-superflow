@@ -19,5 +19,10 @@ fun main() {
         println(independentChain(seed))
         println(independentDiamond(seed))
         println(originalMultiple(seed))
+        println(classInterface(seed))
+        println(interfaceClass(seed))
+        println(classInterfaceReturn(seed))
+        println(classInterfaceHolder(seed))
+        println(classInterfaceMutation(seed))
     }
 }
