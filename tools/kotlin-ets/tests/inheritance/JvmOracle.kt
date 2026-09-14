@@ -8,5 +8,6 @@ fun main() {
         println(constructorEffects(seed))
         println(selected(true, seed))
         println(selected(false, seed))
+        println(propertyDispatch(seed))
     }
 }

@@ -5,6 +5,20 @@ evidence, not the current backlog. Use the existing non-spec development workflo
 
 ## Acceptance contract
 
+### Latest priority: reuse audit and declaration consumers
+
+The user requests architecture-level reuse rather than more isolated API gates.
+Read docs/backend-reuse-audit.md (source inspection at 44fb21a). Pause the proposed
+generic-binary-member increment. Next fix the declaration/call normalization
+contract against actual official common/JS phases and ETS consumers. The contract
+is now in docs/declaration-call-contract.md. Its first consumer family is inherited
+final properties (storage, custom accessors and generic heritage), sharing official
+real-override resolution and receiver substitution. Interface/overridden properties,
+top-level initialization, inherited defaults and constructors remain pending.
+Main alone; no agents or scheduled wakeups.
+R2I is locally committed as 44fb21a; recent push retries failed connecting to
+GitHub. Do not claim it is remotely published until push/remote confirmation.
+
 ### Latest correction: main alone (2026-09-14)
 
 The user explicitly means THIS main assistant implements, tests and self-checks.

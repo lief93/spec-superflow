@@ -37,6 +37,11 @@ result.expected = run('jvm-run', 'java', ['-cp', `${jar}:${cp}`, 'inheritancefix
 const output = join(work, 'Inheritance.ets');
 run('public-cli', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', output, source]);
 const code = readFileSync(output, 'utf8');
+const typecheckPath = join(work, 'Inheritance.ts');
+writeFileSync(typecheckPath, code);
+const checked = ts.createProgram([typecheckPath], { target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.CommonJS, strict: true, noEmit: true, types: [] });
+assert.deepEqual(ts.getPreEmitDiagnostics(checked).map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')), []);
 const tree = ts.createSourceFile(output, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 assert.deepEqual(tree.parseDiagnostics, []);
 for (const [name, methodName, parameters] of [['Operation', 'apply', ['left', 'right']], ['Derived', 'apply', ['left', 'right']],
@@ -54,11 +59,20 @@ vm.runInContext(compiled.outputText, context, { timeout: 1000 });
 result.actual = [];
 for (const seed of [0, -3, 7, -2147483648, 2147483647]) {
   for (const invocation of [`dispatch(${seed})`, `abstractDispatch(${seed})`, `callEffects(${seed})`,
-    `constructorEffects(${seed})`, `selected(true,${seed})`, `selected(false,${seed})`]) {
+    `constructorEffects(${seed})`, `selected(true,${seed})`, `selected(false,${seed})`, `propertyDispatch(${seed})`]) {
     result.actual.push(String(vm.runInContext('exports.' + invocation, context, { timeout: 1000 })));
   }
 }
 record(); assert.deepEqual(result.actual, result.expected);
+assert.match(code, /get computed\(\)/);
+assert.match(code, /set computed\(next: T\)/);
+const inheritedOutput = join(work, 'SupportedInheritedProperty.ets');
+run('supported-inherited-property', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
+  '--out', inheritedOutput, join(here, 'SupportedInheritedProperty.kt')]);
+const inheritedJs = ts.transpileModule(readFileSync(inheritedOutput, 'utf8'), { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
+assert.equal(vm.runInNewContext(inheritedJs.outputText + '\ninheritedProperty(new PropertyChild())',
+  { exports: {} }, { timeout: 1000 }), 3);
 const supportedGeneric = join(work, 'SupportedGeneric.ets');
 run('supported-generic', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', supportedGeneric, join(here, 'SupportedGeneric.kt')]);
 const supportedCode = readFileSync(supportedGeneric, 'utf8');

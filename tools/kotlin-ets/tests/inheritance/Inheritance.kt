@@ -77,3 +77,29 @@ fun constructorEffects(seed: Int): String {
 }
 
 fun selected(value: Boolean, seed: Int): Int = select(value, seed).apply(seed, 5)
+
+open class PropertyRoot<T>(var value: T) {
+    var trace: String = ""
+    var computed: T
+        get() { trace += "G"; return value }
+        set(next) { trace += "S"; value = next }
+}
+
+open class PropertyMiddle<T>(value: T) : PropertyRoot<T>(value)
+class PropertyLeaf(value: Int) : PropertyMiddle<Int>(value)
+
+class PropertyEffects {
+    var trace: String = ""
+    fun receiver(value: PropertyLeaf): PropertyLeaf { trace += "R"; return value }
+    fun argument(value: Int): Int { trace += "A"; return value }
+}
+
+fun propertyDispatch(seed: Int): String {
+    val leaf = PropertyLeaf(seed)
+    val base: PropertyRoot<Int> = leaf
+    val effects = PropertyEffects()
+    effects.receiver(leaf).computed = effects.argument(seed + 1)
+    val read = leaf.computed
+    leaf.value = read + 1
+    return "${effects.trace}:${leaf.trace}:${base.value}:${base.computed}"
+}

@@ -56,6 +56,13 @@ record(); assert.equal(result.expected.length, 31); assert.deepEqual(result.actu
 const supported = join(here, 'SupportedMemberGeneric.kt'), supportedOut = join(work, 'SupportedMemberGeneric.ets');
 run('supported-generic-member', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', supportedOut, supported]);
 assert.ok(existsSync(supportedOut));
+const propertyOut = join(work, 'SupportedInheritedProperty.ets');
+run('supported-inherited-property', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
+  '--out', propertyOut, join(here, 'SupportedInheritedProperty.kt')]);
+const propertyJs = ts.transpileModule(readFileSync(propertyOut, 'utf8'), { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
+assert.equal(vm.runInNewContext(propertyJs.outputText + '\ninheritedProperty(new PropertyChild())',
+  { exports: {} }, { timeout: 1000 }), 1);
 for (const input of fixtures.filter(path => path.includes('/Unsupported'))) {
   const name = input.slice(input.lastIndexOf('/') + 1), out = join(work, name + '.ets');
   const diagnostic = JSON.parse(run(name, 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', out, input], 2).stdout);
@@ -75,4 +82,4 @@ assert.equal(JSON.parse(cli.stdout).code, 'COMPILATION_REJECTED');
 assert.ok(identifiesInput(cli.stderr)); assert.equal(existsSync(rejectedEts), false);
 for (const input of result.inputs) assert.equal(hash(input.path), input.sha256, `Changed during verification: ${input.path}`);
 result.output = { path: output, sha256: hash(output) }; result.passed = true; record();
-console.log('PASS 31 same-input JVM/public-CLI host results, migrated generic-member positive, three source-linked boundaries and incompatible-diamond JVM/frontend rejection');
+console.log('PASS 31 same-input JVM/public-CLI host results, generic-member and inherited-property positives, two source-linked boundaries and incompatible-diamond JVM/frontend rejection');

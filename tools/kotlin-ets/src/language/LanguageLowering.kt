@@ -221,9 +221,6 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             }
         }
         val resolved = call.symbol.owner
-        if (resolved.isFakeOverride && resolved.correspondingPropertySymbol != null) {
-            diagnostics.unsupported(call, "Inherited property dispatch is not supported")
-        }
         val owner = if (resolved.isFakeOverride) resolved.collectRealOverrides().singleOrNull()
             ?: diagnostics.unsupported(call, "Ambiguous inherited declaration: ${symbolName(resolved)}") else resolved
         val parent = owner.parent
@@ -243,9 +240,6 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val substitutions = if (owner.dispatchReceiverParameter == null) emptyMap()
             else receiverSubstitution(parent as? IrClass, receiver)
         if (property != null) {
-            if (receiver != null && receiver.type.classOrNull != (parent as? IrClass)?.symbol) {
-                diagnostics.unsupported(call, "Inherited property dispatch is not supported")
-            }
             val propertyType = etsSubstitute(type(property.backingField?.type ?: property.getter!!.returnType), substitutions)
             val access = receiver?.let { EtsMember(expression(it, scope), identifier(property), propertyType, source(call)) }
                 ?: diagnostics.unsupported(call, "Top-level stored properties are outside the first language slice")
