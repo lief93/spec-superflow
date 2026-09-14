@@ -47,7 +47,7 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
     if (providers.isEmpty()) return
     providers.forEach { provider ->
         if (generateSequence(provider.parent as? IrDeclaration) { it.parent as? IrDeclaration }.any {
-                it is IrFunction || it is IrClass && it.isInner
+                it is IrFunction || it is IrClass && it.isInner && sourceInnerClassBinding(it) == null
             }) DiagnosticSink(provider.file.fileEntry.name).unsupported(provider,
                 "Inherited default providers in local or inner classes require capture lowering before static dispatch")
     }
@@ -115,7 +115,10 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
             remapMultiFieldValueClassStructure = { _, _, _ -> })
         // This official attribute does not follow copyAttributes' attributeOwnerId.
         helper.defaultArgumentsOriginalFunction = stub.defaultArgumentsOriginalFunction
-        helper.body = stub.moveBodyTo(helper)
+        // Inner lowering can use the class receiver inside a default lambda.
+        // Moving to a static helper must remap that identity as well as parameters.
+        helper.body = stub.moveBodyTo(helper, stub.parameters.zip(helper.parameters).toMap() +
+            (checkNotNull(owner.thisReceiver) to helper.valueParameters.first()))
         val parameters = (owner.typeParameters + stub.typeParameters).zip(helper.typeParameters).toMap() +
             stub.defaultArgumentsOriginalFunction!!.typeParameters.zip(helper.typeParameters.drop(owner.typeParameters.size))
         helper.remapTypes(object : TypeRemapper {

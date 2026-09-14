@@ -13,5 +13,7 @@ fun main() {
         println(namedEffects(seed))
         println(ownedDefaults(seed))
         println(siblingDefaults(seed))
+        println(localCapturedDefaults(seed))
+        println(innerCapturedDefaults(seed))
     }
 }

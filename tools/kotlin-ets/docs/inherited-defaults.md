@@ -20,6 +20,13 @@ Pinned reference: Kotlin 2.1.20. `src/core/DefaultArguments.kt` composes:
   `getAllSubstitutedSupertypes`, and JS `NameTable`: instantiate generic owners
   and methods, preserve source ownership and avoid helper-name collisions.
 
+The frontend runs source inlining and official local/inner capture lowering
+before inherited-default generation, following the prerequisites in Kotlin's
+`JsLoweringPhases.kt`. A default body therefore already refers to bound capture
+fields or the registered outer link. The official `moveBodyTo` parameter-map hook
+also maps the provider class receiver to the static helper's explicit receiver:
+inner lowering can retain that class receiver inside a default lambda.
+
 The JS default factory/injector requires JS undefined, prototype and super-context
 conventions. ETS does not import those conventions or their runtime. The common
 masked route supplies the language semantics; ETS supplies receiver placement,
@@ -74,9 +81,16 @@ has an explicit source diagnostic rather than emitting an invalid ETS hierarchy.
 
 This does not add support for inherited member extensions, suspend/inline
 provider combinations, arbitrary external binary default bodies, explicit super
-dispatch, projected receivers, multiple receiver bounds, or providers in local
-and inner classes. The latter need capture/phase-order composition before static
-dispatch. They must not silently capture unavailable state.
+dispatch, projected receivers or multiple receiver bounds.
+Named local Any-only providers and registered nongeneric inner providers can use
+captured values in defaults, including closures. Local derived classes may forward
+constructor-only captures to their base without storing another copy. This uses
+the official lowering's actual field set, not a second closure analysis. Derived
+classes needing stored captures before `super` are still rejected; arbitrary
+captured inheritance and inner heritage are not covered by this increment.
+Generated capture parameters and fields use the existing JS NameTable; generated
+fields avoid descendant source members using official `isSubclassOf` relationships.
+Source names win, and no capture field is widened or inferred by its spelling.
 Existing unsupported type/declaration checks remain active. This is not completion
 of all R2 declaration or generic semantics.
 
@@ -88,24 +102,50 @@ The runner freezes implementation and fixture hashes and records commands/result
 under `tests/inheritance/defaults/.work/run-*`. It verifies:
 
 - Kotlin JVM versus ETS-host results for five seeds, including Int boundaries,
-  across eleven scenarios, both flat and multi-file output.
+  across thirteen scenarios, both flat and multi-file output.
 - Strict target TypeScript semantic checking, source method/parameter names,
   source-first collision handling and no IIFE around omitted constants.
 - Identical per-file output with reversed source input order; provider-local
   private helpers remain private; callers reference the provider class (or the
   interface helper), not its private dependencies.
 - JVM-valid source boundaries rejected with exact source spans and no ETS output:
-  star projections, multiple receiver bounds, explicit super, local and inner
-  default providers.
-- Actual official IR origins and provider links for thirteen generated helpers,
+  star projections, multiple receiver bounds and explicit super. Historical local
+  and inner negatives now generate successfully; the behavioral scenarios also
+  exercise changing shared state, independent outer instances and virtual dispatch.
+- Actual official IR origins and provider links for seventeen generated helpers,
   exactly one virtual implementation dispatch per helper, two mask parameters
-  for the wide method, and twenty-two calls targeting live provider helpers with
+  for the wide method, and twenty-nine calls targeting live provider helpers with
   complete argument/type bindings. Two public widening bridges have exact argument
   symbols and their own generic return/type-argument binders. Cross-file callers
   exercise both generic and specialized derived classes without name collisions.
+- Four capture-aware default helpers read exact official fields through their
+  moved receiver, including inside closures; no implicit class receiver remains.
+  The derived local class stores no generated capture fields. A deliberate user
+  `$state` parameter/property collision verifies that user declarations survive
+  unchanged and generated capture storage stays distinct.
 
 These are host/IR/module checks, not ArkTS SDK, ArkVM, native UI or visual parity
 evidence. The combined SDK/native gate remains in R2 of `task_plan.md`.
+
+Capture-composition GREEN: `tests/inheritance/defaults/.work/run-me1TY3`, all
+65 frozen inputs unchanged, 65 flat plus 65 multi-file JVM/ETS-host outcomes,
+three boundaries, two historical negatives now positive and deterministic
+five-file output. The seventeen provider helpers include four checked captured
+receivers; twenty-nine calls retain full argument/type bindings. Flat SHA-256:
+`1e88798274a28a90584a10f797d502d3150b0b92a3423eaee9ea69f9ab1db28c`.
+RED `run-xwUcjE` caught a duplicate constructor parameter; `run-GDmNLf` then caught
+a generated base capture field shadowing the child's source property. Both are
+retained. The final fixture preserves the user's `$state` parameter and property.
+Earlier `run-ZbO9c0` covered capture behavior before adding this collision case.
+
+Frozen regressions: capture construction `run-su7vhA` passes 50 + 50 outcomes and
+seven malformed-prefix checks; constructor `run-TjgMb4` passes 90 + 90 and four
+boundaries. Both retain the prior flat/module output hashes. Local core
+`run-NhO261` retains capture/ownership checks and the stored-capture inheritance
+refusal. Source-inline `run-l3QFlx` verifies the actual official inliner, ten
+inlined blocks (three library blocks), JVM/host effects and missing-body refusal.
+Target suite `target-tests.zWviDp` passes constructor flow, visibility, inheritance,
+binding, generic and UI-builder checks. These are not new SDK/native results.
 
 Ownership GREEN: `tests/inheritance/defaults/.work/run-cJb0cl`, 55 flat plus
 55 multi-file JVM/ETS-host outcomes, five boundaries, deterministic four-file output and

@@ -36,9 +36,12 @@ user parameter names win over generated capture names.
   retaining captured fields, so the existing dispatcher consumes them directly.
 
 Multiple roots with stored captured fields or inner outer links use the checked
-common prefix described below. Generic inner binders, captured inheritance, anonymous owners and
-local/inner inherited-default providers are not newly supported. These remaining
-composition requirements stay in R2, not silently deferred to page adaptation.
+common prefix described below. Constructor-only local captures may also be
+forwarded through source inheritance: the official generated field set decides
+whether pre-super storage is required. Generic inner binders, stored captures in
+derived classes and anonymous owners remain unsupported. Local/inner default
+provider composition is documented separately in inherited-defaults.md. Remaining
+initialization work stays in R2, not silently deferred to page adaptation.
 
 ## Multi-entry stored captures
 

@@ -863,9 +863,11 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     private fun hasCaptureOrigin(field: IrField): Boolean =
         field.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE
 
-    private fun captureOwner(declaration: IrClass): Boolean = declaration.visibility == DescriptorVisibilities.LOCAL &&
+    private fun localCaptureOwner(declaration: IrClass): Boolean = declaration.visibility == DescriptorVisibilities.LOCAL &&
         declaration.kind == ClassKind.CLASS && !declaration.isInner && !declaration.name.isSpecial && sourceFile(declaration) != null &&
-        declaration.constructors.toList().let { it.size == 1 && isEtsNativeConstructor(it.single()) } &&
+        declaration.constructors.toList().let { it.size == 1 && isEtsNativeConstructor(it.single()) }
+
+    private fun captureOwner(declaration: IrClass): Boolean = localCaptureOwner(declaration) &&
         declaration.superTypes.all { it.classOrNull?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Any" }
 
     private fun capturedFieldSymbol(field: IrField): EtsSymbol {
@@ -877,13 +879,22 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         capturedFields[field.symbol]?.let { return it }
         val fields = owner.declarations.filterIsInstance<IrField>().filter(::hasCaptureOrigin)
         val occupied = mutableSetOf("constructor")
-        owner.declarations.filterIsInstance<IrProperty>().forEach { property ->
-            occupied += identifier(property)
-            property.backingField?.let { occupied += fieldName(it) }
-        }
-        owner.declarations.filterIsInstance<IrSimpleFunction>().filterNot { it.isFakeOverride }.forEach {
-            occupied += functionSymbol(it).name
-        }
+        // A generated private field must not shadow a descendant's source member.
+        sourceFile(owner)!!.module.acceptVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
+            override fun visitClass(declaration: IrClass) {
+                if (declaration.isSubclassOf(owner)) {
+                    declaration.declarations.filterIsInstance<IrProperty>().forEach { property ->
+                        occupied += identifier(property)
+                        property.backingField?.let { occupied += fieldName(it) }
+                    }
+                    declaration.declarations.filterIsInstance<IrSimpleFunction>().filterNot { it.isFakeOverride }.forEach {
+                        occupied += functionSymbol(it).name
+                    }
+                }
+                super.visitClass(declaration)
+            }
+        })
         val table = NameTable<IrField>(reserved = (occupied + fields.map { it.name.asString() }).toMutableSet())
         for (capture in fields) {
             if (capture.parent !== owner || capture.isStatic || capture.isExternal || !capture.isFinal || capture.initializer != null)
@@ -903,7 +914,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val owner = function.parent as? IrClass ?: return
         val inner = innerBinding(owner)
         val captures = if (inner != null) function.valueParameters.filter { it.origin === JvmLoweredDeclarationOrigin.FIELD_FOR_OUTER_THIS }
-            else if (captureOwner(owner)) function.valueParameters.filter(::isCapturedParameter) else return
+            else if (localCaptureOwner(owner)) function.valueParameters.filter(::isCapturedParameter) else return
         if (captures.isEmpty() || captures.all { it.symbol in capturedParameters }) return
         val occupied = function.valueParameters.filterNot { it in captures }.map { identifier(it) }.toMutableSet()
         val reserved = mutableSetOf<String>()

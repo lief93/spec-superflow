@@ -2,6 +2,7 @@
 package dev.ets
 
 import org.jetbrains.kotlin.backend.common.defaultArgumentsOriginalFunction
+import org.jetbrains.kotlin.backend.common.lower.LocalDeclarationsLowering
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
@@ -21,7 +22,7 @@ fun main(args: Array<String>) {
             }
         })
         val helpers = functions.filter { it.origin == IrDeclarationOrigin.FUNCTION_FOR_DEFAULT_PARAMETER }
-        check(helpers.size == 13)
+        check(helpers.size == 17)
         helpers.forEach { helper ->
             val original = checkNotNull(helper.defaultArgumentsOriginalFunction)
             val owner = original.parent as IrClass
@@ -46,6 +47,37 @@ fun main(args: Array<String>) {
                 }
             })
             check(dispatches == 1)
+        }
+        val capturedHelpers = helpers.filter { it.file.fileEntry.name.endsWith("/Captures.kt") }
+        check(capturedHelpers.size == 4)
+        val capturedChild = functions.single { it.name.asString() == "calculate" &&
+            (it.parent as? IrClass)?.name?.asString() == "CapturedChild" }.parent as IrClass
+        check(capturedChild.declarations.filterIsInstance<IrField>().none {
+            it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE
+        })
+        capturedHelpers.forEach { helper ->
+            val owner = helper.parent as IrClass
+            val captureFields = owner.declarations.filterIsInstance<IrField>().filter {
+                it.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE ||
+                    it === sourceInnerClassBinding(owner)?.field
+            }
+            check(captureFields.isNotEmpty())
+            var reads = 0
+            helper.acceptVoid(object : IrElementVisitorVoid {
+                override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
+                override fun visitGetField(expression: IrGetField) {
+                    if (expression.symbol.owner in captureFields) {
+                        check((expression.receiver as? IrGetValue)?.symbol === helper.valueParameters.first().symbol)
+                        reads++
+                    }
+                    super.visitGetField(expression)
+                }
+                override fun visitGetValue(expression: IrGetValue) {
+                    check(expression.symbol !== owner.thisReceiver!!.symbol)
+                    super.visitGetValue(expression)
+                }
+            })
+            check(reads > 0)
         }
         val masks = helpers.single { it.defaultArgumentsOriginalFunction!!.name.asString() == "sum" }
             .valueParameters.filter { it.origin == IrDeclarationOrigin.MASK_FOR_DEFAULT_FUNCTION }
@@ -84,7 +116,7 @@ fun main(args: Array<String>) {
             }
             check(bridge.returnType.classifierOrNull == bridge.typeParameters.single().symbol)
         }
-        check(calls == 22) { "Expected 22 provider-helper calls including the widening bridges, got $calls" }
+        check(calls == 29) { "Expected 29 provider-helper calls including capture defaults and widening bridges, got $calls" }
         println("PASS common default origins, provider/source identity, explicit receivers, virtual dispatch and two masks; $calls calls")
     }
 }

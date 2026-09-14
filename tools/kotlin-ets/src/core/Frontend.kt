@@ -93,9 +93,9 @@ fun <T> withKotlinFrontend(arguments: List<String>, emit: (KotlinFrontendSession
         }
         val frontend = KotlinFrontendSession(translated.result.irModuleFragment, BinaryBodies(translated))
         session = frontend
-        lowerInheritedDefaults(translated)
         val unavailableInlineBodies = lowerSourceInlineFunctions(translated, frontend.bodies)
         lowerLocalDeclarations(translated)
+        lowerInheritedDefaults(translated)
         lowerNativeConstructorDispatch(translated)
         lowerSecondaryConstructors(translated)
         lowerForLoops(translated)

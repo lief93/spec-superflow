@@ -16,7 +16,7 @@ function files(path) {
   return readdirSync(path, { withFileTypes: true }).flatMap(entry => entry.isDirectory()
     ? files(join(path, entry.name)) : [join(path, entry.name)]).sort();
 }
-const sources = ['Provider.kt', 'Application.kt', 'Ownership.kt', 'Sibling.kt'].map(name => join(here, name));
+const sources = ['Provider.kt', 'Application.kt', 'Ownership.kt', 'Sibling.kt', 'Captures.kt'].map(name => join(here, name));
 const inputs = [...files(join(root, 'src')), ...sources, ...files(join(here, 'negatives')),
   join(here, 'Oracle.kt'), join(here, 'IrEvidence.kt'), fileURLToPath(import.meta.url)]
   .map(path => ({ path, sha256: hash(path) }));
@@ -48,9 +48,16 @@ assert.deepEqual(tree.parseDiagnostics, []);
 const child = tree.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'DefaultChild');
 assert.deepEqual(child.members.find(node => node.name?.text === 'calculate').parameters.map(node => node.name.text), ['left', 'right']);
 const classes = tree.statements.filter(ts.isClassDeclaration);
+const capturedChild = classes.find(node => node.name.text === 'CapturedChild');
+const capturedConstructor = capturedChild.members.find(ts.isConstructorDeclaration);
+assert.equal(capturedConstructor.parameters.at(-1).name.text, '$state', 'Keep the user constructor parameter');
+assert.equal(new Set(capturedConstructor.parameters.map(node => node.name.text)).size, capturedConstructor.parameters.length);
+assert.ok(capturedChild.members.some(node => ts.isPropertyDeclaration(node) && node.name.text === '$state'));
+assert.ok(classes.find(node => node.name.text === 'CapturedBase').members.filter(ts.isPropertyDeclaration)
+  .every(node => node.name.text !== '$state'), 'Generated captures must not shadow descendant source properties');
 const bridges = [...tree.statements.filter(ts.isFunctionDeclaration), ...classes.flatMap(node => node.members.filter(ts.isMethodDeclaration))]
   .filter(node => node.parameters[0]?.name.text === '$this');
-assert.equal(bridges.length, 15);
+assert.equal(bridges.length, 19);
 assert.ok(bridges.every(node => node.name.text.includes('$default')));
 assert.match(code, /function DefaultBase_calculate\$default\(value: number\)/, 'User names win over compiler helper names');
 assert.ok(bridges.some(node => node.name.text.startsWith('DefaultBase_calculate$default_')));
@@ -72,7 +79,8 @@ const compiled = ts.transpileModule(code, { compilerOptions: { target: ts.Script
 const context = vm.createContext({ exports: {} });
 vm.runInContext(compiled.outputText, context, { timeout: 1000 });
 const scenarios = ['defaults', 'genericDefaults', 'closureDefaults', 'recursiveDefaults', 'nullableDefaults',
-  'bitwiseDefaults', 'wideDefaults', 'heritageDefaults', 'namedEffects', 'ownedDefaults', 'siblingDefaults'];
+  'bitwiseDefaults', 'wideDefaults', 'heritageDefaults', 'namedEffects', 'ownedDefaults', 'siblingDefaults',
+  'localCapturedDefaults', 'innerCapturedDefaults'];
 function evaluate(context) {
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed => scenarios.map(name =>
     String(vm.runInContext(`exports.${name}(${seed})`, context, { timeout: 1000 }))));
@@ -84,12 +92,12 @@ const modules = join(work, 'modules'), reversed = join(work, 'reversed');
 const cli = join(root, 'kotlin-ets');
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Ownership.ets', 'Provider.ets', 'Sibling.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Captures.ets', 'Ownership.ets', 'Provider.ets', 'Sibling.ets']);
 for (const name of readdirSync(modules)) {
   assert.equal(readFileSync(join(modules, name), 'utf8'), readFileSync(join(reversed, name), 'utf8'));
   writeFileSync(join(modules, name.replace('.ets', '.ts')), readFileSync(join(modules, name), 'utf8'));
 }
-const moduleCheck = ts.createProgram(['Application.ts', 'Ownership.ts', 'Provider.ts', 'Sibling.ts'].map(name => join(modules, name)), {
+const moduleCheck = ts.createProgram(['Application.ts', 'Captures.ts', 'Ownership.ts', 'Provider.ts', 'Sibling.ts'].map(name => join(modules, name)), {
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, strict: true, noEmit: true, types: [] });
 assert.deepEqual(ts.getPreEmitDiagnostics(moduleCheck).map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')), []);
 const providerCode = readFileSync(join(modules, 'Provider.ets'), 'utf8');
@@ -108,11 +116,11 @@ function load(name) {
   } }, { timeout: 1000 });
   return exports;
 }
-result.moduleActual = evaluate(vm.createContext({ exports: { ...load('Application'), ...load('Ownership') } }));
+result.moduleActual = evaluate(vm.createContext({ exports: { ...load('Application'), ...load('Ownership'), ...load('Captures') } }));
 assert.deepEqual(result.moduleActual, result.expected);
 result.negatives = [];
 for (const [name, message] of [['Star', /invariant receiver/], ['MultipleBounds', /one noncyclic receiver bound/],
-  ['Super', /super/i], ['Local', /local or inner classes/], ['Inner', /local or inner classes/]]) {
+  ['Super', /super/i]]) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
   run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
   const diagnostic = JSON.parse(run(name, 'bash', [cli, '--mode', 'language', '--out', out, input], 2));
@@ -120,6 +128,13 @@ for (const [name, message] of [['Star', /invariant receiver/], ['MultipleBounds'
   assert.equal(diagnostic.source.file, input);
   assert.ok(diagnostic.source.start >= 0 && diagnostic.source.end > diagnostic.source.start);
   assert.equal(existsSync(out), false); result.negatives.push(diagnostic);
+}
+result.formerNegatives = [];
+for (const name of ['Local', 'Inner']) {
+  const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
+  run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
+  run(name + '-accepted', 'bash', [cli, '--mode', 'language', '--out', out, input]);
+  assert.ok(existsSync(out)); result.formerNegatives.push(name);
 }
 const proofJar = join(work, 'ir-proof.jar');
 run('ir-build', 'bash', [compiler, ...['core/Frontend.kt', 'core/Constructors.kt', 'core/ConstructorDispatch.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt',
