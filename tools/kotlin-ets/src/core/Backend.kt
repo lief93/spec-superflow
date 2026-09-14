@@ -1,0 +1,39 @@
+package dev.ets
+
+import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.visitors.*
+
+/** Official IR stays alive only while lowering. The returned program is compiler-independent. */
+class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>) {
+    val language: Language = LanguageLowering(diagnostics, rules)
+
+    fun validateSource(module: IrModuleFragment) {
+        module.files.forEach { file ->
+            diagnostics.currentFile = file.fileEntry.name
+            file.acceptChildrenVoid(object : IrElementVisitorVoid {
+                override fun visitElement(element: IrElement) {
+                    if (element is IrDeclarationWithName && element.name.asString().startsWith("__ets") &&
+                        element.origin !== ETS_SHARED_VARIABLE_CELL) {
+                        diagnostics.unsupported(element, "Source name collides with reserved __ets target helpers")
+                    }
+                    element.acceptChildrenVoid(this)
+                }
+            })
+        }
+    }
+
+    fun lower(module: IrModuleFragment): EtsProgram {
+        validateSource(module)
+        val program = EtsProgram(module.files.map { file ->
+            diagnostics.currentFile = file.fileEntry.name
+            EtsFile(file.fileEntry.name, file.declarations.map { declaration -> when (declaration) {
+                is IrSimpleFunction -> language.function(declaration).copy(exported = true)
+                is IrClass -> language.clazz(declaration).copy(exported = true)
+                else -> diagnostics.unsupported(declaration, "Unsupported top-level declaration")
+            } })
+        })
+        EtsValidator().validate(program, perFileNames = true)
+        return program
+    }
+}

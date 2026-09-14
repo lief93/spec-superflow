@@ -1,0 +1,77 @@
+package dev.ets
+
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
+import java.nio.file.StandardOpenOption.CREATE_NEW
+import kotlin.system.exitProcess
+
+private fun quote(value: String?): String = value?.let {
+    "\"" + it.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r") + "\""
+} ?: "null"
+
+fun main(arguments: Array<String>) {
+    try {
+        val options = linkedMapOf<String, String>()
+        val sources = mutableListOf<String>()
+        var index = 0
+        while (index < arguments.size) {
+            val item = arguments[index++]
+            if (item.startsWith("--")) {
+                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file")) { "Unknown option $item" }
+                require(index < arguments.size) { "Missing value for $item" }
+                options[item] = arguments[index++]
+            } else sources.add(item)
+        }
+        options["--sources-file"]?.let { path -> sources.addAll(File(path).readLines().filter { it.isNotBlank() }) }
+        require(sources.isNotEmpty()) { "At least one Kotlin source path is required" }
+        require(("--out" in options) != ("--out-dir" in options)) { "Specify exactly one of --out or --out-dir" }
+        val output = File(options["--out"] ?: options.getValue("--out-dir"))
+        require(!Files.exists(output.toPath(), NOFOLLOW_LINKS)) { "Refusing to overwrite existing target: $output" }
+        val mode = options["--mode"] ?: "page"
+        require(mode in setOf("page", "language")) { "Mode must be page or language" }
+        val classpath = options["--classpath"] ?: options["--classpath-file"]?.let { path ->
+            File(path).readLines().filter { it.isNotBlank() }.joinToString(File.pathSeparator)
+        } ?: requireNotNull(System.getenv("KOTLIN_ETS_STDLIB")) { "Kotlin stdlib path missing" }
+        val compilerArgs = listOf("-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", classpath) + sources
+        val target = withKotlinFrontend(compilerArgs) { frontend ->
+            val module = frontend.module
+            val diagnostics = DiagnosticSink()
+            val stdlib = StandardLibraryRules()
+            val backend = EtsBackend(diagnostics, listOf(stdlib))
+            if (mode == "page") {
+                backend.validateSource(module)
+                val targetModule = ComposeLowering(backend.language, diagnostics).lower(module,
+                    requireNotNull(options["--entry"]) { "--entry is required for page mode" })
+                if ("--out-dir" in options) emitEtsModules(targetModule, ComposeRuntime(StandardLibraryRuntime))
+                else mapOf(output.name to emitEtsProgram(targetModule, ComposeRuntime(StandardLibraryRuntime)))
+            } else {
+                val program = backend.lower(module)
+                if ("--out-dir" in options) emitEtsModules(program, StandardLibraryRuntime)
+                else mapOf(output.name to emitEtsProgram(program, StandardLibraryRuntime))
+            }
+        }
+        Files.createDirectories(output.absoluteFile.parentFile.toPath())
+        if ("--out-dir" in options) {
+            Files.createDirectory(output.toPath())
+            target.forEach { (name, code) -> Files.writeString(output.resolve(name).toPath(), code, CREATE_NEW) }
+        } else Files.writeString(output.toPath(), target.getValue(output.name), CREATE_NEW)
+        println("{\"ok\":true,\"frontend\":\"Kotlin-2.1.20-K2-FIR2IR\",\"output\":" + quote(output.path) + "}")
+    } catch (failure: InvalidTarget) {
+        val source = failure.source
+        println("{\"ok\":false,\"code\":\"INVALID_TARGET\",\"message\":" + quote(failure.message) +
+            ",\"source\":{\"file\":" + quote(source.file) + ",\"start\":" + source.start +
+            ",\"end\":" + source.end + "}}")
+        exitProcess(2)
+    } catch (failure: Unsupported) {
+        val d = failure.diagnostic
+        println("{\"ok\":false,\"code\":" + quote(d.code) + ",\"message\":" + quote(d.message) +
+            ",\"source\":{\"file\":" + quote(d.source.file) + ",\"start\":" + d.source.start +
+            ",\"end\":" + d.source.end + "}}")
+        exitProcess(2)
+    } catch (failure: Exception) {
+        System.err.println(failure.message)
+        println("{\"ok\":false,\"code\":\"COMPILATION_REJECTED\",\"message\":" + quote(failure.message) + "}")
+        exitProcess(1)
+    }
+}

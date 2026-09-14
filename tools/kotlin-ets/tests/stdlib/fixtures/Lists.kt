@@ -1,0 +1,23 @@
+package stdlibcases
+
+fun emptySize(): Int = listOf<Int>().size
+fun singleton(value: Int): Int = listOf(value)[0]
+fun listRead(a: Int, b: Int, index: Int): Int = listOf(a, b)[index]
+fun listSize(a: String, b: String): Int = listOf(a, b).size
+fun append(value: Int): Boolean = mutableListOf(1, 2).add(value)
+fun emptyMutableAdd(value: Int): Boolean = mutableListOf<Int>().add(value)
+fun indexed(values: List<Int>, index: Int): Int = values[index]
+fun mapped(value: Int): Int = listOf(1, 2, 3).map { it + value }[2]
+fun mutation(value: Int): Int {
+    val values = mutableListOf(1, 2)
+    values.add(value)
+    return values[2] + values.size
+}
+
+fun invalidMap(): List<Int> {
+    val values = mutableListOf(1, 2)
+    return values.map { value ->
+        values.add(value)
+        value
+    }
+}

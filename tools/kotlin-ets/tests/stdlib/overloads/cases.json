@@ -1,0 +1,23 @@
+[
+  { "name": "numericCase", "args": [0] },
+  { "name": "numericCase", "args": [1] },
+  { "name": "numericCase", "args": [2] },
+  { "name": "numericCase", "args": [3] },
+  { "name": "onceCase", "args": [] },
+  { "name": "receiverOnce", "args": [] },
+  { "name": "emptyCase", "args": [0] },
+  { "name": "emptyCase", "args": [1] },
+  { "name": "polarityCase", "args": [0] },
+  { "name": "polarityCase", "args": [1] },
+  { "name": "polarityCase", "args": [2] },
+  { "name": "polarityCase", "args": [3] },
+  { "name": "mutationCase", "args": [false] },
+  { "name": "mutationCase", "args": [true] },
+  { "name": "failureCase", "args": [false] },
+  { "name": "failureCase", "args": [true] },
+  { "name": "cursorCase", "args": [false] },
+  { "name": "cursorCase", "args": [true] },
+  { "name": "identity", "args": [] },
+  { "name": "errorIdentity", "args": [false] },
+  { "name": "errorIdentity", "args": [true] }
+]

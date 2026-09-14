@@ -1,0 +1,679 @@
+@file:OptIn(org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI::class)
+package dev.ets
+
+import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.IrStatement
+import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
+import org.jetbrains.kotlin.ir.types.*
+import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
+import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
+import org.jetbrains.kotlin.ir.visitors.acceptVoid
+import org.jetbrains.kotlin.name.FqName
+
+/** Consumes resolved, pre-Compose-lowering IR. No source spelling is used for API dispatch. */
+class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink) {
+    private val bindingSymbols = linkedMapOf<IrValueSymbol, EtsSymbol>()
+    private data class Pager(val name: String, val count: IrExpression, val scope: Scope)
+    private val fields = mutableListOf<EtsField>()
+    private val states = linkedMapOf<IrValueSymbol, String>()
+    private val pagers = linkedMapOf<IrValueSymbol, Pager>()
+    private val coroutineScopes = mutableSetOf<IrValueSymbol>()
+    private val slots = mutableSetOf<IrValueSymbol>()
+    private val builders = linkedSetOf<IrSimpleFunction>()
+    private val builderSymbols = linkedMapOf<IrSimpleFunction, EtsSymbol>()
+    private val slotMethods = mutableListOf<EtsFunction>()
+    private val fieldNames = mutableSetOf<String>()
+    private lateinit var root: IrSimpleFunction
+    private lateinit var pageReceiver: EtsSymbol
+    private var textContexts: Map<IrFunction, MaterialTextContext> = emptyMap()
+    private var textContext = MaterialTextContext.BodyLarge
+    private var usesMaterialTypography = false
+    private val touchBoxes = linkedMapOf<IrCall, TouchTargets>()
+
+    fun lower(module: IrModuleFragment, entryName: String): EtsProgram {
+        fields.clear(); states.clear(); pagers.clear(); coroutineScopes.clear()
+        slots.clear(); builders.clear(); fieldNames.clear(); slotMethods.clear()
+        usesMaterialTypography = false
+        touchBoxes.clear()
+        bindingSymbols.clear()
+        builderSymbols.clear()
+        val declarations = module.files.flatMap { it.declarations }
+        val functions = declarations.filterIsInstance<IrSimpleFunction>()
+        val entries = functions.filter { it.name.asString() == entryName || symbolName(it) == entryName }
+        root = entries.singleOrNull() ?: diagnostics.unsupported(module, "Expected one source entry: $entryName")
+        diagnostics.currentFile = sourceFile(root)?.fileEntry?.name
+        pageReceiver = EtsSymbol("ui:this", "this", etsClassSymbol(root.name.asString(), language.source(root)).type, language.source(root), external = true)
+        if (!isUiBuilder(root)) diagnostics.unsupported(root, "UI entry must be @Composable and return Unit")
+        textContexts = materialTextContexts(root, diagnostics)
+        val rootScope = scope()
+        val defaults = root.valueParameters.map { parameter ->
+            val value = parameter.defaultValue?.expression
+                ?: diagnostics.unsupported(parameter, "Entry parameter requires a source default")
+            val emitted = language.expression(value, rootScope)
+            rootScope.bindings[parameter.symbol] = emitted
+            emitted
+        }
+        val rootMethod = builder(root)
+        val methods = mutableListOf(rootMethod)
+        val emitted = mutableSetOf(root)
+        while (builders.any { it !in emitted }) {
+            val next = builders.first { it !in emitted }
+            emitted += next
+            methods += builder(next)
+        }
+        val ownership = BuilderOwnership(methods, rootMethod.symbol.id, pageReceiver.id)
+        val files = linkedMapOf<String, MutableList<EtsDeclaration>>()
+        for (declaration in declarations) {
+            diagnostics.currentFile = sourceFile(declaration)?.fileEntry?.name
+            val file = files.getOrPut(diagnostics.currentFile!!) { mutableListOf() }
+            when (declaration) {
+                is IrSimpleFunction -> if (!isUiBuilder(declaration)) {
+                    file += language.function(declaration, scope()).copy(exported =
+                        declaration.visibility != org.jetbrains.kotlin.descriptors.DescriptorVisibilities.PRIVATE)
+                } else {
+                    val symbol = builderSymbols[declaration]
+                    if (symbol?.id in ownership.globalIds) {
+                        file += ownership.rewrite(methods.single { it.symbol.id == symbol!!.id }).copy(
+                            kind = EtsFunctionKind.FUNCTION,
+                            exported = declaration.visibility != org.jetbrains.kotlin.descriptors.DescriptorVisibilities.PRIVATE)
+                    }
+                }
+                is IrClass -> file += language.clazz(declaration).copy(exported =
+                    declaration.visibility != org.jetbrains.kotlin.descriptors.DescriptorVisibilities.PRIVATE)
+                else -> diagnostics.unsupported(declaration, "Unsupported top-level UI module declaration")
+            }
+        }
+        diagnostics.currentFile = sourceFile(root)?.fileEntry?.name
+        val name = root.name.asString()
+        val entryBody = native("Stack", listOf(stackOptions(root)), root,
+            listOf(EtsUiElement(methodCall(builderSymbol(root), defaults, root)))).copy(attributes = listOf(
+                attribute("width", listOf(literal("100%", root)), root),
+                attribute("height", listOf(literal("100%", root)), root)))
+        val build = EtsFunction("build", emptyList(), EtsTypes.VOID, listOf(entryBody), language.source(root),
+            kind = EtsFunctionKind.METHOD, build = true)
+        val pageMethods = (methods.filter { it.symbol.id !in ownership.globalIds } + slotMethods).map(ownership::rewrite)
+        val component = EtsClass(name, fields + pageMethods + build, language.source(root), exported = true, component = true, entry = true)
+        files.getOrPut(language.source(root).file!!) { mutableListOf() }.add(component)
+        return EtsProgram(files.filterValues { it.isNotEmpty() }.map { (path, declarations) -> EtsFile(path, declarations) },
+            if (usesMaterialTypography) listOf(EtsImport("@ohos.graphics.drawing", "__etsDrawing", default = true)) else emptyList())
+    }
+
+    private val target = ArkUiCalls(language, diagnostics)
+    private val uiRules: List<CallRule> by lazy {
+        listOf(
+            object : CallRule {
+                override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
+                override fun lowerUi(call: IrCall, language: Language, scope: Scope) = sourceUiCall(call, scope)
+            },
+            object : CallRule {
+                override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
+                override fun lowerUi(call: IrCall, language: Language, scope: Scope) =
+                    if (symbolName(call.symbol.owner) == "kotlin.repeat") repeatUi(call, scope) else null
+            },
+            ComposeLayoutRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
+            ComposeTextRule(target, ::colorValue, ::dimension,
+                { usesMaterialTypography = true; textContext }, ::modifiers),
+            ComposeButtonRule(target, ::uiLambdaBody, ::callback, ::modifiers),
+            object : ComposeControlRule(::modifiers) {
+                override fun control(call: IrCall, language: Language, scope: Scope) =
+                    if (symbolName(call.symbol.owner) == "androidx.compose.foundation.pager.HorizontalPager")
+                        pager(call, scope) else null
+            },
+        )
+    }
+
+    private fun scope() = Scope(callRule = object : CallRule {
+        override fun lower(call: IrCall, language: Language, scope: Scope) = platformCall(call, scope)
+        override fun lowerStatement(call: IrCall, language: Language, scope: Scope) = platformStatement(call, scope)
+    }, callRules = uiRules)
+
+    private fun expression(value: IrExpression, scope: Scope) = language.expression(value, scope)
+    private fun literal(value: Any, owner: IrElement) = target.literal(value, owner)
+    private fun call(name: String, args: List<EtsExpression>, owner: IrElement,
+        types: List<EtsType> = args.map { it.type }, result: EtsType = EtsTypes.VOID,
+        receiver: EtsExpression? = null, identity: String = "arkui:$name"): EtsCall =
+        target.call(name, args, owner, types, result, receiver, identity)
+
+    private fun builderSymbol(function: IrSimpleFunction): EtsSymbol = builderSymbols.getOrPut(function) {
+        val source = SourceSpan(sourceFile(function)?.fileEntry?.name, function.startOffset, function.endOffset)
+        etsFunctionSymbol(function.name.asString(), function.valueParameters.map {
+            if (it.type.hasAnnotation(COMPOSABLE)) bindingWrappedBuilder() else language.type(it.type)
+        }, EtsTypes.VOID, source)
+    }
+    private fun methodCall(symbol: EtsSymbol, args: List<EtsExpression>, owner: IrElement): EtsCall {
+        val source = language.source(owner)
+        return EtsCall(EtsMember(EtsReference(pageReceiver, source), symbol.name, symbol.type, source, symbol.id),
+            args, EtsTypes.VOID, source)
+    }
+    private fun attribute(name: String, args: List<EtsExpression>, owner: IrElement) = target.attribute(name, args, owner)
+    private fun native(name: String, args: List<EtsExpression>, owner: IrElement, children: List<EtsStatement>? = null) =
+        target.native(name, args, owner, children)
+    private fun enumValue(type: String, name: String, owner: IrElement) = target.enumValue(type, name, owner)
+    private fun record(name: String, values: Map<String, EtsExpression>, owner: IrElement) = target.record(name, values, owner)
+    private fun stackOptions(owner: IrElement) = target.stackOptions(owner)
+
+    private fun binding(value: IrValueDeclaration, name: String = value.name.asString(),
+        targetType: EtsType = language.type(value.type)): EtsReference =
+        EtsReference(bindingSymbols.getOrPut(value.symbol) {
+            EtsSymbol("ui:${bindingSymbols.size}", name, targetType, language.source(value))
+        })
+
+    private fun field(name: String, type: EtsType, element: IrElement): EtsMember {
+        val source = language.source(element)
+        val receiver = EtsReference(pageReceiver, source)
+        return EtsMember(receiver, name, type, source)
+    }
+
+    private fun bindingWrappedBuilder() = EtsNamedType("WrappedBuilder", listOf(EtsTupleType(emptyList())))
+
+    private fun isUiBuilder(function: IrSimpleFunction): Boolean =
+        function.hasAnnotation(COMPOSABLE) && function.returnType.isUnit()
+
+    private fun builder(function: IrSimpleFunction): EtsFunction = withTextContext(function) {
+        diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
+        builderSymbol(function)
+        if (function.extensionReceiverParameter != null || function.dispatchReceiverParameter != null)
+            diagnostics.unsupported(function, "Source builder receivers are not supported")
+        val scope = scope()
+        val parameters = function.valueParameters.map { parameter ->
+            if (parameter.type.hasAnnotation(COMPOSABLE)) {
+                if (parameter.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Function0")
+                    diagnostics.unsupported(parameter, "Content slots currently require () -> Unit")
+                slots += parameter.symbol
+                val reference = binding(parameter, targetType = bindingWrappedBuilder())
+                scope.bindings[parameter.symbol] = reference
+                EtsParameter(reference.symbol)
+            } else {
+                val reference = binding(parameter)
+                scope.bindings[parameter.symbol] = reference
+                EtsParameter(reference.symbol, parameter.defaultValue?.expression?.let { expression(it, scope) })
+            }
+        }
+        val body = function.body ?: diagnostics.unsupported(function, "Builder has no source body")
+        val lines = uiBody(body, scope, function == root)
+        EtsFunction(function.name.asString(), parameters, EtsTypes.VOID, lines, language.source(function),
+            kind = EtsFunctionKind.METHOD, builder = true)
+    }
+
+    private fun <T> withTextContext(function: IrFunction, emit: () -> T): T {
+        val previous = textContext
+        textContext = textContexts[function] ?: diagnostics.unsupported(function, "Unresolved inherited text context")
+        return try { emit() } finally { textContext = previous }
+    }
+
+    private fun uiBody(body: IrBody, scope: Scope, rootBody: Boolean = false): List<EtsStatement> = when (body) {
+        is IrBlockBody -> uiStatements(body.statements, scope, rootBody)
+        is IrExpressionBody -> uiStatement(body.expression, scope, rootBody)
+        else -> diagnostics.unsupported(body, "Unsupported builder body")
+    }
+
+    private fun uiStatements(statements: List<IrStatement>, scope: Scope, rootBody: Boolean): List<EtsStatement> {
+        val lines = mutableListOf<EtsStatement>()
+        statements.forEachIndexed { index, statement ->
+            if (statement !is IrVariable) {
+                lines += uiStatement(statement, scope, rootBody)
+            } else {
+                if (statement.isVar) diagnostics.unsupported(statement, "Mutable builder local requires remembered state")
+                val initial = statement.initializer ?: diagnostics.unsupported(statement, "Uninitialized builder variable")
+                if (remember(statement, initial, scope, rootBody)) return@forEachIndexed
+                if (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE &&
+                    uses(statement, statements.drop(index + 1)) == 1 && stableRead(initial, scope)) {
+                    scope.aliases[statement.symbol] = initial
+                    return@forEachIndexed
+                }
+                val platformValue = initial.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() in
+                    setOf("androidx.compose.ui.unit.Dp", "androidx.compose.ui.unit.TextUnit", "androidx.compose.ui.graphics.Color", "androidx.compose.ui.Modifier")
+                if (initial is IrFunctionExpression ||
+                    (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE && platformValue)) {
+                    scope.aliases[statement.symbol] = initial
+                    return@forEachIndexed
+                }
+                val value = language.expression(initial, scope)
+                val name = if (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE)
+                    "uiTemporary${statement.startOffset}" else statement.name.asString()
+                val child = scope.fork()
+                child.bindings[statement.symbol] = binding(statement, name)
+                child.aliases.remove(statement.symbol)
+                val remaining = statements.drop(index + 1)
+                val captures = capturedValues(remaining, child).filter { it != statement.symbol }
+                val methodName = "${name}_${statement.startOffset}"
+                val parameters = listOf(capturedParameter(statement.symbol, child)) + captures.map { capturedParameter(it, child) }
+                val body = uiStatements(remaining, child, rootBody)
+                // A builder parameter evaluates a source val once; textual aliasing would duplicate calls.
+                val bridge = EtsFunction(methodName, parameters, EtsTypes.VOID, body, language.source(statement), kind = EtsFunctionKind.METHOD, builder = true)
+                slotMethods += bridge
+                lines += EtsUiElement(methodCall(bridge.symbol, listOf(value) + captures.map { scope.bindings.getValue(it) }, statement))
+                return lines
+            }
+        }
+        return lines
+    }
+
+    private fun uses(variable: IrVariable, elements: List<IrElement>): Int {
+        var count = 0
+        val visitor = object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) { element.acceptChildrenVoid(this) }
+            override fun visitGetValue(expression: IrGetValue) {
+                if (expression.symbol == variable.symbol) count++
+            }
+        }
+        elements.forEach { it.acceptVoid(visitor) }
+        return count
+    }
+
+    // A mutable read can change while later named arguments run. Only immutable,
+    // default-accessor reads may move to their single use without a value bridge.
+    private fun stableRead(expression: IrExpression, scope: Scope): Boolean = when (expression) {
+        is IrConst -> true
+        is IrGetValue -> scope.aliases[expression.symbol]?.let { stableRead(it, scope) }
+            ?: when (val owner = expression.symbol.owner) {
+                is IrVariable -> !owner.isVar && expression.symbol in scope.bindings
+                is IrValueParameter -> expression.symbol in scope.bindings
+                else -> false
+            }
+        is IrCall -> {
+            val getter = expression.symbol.owner
+            val property = getter.correspondingPropertySymbol?.owner
+            property != null && !property.isVar && property.getter?.symbol == getter.symbol &&
+                getter.origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR &&
+                property.backingField?.isFinal == true && sourceFile(property) != null &&
+                getter.valueParameters.isEmpty() && expression.extensionReceiver == null &&
+                expression.dispatchReceiver?.let { stableRead(it, scope) } == true
+        }
+        else -> false
+    }
+
+    private fun uiStatement(node: IrStatement, scope: Scope, rootBody: Boolean = false): List<EtsStatement> = when (node) {
+        is IrVariable -> uiStatements(listOf(node), scope, rootBody)
+        is IrCall -> (adaptCall(node, language, scope, CallContext.UI) as? CallResult.Ui)?.statements
+            ?: diagnostics.unsupported(node, "Unsupported resolved UI API: ${symbolName(node.symbol.owner)}")
+        is IrReturn -> uiStatement(node.value, scope, rootBody)
+        is IrBlock -> uiStatements(node.statements, scope.fork(), rootBody)
+        is IrComposite -> uiStatements(node.statements, scope, rootBody)
+        is IrGetObjectValue -> if (node.type.isUnit()) emptyList() else diagnostics.unsupported(node, "Unexpected UI value")
+        is IrWhen -> listOf(EtsIf(node.branches.map { branch -> EtsBranch(
+            if (branch is IrElseBranch) null else expression(branch.condition, scope), uiStatement(branch.result, scope.fork())) }, language.source(node)))
+        else -> diagnostics.unsupported(node, "Unsupported UI statement ${node::class.simpleName}")
+    }
+
+    private fun remember(variable: IrVariable, expression: IrExpression, scope: Scope, rootBody: Boolean): Boolean {
+        val call = expression as? IrCall ?: return false
+        val api = symbolName(call.symbol.owner)
+        if (api !in setOf("androidx.compose.runtime.remember", "androidx.compose.runtime.rememberCoroutineScope",
+                "androidx.compose.foundation.pager.rememberPagerState")) return false
+        if (!rootBody) diagnostics.unsupported(call, "Remember is supported only in the entry builder's unconditional body")
+        val name = variable.name.asString()
+        when (api) {
+            "androidx.compose.runtime.remember" -> {
+                checkArguments(call, setOf("calculation"))
+                val calculation = singleResult(argument(call, "calculation"), scope, call)
+                val factory = calculation as? IrCall ?: diagnostics.unsupported(calculation, "Remember requires mutableStateOf")
+                if (symbolName(factory.symbol.owner) != "androidx.compose.runtime.mutableStateOf")
+                    diagnostics.unsupported(factory, "Remember supports only explicit mutableStateOf in this slice")
+                checkArguments(factory, setOf("value"))
+                val initial = argument(factory, "value") ?: diagnostics.unsupported(factory, "Missing state value")
+                val field = fieldName(name, variable)
+                fields += EtsField(EtsSymbol("ui:field:$field", field, language.type(initial.type), language.source(variable)),
+                    expression(initial, scope()), private = true, state = true)
+                states[variable.symbol] = field
+            }
+            "androidx.compose.foundation.pager.rememberPagerState" -> {
+                checkArguments(call, setOf("initialPage", "pageCount"))
+                val count = singleResult(argument(call, "pageCount"), scope, call)
+                val countValue = (count as? IrConst)?.value as? Int
+                if (countValue == null || countValue <= 0)
+                    diagnostics.unsupported(count, "Pager pageCount currently requires a positive integer literal")
+                val initial = argument(call, "initialPage")?.let { language.expression(it, scope()) }
+                    ?: EtsLiteral(0, EtsTypes.NUMBER, language.source(call))
+                val field = fieldName(name + "_currentPage", variable)
+                fieldName(name + "_controller", variable)
+                fields += EtsField(EtsSymbol("ui:field:$field", field, EtsTypes.NUMBER, language.source(variable)), initial, private = true, state = true)
+                val controllerType = EtsNamedType("SwiperController")
+                fields += EtsField(EtsSymbol("ui:field:${name}_controller", "${name}_controller", controllerType, language.source(variable)),
+                    EtsNew(controllerType, emptyList(), language.source(variable)), private = true)
+                pagers[variable.symbol] = Pager(name, count, scope.fork())
+            }
+            else -> {
+                checkArguments(call, emptySet())
+                coroutineScopes += variable.symbol
+            }
+        }
+        return true
+    }
+
+    private fun fieldName(name: String, node: IrElement): String {
+        if (!fieldNames.add(name)) diagnostics.unsupported(node, "Colliding generated state field: $name")
+        return name
+    }
+
+    private fun singleResult(expression: IrExpression?, scope: Scope, owner: IrElement): IrExpression {
+        val fn = lambda(expression, scope) ?: diagnostics.unsupported(owner, "Expected source lambda")
+        val statements = (fn.body as? IrBlockBody)?.statements
+            ?: diagnostics.unsupported(fn, "Expected lambda block")
+        val result = statements.singleOrNull() ?: diagnostics.unsupported(fn, "Expected a single initializer expression")
+        return (result as? IrReturn)?.value ?: result as? IrExpression
+            ?: diagnostics.unsupported(result, "Expected initializer value")
+    }
+
+    private fun sourceUiCall(call: IrCall, scope: Scope): List<EtsStatement>? {
+        val function = call.symbol.owner
+        val receiver = dereference(call.dispatchReceiver, scope) as? IrGetValue
+        if (function.name.asString() == "invoke" && receiver?.symbol in slots) {
+            checkArguments(call, emptySet())
+            return listOf(EtsUiElement(call("builder", emptyList(), call, receiver = expression(call.dispatchReceiver!!, scope))))
+        }
+        if (isUiBuilder(function) && sourceFile(function) != null && !function.isExternal) {
+            builders += function
+            val args = function.valueParameters.mapIndexed { index, parameter ->
+                val value = call.getValueArgument(index) ?: parameter.defaultValue?.expression
+                    ?: diagnostics.unsupported(call, "Missing builder argument ${parameter.name}")
+                if (parameter.type.hasAnnotation(COMPOSABLE)) uiLambda(value, scope, "${function.name}_${parameter.name}")
+                else expression(value, scope)
+            }
+            return listOf(EtsUiElement(methodCall(builderSymbol(function), args, call)))
+        }
+        return null
+    }
+
+    private fun repeatUi(call: IrCall, scope: Scope): List<EtsStatement> {
+        checkArguments(call, setOf("times", "action"))
+        val times = argument(call, "times") ?: diagnostics.unsupported(call, "repeat requires times")
+        val fn = lambda(argument(call, "action"), scope) ?: diagnostics.unsupported(call, "repeat requires action")
+        val parameter = fn.valueParameters.singleOrNull() ?: diagnostics.unsupported(fn, "repeat action requires index")
+        val child = scope.fork()
+        child.bindings[parameter.symbol] = binding(parameter)
+        return listOf(EtsUiForEach(indexItems(expression(times, scope), call),
+            EtsParameter(binding(parameter).symbol), uiBody(fn.body!!, child), language.source(call)))
+    }
+
+    private fun pager(call: IrCall, scope: Scope): ComposeElement {
+        checkArguments(call, setOf("state", "modifier", "pageContent"))
+        val state = pagerFor(argument(call, "state"), scope, call)
+        val fn = lambda(argument(call, "pageContent"), scope) ?: diagnostics.unsupported(call, "Pager requires page content")
+        val parameter = fn.valueParameters.singleOrNull() ?: diagnostics.unsupported(fn, "Pager content requires page index")
+        val child = scope.fork()
+        child.bindings[parameter.symbol] = binding(parameter)
+        val source = language.source(call)
+        val current = field("${state.name}_currentPage", EtsTypes.NUMBER, call)
+        val index = EtsSymbol("ui:pager:${call.startOffset}", "index", EtsTypes.NUMBER, source)
+        val onChange = EtsLambda(listOf(EtsParameter(index)), listOf(EtsExpressionStatement(EtsAssignment(current, EtsReference(index), source))), EtsTypes.VOID, source)
+        return ComposeElement(native("Swiper", listOf(field("${state.name}_controller", EtsNamedType("SwiperController"), call)), call,
+            listOf(EtsUiForEach(indexItems(expression(state.count, state.scope), call), EtsParameter(binding(parameter).symbol), uiBody(fn.body!!, child), source)))
+            .copy(attributes = listOf(attribute("index", listOf(current), call), attribute("loop", listOf(literal(false, call)), call),
+                attribute("indicator", listOf(literal(false, call)), call), attribute("onChange", listOf(onChange), call))), setOf("padding", "onClick"))
+    }
+
+    private fun indexItems(count: EtsExpression, owner: IrElement): EtsExpression {
+        val source = language.source(owner)
+        val index = EtsSymbol("ui:index:${source.start}", "index", EtsTypes.NUMBER, source)
+        val unused = EtsSymbol("ui:unused:${source.start}", "_unused", EtsTypes.NUMBER, source)
+        val mapper = EtsLambda(listOf(EtsParameter(unused), EtsParameter(index)), listOf(EtsReturn(EtsReference(index), source)), EtsTypes.NUMBER, source)
+        val array = EtsReference(EtsSymbol("arkui:Array", "Array", EtsNamedType("Array"), source, true))
+        return call("from", listOf(record("ArrayLike", linkedMapOf("length" to count), owner), mapper), owner,
+            result = EtsNamedType("Array", listOf(EtsTypes.NUMBER)), receiver = array)
+    }
+
+    private fun uiLambda(expression: IrExpression, scope: Scope, sourceName: String): EtsExpression {
+        val resolved = dereference(expression, scope)
+        if (resolved is IrGetValue && resolved.symbol in slots) return expression(resolved, scope)
+        val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected source content lambda")
+        val captures = capturedValues(listOf(fn.body ?: diagnostics.unsupported(fn, "Missing slot body")), scope)
+        val name = "${sourceName}_${fn.startOffset}"
+        val captured = captures.map { capturedParameter(it, scope) }
+        val body = uiLambdaBody(expression, scope.fork())
+        // ArkUI only transforms UI DSL in builders/native slots, not arbitrary function arguments.
+        val bridge = EtsFunction(name, captured, EtsTypes.VOID, body, language.source(fn), kind = EtsFunctionKind.METHOD, builder = true)
+        slotMethods += bridge
+        val callback = EtsLambda(emptyList(), listOf(EtsExpressionStatement(methodCall(bridge.symbol, captures.map { scope.bindings.getValue(it) }, fn))), EtsTypes.VOID, language.source(fn))
+        return EtsNew(bindingWrappedBuilder(), listOf(callback), language.source(expression))
+    }
+
+    private fun capturedParameter(symbol: IrValueSymbol, scope: Scope): EtsParameter =
+        EtsParameter((scope.bindings.getValue(symbol) as EtsReference).symbol)
+
+    private fun capturedValues(elements: List<IrElement>, scope: Scope): Set<IrValueSymbol> {
+        val captures = linkedSetOf<IrValueSymbol>()
+        val expanded = mutableSetOf<IrValueSymbol>()
+        val visitor = object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) { element.acceptChildrenVoid(this) }
+            override fun visitGetValue(expression: IrGetValue) {
+                val symbol = expression.symbol
+                if (symbol in scope.aliases && expanded.add(symbol)) scope.aliases[symbol]!!.acceptVoid(this)
+                else if (symbol in scope.bindings) captures += symbol
+            }
+        }
+        elements.forEach { it.acceptVoid(visitor) }
+        return captures
+    }
+
+    private fun uiLambdaBody(expression: IrExpression, scope: Scope): List<EtsStatement> {
+        val resolved = dereference(expression, scope)
+        if (resolved is IrGetValue && resolved.symbol in slots)
+            return listOf(EtsUiElement(call("builder", emptyList(), expression, receiver = expression(resolved, scope))))
+        val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected composable content lambda")
+        if (fn.valueParameters.isNotEmpty()) diagnostics.unsupported(fn, "Unexpected content lambda parameters")
+        return withTextContext(fn) { uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing content body"), scope.fork()) }
+    }
+
+    private fun callback(expression: IrExpression, scope: Scope): EtsExpression {
+        val fn = lambda(expression, scope) ?: return expression(expression, scope)
+        val body = fn.body ?: diagnostics.unsupported(fn, "Missing callback body")
+        return EtsLambda(emptyList(), language.statements(body, scope.fork()), EtsTypes.VOID, language.source(expression))
+    }
+
+    private fun platformCall(call: IrCall, scope: Scope): EtsExpression? {
+        val function = call.symbol.owner
+        val api = symbolName(function)
+        if (isUiBuilder(function) && sourceFile(function) != null && !function.isExternal)
+            diagnostics.unsupported(call, "Source UI builder cannot execute inside a value helper or ordinary expression")
+        val property = function.correspondingPropertySymbol?.owner?.let(::symbolName)
+        val receiver = dereference(call.dispatchReceiver ?: call.extensionReceiver, scope)
+        val value = receiver as? IrGetValue
+        if (property in setOf("androidx.compose.runtime.State.value", "androidx.compose.runtime.MutableState.value")) {
+            val field = value?.symbol?.let(states::get) ?: diagnostics.unsupported(call, "State access requires source remembered state")
+            return if (function.valueParameters.isEmpty()) field(field, language.type(call.type), call)
+                else {
+                    val assigned = language.expression(call.getValueArgument(0)!!, scope)
+                    etsDiscard(EtsAssignment(field(field, assigned.type, call), assigned, language.source(call)))
+                }
+        }
+        if (property == "androidx.compose.foundation.pager.PagerState.currentPage") {
+            val pager = pagerFor(receiver, scope, call)
+            return field("${pager.name}_currentPage", EtsTypes.NUMBER, call)
+        }
+        if (api == "kotlinx.coroutines.launch")
+            diagnostics.unsupported(call, "Unsupported resolved platform expression: $api")
+        return null
+    }
+
+    private fun platformStatement(call: IrCall, scope: Scope): List<EtsStatement>? {
+        val api = symbolName(call.symbol.owner)
+        if (api == "kotlinx.coroutines.launch") {
+            val value = dereference(call.dispatchReceiver ?: call.extensionReceiver, scope) as? IrGetValue
+            if (value?.symbol !in coroutineScopes) diagnostics.unsupported(call, "launch requires remembered UI coroutine scope")
+            checkArguments(call, setOf("block"))
+            val target = singleResult(argument(call, "block"), scope, call) as? IrCall
+                ?: diagnostics.unsupported(call, "Pager adapter supports only launch { pager.animateScrollToPage(...) }")
+            if (symbolName(target.symbol.owner) != "androidx.compose.foundation.pager.PagerState.animateScrollToPage")
+                diagnostics.unsupported(target, "Unsupported coroutine operation in Pager adapter")
+            checkArguments(target, setOf("page"))
+            val pager = pagerFor(target.dispatchReceiver, scope, target)
+            val page = argument(target, "page") ?: diagnostics.unsupported(target, "Missing pager target index")
+            val source = language.source(call)
+            val controller = field("${pager.name}_controller", EtsNamedType("SwiperController"), call)
+            val method = EtsMember(controller, "changeIndex",
+                EtsFunctionType(listOf(EtsTypes.NUMBER, EtsTypes.BOOLEAN), EtsTypes.VOID), source)
+            return listOf(EtsExpressionStatement(EtsCall(method, listOf(language.expression(page, scope),
+                EtsLiteral(true, EtsTypes.BOOLEAN, source)), EtsTypes.VOID, source)))
+        }
+        return null
+    }
+
+    private fun pagerFor(expression: IrExpression?, scope: Scope, owner: IrElement): Pager {
+        val value = dereference(expression, scope) as? IrGetValue
+        return value?.symbol?.let(pagers::get) ?: diagnostics.unsupported(owner, "Expected source remembered PagerState")
+    }
+
+    private fun dereference(expression: IrExpression?, scope: Scope): IrExpression? =
+        if (expression is IrGetValue && expression.symbol in scope.aliases) dereference(scope.aliases[expression.symbol], scope)
+        else expression
+
+    private fun checkArguments(call: IrCall, supported: Set<String>) = target.checkArguments(call, supported)
+
+    private fun dimension(expression: IrExpression, scope: Scope, unit: String): EtsExpression {
+        val resolved = dereference(expression, scope) as? IrCall
+            ?: diagnostics.unsupported(expression, "Expected resolved $unit dimension")
+        val property = resolved.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+        if (property != "androidx.compose.ui.unit.$unit") diagnostics.unsupported(expression, "Unsupported $unit dimension expression")
+        val receiver = resolved.extensionReceiver ?: diagnostics.unsupported(resolved, "Dimension has no numeric receiver")
+        return expression(receiver, scope)
+    }
+
+    private fun colorValue(expression: IrExpression, scope: Scope): EtsExpression {
+        val resolved = dereference(expression, scope)
+        if (resolved is IrWhen) {
+            val branches = resolved.branches
+            if (branches.size != 2 || branches.last() !is IrElseBranch)
+                diagnostics.unsupported(resolved, "Color condition requires if/else")
+            return EtsConditional(language.expression(branches[0].condition, scope),
+                colorValue(branches[0].result, scope), colorValue(branches[1].result, scope),
+                EtsTypes.NUMBER, language.source(expression))
+        }
+        val call = resolved as? IrCall ?: diagnostics.unsupported(expression, "Expected resolved Color")
+        val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+        val colors = mapOf("Black" to 0xFF000000L, "White" to 0xFFFFFFFFL, "Gray" to 0xFF888888L, "Red" to 0xFFFF0000L, "Transparent" to 0L)
+        for ((name, value) in colors) if (property == "androidx.compose.ui.graphics.Color.Companion.$name")
+            return EtsLiteral(value, EtsTypes.NUMBER, language.source(expression))
+        if (symbolName(call.symbol.owner) == "androidx.compose.ui.graphics.Color" && call.symbol.owner.valueParameters.size == 1) {
+            val value = call.getValueArgument(0) ?: diagnostics.unsupported(call, "Missing Color value")
+            if (value.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() !in setOf("kotlin.Int", "kotlin.Long"))
+                diagnostics.unsupported(value, "Only ARGB Int/Long Color is supported")
+            return language.expression(value, scope)
+        }
+        diagnostics.unsupported(expression, "Unsupported resolved Color API")
+    }
+
+    private fun modifiers(expression: IrExpression?, scope: Scope, node: ComposeElement): List<EtsStatement> {
+        val operations = mutableListOf<IrCall>()
+        fun collect(value: IrExpression?) {
+            when (val resolved = dereference(value, scope)) {
+                null -> return
+                is IrGetObjectValue -> if (symbolName(resolved.symbol.owner) !in setOf("androidx.compose.ui.Modifier.Companion", "androidx.compose.ui.Modifier"))
+                    diagnostics.unsupported(resolved, "Expected Modifier companion")
+                is IrCall -> {
+                    collect(resolved.extensionReceiver ?: resolved.dispatchReceiver)
+                    operations += resolved
+                }
+                else -> diagnostics.unsupported(resolved, "Unsupported Modifier receiver")
+            }
+        }
+        collect(expression)
+        val owner = expression ?: root
+        fun layer(index: Int, width: Boolean, height: Boolean): EtsUiElement {
+            val attributes = linkedMapOf<String, EtsExpression>()
+            if (width) attributes["width"] = literal("100%", owner)
+            if (height) attributes["height"] = literal("100%", owner)
+            var nextWidth = width
+            var nextHeight = height
+            val seen = mutableSetOf<String>()
+            var cursor = index
+            while (cursor < operations.size) {
+                val call = operations[cursor]
+                val api = symbolName(call.symbol.owner)
+                val keys = when (api) {
+                    "androidx.compose.foundation.layout.width", "androidx.compose.foundation.layout.fillMaxWidth" -> setOf("width")
+                    "androidx.compose.foundation.layout.height", "androidx.compose.foundation.layout.fillMaxHeight" -> setOf("height")
+                    "androidx.compose.foundation.layout.fillMaxSize" -> setOf("width", "height")
+                    "androidx.compose.foundation.layout.padding" -> setOf("padding")
+                    "androidx.compose.foundation.background" -> setOf("backgroundColor")
+                    "androidx.compose.ui.platform.testTag" -> setOf("id")
+                    "androidx.compose.foundation.clickable" -> setOf("onClick", "enabled")
+                    else -> diagnostics.unsupported(call, "Unsupported resolved Modifier API: $api")
+                }
+                // Padding changes the next operation's coordinate space. Repeated attributes
+                // must also keep their own layer instead of overwriting an earlier operation.
+                if ("padding" in seen || keys.any { it in seen }) break
+                when (api) {
+                    "androidx.compose.foundation.layout.width", "androidx.compose.foundation.layout.height" -> {
+                        val name = keys.single()
+                        checkArguments(call, setOf(name))
+                        val value = argument(call, name) ?: diagnostics.unsupported(call, "Missing $name")
+                        val emitted = dimension(value, scope, "dp")
+                        val constrained = if (name == "width") nextWidth else nextHeight
+                        if (!constrained) attributes[name] = emitted
+                        else {
+                            val scalar = (dereference(value, scope) as IrCall).extensionReceiver!!
+                            if (!stableRead(scalar, scope)) diagnostics.unsupported(value,
+                                "A size already fixed by an outer modifier requires a stable scalar argument")
+                        }
+                        if (name == "width") nextWidth = true else nextHeight = true
+                    }
+                    "androidx.compose.foundation.layout.fillMaxWidth", "androidx.compose.foundation.layout.fillMaxHeight", "androidx.compose.foundation.layout.fillMaxSize" -> {
+                        checkArguments(call, setOf("fraction"))
+                        val fraction = argument(call, "fraction")
+                        if (fraction != null && !stableRead(fraction, scope))
+                            diagnostics.unsupported(fraction, "Fill fraction currently requires a stable scalar argument")
+                        val source = language.source(call)
+                        val length = fraction?.let {
+                            EtsBinary("+", EtsBinary("*", language.expression(it, scope),
+                                EtsLiteral(100, EtsTypes.NUMBER, source), EtsTypes.NUMBER, source),
+                                EtsLiteral("%", EtsTypes.STRING, source), EtsTypes.STRING, source)
+                        } ?: EtsLiteral("100%", EtsTypes.STRING, source)
+                        if ("width" in keys) { if (!nextWidth) attributes["width"] = length; nextWidth = true }
+                        if ("height" in keys) { if (!nextHeight) attributes["height"] = length; nextHeight = true }
+                    }
+                    "androidx.compose.foundation.layout.padding" -> {
+                        checkArguments(call, setOf("all", "horizontal", "vertical", "start", "top", "end", "bottom"))
+                        fun edge(name: String) = argument(call, name)?.let { dimension(it, scope, "dp") } ?: literal(0, call)
+                        attributes["padding"] = if (argument(call, "all") != null) edge("all")
+                        else if (call.symbol.owner.valueParameters.any { it.name.asString() == "horizontal" })
+                            record("Padding", linkedMapOf("left" to edge("horizontal"), "right" to edge("horizontal"), "top" to edge("vertical"), "bottom" to edge("vertical")), call)
+                        else record("Padding", linkedMapOf("left" to edge("start"), "right" to edge("end"), "top" to edge("top"), "bottom" to edge("bottom")), call)
+                    }
+                    "androidx.compose.foundation.background" -> {
+                        checkArguments(call, setOf("color"))
+                        attributes["backgroundColor"] = colorValue(argument(call, "color") ?: diagnostics.unsupported(call, "Missing background color"), scope)
+                    }
+                    "androidx.compose.ui.platform.testTag" -> {
+                        checkArguments(call, setOf("tag"))
+                        attributes["id"] = expression(argument(call, "tag")!!, scope)
+                    }
+                    "androidx.compose.foundation.clickable" -> {
+                        if (node.touch == null) diagnostics.unsupported(call,
+                            "Minimum touch target arbitration requires a homogeneous Row/repeat/Box group")
+                        checkArguments(call, setOf("onClick", "enabled"))
+                        attributes["onClick"] = callback(argument(call, "onClick")!!, scope)
+                        argument(call, "enabled")?.let { attributes["enabled"] = expression(it, scope) }
+                    }
+                }
+                seen += keys
+                cursor++
+            }
+            val attrs = attributes.map { (name, value) -> attribute(name, listOf(value), owner) }.toMutableList()
+            node.touch?.let { touch ->
+                val origin = operations.take(index).sumOf { touch.padding[it] ?: 0.0 }
+                if (index == 0) {
+                    if ("id" in attributes && touch.count != 1) diagnostics.unsupported(touch.box,
+                        "Touch target source tag must be inside its outer padding boundary")
+                    val item = scope.bindings[touch.index.symbol]
+                        ?: diagnostics.unsupported(touch.box, "Unbound repeated touch target index")
+                    if ("id" !in attributes) attrs += attribute("id", listOf(EtsBinary("+", literal("__etsTouch${touch.box.startOffset}_", touch.box), item, EtsTypes.STRING, language.source(touch.box))), touch.box)
+                }
+                attrs += attribute("responseRegion", listOf(touch.region(origin, language.source(touch.box))), touch.box)
+                attrs += attribute("mouseResponseRegion", listOf(record("Rectangle", linkedMapOf("x" to literal(0, touch.box), "y" to literal(0, touch.box),
+                    "width" to literal("100%", touch.box), "height" to literal("100%", touch.box)), touch.box)), touch.box)
+            }
+            if (cursor == operations.size && seen.none { it in node.modifierBoundaries })
+                return node.element.copy(attributes = node.element.attributes + attrs)
+            return native("Stack", listOf(stackOptions(owner)), owner, listOf(layer(cursor, nextWidth, nextHeight))).copy(attributes = attrs)
+        }
+        return listOf(layer(0, false, false))
+    }
+
+    companion object {
+        private val COMPOSABLE = FqName("androidx.compose.runtime.Composable")
+    }
+}

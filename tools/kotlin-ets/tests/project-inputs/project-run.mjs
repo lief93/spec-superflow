@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import vm from 'node:vm';
+import ts from '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/typescript.js';
+
+assert.equal(process.env.KOTLIN_ETS_BUILD_SLOT, '1', 'Run with an exclusive compiler slot');
+const here = dirname(fileURLToPath(import.meta.url));
+const root = resolve(here, '../..');
+const wrapperHost = process.env.COLLECTOR_ANDROID_HOST || '/private/tmp/kotlin-ets-native-20260914-06/android';
+mkdirSync(join(here, '.work'), { recursive: true });
+const work = mkdtempSync(join(here, '.work/public-'));
+console.log(`Evidence: ${work}`);
+const project = join(work, 'Android project');
+cpSync(join(here, 'collector/fixture'), project, { recursive: true });
+cpSync(join(wrapperHost, 'gradlew'), join(project, 'gradlew'));
+cpSync(join(wrapperHost, 'gradle'), join(project, 'gradle'), { recursive: true });
+cpSync(join(here, 'SupportedApp.kt'), join(project, 'src/main/kotlin/App.kt'));
+const output = join(work, 'ETS output', 'Page.ets');
+const evidence = join(work, 'run');
+const args = [join(root, 'kotlin-ets'), '--project', project, '--module', ':',
+  '--compile-task', 'compileKotlin', '--mode', 'language', '--out', output, '--offline', '--work-dir', evidence];
+const javaHome = process.env.JAVA_HOME || '/Applications/Android Studio.app/Contents/jbr/Contents/Home';
+const env = { ...process.env, JAVA_HOME: javaHome, JAVA_TOOL_OPTIONS: '-XX:ActiveProcessorCount=2 -XX:+UseSerialGC' };
+const result = spawnSync('bash', args, { encoding: 'utf8', env, timeout: 600000, maxBuffer: 8 * 1024 * 1024 });
+writeFileSync(join(work, 'command.json'), JSON.stringify({ command: 'bash', args, status: result.status, error: result.error?.message }, null, 2));
+writeFileSync(join(work, 'stdout.log'), result.stdout || '');
+writeFileSync(join(work, 'stderr.log'), result.stderr || '');
+assert.equal(result.error, undefined);
+assert.equal(result.status, 0, result.stdout + result.stderr);
+assert.equal(JSON.parse(result.stdout).ok, true);
+const inputs = JSON.parse(readFileSync(join(evidence, 'inputs.json')));
+assert.equal(inputs.sources.length, 3);
+assert.ok(inputs.sources.some(path => path.endsWith('/Generated.kt')));
+assert.ok(inputs.sources.some(path => path.endsWith('/JavaInput.java')));
+for (const module of ['dep', 'leaf']) assert.ok(inputs.classpath.some(path => path.includes(`/${module}/build/`)));
+const code = readFileSync(output, 'utf8');
+assert.match(code, /function buttonLabel\(page: number\)/);
+assert.match(code, /function pageSpacing\(base: number, extra: number\)/);
+const context = { exports: {} };
+vm.runInNewContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText, context);
+const actual = [0, 1, 2, 3].map(page => context.exports.buttonLabel(page));
+assert.deepEqual(actual, ['Next', 'Next', 'Next', 'Explore']);
+assert.equal(context.exports.pageSpacing(16, 8), 24);
+writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, inputs: join(evidence, 'inputs.json'), output,
+  outputSha256: createHash('sha256').update(code).digest('hex'), labels: actual, spacing: 24,
+  validation: 'actual Gradle -> public compiler -> generated language code host execution; not native UI acceptance' }, null, 2));
+console.log('PASS project entry, real transitive dependencies/generated source, source-list input and generated function execution');

@@ -1,0 +1,114 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { cpSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, basename, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = resolve(here, '../..');
+const sdk = '/Applications/DevEco-Studio.app/Contents';
+const seed = process.env.KOTLIN_ETS_SDK_SEED ?? '/private/tmp/kotlin-ets-native-20260913-07/harmony';
+const work = mkdtempSync('/private/tmp/kotlin-ets-language-sdk-');
+const host = join(work, 'harmony');
+const generated = process.argv[2] ? resolve(process.argv[2]) : join(work, 'generated');
+const sources = new Map(['LanguageSlice', 'DataSlice', 'ScopeSlice', 'ControlSlice', 'SingletonSlice', 'AccessorSlice']
+  .map(name => [name, join(here, name + '.kt')]));
+sources.set('Concatenation', join(root, 'tests/lowering/Concatenation.kt'));
+sources.set('LocalFunctions', join(root, 'tests/local-functions/LocalFunctions.kt'));
+sources.set('LocalGeneric', join(root, 'tests/generics/LocalGeneric.kt'));
+sources.set('Loops', join(root, 'tests/loops/Loops.kt'));
+sources.set('Filter', join(root, 'tests/stdlib/fixtures/Filter.kt'));
+const fixtures = [...sources.keys()];
+const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
+const env = { ...process.env, JAVA_HOME: join(sdk, 'jbr/Contents/Home'),
+  DEVECO_SDK_HOME: join(sdk, 'sdk'),
+  PATH: `${sdk}/tools/node/bin:${sdk}/tools/ohpm/bin:${process.env.PATH}` };
+const manifest = { seed, generated, host, fixtures: [], commands: [], implementation: [] };
+manifest.hostTemplates = ['SdkIndex.ets', 'SdkEntryAbility.ets'].map(name => ({ path: join(here, name), sha256: hash(join(here, name)) }));
+function record() { writeFileSync(join(work, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n'); }
+function identities(directory) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) identities(path);
+    else if (entry.name.endsWith('.kt')) manifest.implementation.push({ path, sha256: hash(path) });
+  }
+}
+function run(label, command, args, cwd = root) {
+  const started = new Date().toISOString();
+  const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: 600000, maxBuffer: 32 * 1024 * 1024 });
+  const stdout = join(work, label + '.stdout');
+  const stderr = join(work, label + '.stderr');
+  writeFileSync(stdout, result.stdout ?? '');
+  writeFileSync(stderr, result.stderr ?? '');
+  manifest.commands.push({ label, command, args, cwd, started, finished: new Date().toISOString(),
+    status: result.status, error: result.error?.message, stdout, stderr });
+  record();
+  console.log(`${label}: ${result.status}`);
+  if (result.error || result.status !== 0) {
+    process.stderr.write((result.stdout ?? '') + (result.stderr ?? ''));
+    return false;
+  }
+  return true;
+}
+console.log(`SDK evidence: ${work}`);
+identities(join(root, 'src'));
+record();
+if (!process.argv[2]) {
+  mkdirSync(generated);
+  for (const fixture of fixtures) {
+    if (!run('generate-' + fixture, 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
+      '--out', join(generated, fixture + '.kt.ets'), sources.get(fixture)])) process.exit(1);
+  }
+}
+const excluded = new Set(['build', '.hvigor', 'oh_modules', '.idea', '.migration', '.git']);
+cpSync(seed, host, { recursive: true, filter: path => !excluded.has(basename(path)) });
+rmSync(join(host, 'entry/src/main/ets'), { recursive: true, force: true });
+for (const directory of ['pages', 'entryability', 'language']) mkdirSync(join(host, 'entry/src/main/ets', directory), { recursive: true });
+copyFileSync(join(here, 'SdkIndex.ets'), join(host, 'entry/src/main/ets/pages/Index.ets'));
+copyFileSync(join(here, 'SdkEntryAbility.ets'), join(host, 'entry/src/main/ets/entryability/EntryAbility.ets'));
+writeFileSync(join(host, 'entry/src/main/resources/base/profile/main_pages.json'), JSON.stringify({ src: ['pages/Index'] }) + '\n');
+for (const fixture of fixtures) {
+  const original = join(generated, fixture + '.kt.ets');
+  const copy = join(host, 'entry/src/main/ets/language', fixture + '.ets');
+  copyFileSync(original, copy);
+  manifest.fixtures.push({ source: sources.get(fixture), sourceSha256: hash(sources.get(fixture)),
+    original, copy, sha256: hash(original) });
+  assert.equal(hash(copy), hash(original));
+}
+record();
+if (!run('ohpm-install', join(sdk, 'tools/ohpm/bin/ohpm'), ['install'], host)) process.exit(1);
+const passed = run('sdk-assemble', join(sdk, 'tools/hvigor/bin/hvigorw'),
+  ['assembleHap', '--mode', 'module', '-p', 'module=entry@default', '-p', 'product=default', '--no-daemon'], host);
+for (const fixture of manifest.fixtures) {
+  assert.equal(hash(fixture.original), fixture.sha256, 'original generated bytes changed');
+  assert.equal(hash(fixture.copy), fixture.sha256, 'SDK-host generated bytes changed');
+  assert.equal(hash(fixture.source), fixture.sourceSha256, 'Kotlin fixture source changed');
+}
+for (const implementation of manifest.implementation) {
+  assert.equal(hash(implementation.path), implementation.sha256, 'compiler implementation changed during SDK verification');
+}
+manifest.implementationBytesUnchanged = true;
+manifest.generatedBytesUnchanged = true;
+manifest.sdkPassed = passed;
+if (passed) {
+  const compilerFiles = join(host, 'entry/build/default/cache/default/default@CompileArkTS/esmodule/debug/filesInfo.txt');
+  const records = readFileSync(compilerFiles, 'utf8').split('\n');
+  copyFileSync(compilerFiles, join(work, 'sdk-filesInfo.txt'));
+  manifest.compiledModules = fixtures.map(fixture => {
+    const record = records.find(line => line.includes(`/language/${fixture}.ts;`) && line.endsWith(';ets'));
+    assert.ok(record, `SDK compiler input omitted ${fixture}.ets`);
+    return { fixture, record };
+  });
+  const abc = join(host, 'entry/build/default/intermediates/loader_out/default/ets/modules.abc');
+  manifest.abc = { path: abc, sha256: hash(abc) };
+  const output = join(host, 'entry/build/default/outputs/default');
+  manifest.haps = readdirSync(output).filter(name => name.endsWith('.hap')).map(name => {
+    const path = join(output, name);
+    assert.ok(existsSync(path));
+    return { path, sha256: hash(path) };
+  });
+  assert.ok(manifest.haps.length > 0, 'SDK did not produce a HAP');
+}
+record();
+process.exit(passed ? 0 : 1);

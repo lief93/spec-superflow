@@ -1,0 +1,7 @@
+.work/
+.gradle/
+.hvigor/
+__pycache__/
+*.pyc
+/verification/evidence/**/*.stdout
+/verification/evidence/**/*.stderr

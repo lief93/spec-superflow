@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+for arg in "$@"; do
+  if [[ "$arg" == "--project" ]]; then
+    exec node "$ROOT/project.mjs" "$@"
+  fi
+done
+JDK="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
+MAVEN="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1"
+jar() { find "$MAVEN/$1/$2/$3" -name "$2-$3.jar" -print -quit; }
+STDLIB="$(jar org.jetbrains.kotlin kotlin-stdlib 2.1.20)"
+CP="$(jar org.jetbrains.kotlin kotlin-compiler-embeddable 2.1.20):$STDLIB"
+CP="$CP:$(jar org.jetbrains.kotlin kotlin-script-runtime 2.1.20):$(jar org.jetbrains.kotlin kotlin-reflect 1.6.10)"
+CP="$CP:$(jar org.jetbrains.kotlin kotlin-daemon-embeddable 2.1.20):$(jar org.jetbrains.intellij.deps trove4j 1.0.20200330)"
+CP="$CP:$(jar org.jetbrains.kotlinx kotlinx-coroutines-core-jvm 1.8.0):$(jar org.jetbrains annotations 13.0)"
+BUILD="$(mktemp -d "${TMPDIR:-/tmp}/kotlin-ets-build.XXXXXX")"
+trap 'rm -rf "$BUILD"' EXIT
+SOURCES=()
+while IFS= read -r file; do SOURCES+=("$file"); done < <(find "$ROOT/src" -name '*.kt' -type f | sort)
+"$JDK/bin/java" -Xmx3g -cp "$CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
+  -no-stdlib -no-reflect -classpath "$CP" -d "$BUILD/tool.jar" "${SOURCES[@]}"
+export KOTLIN_ETS_STDLIB="$STDLIB"
+"$JDK/bin/java" -Xmx3g -cp "$CP:$BUILD/tool.jar" dev.ets.MainKt "$@"

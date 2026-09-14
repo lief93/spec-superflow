@@ -1,0 +1,10 @@
+// Independent test observer, never changes compilation inputs or source files.
+gradle.taskGraph.whenReady { graph ->
+    def root = gradle.rootProject
+    def selected = root.project(root.property('kotlinEtsModule')).tasks.getByName(root.property('kotlinEtsCompileTask'))
+    if (graph.hasTask(selected)) {
+        throw new GradleException('SELECTED_KOTLIN_COMPILE_MUST_NOT_BE_IN_GRAPH')
+    }
+    def output = new File(root.property('collectorTestGraph').toString())
+    output.text = groovy.json.JsonOutput.toJson(graph.allTasks.collect { it.path })
+}

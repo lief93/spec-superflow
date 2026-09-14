@@ -1,0 +1,59 @@
+package dev.ets.verification
+
+import android.content.Context
+import android.content.res.Configuration
+import android.os.Bundle
+import android.os.LocaleList
+import android.os.Build
+import android.util.Log
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import java.util.Locale
+
+class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(base: Context) {
+        val config = Configuration(base.resources.configuration)
+        config.setLocales(LocaleList(Locale.forLanguageTag("en-US")))
+        config.fontScale = 1f
+        config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_NO
+        super.attachBaseContext(base.createConfigurationContext(config))
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
+        }
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).hide(WindowInsetsCompat.Type.systemBars())
+        setContent {
+            MaterialTheme(colorScheme = lightColorScheme()) {
+                Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }.background(Color.White)) {
+                    Box(Modifier.fillMaxSize().onGloballyPositioned { coordinates ->
+                        val b = coordinates.boundsInWindow()
+                        val c = resources.configuration
+                        Log.i("SliceEnvironment", "{\"locale\":\"${c.locales[0].toLanguageTag()}\",\"fontScale\":${c.fontScale},\"nightMode\":${c.uiMode and Configuration.UI_MODE_NIGHT_MASK},\"density\":${resources.displayMetrics.density},\"bounds\":[${b.left},${b.top},${b.right},${b.bottom}]}")
+                    }) {
+                        __ROOT__()
+                    }
+                }
+            }
+        }
+    }
+}

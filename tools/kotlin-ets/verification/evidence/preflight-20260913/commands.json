@@ -1,0 +1,229 @@
+[
+  {
+    "name": "android-sdk",
+    "argv": [
+      "/Users/lief123/Library/Android/sdk/platform-tools/adb",
+      "-s",
+      "emulator-5560",
+      "shell",
+      "getprop",
+      "ro.build.version.sdk"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285781.5965078,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/000-android-sdk.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/000-android-sdk.stderr",
+    "exit": 0,
+    "finished_at": 1789285781.72475
+  },
+  {
+    "name": "android-fingerprint",
+    "argv": [
+      "/Users/lief123/Library/Android/sdk/platform-tools/adb",
+      "-s",
+      "emulator-5560",
+      "shell",
+      "getprop",
+      "ro.build.fingerprint"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285781.725465,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/001-android-fingerprint.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/001-android-fingerprint.stderr",
+    "exit": 0,
+    "finished_at": 1789285781.854651
+  },
+  {
+    "name": "android-size",
+    "argv": [
+      "/Users/lief123/Library/Android/sdk/platform-tools/adb",
+      "-s",
+      "emulator-5560",
+      "shell",
+      "wm",
+      "size"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285781.855336,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/002-android-size.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/002-android-size.stderr",
+    "exit": 0,
+    "finished_at": 1789285781.984362
+  },
+  {
+    "name": "android-density",
+    "argv": [
+      "/Users/lief123/Library/Android/sdk/platform-tools/adb",
+      "-s",
+      "emulator-5560",
+      "shell",
+      "wm",
+      "density"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285781.98485,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/003-android-density.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/003-android-density.stderr",
+    "exit": 0,
+    "finished_at": 1789285782.1070762
+  },
+  {
+    "name": "android-locale",
+    "argv": [
+      "/Users/lief123/Library/Android/sdk/platform-tools/adb",
+      "-s",
+      "emulator-5560",
+      "shell",
+      "getprop",
+      "persist.sys.locale"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285782.1079721,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/004-android-locale.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/004-android-locale.stderr",
+    "exit": 0,
+    "finished_at": 1789285782.18265
+  },
+  {
+    "name": "harmony-screen",
+    "argv": [
+      "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc",
+      "-t",
+      "127.0.0.1:15557",
+      "shell",
+      "hidumper",
+      "-s",
+      "RenderService",
+      "-a",
+      "screen"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285782.183399,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/005-harmony-screen.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/005-harmony-screen.stderr",
+    "exit": 0,
+    "finished_at": 1789285782.256261
+  },
+  {
+    "name": "harmony-product",
+    "argv": [
+      "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc",
+      "-t",
+      "127.0.0.1:15557",
+      "shell",
+      "param",
+      "get",
+      "const.product.software.version"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285782.256845,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/006-harmony-product.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/006-harmony-product.stderr",
+    "exit": 0,
+    "finished_at": 1789285782.29317
+  },
+  {
+    "name": "harmony-locale",
+    "argv": [
+      "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc",
+      "-t",
+      "127.0.0.1:15557",
+      "shell",
+      "param",
+      "get",
+      "persist.global.locale"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285782.294288,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/007-harmony-locale.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/007-harmony-locale.stderr",
+    "exit": 0,
+    "finished_at": 1789285782.3336692
+  },
+  {
+    "name": "java",
+    "argv": [
+      "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin/java",
+      "-version"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285782.3343391,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/008-java.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/008-java.stderr",
+    "exit": 0,
+    "finished_at": 1789285782.404481
+  },
+  {
+    "name": "hvigor",
+    "argv": [
+      "/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw",
+      "--version"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {
+      "JAVA_HOME": "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home",
+      "ANDROID_HOME": "/Users/lief123/Library/Android/sdk",
+      "DEVECO_SDK_HOME": "/Applications/DevEco-Studio.app/Contents/sdk",
+      "PATH": "/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Users/lief123/.nvm/versions/node/v22.19.0/bin:/opt/homebrew/bin:/Users/lief123/.local/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/opt/homebrew/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/lief123/.codex/tmp/arg0/codex-arg0R7j7j6:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/lief123/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Users/lief123/.orbstack/bin:/Users/lief123/.local/bin"
+    },
+    "started_at": 1789285782.405016,
+    "stdout": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/009-hvigor.stdout",
+    "stderr": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark/tools/kotlin-ets/verification/evidence/preflight-20260913/009-hvigor.stderr",
+    "exit": 0,
+    "finished_at": 1789285782.58597
+  }
+]

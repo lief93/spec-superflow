@@ -1,0 +1,28 @@
+package dev.ets
+
+/** Substitution is by declaration identity; a nested function's own binders remain bound. */
+fun etsSubstitute(type: EtsType, substitutions: Map<String, EtsType>): EtsType = when (type) {
+    is EtsTypeParameterType -> substitutions[type.id] ?: type
+    is EtsNamedType -> type.copy(arguments = type.arguments.map { etsSubstitute(it, substitutions) })
+    is EtsRecordType -> type.copy(fields = type.fields.mapValues { etsSubstitute(it.value, substitutions) })
+    is EtsNullableType -> when (val inner = etsSubstitute(type.inner, substitutions)) {
+        is EtsNullableType -> inner
+        EtsTypes.NULL -> inner
+        else -> EtsNullableType(inner)
+    }
+    is EtsTupleType -> type.copy(elements = type.elements.map { etsSubstitute(it, substitutions) })
+    is EtsFunctionType -> {
+        val free = substitutions - type.typeParameters.map { it.id }.toSet()
+        type.copy(parameters = type.parameters.map { etsSubstitute(it, free) },
+            result = etsSubstitute(type.result, free),
+            typeParameters = type.typeParameters.map { parameter ->
+                parameter.copy(upperBound = parameter.upperBound?.let { etsSubstitute(it, free) })
+            })
+    }
+}
+
+fun etsInstantiate(signature: EtsFunctionType, arguments: List<EtsType>): EtsFunctionType {
+    require(signature.typeParameters.size == arguments.size) { "Generic target argument count differs from declaration" }
+    val substitutions = signature.typeParameters.map { it.id }.zip(arguments).toMap()
+    return etsSubstitute(signature.copy(typeParameters = emptyList()), substitutions) as EtsFunctionType
+}

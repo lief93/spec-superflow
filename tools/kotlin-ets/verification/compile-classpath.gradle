@@ -1,0 +1,10 @@
+gradle.projectsEvaluated {
+    def app = gradle.rootProject.project(':app')
+    app.tasks.register('verificationClasspath') {
+        dependsOn app.tasks.named('compileDebugKotlin')
+        doLast {
+            def compile = app.tasks.named('compileDebugKotlin').get()
+            println('KOTLIN_ETS_CLASSPATH=' + compile.libraries.files.collect { it.absolutePath }.join(File.pathSeparator))
+        }
+    }
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "bundle-path",
+    "argv": [
+      "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc",
+      "-t",
+      "127.0.0.1:15557",
+      "shell",
+      "bm",
+      "dump",
+      "-n",
+      "com.joker.kit"
+    ],
+    "cwd": "/Users/lief123/Documents/hsbc/spec-superflow-test-quality-benchmark",
+    "environment_overrides": {},
+    "started_at": 1789287094.192689,
+    "stdout": "tools/kotlin-ets/verification/evidence/harmony-package-path/000-bundle-path.stdout",
+    "stderr": "tools/kotlin-ets/verification/evidence/harmony-package-path/000-bundle-path.stderr",
+    "exit": 0,
+    "finished_at": 1789287094.324168
+  }
+]

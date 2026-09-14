@@ -1,0 +1,45 @@
+package dev.ets.verification
+
+import android.util.Log
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
+import androidx.compose.ui.semantics.SemanticsProperties
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+
+class ModifierOrderTest {
+    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test fun geometryAndBoundaryClicks() {
+        compose.waitForIdle()
+        val density = compose.activity.resources.displayMetrics.density
+        val outer = compose.onNodeWithTag("outer-hit").fetchSemanticsNode().boundsInRoot
+        val inner = compose.onNodeWithTag("inner-hit").fetchSemanticsNode().boundsInRoot
+        assertEquals(28f * density, outer.width, 0.5f)
+        assertEquals(16f * density, outer.height, 0.5f)
+        assertEquals(20f * density, inner.width, 0.5f)
+        assertEquals(8f * density, inner.height, 0.5f)
+        Log.i("ModifierGeometry", "{\"density\":$density,\"outer\":[${outer.left},${outer.top},${outer.right},${outer.bottom}],\"inner\":[${inner.left},${inner.top},${inner.right},${inner.bottom}]}")
+        val points = listOf(
+            "outer-ring" to Offset(outer.left + 2 * density, outer.center.y),
+            "inner-ring" to Offset(inner.left - 2 * density, inner.center.y),
+            "inner-painted" to inner.center
+        )
+        var previous = 0
+        for ((name, point) in points) {
+            compose.onRoot().performTouchInput { click(point) }
+            compose.waitForIdle()
+            val text = compose.onNodeWithText("Hits ", substring = true).fetchSemanticsNode().config[SemanticsProperties.Text].single().text
+            val count = text.substringAfter("Hits ").toInt()
+            Log.i("ModifierBoundary", "{\"probe\":\"$name\",\"x\":${point.x},\"y\":${point.y},\"before\":$previous,\"after\":$count}")
+            if (name != "inner-ring") assertEquals(previous + 1, count)
+            previous = count
+        }
+    }
+}

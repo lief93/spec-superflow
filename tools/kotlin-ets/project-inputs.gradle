@@ -1,0 +1,73 @@
+import groovy.json.JsonOutput
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption
+
+// Bounded to the real JVM/Android KotlinCompile API (verified with KGP 2.1.20).
+// No configuration-name inference: libraries already carries Gradle transforms.
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    def required = { String name ->
+        def value = root.findProperty(name)?.toString()
+        if (!value) throw new GradleException("Kotlin/ETS: missing -P${name}")
+        value
+    }
+    def module = required('kotlinEtsModule')
+    def taskName = required('kotlinEtsCompileTask')
+    def output = new File(required('kotlinEtsInputsOutput'))
+    if (!module.startsWith(':')) throw new GradleException('Kotlin/ETS: module must be an absolute Gradle project path')
+    if (taskName.contains(':')) throw new GradleException('Kotlin/ETS: compile task must be a local task name')
+    if (!output.isAbsolute()) throw new GradleException('Kotlin/ETS: inputs output must be an absolute fresh path')
+    if (output.exists()) throw new GradleException("Kotlin/ETS: inputs output already exists: ${output}")
+    def project = root.findProject(module)
+    if (project == null) throw new GradleException("Kotlin/ETS: module not found: ${module}")
+    def compile = project.tasks.findByName(taskName)
+    if (compile == null) throw new GradleException("Kotlin/ETS: compile task not found: ${module}:${taskName}")
+    // Init scripts have a different classloader from project plugins. Check the
+    // actual class hierarchy rather than importing a second KGP or duck typing.
+    def type = compile.class
+    while (type != null && type.name != 'org.jetbrains.kotlin.gradle.tasks.KotlinCompile') type = type.superclass
+    if (type == null) throw new GradleException("Kotlin/ETS: ${compile.path} is not a supported JVM/Android KotlinCompile task (${compile.class.name})")
+    if (root.tasks.findByName('kotlinEtsCollectInputs') != null) {
+        throw new GradleException('Kotlin/ETS: root task kotlinEtsCollectInputs already exists')
+    }
+    root.tasks.register('kotlinEtsCollectInputs') {
+        description = 'Collect actual Kotlin compile sources and resolved libraries without running that compile task'
+        // Include producer dependencies, not the selected KotlinCompile action.
+        // Resolving files happens in doLast, after these producers have run.
+        dependsOn { compile.taskDependencies.getDependencies(compile) }
+        dependsOn compile.sources.buildDependencies, compile.javaSources.buildDependencies, compile.libraries.buildDependencies
+        doLast {
+            def checked = { Collection<File> files, String kind ->
+                def paths = new LinkedHashSet<String>()
+                files.each { file ->
+                    if (!file.exists() || !file.canRead()) {
+                        throw new GradleException("Kotlin/ETS: ${compile.path} ${kind} path is missing or unreadable: ${file.absolutePath}")
+                    }
+                    paths.add(file.toPath().toAbsolutePath().normalize().toString())
+                }
+                paths.toList()
+            }
+            def sourceFiles = (compile.sources.files + compile.javaSources.files).findAll {
+                it.name.endsWith('.kt') || it.name.endsWith('.java')
+            }
+            def sources = checked(sourceFiles, 'source').sort()
+            if (sources.isEmpty()) throw new GradleException("Kotlin/ETS: ${compile.path} has no Kotlin/Java source files")
+            if (sourceFiles.any { !it.isFile() }) throw new GradleException("Kotlin/ETS: ${compile.path} source input is not a file")
+            def libraries = new ArrayList<File>(compile.libraries.files)
+            def android = project.extensions.findByName('android')
+            if (android != null && (project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library'))) {
+                libraries.addAll(android.bootClasspath)
+            }
+            def classpath = checked(libraries, 'classpath')
+            def manifest = [schemaVersion: 1, project: root.projectDir.absolutePath,
+                module: project.path, task: compile.path, sources: sources, classpath: classpath]
+            Files.createDirectories(output.toPath().parent)
+            try {
+                Files.write(output.toPath(), (JsonOutput.prettyPrint(JsonOutput.toJson(manifest)) + '\n').getBytes('UTF-8'),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+            } catch (IOException error) {
+                throw new GradleException("Kotlin/ETS: cannot write fresh inputs manifest ${output}: ${error.message}", error)
+            }
+        }
+    }
+}
