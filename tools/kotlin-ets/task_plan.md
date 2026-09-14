@@ -5,6 +5,41 @@ evidence, not the current backlog. Use the existing non-spec development workflo
 
 ## Acceptance contract
 
+### Current completed increment: bounded images and materialized resources (2026-09-14)
+
+The legacy inventory now drives control priority. Image, Icon and bounded Coil 2
+literal-URL AsyncImage each have their own rule file (15 control families total).
+Painter resources use the shared CallRule type/value contract, not a private
+image expression parser. Static R identity, conditional resource selection and
+Painter method parameters reach native Image. Stable size modifiers, explicit
+SrcIn tint, alpha, description and bounded ContentScale are supported.
+The separate asset tool reuses the existing pure vector converter and copies
+bitmaps; it does not consume page JSON. Qualified/ambiguous resources, unsupported
+vector metadata and missing media reject. Resources still need installation into
+the target module's media directory; no automatic target-project mutation.
+
+Focused resource/real-IR negatives, shared type/slot/state regression, basic
+controls, launcher checks and the public materializer -> public compiler ->
+unchanged ETS/media SDK build passed. No install/network/visual run. ImageVector,
+default inherited tint, complete intrinsic sizing and request-object/loader
+semantics remain unsupported. See docs/compose-images.md and its evidence.
+Fresh pre-commit verification subsequently passed at the user's request; see
+docs/control-migration-verification.md. Independent review and device/visual
+acceptance were not performed by that verification turn.
+
+### Current completed increment: per-control rules and basic controls (2026-09-14)
+
+User requested broader Compose coverage and one control family per file.
+All twelve control families are now in src/ui/controls; shared CallRule dispatch,
+typed values, ordered modifiers and target validation/printing remain common.
+Added BasicText, horizontal/vertical dividers, Checkbox and Switch with explicit
+parameter limits. Real-IR positives/negatives, emitted Boolean callback execution,
+the typed state/slot/Pager regression and one minimal SDK compile passed.
+The regenerated original Page.ets is byte-identical to accepted native-06.
+No install or visual equivalence claim for new controls; unsupported styles,
+nullable selection callbacks and effectful divider thickness reject explicitly.
+See docs/compose-basic-controls.md. No new review/commit/push in this increment.
+
 ### Current completed increment: unified API dispatch (2026-09-14)
 
 User requested that Compose not maintain an independent adaptation pipeline.

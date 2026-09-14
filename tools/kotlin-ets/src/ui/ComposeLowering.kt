@@ -113,15 +113,23 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink) {
                 override fun lowerUi(call: IrCall, language: Language, scope: Scope) =
                     if (symbolName(call.symbol.owner) == "kotlin.repeat") repeatUi(call, scope) else null
             },
-            ComposeLayoutRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
+            ComposeColumnRule(target, ::uiLambdaBody, ::modifiers),
+            ComposeRowRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
+            ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
+            ComposeSpacerRule(target, ::modifiers),
             ComposeTextRule(target, ::colorValue, ::dimension,
                 { usesMaterialTypography = true; textContext }, ::modifiers),
             ComposeButtonRule(target, ::uiLambdaBody, ::callback, ::modifiers),
-            object : ComposeControlRule(::modifiers) {
-                override fun control(call: IrCall, language: Language, scope: Scope) =
-                    if (symbolName(call.symbol.owner) == "androidx.compose.foundation.pager.HorizontalPager")
-                        pager(call, scope) else null
-            },
+            ComposeBasicTextRule(target, ::modifiers),
+            ComposeHorizontalDividerRule(target, ::colorValue, ::dimension, ::modifiers),
+            ComposeVerticalDividerRule(target, ::colorValue, ::dimension, ::modifiers),
+            ComposeCheckboxRule(target, ::modifiers),
+            ComposeSwitchRule(target, ::modifiers),
+            ComposeImageRule(target, ::modifiers),
+            ComposeIconRule(target, ::colorValue, ::modifiers),
+            ComposeAsyncImageRule(target, ::modifiers),
+            ComposeHorizontalPagerRule(target, ::pagerBinding, { binding(it) }, { body, scope -> uiBody(body, scope) },
+                ::indexItems, ::modifiers),
         )
     }
 
@@ -389,21 +397,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink) {
             EtsParameter(binding(parameter).symbol), uiBody(fn.body!!, child), language.source(call)))
     }
 
-    private fun pager(call: IrCall, scope: Scope): ComposeElement {
-        checkArguments(call, setOf("state", "modifier", "pageContent"))
+    private fun pagerBinding(call: IrCall, scope: Scope): ComposePagerBinding {
         val state = pagerFor(argument(call, "state"), scope, call)
-        val fn = lambda(argument(call, "pageContent"), scope) ?: diagnostics.unsupported(call, "Pager requires page content")
-        val parameter = fn.valueParameters.singleOrNull() ?: diagnostics.unsupported(fn, "Pager content requires page index")
-        val child = scope.fork()
-        child.bindings[parameter.symbol] = binding(parameter)
-        val source = language.source(call)
-        val current = field("${state.name}_currentPage", EtsTypes.NUMBER, call)
-        val index = EtsSymbol("ui:pager:${call.startOffset}", "index", EtsTypes.NUMBER, source)
-        val onChange = EtsLambda(listOf(EtsParameter(index)), listOf(EtsExpressionStatement(EtsAssignment(current, EtsReference(index), source))), EtsTypes.VOID, source)
-        return ComposeElement(native("Swiper", listOf(field("${state.name}_controller", EtsNamedType("SwiperController"), call)), call,
-            listOf(EtsUiForEach(indexItems(expression(state.count, state.scope), call), EtsParameter(binding(parameter).symbol), uiBody(fn.body!!, child), source)))
-            .copy(attributes = listOf(attribute("index", listOf(current), call), attribute("loop", listOf(literal(false, call)), call),
-                attribute("indicator", listOf(literal(false, call)), call), attribute("onChange", listOf(onChange), call))), setOf("padding", "onClick"))
+        return ComposePagerBinding(expression(state.count, state.scope),
+            field("${state.name}_currentPage", EtsTypes.NUMBER, call),
+            field("${state.name}_controller", EtsNamedType("SwiperController"), call))
     }
 
     private fun indexItems(count: EtsExpression, owner: IrElement): EtsExpression {
@@ -586,7 +584,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink) {
                 val keys = when (api) {
                     "androidx.compose.foundation.layout.width", "androidx.compose.foundation.layout.fillMaxWidth" -> setOf("width")
                     "androidx.compose.foundation.layout.height", "androidx.compose.foundation.layout.fillMaxHeight" -> setOf("height")
-                    "androidx.compose.foundation.layout.fillMaxSize" -> setOf("width", "height")
+                    "androidx.compose.foundation.layout.fillMaxSize", "androidx.compose.foundation.layout.size" -> setOf("width", "height")
                     "androidx.compose.foundation.layout.padding" -> setOf("padding")
                     "androidx.compose.foundation.background" -> setOf("backgroundColor")
                     "androidx.compose.ui.platform.testTag" -> setOf("id")
@@ -597,6 +595,24 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink) {
                 // must also keep their own layer instead of overwriting an earlier operation.
                 if ("padding" in seen || keys.any { it in seen }) break
                 when (api) {
+                    "androidx.compose.foundation.layout.size" -> {
+                        checkArguments(call, setOf("size", "width", "height"))
+                        for (name in listOf("width", "height")) {
+                            val value = argument(call, "size") ?: argument(call, name)
+                                ?: diagnostics.unsupported(call, "Missing size $name")
+                            val emitted = dimension(value, scope, "dp")
+                            val scalar = (dereference(value, scope) as? IrCall)?.extensionReceiver
+                            if (scalar == null || !stableRead(scalar, scope)) diagnostics.unsupported(value,
+                                "size currently requires stable dimensions to preserve evaluation count")
+                            if (name == "width") {
+                                if (!nextWidth) attributes[name] = emitted
+                                nextWidth = true
+                            } else {
+                                if (!nextHeight) attributes[name] = emitted
+                                nextHeight = true
+                            }
+                        }
+                    }
                     "androidx.compose.foundation.layout.width", "androidx.compose.foundation.layout.height" -> {
                         val name = keys.single()
                         checkArguments(call, setOf(name))

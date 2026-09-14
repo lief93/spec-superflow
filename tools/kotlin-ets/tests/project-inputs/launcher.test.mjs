@@ -29,6 +29,12 @@ test('explicit compile task supports non-Android modules, without variant guessi
   assert.ok(!gradleArguments(options, '/tmp/inputs.json').includes('--offline'));
 });
 
+test('project entry retains the materialized image registry path', () => {
+  const options = parseOptions(['--project', '/tmp/p', '--module', ':app', '--variant', 'debug',
+    '--entry', 'sample.Page', '--out', '/tmp/Page.ets', '--image-resources', '/tmp/image assets/image-resources.properties']);
+  assert.equal(options.imageResources, '/tmp/image assets/image-resources.properties');
+});
+
 test('invalid or ambiguous project input is rejected before invoking Gradle', () => {
   const base = ['--project', '/tmp/p', '--module', ':app', '--variant', 'debug', '--entry', 'sample.Page', '--out', '/tmp/Page.ets'];
   for (const extra of [['--variant', 'release'], ['--classpath', 'other.jar'], ['--compile-task', 'compileKotlin'], ['--out-dir', '/tmp/modules']]) {

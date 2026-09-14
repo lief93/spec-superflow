@@ -18,7 +18,7 @@ fun main(arguments: Array<String>) {
         while (index < arguments.size) {
             val item = arguments[index++]
             if (item.startsWith("--")) {
-                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file")) { "Unknown option $item" }
+                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources")) { "Unknown option $item" }
                 require(index < arguments.size) { "Missing value for $item" }
                 options[item] = arguments[index++]
             } else sources.add(item)
@@ -34,11 +34,12 @@ fun main(arguments: Array<String>) {
             File(path).readLines().filter { it.isNotBlank() }.joinToString(File.pathSeparator)
         } ?: requireNotNull(System.getenv("KOTLIN_ETS_STDLIB")) { "Kotlin stdlib path missing" }
         val compilerArgs = listOf("-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", classpath) + sources
+        val images = options["--image-resources"]?.let { ImageResources.read(File(it).absoluteFile) } ?: ImageResources()
         val target = withKotlinFrontend(compilerArgs) { frontend ->
             val module = frontend.module
             val diagnostics = DiagnosticSink()
             val stdlib = StandardLibraryRules()
-            val backend = EtsBackend(diagnostics, listOf(stdlib))
+            val backend = EtsBackend(diagnostics, listOf(stdlib, images))
             if (mode == "page") {
                 backend.validateSource(module)
                 val targetModule = ComposeLowering(backend.language, diagnostics).lower(module,

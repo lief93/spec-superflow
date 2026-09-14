@@ -44,6 +44,9 @@ interface Language {
 }
 
 fun interface CallRule {
+    /** Platform value representation; the shared call checker still validates every result. */
+    fun mapType(type: IrType, language: Language): EtsType? = null
+
     /** A typed value, or null to decline. Never return void for an object-valued call. */
     fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression?
 

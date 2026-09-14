@@ -111,7 +111,7 @@ private fun verifyUnifiedRules(classpath: String, file: String) {
         val diagnostics = DiagnosticSink()
         val ordinary = EtsBackend(diagnostics, listOf(StandardLibraryRules()))
         val unsupported = runCatching { ComposeLowering(ordinary.language, diagnostics).lower(module, "unifiedapi.RulePage") }.exceptionOrNull()
-        check(unsupported is Unsupported && "HorizontalDivider" in unsupported.message.orEmpty())
+        check(unsupported is Unsupported && "CircularProgressIndicator" in unsupported.message.orEmpty())
         var values = 0
         var controls = 0
         val rule = object : CallRule {
@@ -122,7 +122,7 @@ private fun verifyUnifiedRules(classpath: String, file: String) {
                 return EtsLiteral(73, EtsTypes.NUMBER, language.source(call))
             }
             override fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? {
-                if (symbolName(call.symbol.owner) != "androidx.compose.material3.HorizontalDivider") return null
+                if (symbolName(call.symbol.owner) != "androidx.compose.material3.CircularProgressIndicator") return null
                 controls++
                 val source = language.source(call)
                 val symbol = EtsSymbol("test:Divider", "Divider", EtsFunctionType(emptyList(), EtsTypes.VOID), source, external = true)

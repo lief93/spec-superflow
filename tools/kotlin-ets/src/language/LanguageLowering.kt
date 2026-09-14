@@ -34,6 +34,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     override fun source(element: IrElement): SourceSpan = sourceSpan(element, diagnostics)
 
     override fun type(type: IrType): EtsType {
+        callRules.firstNotNullOfOrNull { it.mapType(type.makeNotNull(), this) }?.let { mapped ->
+            return if (type.isNullable()) EtsNullableType(mapped) else mapped
+        }
         val simple = type as? IrSimpleType ?: unsupportedType(type)
         val owner = simple.classifier.owner
         if (owner is IrTypeParameter) {

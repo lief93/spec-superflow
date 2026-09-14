@@ -293,7 +293,7 @@ const typedCompile = run('typed-boundary-compile', java, ['-cp', dependencies.jo
   '-classpath', dependencies.join(':'), '-d', typedJar, ...productionSources, join(here, 'TypedBoundaryProbe.kt')]);
 assert.equal(typedCompile.status, 0, typedCompile.stderr);
 const typedProbe = run('typed-boundary-probe', java, ['-cp', `${typedJar}:${dependencies.join(':')}`,
-  'ui.test.TypedBoundaryProbeKt', classpath, fixture]);
+  'ui.test.TypedBoundaryProbeKt', classpath, fixture, join(here, 'UnifiedApi.kt')]);
 assert.equal(typedProbe.status, 0, `${typedProbe.stdout}\n${typedProbe.stderr}`);
 assert.ok(typedProbe.stdout.includes('PASS typed UI bindings'));
 for (const file of implementation) assert.equal(hash(file.path), file.sha256, 'Compiler changed during UI regression');

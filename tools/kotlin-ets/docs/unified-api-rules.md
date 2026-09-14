@@ -25,7 +25,8 @@ than being rejected solely by their framework package prefix.
 - `core/Contract.kt`: contexts, results, rule interface, priority and consumption.
 - `language/LanguageLowering.kt`: ordinary language lowering and source fallback;
   calls the shared dispatcher, without its former private adapter type checker.
-- `ui/ComposeControlRules.kt`: independent layout, text and button rules. Each
+- `ui/controls/*Rule.kt`: one control family per file, with the common
+  `ui/ComposeControlRule.kt` modifier-decoration contract. Each
   receives the specific content/value/modifier operations it needs, not the
   entire mutable ComposeLowering object.
 - `ui/ArkUiCalls.kt`: typed target API signatures/construction, no output strings.
@@ -37,15 +38,16 @@ To add an external control, implement a `CallRule.lowerUi` rule using resolved
 symbols and typed nodes, then register it with the backend. Implement value or
 effect hooks on the same rule where the API family needs them. The test
 `tests/ui/UnifiedApi.kt` + `TypedBoundaryProbe.kt` shows one backend registration
-handling actual Compose HorizontalDivider and currentCompositeKeyHash calls.
-That probe is not a production Divider mapping or a plugin-loader feature.
+handling actual Compose CircularProgressIndicator and currentCompositeKeyHash calls.
+That probe is not a production progress-indicator mapping or a plugin-loader feature.
 Built-in scoped rules have priority over backend rules; unsupported arguments of
 an already claimed API still reject rather than bypassing its checks.
 
 Ordered Modifier application and remembered-state declarations retain specialized
 framework structure handling. This increment does not claim that all UI-specific
 algorithms have disappeared or that every responsibility is already extracted
-from the coordinator. No new control coverage or source naming policy is claimed.
+from the coordinator. The follow-up [basic controls](compose-basic-controls.md)
+increment adds controls without changing source naming policy.
 
 ## Focused verification
 

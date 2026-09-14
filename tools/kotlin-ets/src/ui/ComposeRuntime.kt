@@ -12,6 +12,8 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
             }
             if (id?.startsWith("compose:") == true) {
                 val valid = when (id) {
+                    "compose:imageTint" -> node is EtsReference && node.symbol.name == "__etsImageTint" &&
+                        node.type == EtsFunctionType(listOf(EtsTypes.NUMBER), EtsNamedType("ColorFilter"))
                     "compose:nearestTouch" -> node is EtsReference && node.symbol.name == "__etsNearestTouch" &&
                         node.type == EtsFunctionType(listOf(EtsNamedType("Array", listOf(EtsNamedType("TouchTestInfo"))),
                             EtsTypes.NUMBER, EtsTypes.NUMBER, EtsTypes.NUMBER), EtsNamedType("TouchResult"))
@@ -24,6 +26,7 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
             }
         } } }
         return languageRuntime.declarations(program) +
+            (if ("compose:imageTint" in required) imageTintSupport else emptyList()) +
             (if ("compose:materialTypography" in required) materialTypographySupport else emptyList()) +
             (if ("compose:nearestTouch" in required) touchTargetSupport else emptyList())
     }

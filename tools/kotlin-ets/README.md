@@ -8,6 +8,10 @@ This first slice is not a general Kotlin compiler or an Android compatibility
 runtime. See the tests and verification reports before claiming a feature works
 on a device. In particular, host-language execution is not ArkTS SDK validation.
 
+Image/Icon and bounded URL AsyncImage support: [usage and limits](docs/compose-images.md).
+Local image assets use the [materializer](docs/image-resources.md), which reuses
+the old vector converter without consuming old page JSON.
+
 ## Architecture
 
 ```text
@@ -31,6 +35,7 @@ Kotlin sources + real dependency classpath
 | `src/target/` | Compiler-independent target tree, validation and syntax-only printer |
 | `src/output/` | Source-file ownership, typed dependencies and flat module output |
 | `src/ui/` | Compose controls, remembered UI state, content slots and ordered modifiers |
+| `src/ui/controls/` | One file per control family, all implementing the shared call-rule contract |
 | `src/core/Main.kt` | CLI, output assembly and failure handling |
 | `verification/` | Separate native hosts, generation identity, builds, installation and comparisons |
 
@@ -43,6 +48,9 @@ The four development lanes share [these fixed interfaces](docs/shared-contracts.
 Diagnostics may be serialized to JSON, but serialized JSON is not a compiler
 input. The old Python implementation remains independent and unchanged by this
 module. Its adapters are not automatically loaded here.
+
+See [Compose basic controls](docs/compose-basic-controls.md) for current control
+coverage, supported parameters, explicit limitations and focused test commands.
 
 ## Run
 

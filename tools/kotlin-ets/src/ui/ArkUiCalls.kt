@@ -3,6 +3,7 @@ package dev.ets
 
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.expressions.IrExpression
 
 /** Typed target API construction shared by Compose rules; no source-code output. */
 internal class ArkUiCalls(private val language: Language, val diagnostics: DiagnosticSink) {
@@ -24,9 +25,11 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
     fun attribute(name: String, args: List<EtsExpression>, owner: IrElement): EtsCall {
         val value = args.singleOrNull() ?: diagnostics.unsupported(owner, "Target attribute requires one argument: $name")
         val expected = when (name) {
-            "id" -> EtsTypes.STRING
-            "enabled", "loop", "indicator" -> EtsTypes.BOOLEAN
-            "index", "fontSize", "fontColor", "backgroundColor" -> EtsTypes.NUMBER
+            "id", "accessibilityText", "accessibilityLevel" -> EtsTypes.STRING
+            "enabled", "loop", "indicator", "select", "vertical" -> EtsTypes.BOOLEAN
+            "index", "fontSize", "fontColor", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity" -> EtsTypes.NUMBER
+            "objectFit" -> EtsNamedType("ImageFit")
+            "colorFilter" -> EtsNamedType("ColorFilter")
             "onClick" -> EtsFunctionType(emptyList(), EtsTypes.VOID)
             "onChange" -> EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.VOID)
             "onChildTouchTest" -> EtsFunctionType(listOf(EtsNamedType("Array", listOf(EtsNamedType("TouchTestInfo")))), EtsNamedType("TouchResult"))
@@ -44,9 +47,12 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
     fun native(name: String, args: List<EtsExpression>, owner: IrElement, children: List<EtsStatement>? = null): EtsUiElement {
         val expected = when (name) {
             "Text" -> listOf(EtsTypes.STRING)
+            "Image" -> listOf(args.singleOrNull()?.type?.takeIf { it == ImageResources.RESOURCE || it == EtsTypes.STRING }
+                ?: diagnostics.unsupported(owner, "Image requires Resource or URL string"))
             "Stack" -> listOf(stackOptions(owner).type)
             "Swiper" -> listOf(EtsNamedType("SwiperController"))
-            "Column", "Row", "Button" -> emptyList()
+            "Column", "Row", "Button", "Divider", "Checkbox" -> emptyList()
+            "Toggle" -> listOf(EtsRecordType("ToggleOptions", mapOf("type" to EtsNamedType("ToggleType"), "isOn" to EtsTypes.BOOLEAN)))
             else -> diagnostics.unsupported(owner, "Unknown target control: $name")
         }
         return EtsUiElement(call(name, args, owner, expected), children)
@@ -62,6 +68,15 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
         EtsObject(values, EtsRecordType(name, values.mapValues { it.value.type }), language.source(owner))
 
     fun stackOptions(owner: IrElement) = record("StackOptions", linkedMapOf("alignContent" to enumValue("Alignment", "TopStart", owner)), owner)
+
+    fun booleanChange(expression: IrExpression, scope: Scope): EtsCall {
+        val callback = language.expression(expression, scope)
+        val expected = EtsFunctionType(listOf(EtsTypes.BOOLEAN), EtsTypes.VOID)
+        if (!etsAssignable(callback.type, expected))
+            diagnostics.unsupported(expression, "Selection callback requires a non-null (Boolean) -> Unit value")
+        // onChange is overloaded by control: selection callbacks differ from Swiper's numeric index.
+        return call("onChange", listOf(callback), expression, listOf(expected))
+    }
 
     fun checkArguments(call: IrCall, supported: Set<String>) {
         call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
