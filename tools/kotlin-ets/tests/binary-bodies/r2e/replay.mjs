@@ -62,8 +62,24 @@ assert.ok(['UNSUPPORTED', 'INVALID_TARGET'].includes(rejection.code));
 assert.equal(rejection.source.file, complete.application);
 assert.ok(rejection.source.start >= 0 && rejection.source.end > rejection.source.start);
 assert.equal(existsSync(unavailable), false);
+const invalidBounds = [];
+for (const [name, call] of [
+  ['dependent-bound', 'receiver.bounded<Int, String>("wrong") { it }'],
+  ['nonnull-bound', 'receiver.nonNull<String?>(null) { it }'],
+]) {
+  const source = join(work, `${name}.kt`);
+  const output = join(work, `${name}.ets`);
+  writeFileSync(source, `package memberconsumer\nfun invalid(receiver: memberbinary.FinalMember) = ${call}\n`);
+  const failure = JSON.parse(run(name, 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.MainKt', '--mode', 'language',
+    '--classpath', classpath, '--out', output, source], 1));
+  assert.equal(failure.code, 'COMPILATION_REJECTED');
+  const evidence = JSON.parse(readFileSync(join(work, `${name}.json`)));
+  assert.match(evidence.stderr, /within its bounds|subtype of|upper bound/i);
+  assert.equal(existsSync(output), false);
+  invalidBounds.push(failure);
+}
 assert.ok(implementation.every(input => hash(input.path) === input.sha256), 'Production changed during replay');
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, expected, actual, output, sha256: hash(output),
   implementation, producerInputs: inputs, receiverTypes: 'explicit CallRule and test-host types; not class translation',
-  unmappedCli: rejection, strictHostTypecheck: true, sdk: 'not run', device: 'not run' }, null, 2));
+  unmappedCli: rejection, invalidBounds, strictHostTypecheck: true, sdk: 'not run', device: 'not run' }, null, 2));
 console.log(`PASS ${actual.length} JVM/host member-inline pairs with explicit receiver type mapping; unmapped CLI rejects`);

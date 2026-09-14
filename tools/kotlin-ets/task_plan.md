@@ -67,32 +67,27 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | Order | Remaining work | Required evidence |
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
-| R2.2 | Complete the selected dependency linking family under that contract, including generic/member substitutions and call-site binding; investigate KLIB through a separate official-loader proof, not the JVM signature reader | JVM/ETS same-input results, real loaded body provenance, cross-file/runtime closure, unsupported formats explicitly rejected |
+| R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
 | R2.3 | Remaining declaration/call semantics: class property overrides, inherited default arguments, constructor forms, virtual overloads and remaining generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
 ## Next action
 
-Continue R2.2. The bounded method-generic member route now reuses the existing
-official registration/deserializer/inliner and passes frozen IR plus strict host
-type/result checks; see docs/r2e-binary-members.md. Binary provenance is excluded
-from source-owned declaration emission. Do not reimplement generic substitution.
-The separate official KLIB proof now loads real bodies and links three modules
-through the same ETS backend; see docs/klib-loader-proof.md. Public KLIB input,
-session/body-origin and phase-context integration are not implemented by that
-proof. The JVM signature reader is not a KLIB frontend.
-Stateless member extension-receiver binding now also reuses that existing
-deserializer/inliner: run-KLzVJm plus replay-SCNjcq validate both receiver
-identities, generic defaults and result/effect order. Only its blanket guard was
-removed; see docs/r2e-binary-members.md.
-Next close the bounded generic upper-bound/call-site combinations under the
-same dependency-body contract. KLIB production session/phase integration remains
-separate from its accepted proof. Keep receiver/state/format exclusions explicit;
-do not start page-specific features or jump to class property overrides.
+Continue R2.3 with source class property overrides. Retain official property,
+getter/setter and backing-field identities; preserve separate base/derived storage
+and virtual accessor dispatch. Do not flatten properties just to reconstruct them
+or invent per-page rules. Then inherited defaults, constructor forms, virtual
+overloads and remaining source generic bounds/variance combinations in that row.
 
-R2.1 is accepted for the documented bounded body/replacement contract, not a
-general dependency linker. Proceed to R2.2, then R2.3, R2.4 and the R2 gate. R3-R7
+R2.2's selected binary-inline family and its required separate KLIB proof are
+accepted with the documented exclusions. Public KLIB input/session/phase support
+is not implemented or claimed by the proof; ordinary JVM bytecode is not IR.
+See docs/r2e-binary-members.md and docs/klib-loader-proof.md. Do not reimplement
+generic substitution or return to already accepted bounded dependency work.
+
+R2.1 and R2.2 are accepted for their documented bounded contracts, not a
+general dependency linker. Proceed to R2.3, R2.4 and the R2 gate. R3-R7
 retain the deliverables above; each receives its finite implementation/test queue
 when its prerequisites are accepted. No claim that pending stages are implemented.
 

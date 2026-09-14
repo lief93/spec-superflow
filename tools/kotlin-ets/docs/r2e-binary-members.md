@@ -54,6 +54,28 @@ line project-adapter loader. Unmapped command-line generation must still reject.
 
 ## Tests and evidence
 
+### R2.2 bounded upper-bound closure
+
+Existing official `InlineFunctionBodyPreprocessor.InlinerTypeRemapper` recursively
+erases a type-parameter upper bound, substitutes by classifier identity and
+merges nullability. The registered original type parameters already preserve
+`T : R` and `T : Any`. No new production substitution code was needed.
+
+- `run-OLRVgz` proves 26 original binary inline blocks, dependent-bound parent/
+  index/classifier identity, non-null bounds, transitive relay calls and the
+  existing seven closed boundaries after producer-source removal.
+- `run-OLRVgz/replay-VVr6bu` passes strict host types and three JVM/ETS-host
+  result/effect-trace pairs. New combinations include `<R=String?, T=String>`,
+  Int overflow with callback effects, and a non-null generic default.
+- Two public-CLI negatives pass invalid `<R=Int, T=String>` and nullable `T`
+  against `T : Any` to the official frontend. Both reject the bounds with no
+  target file. No backend-specific upper-bound checker was invented.
+- This closes the selected R2.2 JVM-inline family alongside the required separate
+  KLIB proof. Stateful/generic binary classes, arbitrary class/interface bounds,
+  constructors, context/reified and unprovided bodies remain explicit boundaries,
+  not silently generated placeholders. Class declaration variance and dispatch
+  combinations stay in R2.3; this is not all of R2.
+
 ### R2.2 member extension receiver increment
 
 - `run-6YVxSz`: new JVM oracle cases pass, but the old extension-receiver guard
@@ -102,7 +124,7 @@ node tests/binary-bodies/r2e/replay.mjs tests/binary-bodies/r2e/.work/run-REPLAC
 ```
 
 The focused test builds real producer JARs and removes the producer source copy
-before consuming them. It now checks twenty official inline blocks, canonical receiver
+before consuming them. It now checks twenty-six official inline blocks, canonical receiver
 identities, signature-only refusal, six unsupported member cases and a missing
 `SourceFile` diagnostic. A separate JVM oracle records argument/callback order.
 The target replay compares the same inputs and effect trace using generated ETS

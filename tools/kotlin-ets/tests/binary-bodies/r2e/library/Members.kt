@@ -9,6 +9,8 @@ class FinalMember {
     inline fun <T> relay(value: T): T = value
     inline fun <T> extend(value: T, action: (T) -> T): T = value.selectFrom(action = action)
     inline fun <T> T.selectFrom(fallback: T = this, action: (T) -> T): T = relay(action(fallback))
+    inline fun <R, T : R> bounded(value: T, action: (R) -> R): R = relay(action(value))
+    inline fun <T : Any> nonNull(value: T, fallback: T = value, action: (T) -> T): T = relay(action(fallback))
 }
 
 class PeerMember {

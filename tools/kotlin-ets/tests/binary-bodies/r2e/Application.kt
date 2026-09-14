@@ -60,5 +60,12 @@ fun scenario(receiver: FinalMember, peer: PeerMember, seed: Int): String {
         value + 4
     }
     val tenth = receiver.extend<String?>(value = null) { it }
-    return "$first/$second/$third/$fourth/$fifth/$sixth/$seventh/$eighth/$ninth/$tenth/${effects.count}/${effects.trace}"
+    val eleventh = receiver.bounded<String?, String>(value = "bounded") { it }
+    val twelfth = receiver.bounded<Int, Int>(value = effects.value(seed, "O")) { value ->
+        effects.count += 1
+        effects.trace += "Q"
+        value + 6
+    }
+    val thirteenth = receiver.nonNull(value = "nonnull") { it }
+    return "$first/$second/$third/$fourth/$fifth/$sixth/$seventh/$eighth/$ninth/$tenth/$eleventh/$twelfth/$thirteenth/${effects.count}/${effects.trace}"
 }

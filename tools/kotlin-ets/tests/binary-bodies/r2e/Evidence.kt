@@ -41,7 +41,7 @@ fun main(args: Array<String>) {
                     element.acceptChildrenVoid(this)
                 }
             })
-            check(count == 10) { "Expected ten unavailable member calls, got $count" }
+            check(count == 13) { "Expected thirteen unavailable member calls, got $count" }
             println("PASS signature-only member bodies remain unavailable")
             return@withKotlinFrontend
         }
@@ -53,7 +53,7 @@ fun main(args: Array<String>) {
                 element.acceptChildrenVoid(this)
             }
         })
-        check(blocks.size == 20) { "Expected ten direct and ten transitive expansions, got ${blocks.size}" }
+        check(blocks.size == 26) { "Expected thirteen direct and thirteen transitive expansions, got ${blocks.size}" }
         val scenario = session.module.files.single().declarations.filterIsInstance<IrSimpleFunction>().single { it.name.asString() == "scenario" }
         val receivers = scenario.valueParameters.take(2).map { it.type.classOrNull!! }.toSet()
         check(receivers.size == 2)
@@ -85,6 +85,23 @@ fun main(args: Array<String>) {
                     check(function.valueParameters.first().defaultValue != null)
                 }
             }
+            if (function.name.asString() == "bounded") {
+                val (result, value) = function.typeParameters
+                check(result.parent === function && value.parent === function)
+                check(result.index == 0 && value.index == 1)
+                check(result.name.asString() == "R" && value.name.asString() == "T")
+                check(result.superTypes.single().isNullableAny())
+                check(value.superTypes.single().classifierOrNull === result.symbol)
+                check(function.returnType.classifierOrNull === result.symbol)
+                check(function.valueParameters.first().type.classifierOrNull === value.symbol)
+            }
+            if (function.name.asString() == "nonNull") {
+                val parameter = function.typeParameters.single()
+                check(parameter.parent === function && parameter.index == 0)
+                check(parameter.superTypes.single().isAny())
+                check(function.returnType.classifierOrNull === parameter.symbol)
+                check(function.valueParameters.first().type.classifierOrNull === parameter.symbol)
+            }
             check(loaded.declaration === function && loaded.body === function.body)
             check(loaded.source.file == block.inlinedFunctionFileEntry.name)
             check(loaded.source.start >= 0 && loaded.source.end > loaded.source.start)
@@ -98,6 +115,6 @@ fun main(args: Array<String>) {
         check(memberOwners == receivers)
         File(args[2], "production.ir").writeText(session.module.dump())
         File(args[2], "bodies.txt").writeText(report.joinToString("\n"))
-        println("PASS twenty official member blocks, generic extension receivers/defaults, original receiver classifiers and binary provenance")
+        println("PASS twenty-six official member blocks, generic bounds/receivers/defaults, original classifiers and binary provenance")
     }
 }

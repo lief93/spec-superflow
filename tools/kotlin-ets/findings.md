@@ -30,6 +30,9 @@ transitive serialized inline loading and typed UI modules have since progressed.
   inliner and our registered signature types. The missing integration was a
   blanket guard, not a missing substitution algorithm. Actual serialized
   generic extension bodies now pass both IR identity and JVM/ETS-host checks.
+- Dependent (`T : R`) and non-null (`T : Any`) binary method bounds also compose
+  through the existing official InlinerTypeRemapper. New exact-input tests
+  establish coverage instead of adding a second upper-bound/substitution engine.
 
 ## Historical observations
 

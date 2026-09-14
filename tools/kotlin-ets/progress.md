@@ -1,5 +1,18 @@
 # Execution progress
 
+## 2026-09-14: R2.2 upper-bound closure, continue through remaining plan
+
+- User requested automatic continuation through all agreed stages, prioritizing
+  official reuse and the ETS backend. Main-only work continues, no agents/timers.
+  No interrupted compiler process remained; previous commits were published.
+- Official InlinerTypeRemapper already supplies recursive bound erasure,
+  classifier substitution and nullability; no production changes were needed.
+- run-OLRVgz proves 26 binary inline blocks, original dependent/non-null upper
+  bounds, source deletion and all existing boundaries. replay-VVr6bu passes three
+  strict-host JVM/ETS result/effect pairs plus two invalid-bound CLI negatives.
+- Accepted R2.2's finite serialized-inline family and separate KLIB proof, not
+  universal JAR/KLIB runtime support. R2.3 is next; R2 as a whole stays incomplete.
+
 ## 2026-09-14: R2.2 member extension receivers
 
 - Re-read official FunctionInlining's unified parameter/argument pairing,
