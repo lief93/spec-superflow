@@ -17,6 +17,10 @@ transitive serialized inline loading and typed UI modules have since progressed.
   reasons; inline diagnostics consume the provider result. A checked target
   replacement is not a Kotlin body. Actual signature-only and replacement tests
   prove that distinction. See docs/binary-bodies.md for evidence and R2.2 gaps.
+- R2.2 method-generic members can reuse the same official registration and
+  inliner as top-level generic functions. The new failure was in our backend's
+  source-owner query, not a missing Kotlin generic substitution algorithm:
+  binary provenance must not qualify as an input source class/module.
 
 ## Historical observations
 

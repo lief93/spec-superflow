@@ -38,7 +38,9 @@ const application = join(consumer, 'Application.kt');
 const oracle = join(work, 'oracle.jar');
 run('oracle-build', 'bash', [compiler, '-classpath', `${cp}:${library}`, application, join(consumer, 'Oracle.kt'), '-d', oracle]);
 const expected = run('jvm', 'java', ['-cp', `${cp}:${library}:${oracle}`, 'memberconsumer.OracleKt']).trim().split('\n');
-assert.deepEqual(expected, ['1/7/10/7/-6/15/RBALRCDPREFRHGI', '1/7/7/7/-6/15/RBALRCDPREFRHGI', '1/7/-2147483640/7/-6/15/RBALRCDPREFRHGI']);
+assert.deepEqual(expected, ['1/7/10/7/-6/3/fallback/text/18/RBALRCDPREFRHGIRJK',
+  '1/7/7/7/-6/0/fallback/text/18/RBALRCDPREFRHGIRJK',
+  '1/7/-2147483640/7/-6/-2147483647/fallback/text/18/RBALRCDPREFRHGIRJK']);
 const evidence = join(work, 'evidence.jar');
 run('evidence-build', 'bash', [compiler, ...frozen, '-d', evidence]);
 function inspect(name, jar, source, mode) {
@@ -72,5 +74,5 @@ negatives.push({ name: 'no-source', jar: 'no-source.jar', source: application, m
 assert.ok(production.every(item => hash(item.snapshot) === item.sha256), 'Frozen focused snapshot changed');
 writeFileSync(join(work, 'producers.json'), JSON.stringify(identities(readdirSync(work).filter(name => name.endsWith('.jar')).map(name => join(work, name))), null, 2));
 writeFileSync(join(work, 'complete.json'), JSON.stringify({ expected, negatives, application, focusedSnapshotUnchanged: true,
-  producerSourceAbsent: true, officialInlineBlocks: 8, hostParity: 'pending shared frozen replay' }, null, 2));
+  producerSourceAbsent: true, officialInlineBlocks: 14, hostParity: 'pending shared frozen replay' }, null, 2));
 console.log('PASS frozen focused member-inline checks; no public backend or SDK claim');

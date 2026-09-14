@@ -27,6 +27,13 @@ const output = join(work, 'Application.ets');
 run('generate-with-explicit-type-adapter', 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.r2e.ReplayKt',
   classpath, complete.application, output]);
 const code = readFileSync(output, 'utf8');
+const typecheck = join(work, 'Application.ts');
+writeFileSync(typecheck, code);
+writeFileSync(join(work, 'Receivers.ts'), readFileSync(join(here, 'Receivers.ets')));
+const checked = ts.createProgram([typecheck], { target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.CommonJS, strict: true, noEmit: true, types: [] });
+assert.deepEqual(ts.getPreEmitDiagnostics(checked).map(d =>
+  ts.flattenDiagnosticMessageText(d.messageText, '\n')), []);
 const parsed = ts.createSourceFile('Application.ets', code, ts.ScriptTarget.Latest, true);
 assert.deepEqual(parsed.parseDiagnostics, []);
 const scenario = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name.text === 'scenario');
@@ -52,9 +59,11 @@ const unavailable = join(work, 'unmapped.ets');
 const rejection = JSON.parse(run('unmapped-cli', 'java', ['-cp', `${cp}:${jar}`, 'dev.ets.MainKt', '--mode', 'language',
   '--classpath', classpath, '--out', unavailable, complete.application], 2));
 assert.ok(['UNSUPPORTED', 'INVALID_TARGET'].includes(rejection.code));
+assert.equal(rejection.source.file, complete.application);
+assert.ok(rejection.source.start >= 0 && rejection.source.end > rejection.source.start);
 assert.equal(existsSync(unavailable), false);
 assert.ok(implementation.every(input => hash(input.path) === input.sha256), 'Production changed during replay');
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, expected, actual, output, sha256: hash(output),
   implementation, producerInputs: inputs, receiverTypes: 'explicit CallRule and test-host types; not class translation',
-  unmappedCli: rejection, sdk: 'not run', device: 'not run' }, null, 2));
+  unmappedCli: rejection, strictHostTypecheck: true, sdk: 'not run', device: 'not run' }, null, 2));
 console.log(`PASS ${actual.length} JVM/host member-inline pairs with explicit receiver type mapping; unmapped CLI rejects`);

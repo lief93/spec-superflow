@@ -7,14 +7,21 @@ import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import org.jetbrains.kotlin.load.kotlin.JvmPackagePartSource
+import org.jetbrains.kotlin.load.kotlin.KotlinJvmBinarySourceElement
 
 data class Diagnostic(val code: String, val message: String, val source: SourceSpan)
 class Unsupported(val diagnostic: Diagnostic) : RuntimeException(diagnostic.message)
 
 fun sourceFile(declaration: IrDeclaration): IrFile? {
-    var parent: IrDeclarationParent = declaration.parent
-    while (parent is IrDeclaration) parent = parent.parent
-    return parent as? IrFile
+    var current = declaration
+    while (true) {
+        // A deserialized owner's provenance file is not an input source module.
+        if (current is IrClass && (current.source is KotlinJvmBinarySourceElement || current.source is JvmPackagePartSource)) return null
+        val parent = current.parent
+        if (parent !is IrDeclaration) return parent as? IrFile
+        current = parent
+    }
 }
 fun symbolName(declaration: IrDeclarationWithName): String =
     declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()

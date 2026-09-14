@@ -74,11 +74,13 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 
 ## Next action
 
-Continue R2.2 from docs/backend-reuse-audit.md, docs/binary-bodies.md and the
-actual BinaryBodies/memberClass loader. First isolate generic member signature,
-receiver and body identity prerequisites against official deserialization and
-inlining; do not merely delete the current guard. Investigate KLIB through its
-official loader separately. Keep exact linking/format gaps and evidence explicit;
+Continue R2.2. The bounded method-generic member route now reuses the existing
+official registration/deserializer/inliner and passes frozen IR plus strict host
+type/result checks; see docs/r2e-binary-members.md. Binary provenance is excluded
+from source-owned declaration emission. Do not reimplement generic substitution.
+Next investigate KLIB through its official loader separately, recording actual
+resolved body/symbol ownership and backend prerequisites. The JVM signature
+reader is not a KLIB frontend. Keep remaining bounds/receiver/format gaps explicit;
 do not start page-specific features or jump to class property overrides.
 
 R2.1 is accepted for the documented bounded body/replacement contract, not a

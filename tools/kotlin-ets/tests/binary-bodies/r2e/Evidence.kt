@@ -41,7 +41,7 @@ fun main(args: Array<String>) {
                     element.acceptChildrenVoid(this)
                 }
             })
-            check(count == 5) { "Expected five unavailable member calls, got $count" }
+            check(count == 8) { "Expected eight unavailable member calls, got $count" }
             println("PASS signature-only member bodies remain unavailable")
             return@withKotlinFrontend
         }
@@ -53,7 +53,7 @@ fun main(args: Array<String>) {
                 element.acceptChildrenVoid(this)
             }
         })
-        check(blocks.size == 8) { "Expected five direct and three transitive expansions, got ${blocks.size}" }
+        check(blocks.size == 14) { "Expected eight direct and six transitive expansions, got ${blocks.size}" }
         val scenario = session.module.files.single().declarations.filterIsInstance<IrSimpleFunction>().single { it.name.asString() == "scenario" }
         val receivers = scenario.valueParameters.take(2).map { it.type.classOrNull!! }.toSet()
         check(receivers.size == 2)
@@ -67,7 +67,19 @@ fun main(args: Array<String>) {
             check(owner.thisReceiver!!.type.classOrNull === owner.symbol)
             check(owner.declarations.filterIsInstance<IrSimpleFunction>().single { it.symbol === function.symbol } === function)
             check(owner.fileOrNull !in session.module.files) { "Binary owner must not become a source class" }
+            check(sourceFile(owner) == null && sourceFile(function) == null) {
+                "Binary provenance must not satisfy source-owned declaration checks"
+            }
             val loaded = session.bodies.resolve(function.symbol) as FunctionBody.Available
+            check(loaded.origin is FunctionBody.Origin.SerializedJvmIr)
+            if (function.name.asString() in setOf("choose", "relay")) {
+                val parameter = function.typeParameters.single()
+                check(parameter.name.asString() == "T")
+                check(parameter.parent === function)
+                check(function.returnType.classifierOrNull === parameter.symbol)
+                check(function.valueParameters.first().type.classifierOrNull === parameter.symbol)
+                check(parameter.superTypes.single().isNullableAny())
+            }
             check(loaded.declaration === function && loaded.body === function.body)
             check(loaded.source.file == block.inlinedFunctionFileEntry.name)
             check(loaded.source.start >= 0 && loaded.source.end > loaded.source.start)
@@ -81,6 +93,6 @@ fun main(args: Array<String>) {
         check(memberOwners == receivers)
         File(args[2], "production.ir").writeText(session.module.dump())
         File(args[2], "bodies.txt").writeText(report.joinToString("\n"))
-        println("PASS eight official member blocks including receiver-dependent default, original source receiver classifiers, real binary provenance")
+        println("PASS fourteen official member blocks, generic binders/defaults, original receiver classifiers and binary provenance")
     }
 }

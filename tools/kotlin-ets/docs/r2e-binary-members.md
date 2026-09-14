@@ -3,15 +3,29 @@
 ## Supported loading boundary
 
 `BinaryBodies` now admits actual Kotlin 2.1.20 serialized IR on a top-level,
-non-generic, stateless final class. A selected non-reified/non-generic inline
+non-generic, stateless final class. A selected non-reified inline
 member may call another supported inline member. Default arguments and caller
 receiver/argument evaluation stay in the official inliner's responsibility.
+
+R2.2 extends this same route to method type parameters. The existing shared
+registration seeds each parameter using its official parent signature/index;
+the official deserializer and common inliner perform loading, erasure and
+call-site substitution. There is no ETS-specific generic substitution algorithm.
+Checks now also require the original parameter parent and index after decoding.
+Tests compose a generic member, generic helper, a default referencing an earlier
+generic parameter, Int/String/nullable-String instantiations and callback effects.
 
 The implementation reuses `JvmIrDeserializerImpl`, the official symbol table,
 public signature computer and common function inliner. It seeds original FIR
 receiver/class/function symbols and validates their identity after decoding.
 Provenance comes from the binary's real `SourceFile` record and serialized body
 offsets; unavailable line tables are not invented.
+
+The shared source-owner query excludes official deserialized class/facade
+sources, including their members. Their IR provenance file exists for inlining
+and diagnostics; it does not make the binary an input-source class. Without an
+explicit receiver mapping, the ETS backend reports the unsupported source type
+and caller span instead of trying to name/emit a fabricated class.
 
 Ordinary class members are removed from the loader's canonical intrinsic set for
 these admitted owners. An inline body calling an ordinary method must reject,
@@ -31,13 +45,40 @@ line project-adapter loader. Unmapped command-line generation must still reject.
 
 ## Tests and evidence
 
+### R2.2 generic member increment
+
+- `run-2DADsf`: genuine RED; producer/JVM oracle succeeded but production rejected
+  `FinalMember.choose` at the old generic-member guard.
+- `run-OxFwNr`: 14 official inline blocks passed. `replay-PWQ67z` matched the
+  three JVM/host results, then failed the unmapped-receiver negative with an
+  internal uninitialized-module error. It is not a passing replay.
+- Root cause: `sourceFile` treated a deserialized owner's provenance file as a
+  source input, so ETS class naming accessed an absent source module. Fixed the
+  common owner query, not by inventing a source module or relaxing rejection.
+- `run-NXPH8l`: frozen body/receiver/type-parameter identity, source-ownership
+  checks, signature-only and seven existing unsupported cases pass. Producer
+  source copies are removed before consumers run.
+- `run-NXPH8l/replay-WWI5My`: unchanged full backend, explicit receiver adapter,
+  strict host typecheck and three same-input JVM/host results pass. The public
+  unmapped CLI returns `UNSUPPORTED` with the exact source file/parameter span
+  and creates no output. `replay-TsTO3P` is the preceding passing host replay
+  without the newly added strict host typecheck.
+- `../.work/policy-fIaIGJ`: existing top-level binary body/default/callback path
+  still passes actual loading, missing-body/source checks and two public-CLI
+  JVM/host pairs after the shared source-owner correction.
+- `tests/language/.work/typed-5CBsdl`: source declarations and shared adapter
+  value/statement/UI contract regression passes.
+- No SDK/native result or generic binary-class support is claimed. KLIB loading,
+  additional bounds/receiver shapes and general dependency linking remain R2.2
+  work; this is not completion of that row.
+
 ```sh
 node tests/binary-bodies/r2e/run.mjs
 node tests/binary-bodies/r2e/replay.mjs tests/binary-bodies/r2e/.work/run-REPLACE
 ```
 
 The focused test builds real producer JARs and removes the producer source copy
-before consuming them. It now checks eight official inline blocks, canonical receiver
+before consuming them. It now checks fourteen official inline blocks, canonical receiver
 identities, signature-only refusal, six unsupported member cases and a missing
 `SourceFile` diagnostic. A separate JVM oracle records argument/callback order.
 The target replay compares the same inputs and effect trace using generated ETS

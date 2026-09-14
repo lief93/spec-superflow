@@ -47,5 +47,12 @@ fun scenario(receiver: FinalMember, peer: PeerMember, seed: Int): String {
         effects.trace += "I"
         value * 3
     }
-    return "$first/$second/$third/$fourth/$fifth/${effects.count}/${effects.trace}"
+    val sixth = effects.receiver(receiver).choose(value = effects.value(seed, "J")) { value ->
+        effects.count += 1
+        effects.trace += "K"
+        value + 2
+    }
+    val seventh = receiver.choose<String?>(value = null, fallback = "fallback", useFallback = true) { it }
+    val eighth = receiver.choose(value = "text") { it }
+    return "$first/$second/$third/$fourth/$fifth/$sixth/$seventh/$eighth/${effects.count}/${effects.trace}"
 }

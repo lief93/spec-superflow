@@ -174,7 +174,8 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
             if (types(function) != originalTypes[function.symbol]) fail("deserialization changed resolved signature type identity")
             val parameters = originalTypeParameters.getValue(function.symbol)
             if (function.typeParameters.size != parameters.size || parameters.withIndex().any { (index, original) ->
-                    function.typeParameters[index] !== original.first || original.first.superTypes != original.second
+                    function.typeParameters[index] !== original.first || original.first.superTypes != original.second ||
+                        original.first.parent !== function || original.first.index != index
                 }) fail("deserialization changed resolved type parameter identity or bounds")
             val body = function.body ?: fail("serialized IR does not contain dependency body ${symbolName(function)}")
             val dependencies = linkedSetOf<IrFunction>()
@@ -219,7 +220,6 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
             owner.superTypes.any { it.classOrNull != context.irBuiltIns.anyClass }) {
             fail("binary inline members require a non-generic top-level final class with no inheritance")
         }
-        if (function.typeParameters.isNotEmpty()) fail("generic binary members are unsupported")
         if (function.contextReceiverParametersCount != 0 || function.extensionReceiverParameter != null) {
             fail("binary inline member context/extension receivers are not supported")
         }

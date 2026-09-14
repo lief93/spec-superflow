@@ -1,5 +1,26 @@
 # Execution progress
 
+## 2026-09-14: R2.2 generic binary member/backend boundary
+
+- Reused existing official global type-parameter registration,
+  JvmIrDeserializerImpl and common FunctionInlining for method-generic members.
+  Added parent/index invariants; no separate generic substitution implementation.
+- RED run-2DADsf confirmed the old member guard. Frozen run-NXPH8l passes 14
+  direct/transitive inline blocks with Int/String/nullable instantiations,
+  dependent defaults, receiver/argument/closure effects and original identities.
+- The first full replay exposed an ETS owner-query bug: binary provenance was
+  classified as source and ClassNaming accessed an uninitialized module. The
+  shared sourceFile query now excludes official deserialized owners and members.
+  No fake class/module or fallback value was added.
+- replay-WWI5My passes strict host typechecking, three JVM/host result pairs and
+  unmapped receiver rejection with a source span/no output. typed-5CBsdl passes
+  source declarations and shared adapter value/statement/UI contracts.
+- All seven existing member boundary cases remain closed. No SDK/native claim.
+  Existing top-level binary regression policy-fIaIGJ also passes two public-CLI
+  JVM/host pairs and its missing-body/source guards.
+  R2.2 remains open for its official KLIB-loader proof and remaining linked
+  receiver/bounds families; next actions remain in task_plan.md.
+
 ## 2026-09-14: R2.1 dependency-body contract
 
 - Available bodies now distinguish source IR from serialized JVM IR and retain
