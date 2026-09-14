@@ -14,6 +14,7 @@ fun main() {
     check("return base + extra;" in code)
     checkPrinterPrecedence()
     checkAccessorContract()
+    checkConstructorFlowContract()
     checkInheritanceContract()
     checkInterfacePropertyContract()
     checkVirtualPropertyContract()

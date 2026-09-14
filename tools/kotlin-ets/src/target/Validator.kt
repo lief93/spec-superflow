@@ -23,7 +23,7 @@ class EtsValidator {
     private var classes = emptyMap<String, EtsClass>()
     private var globalFunctions = emptyMap<String, EtsFunction>()
     private var currentClass: EtsClass? = null
-    private var allowedSuper: EtsSuperConstructorCall? = null
+    private var allowedSuper = emptyList<EtsSuperConstructorCall>()
     private var initializingClass: EtsClass? = null
     private fun reject(node: EtsNode, message: String): Nothing = throw InvalidTarget(node.source, message)
     private fun expect(value: EtsExpression, type: EtsType) {
@@ -279,7 +279,7 @@ class EtsValidator {
     fun validate(program: EtsProgram, perFileNames: Boolean = false) {
         genericScope = emptyMap()
         currentClass = null
-        allowedSuper = null
+        allowedSuper = emptyList()
         val declarationIds = mutableSetOf<String>()
         program.files.flatMap { it.declarations }.forEach { declaration ->
             val id = when (declaration) { is EtsFunction -> declaration.symbol.id; is EtsClass -> declaration.symbol.id }
@@ -399,19 +399,67 @@ class EtsValidator {
         val previousSuper = allowedSuper
         val previousInitializer = initializingClass
         initializingClass = currentClass.takeIf { function.kind == EtsFunctionKind.CONSTRUCTOR }
-        allowedSuper = null
+        allowedSuper = emptyList()
         val delegations = mutableListOf<EtsSuperConstructorCall>()
         walkEts(function) { if (it is EtsSuperConstructorCall) delegations.add(it) }
         val base = currentClass?.baseClass
         if (function.kind == EtsFunctionKind.CONSTRUCTOR && base != null) {
-            val first = function.body.firstOrNull() as? EtsSuperConstructorCall
-            if (delegations.size != 1 || first == null || first.baseClass != base) reject(function, "Derived constructor requires its direct super call first")
-            allowedSuper = first
+            allowedSuper = constructorFlow(function, base)
         } else if (delegations.isNotEmpty()) reject(function, "Super delegation requires a derived constructor")
         try { withTypeParameters(function.typeParameters, function.source) {
             bindingName(function.name, function.source); type(function.returnType, function.source)
             statements(function.body, parameters(function.parameters, outer), function.returnType, emptySet(), function.parameters.map { it.symbol.name }.toSet(), function.builder || function.build)
         } } finally { allowedSuper = previousSuper; initializingClass = previousInitializer }
+    }
+
+    /** Track native allocation on every normal path, independently of ordinary type validation. */
+    private fun constructorFlow(function: EtsFunction, base: EtsNamedType): List<EtsSuperConstructorCall> {
+        val permitted = mutableListOf<EtsSuperConstructorCall>()
+        fun inspect(node: EtsNode, states: Set<Boolean>, context: String = "nested body") {
+            walkEts(node) { child ->
+                if (child is EtsSuperConstructorCall) reject(child, "Super delegation in $context is not supported")
+                if (false in states && child is EtsReference && child.symbol.name == "this")
+                    reject(child, "Target this is read or captured before super initialization")
+            }
+        }
+        fun flow(body: List<EtsStatement>, incoming: Set<Boolean>): Set<Boolean> {
+            var states = incoming
+            for (statement in body) {
+                states = when (statement) {
+                    is EtsSuperConstructorCall -> {
+                        if (statement.baseClass != base) reject(statement, "Super delegation must target the direct base")
+                        if (true in states) reject(statement, "Constructor initializes super more than once on a path")
+                        if (states.isEmpty()) reject(statement, "Unreachable super delegation")
+                        statement.arguments.forEach { inspect(it, states) }
+                        permitted.add(statement)
+                        setOf(true)
+                    }
+                    is EtsBlock -> flow(statement.statements, states)
+                    is EtsIf -> {
+                        val paths = statement.branches.flatMap { branch ->
+                            branch.condition?.let { inspect(it, states) }
+                            flow(branch.body, states)
+                        }.toSet()
+                        if (statement.branches.none { it.condition == null }) paths + states else paths
+                    }
+                    is EtsReturn -> {
+                        statement.value?.let { inspect(it, states) }
+                        if (false in states) reject(statement, "Constructor returns before super initialization")
+                        emptySet()
+                    }
+                    is EtsThrow -> { inspect(statement.value, states); emptySet() }
+                    is EtsLoop -> { inspect(statement, states, "loop"); states }
+                    else -> {
+                        inspect(statement, states)
+                        if (statement is EtsExpressionStatement && statement.expression.type == EtsTypes.NEVER) emptySet() else states
+                    }
+                }
+            }
+            return states
+        }
+        function.parameters.forEach { it.defaultValue?.let { value -> inspect(value, setOf(false)) } }
+        if (false in flow(function.body, setOf(false))) reject(function, "Constructor can finish before super initialization")
+        return permitted
     }
 
     private fun statements(values: List<EtsStatement>, outer: Map<String, EtsSymbol>, result: EtsType, loops: Set<String>, occupiedNames: Set<String> = emptySet(), ui: Boolean = false) {
@@ -433,7 +481,7 @@ class EtsValidator {
             } else { expression(value.value, scope); expect(value.value, result) }
             is EtsThrow -> expression(value.value, scope)
             is EtsSuperConstructorCall -> {
-                if (value !== allowedSuper) reject(value, "Super delegation outside its constructor")
+                if (allowedSuper.none { it === value }) reject(value, "Super delegation outside its constructor")
                 type(value.baseClass, value.source)
                 value.arguments.forEach { expression(it, scope) }
                 constructorArguments(value.baseClass, value.arguments, value)

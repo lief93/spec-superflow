@@ -45,8 +45,8 @@ fun checkInheritanceContract() {
         check(runCatching { EtsPrinter().program(program(*next.toTypedArray())) }.exceptionOrNull() is InvalidTarget) { label }
     }
     reject("Missing super call", child.copy(members = listOf(ctor.copy(body = emptyList()))))
-    reject("Late super call", child.copy(members = listOf(ctor.copy(body = listOf(
-        EtsExpressionStatement(EtsLiteral(1, number, source)), delegation)))))
+    EtsPrinter().program(program(contract, base, child.copy(members = listOf(ctor.copy(body = listOf(
+        EtsExpressionStatement(EtsLiteral(1, number, source)), delegation))))))
     reject("Wrong super argument", child.copy(members = listOf(ctor.copy(body = listOf(
         delegation.copy(arguments = listOf(EtsLiteral("bad", EtsTypes.STRING, source))))))))
     reject("Interface used as base class", child.copy(baseClass = contractType))

@@ -68,6 +68,12 @@ transitive serialized inline loading and typed UI modules have since progressed.
   irAttribute without changing its source isPrimary flag. Native super calls and
   existing initializer consumers then compose; multiple roots, superclass
   factories and capture combinations still need a broader allocation contract.
+- Native ArkTS permits argument preparation and mutually exclusive super calls
+  in a constructor. The ETS target's first-statement-only restriction was ours,
+  not a platform requirement. A typed normal-path initialization check now
+  supports that shape without allowing duplicate allocation, early this/capture,
+  or nested/loop super calls. The SDK probe and actual typed-printer output
+  compile; source multi-entry construction still needs to connect to this rule.
 - Official JS performs constructor conversion after inlining. Constructor
   references reproduce a real phase-order bug if ETS rewrites calls earlier:
   common inlining creates a fresh call to the old constructor symbol. If the

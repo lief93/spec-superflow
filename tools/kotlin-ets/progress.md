@@ -1,5 +1,29 @@
 # Execution progress
 
+## 2026-09-14: R2.3 typed native constructor-flow prerequisite
+
+- SDK experiment confirms native ArkTS permits pre-super argument preparation
+  and mutually exclusive super branches. The old first-statement-only target
+  guard was an ETS-backend restriction, not a platform constraint.
+- Replaced that guard with typed normal-path initialization checks. Branches
+  and blocks join allocation state; throw paths terminate; normal completion
+  and return require one initialization. Early this/read/write/capture, duplicate
+  super, wrong base, nested and loop super remain source-linked refusals. Existing
+  argument types, constructor ownership and readonly checks are still enforced.
+- RED target-tests.x5XKir fails on the valid branch fixture. GREEN
+  target-tests.Zzky1G passes the complete target suite, including sixteen new
+  refusals. SDK constructor-flow-Mbg3Mw passes six JVM/ETS-host results, strict
+  host types and unchanged typed-tree/printer output through real SDK ABC/HAP.
+  All 21 recorded target/test/jar hashes match. No public Kotlin multi-root
+  conversion or native/runtime/UI parity is claimed by that backend fixture.
+- Final public-CLI constructor regression run-tNKu0Y passes 60 flat + 60 module
+  JVM/host results, six boundaries and original factory/root/super IR identity
+  checks. Generated output remains c44d7c7f396de1b54463405fdcb801cb23c334b881aa08d278b88e1a8a0f5fe6.
+- Main alone implemented, tested and self-checked. Source multi-entry constructor
+  normalization is next, using official constructor default stubs/injection and
+  initializer/inliner contracts. This is a required target prerequisite, not
+  completion of constructor families or R2. See docs/native-constructor-flow.md.
+
 ## 2026-09-14: R2.3 original secondary native allocation roots
 
 - Compared official JS synthetic-primary, initializer and ES6 factory contracts.
