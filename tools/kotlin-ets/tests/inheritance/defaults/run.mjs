@@ -16,7 +16,7 @@ function files(path) {
   return readdirSync(path, { withFileTypes: true }).flatMap(entry => entry.isDirectory()
     ? files(join(path, entry.name)) : [join(path, entry.name)]).sort();
 }
-const sources = ['Provider.kt', 'Application.kt'].map(name => join(here, name));
+const sources = ['Provider.kt', 'Application.kt', 'Ownership.kt', 'Sibling.kt'].map(name => join(here, name));
 const inputs = [...files(join(root, 'src')), ...sources, ...files(join(here, 'negatives')),
   join(here, 'Oracle.kt'), join(here, 'IrEvidence.kt'), fileURLToPath(import.meta.url)]
   .map(path => ({ path, sha256: hash(path) }));
@@ -47,18 +47,32 @@ const tree = ts.createSourceFile(output, code, ts.ScriptTarget.Latest, true, ts.
 assert.deepEqual(tree.parseDiagnostics, []);
 const child = tree.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'DefaultChild');
 assert.deepEqual(child.members.find(node => node.name?.text === 'calculate').parameters.map(node => node.name.text), ['left', 'right']);
-const bridges = tree.statements.filter(node => ts.isFunctionDeclaration(node) && node.parameters[0]?.name.text === '$this');
-assert.equal(bridges.length, 10);
+const classes = tree.statements.filter(ts.isClassDeclaration);
+const bridges = [...tree.statements.filter(ts.isFunctionDeclaration), ...classes.flatMap(node => node.members.filter(ts.isMethodDeclaration))]
+  .filter(node => node.parameters[0]?.name.text === '$this');
+assert.equal(bridges.length, 15);
 assert.ok(bridges.every(node => node.name.text.includes('$default')));
 assert.match(code, /function DefaultBase_calculate\$default\(value: number\)/, 'User names win over compiler helper names');
 assert.ok(bridges.some(node => node.name.text.startsWith('DefaultBase_calculate$default_')));
 assert.match(code, /return \$this\.calculate\(/, 'Defaults must dispatch virtually, not copy the user method');
+const restricted = classes.find(node => node.name.text === 'RestrictedBase');
+const modifier = (node, kind) => node.modifiers?.some(value => value.kind === kind);
+const owned = restricted.members.filter(node => ts.isMethodDeclaration(node) && modifier(node, ts.SyntaxKind.StaticKeyword));
+assert.equal(owned.length, 3);
+assert.ok(modifier(owned.find(node => node.name.text.includes('choose$default')), ts.SyntaxKind.ProtectedKeyword));
+assert.ok(modifier(owned.find(node => node.name.text.includes('seed$default')), ts.SyntaxKind.PrivateKeyword));
+const widening = classes.find(node => node.name.text === 'RestrictedChild').members.find(node =>
+  ts.isMethodDeclaration(node) && modifier(node, ts.SyntaxKind.StaticKeyword));
+assert.ok(widening && !modifier(widening, ts.SyntaxKind.PrivateKeyword) && !modifier(widening, ts.SyntaxKind.ProtectedKeyword));
+assert.match(widening.getText(tree), /RestrictedBase\.[\w$]*choose\$default/);
+assert.equal(tree.statements.filter(node => ts.isFunctionDeclaration(node) && node.parameters[0]?.name.text === '$this').length, 1,
+  'Only the interface default helper needs file-level placement');
 assert.doesNotMatch(code, /\(\(\): [^\n]+ => \{\s*return null;/, 'Omitted constants need no IIFE');
 const compiled = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
 const context = vm.createContext({ exports: {} });
 vm.runInContext(compiled.outputText, context, { timeout: 1000 });
 const scenarios = ['defaults', 'genericDefaults', 'closureDefaults', 'recursiveDefaults', 'nullableDefaults',
-  'bitwiseDefaults', 'wideDefaults', 'heritageDefaults', 'namedEffects'];
+  'bitwiseDefaults', 'wideDefaults', 'heritageDefaults', 'namedEffects', 'ownedDefaults', 'siblingDefaults'];
 function evaluate(context) {
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed => scenarios.map(name =>
     String(vm.runInContext(`exports.${name}(${seed})`, context, { timeout: 1000 }))));
@@ -70,12 +84,12 @@ const modules = join(work, 'modules'), reversed = join(work, 'reversed');
 const cli = join(root, 'kotlin-ets');
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Provider.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Ownership.ets', 'Provider.ets', 'Sibling.ets']);
 for (const name of readdirSync(modules)) {
   assert.equal(readFileSync(join(modules, name), 'utf8'), readFileSync(join(reversed, name), 'utf8'));
   writeFileSync(join(modules, name.replace('.ets', '.ts')), readFileSync(join(modules, name), 'utf8'));
 }
-const moduleCheck = ts.createProgram(['Application.ts', 'Provider.ts'].map(name => join(modules, name)), {
+const moduleCheck = ts.createProgram(['Application.ts', 'Ownership.ts', 'Provider.ts', 'Sibling.ts'].map(name => join(modules, name)), {
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, strict: true, noEmit: true, types: [] });
 assert.deepEqual(ts.getPreEmitDiagnostics(moduleCheck).map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')), []);
 const providerCode = readFileSync(join(modules, 'Provider.ets'), 'utf8');
@@ -94,7 +108,7 @@ function load(name) {
   } }, { timeout: 1000 });
   return exports;
 }
-result.moduleActual = evaluate(vm.createContext({ exports: load('Application') }));
+result.moduleActual = evaluate(vm.createContext({ exports: { ...load('Application'), ...load('Ownership') } }));
 assert.deepEqual(result.moduleActual, result.expected);
 result.negatives = [];
 for (const [name, message] of [['Star', /invariant receiver/], ['MultipleBounds', /one noncyclic receiver bound/],

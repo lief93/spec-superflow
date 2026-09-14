@@ -27,7 +27,9 @@ typed-call normalization and target representation.
 
 ## ETS-specific work
 
-1. Put each generated helper in the provider's source file. User methods remain
+1. Keep class helpers in their provider class, with the source member's visibility.
+   Interface helpers remain in the provider's source file because an ETS interface
+   cannot contain implementation bodies. User methods remain
    methods with their original parameter names and bodies. Only calls omitting
    inherited arguments need the helper; fully supplied calls remain direct.
 2. Use the common generator's selection hook to bind immutable local results,
@@ -45,6 +47,12 @@ typed-call normalization and target representation.
 6. Remove only the selected source defaults and temporary instance stubs after
    injection. The helpers then use the existing language lowering, typed target
    validator, printer and multi-file emitter. No UI/text-output bypass exists.
+7. When a derived override widens protected access to public, put a public static
+   forwarding entry on that derived class. It calls the protected provider helper;
+   it neither duplicates default expressions nor publishes the original protected
+   member. Official signature copying and type remapping preserve generic binders.
+   The injector result is associated with its original call symbol, not matched by
+   a method-name string. These entries are compiler ABI, not new Kotlin source APIs.
 
 Helpers retain the recognizable `Owner_method$default` compiler name. A collision
 renames the generated helper, never the user declaration. Helpers are not forcibly
@@ -60,12 +68,15 @@ and inherited final methods; dependent defaults and closures; generic methods,
 generic class/interface heritage and a single receiver bound; explicit null;
 named-argument effects; recursive defaults; mask positions 31, 32 and 33; and a
 user declaration deliberately colliding with the natural helper name.
+Private/protected default dependencies and public widening overrides are covered.
+Unique private method names now work in a hierarchy; private name shadowing still
+has an explicit source diagnostic rather than emitting an invalid ETS hierarchy.
 
 This does not add support for inherited member extensions, suspend/inline
 provider combinations, arbitrary external binary default bodies, explicit super
 dispatch, projected receivers, multiple receiver bounds, or providers in local
-and inner classes. The latter need capture/phase-order composition before moving
-their bodies outside the class. They must not silently capture unavailable state.
+and inner classes. The latter need capture/phase-order composition before static
+dispatch. They must not silently capture unavailable state.
 Existing unsupported type/declaration checks remain active. This is not completion
 of all R2 declaration or generic semantics.
 
@@ -77,22 +88,35 @@ The runner freezes implementation and fixture hashes and records commands/result
 under `tests/inheritance/defaults/.work/run-*`. It verifies:
 
 - Kotlin JVM versus ETS-host results for five seeds, including Int boundaries,
-  across nine scenarios, both flat and multi-file output.
+  across eleven scenarios, both flat and multi-file output.
 - Strict target TypeScript semantic checking, source method/parameter names,
   source-first collision handling and no IIFE around omitted constants.
 - Identical per-file output with reversed source input order; provider-local
-  private helpers remain private; callers import the dispatch helper, not its
-  private dependencies.
+  private helpers remain private; callers reference the provider class (or the
+  interface helper), not its private dependencies.
 - JVM-valid source boundaries rejected with exact source spans and no ETS output:
   star projections, multiple receiver bounds, explicit super, local and inner
   default providers.
-- Actual official IR origins and provider links for ten generated helpers,
+- Actual official IR origins and provider links for thirteen generated helpers,
   exactly one virtual implementation dispatch per helper, two mask parameters
-  for the wide method, and all eighteen omitted-argument calls targeting live
-  helpers with complete argument/type bindings.
+  for the wide method, and twenty-two calls targeting live provider helpers with
+  complete argument/type bindings. Two public widening bridges have exact argument
+  symbols and their own generic return/type-argument binders. Cross-file callers
+  exercise both generic and specialized derived classes without name collisions.
 
 These are host/IR/module checks, not ArkTS SDK, ArkVM, native UI or visual parity
 evidence. The combined SDK/native gate remains in R2 of `task_plan.md`.
+
+Ownership GREEN: `tests/inheritance/defaults/.work/run-cJb0cl`, 55 flat plus
+55 multi-file JVM/ETS-host outcomes, five boundaries, deterministic four-file output and
+the IR assertions above. Target suite `target-tests.tUqicj` also passes, including
+twelve visibility refusals. Ownership RED `run-56R12A` exposed the blanket private
+method guard; `run-AAQ8IH` caught an escaped provider type parameter in a forwarding
+entry. The validator was not weakened. This is not a new SDK/native acceptance.
+After indentation-only cleanup in `IrEvidence.kt`, the compiler and IR proof were
+rebuilt and rerun in `/tmp/kotlin-ets-default-owner-proof-hoEptE`; all other 63
+frozen inputs remained identical. Final flat ETS SHA-256:
+`34249a2a58647072641fa08b8e7e5bd6d9d1cb6d0579b4416bc182a1db888965`.
 
 Frozen GREEN: `tests/inheritance/defaults/.work/run-SX8Kmd`, 60 unchanged inputs,
 45 flat plus 45 multi-file outcomes, five rejection boundaries, and the actual

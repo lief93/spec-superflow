@@ -6,15 +6,27 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.util.file
+import org.jetbrains.kotlin.ir.types.classifierOrNull
+import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.visitors.*
 
 fun main(args: Array<String>) {
     withKotlinModule(args.drop(1) + listOf("-no-stdlib", "-no-reflect", "-classpath", args[0])) { module ->
-        val helpers = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
-            .filter { it.origin == IrDeclarationOrigin.FUNCTION_FOR_DEFAULT_PARAMETER }
-        check(helpers.size == 10)
+        val functions = mutableListOf<IrSimpleFunction>()
+        module.acceptVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
+            override fun visitSimpleFunction(declaration: IrSimpleFunction) {
+                functions.add(declaration); super.visitSimpleFunction(declaration)
+            }
+        })
+        val helpers = functions.filter { it.origin == IrDeclarationOrigin.FUNCTION_FOR_DEFAULT_PARAMETER }
+        check(helpers.size == 13)
         helpers.forEach { helper ->
             val original = checkNotNull(helper.defaultArgumentsOriginalFunction)
+            val owner = original.parent as IrClass
+            check(helper.parent === if (owner.kind == ClassKind.INTERFACE) original.file else owner)
+            check(helper.visibility == original.visibility)
             check(helper.file === original.file)
             check(helper.startOffset == original.startOffset && helper.endOffset == original.endOffset)
             check(helper.dispatchReceiverParameter == null)
@@ -55,7 +67,24 @@ fun main(args: Array<String>) {
                 super.visitCall(expression)
             }
         })
-        check(calls == 18) { "Expected the fixture's 18 omitted-argument calls, got $calls" }
+        val bridges = functions.filter { it.origin == ETS_DEFAULT_VISIBILITY_BRIDGE }
+        check(bridges.size == 2)
+        check(bridges.map { (it.parent as IrClass).name.asString() }.toSet() == setOf("RestrictedChild", "RestrictedSibling"))
+        bridges.forEach { bridge ->
+            check(bridge.visibility == DescriptorVisibilities.PUBLIC)
+            val forwarded = (bridge.body as IrBlockBody).statements.single() as IrReturn
+            val call = forwarded.value as IrCall
+            check(call.symbol.owner in helpers && call.symbol.owner.visibility == DescriptorVisibilities.PROTECTED)
+            check(bridge.valueParameters.size == call.valueArgumentsCount)
+            bridge.valueParameters.forEachIndexed { index, parameter ->
+                check((call.getValueArgument(index) as IrGetValue).symbol == parameter.symbol)
+            }
+            bridge.typeParameters.forEachIndexed { index, parameter ->
+                check(call.getTypeArgument(index)!!.classifierOrNull == parameter.symbol)
+            }
+            check(bridge.returnType.classifierOrNull == bridge.typeParameters.single().symbol)
+        }
+        check(calls == 22) { "Expected 22 provider-helper calls including the widening bridges, got $calls" }
         println("PASS common default origins, provider/source identity, explicit receivers, virtual dispatch and two masks; $calls calls")
     }
 }

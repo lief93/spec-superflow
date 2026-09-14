@@ -69,7 +69,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, inherited defaults, unique-root/multi-entry native construction and protected constructor visibility accepted; remaining default-helper ownership/capture forms, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, inherited defaults with class-owned helpers, unique-root/multi-entry native construction and protected visibility accepted; remaining capture forms, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
@@ -86,12 +86,18 @@ whole-R2 completion follows. See docs/constructors.md for hashes and RED cases.
 Inner-chain green-weKarR also retains 20 JVM/flat/module outcomes, source owner
 links, strict types, deterministic output and eight precise exclusions.
 
-Next close non-public inherited-method default helper ownership (currently
-file-level helpers cannot legally consume protected/private members), then
-local/inner constructor capture and initializer-popup combinations. Keep helpers
-under the correct source owner using official default/body/type machinery; do
-not widen member visibility to make a file-level helper compile. Afterwards
-proceed to virtual overloads and remaining generic bounds/variance combinations.
+Default-helper ownership is now accepted for the documented source family:
+run-cJb0cl passes 55 flat + 55 module JVM/ETS-host outcomes, five boundaries,
+four-file determinism, thirteen source-owned providers and two public widening bridges with
+exact argument/type bindings. Class helpers retain source visibility; interface
+helpers remain file-level. Target suite tUqicj passes. See inherited-defaults.md;
+this increment does not add SDK/native or whole-R2 acceptance.
+
+Next close local/inner constructor capture and initializer-popup combinations,
+including the capture prerequisites of inherited defaults. Reuse official
+capture/body/type machinery, not widened visibility or a new capture analyzer.
+Afterwards proceed to virtual overloads and remaining generic bounds/variance
+combinations.
 
 Earlier native-constructor milestone:
 

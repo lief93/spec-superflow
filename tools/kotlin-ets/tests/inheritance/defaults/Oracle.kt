@@ -11,5 +11,7 @@ fun main() {
         println(wideDefaults(seed))
         println(heritageDefaults(seed))
         println(namedEffects(seed))
+        println(ownedDefaults(seed))
+        println(siblingDefaults(seed))
     }
 }

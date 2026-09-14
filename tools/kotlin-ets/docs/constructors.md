@@ -156,11 +156,12 @@ defaults to public: the ETS constructor pass overrides that hook (and its inject
 counterpart) with the source visibility. It still reuses the official masked
 argument evaluation, injection, initializer lowering and inliner unchanged.
 
-Non-public inherited-method default helpers currently still use file-level helper
-placement; their remaining ownership composition must be closed separately in
-R2.3. The new access validator must reject an inaccessible call rather than widen
-its source member. Companion/nested-class access privileges and general local/inner
-secondary capture are not claimed by this increment.
+Non-public inherited-method default helpers now retain their owning class and
+visibility; public widening overrides use a derived forwarding entry. See
+inherited-defaults.md for separate host/IR/module evidence. The access validator
+still rejects inaccessible calls rather than widening source members.
+Companion/nested-class access privileges and general local/inner secondary capture
+are not claimed by this increment.
 
 Visibility RED target-tests.hnXlFY proves that the former validator admitted an
 external call to a private constructor. Source run-PspbN9 then caught backing

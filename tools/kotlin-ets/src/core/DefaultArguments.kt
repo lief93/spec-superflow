@@ -8,6 +8,8 @@ import org.jetbrains.kotlin.backend.common.ir.moveBodyTo
 import org.jetbrains.kotlin.backend.common.lower.*
 import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFir2IrPipelineArtifact
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.backend.js.utils.NameTable
 import org.jetbrains.kotlin.ir.builders.*
@@ -20,6 +22,9 @@ import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.*
 import org.jetbrains.kotlin.name.Name
+import java.util.IdentityHashMap
+
+internal val ETS_DEFAULT_VISIBILITY_BRIDGE by IrDeclarationOriginImpl
 
 /** Common default dispatch is resolved before ETS emission; user method bodies stay callable. */
 internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
@@ -53,6 +58,7 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
     val factory = MaskedDefaultArgumentFunctionFactory(context)
     val stubs = mutableSetOf<IrFunction>()
     val generator = object : DefaultArgumentStubGenerator<CommonBackendContext>(context, factory) {
+        override fun defaultArgumentStubVisibility(function: IrFunction) = function.visibility
         override fun getOriginForCallToImplementation(): IrStatementOrigin = IrStatementOrigin.DEFAULT_DISPATCH_CALL
         // JVM stubs mutate parameters for bytecode inlining. ETS selects immutable
         // locals so default closures retain the value visible when they are created.
@@ -67,7 +73,21 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
         }
     }
     module.files.forEach(generator::lower)
+    val sourceCalls = IdentityHashMap<IrCall, IrSimpleFunction>()
     val injector = object : DefaultParameterInjector<CommonBackendContext>(context, factory) {
+        override fun defaultArgumentStubVisibility(function: IrFunction) = function.visibility
+        override fun visitCall(expression: IrCall): IrExpression {
+            val original = expression.symbol.owner
+            val result = super.visitCall(expression)
+            fun last(value: IrExpression): IrCall? = when (value) {
+                is IrCall -> value
+                is IrTypeOperatorCall -> last(value.argument)
+                is IrContainerExpression -> (value.statements.lastOrNull() as? IrExpression)?.let { last(it) }
+                else -> null
+            }
+            last(result)?.takeIf { it.symbol.owner in stubs }?.let { sourceCalls[it] = original }
+            return result
+        }
         override fun shouldReplaceWithSyntheticFunction(functionAccess: IrFunctionAccessExpression): Boolean =
             super.shouldReplaceWithSyntheticFunction(functionAccess) &&
                 (functionAccess as? IrCall)?.superQualifierSymbol == null &&
@@ -88,7 +108,8 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
     val names = NameTable<IrFunction>(reserved = reserved)
     val helpers = stubs.sortedWith(compareBy({ it.file.fileEntry.name }, { it.startOffset }, { it.name.asString() })).associateWith { stub ->
         val owner = stub.parentAsClass
-        val helper = context.irFactory.createStaticFunctionWithReceivers(stub.file,
+        val destination = if (owner.kind == ClassKind.INTERFACE) stub.file else owner
+        val helper = context.irFactory.createStaticFunctionWithReceivers(destination,
             Name.identifier(names.declareFreshName(stub, "${owner.name}_${stub.name}")), stub,
             typeParametersFromContext = owner.typeParameters,
             remapMultiFieldValueClassStructure = { _, _, _ -> })
@@ -118,12 +139,41 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
         })
         helper
     }
-    helpers.values.forEach { it.file.declarations.add(it) }
+    helpers.values.forEach { (it.parent as IrDeclarationContainer).declarations.add(it) }
+    val bridges = mutableMapOf<Pair<IrSimpleFunction, IrClass>, IrSimpleFunction>()
+    val bridgeNames = NameTable<Pair<IrSimpleFunction, IrClass>>(reserved = (reserved + helpers.values.map { it.name.asString() }).toMutableSet())
+    fun accessibleHelper(call: IrCall, helper: IrSimpleFunction): IrSimpleFunction {
+        val sourceCall = sourceCalls[call] ?: return helper
+        val visible = if (sourceCall.isFakeOverride) sourceCall.collectRealOverrides().singleOrNull() ?: return helper else sourceCall
+        val owner = visible.parent as? IrClass ?: return helper
+        if (helper.visibility != DescriptorVisibilities.PROTECTED || visible.visibility != DescriptorVisibilities.PUBLIC ||
+            owner === helper.parent) return helper
+        // Widening overrides own the public entry; the provider and its default body stay protected.
+        return bridges.getOrPut(helper to owner) {
+            context.irFactory.createStaticFunctionWithReceivers(owner,
+                Name.identifier(bridgeNames.declareFreshName(helper to owner, "${visible.name}\$default")), helper,
+                remapMultiFieldValueClassStructure = { _, _, _ -> }).apply bridge@{
+                origin = ETS_DEFAULT_VISIBILITY_BRIDGE
+                visibility = visible.visibility
+                startOffset = visible.startOffset
+                endOffset = visible.endOffset
+                returnType = helper.returnType.remapTypeParameters(helper, this, helper.typeParameters.zip(typeParameters).toMap())
+                val builder = DeclarationIrBuilder(IrGeneratorContextBase(context.irBuiltIns), symbol, startOffset, endOffset)
+                body = builder.irBlockBody {
+                    +builder.irReturn(builder.irCall(helper).apply {
+                        type = this@bridge.returnType
+                        this@bridge.typeParameters.forEachIndexed { index, parameter -> putTypeArgument(index, parameter.defaultType) }
+                        this@bridge.valueParameters.forEachIndexed { index, parameter -> putValueArgument(index, builder.irGet(parameter)) }
+                    })
+                }
+            }
+        }
+    }
     module.files.forEach { file -> file.transformChildrenVoid(object : IrElementTransformerVoid() {
         override fun visitCall(expression: IrCall): IrExpression {
             expression.transformChildrenVoid(this)
             val stub = expression.symbol.owner
-            val helper = helpers[stub] ?: return expression
+            val helper = helpers[stub]?.let { accessibleHelper(expression, it) } ?: return expression
             val owner = stub.parentAsClass
             val diagnostics = DiagnosticSink(file.fileEntry.name)
             val ownerType = defaultReceiverType(owner, expression, diagnostics)
@@ -155,6 +205,7 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
             }
         }
     }) }
+    bridges.values.forEach { (it.parent as IrClass).declarations.add(it) }
     module.acceptVoid(object : IrElementVisitorVoid {
         override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
         override fun visitFile(declaration: IrFile) {

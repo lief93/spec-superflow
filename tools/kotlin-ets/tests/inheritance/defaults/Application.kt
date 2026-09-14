@@ -1,5 +1,13 @@
 package defaultfixture
 
+fun siblingDefaults(seed: Int): String {
+    val effects = Effects()
+    val sibling = RestrictedSibling(seed, effects)
+    val first = sibling.choose()
+    val second = sibling.choose(second = seed + 1)
+    return "$first:$second:${effects.trace}"
+}
+
 fun defaults(seed: Int): String {
     val effects = Effects()
     val child = DefaultChild(effects, seed)
