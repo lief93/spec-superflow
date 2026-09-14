@@ -8,6 +8,7 @@ import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFir2IrPipelineArtifact
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.irAttribute
 import org.jetbrains.kotlin.ir.backend.js.utils.NameTable
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
@@ -19,6 +20,10 @@ import org.jetbrains.kotlin.ir.visitors.*
 import org.jetbrains.kotlin.name.Name
 
 private val ETS_SECONDARY_CONSTRUCTOR by IrDeclarationOriginImpl
+private var IrConstructor.nativeAllocationOwner: IrClass? by irAttribute(followAttributeOwner = false)
+
+internal fun isEtsNativeConstructor(constructor: IrConstructor): Boolean =
+    constructor.isPrimary || constructor.nativeAllocationOwner?.let { it === constructor.parent } == true
 
 /** Runs after inlining can expand constructor references into calls, before local capture lowering. */
 internal fun lowerSecondaryConstructors(input: JvmFir2IrPipelineArtifact) {
@@ -37,19 +42,31 @@ internal fun lowerSecondaryConstructors(input: JvmFir2IrPipelineArtifact) {
         val diagnostics = DiagnosticSink(constructor.file.fileEntry.name)
         if (constructor.visibility == DescriptorVisibilities.PROTECTED)
             diagnostics.unsupported(constructor, "Protected secondary constructors require protected target member visibility")
-        if (owner.primaryConstructor == null) diagnostics.unsupported(constructor,
-            "Secondary constructors without a primary require an ETS allocation and initializer model")
-        if (owner.modality == Modality.ABSTRACT || owner.modality == Modality.SEALED)
-            diagnostics.unsupported(constructor, "Abstract secondary constructors require derived-instance allocation")
         if (generateSequence(owner as IrDeclaration) { it.parent as? IrDeclaration }.any {
                 it is IrFunction || it is IrClass && it.isInner
             }) diagnostics.unsupported(constructor, "Secondary constructors in local or inner classes require capture-aware allocation")
         val body = constructor.body as? IrBlockBody
         val delegation = body?.statements?.firstOrNull() as? IrDelegatingConstructorCall
-        if (delegation?.symbol?.owner?.parent !== owner ||
+        if (delegation == null ||
             body.statements.filterIsInstance<IrDelegatingConstructorCall>().size != 1)
-            diagnostics.unsupported(constructor, "Secondary constructor requires one leading this delegation")
+            diagnostics.unsupported(constructor, "Secondary constructor requires one direct leading delegation")
     }
+    // Preserve the source allocation root, including a secondary that directly calls super.
+    constructors.groupBy { it.parentAsClass }.forEach { (owner, secondary) ->
+        val root = owner.primaryConstructor ?: secondary.singleOrNull {
+            ((it.body as IrBlockBody).statements.first() as IrDelegatingConstructorCall).symbol.owner.parent !== owner
+        } ?: DiagnosticSink(owner.file.fileEntry.name).unsupported(owner,
+            "A source class requires one native allocating constructor root")
+        if (!root.isPrimary) root.nativeAllocationOwner = owner
+        secondary.filter { it !== root }.forEach { constructor ->
+            val diagnostics = DiagnosticSink(constructor.file.fileEntry.name)
+            if (owner.modality == Modality.ABSTRACT || owner.modality == Modality.SEALED)
+                diagnostics.unsupported(constructor, "Abstract secondary constructors require derived-instance allocation")
+            if (((constructor.body as IrBlockBody).statements.first() as IrDelegatingConstructorCall).symbol.owner.parent !== owner)
+                diagnostics.unsupported(constructor, "Secondary constructor requires one leading this delegation")
+        }
+    }
+    constructors.removeAll(::isEtsNativeConstructor)
     // A superclass factory must never allocate a base object in place of a derived instance.
     module.acceptVoid(object : IrElementVisitorVoid {
         override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
@@ -67,6 +84,7 @@ internal fun lowerSecondaryConstructors(input: JvmFir2IrPipelineArtifact) {
             super.visitConstructor(declaration)
         }
     })
+    if (constructors.isEmpty()) return
     val context = createJvmLoweringContext(input)
     val reserved = mutableSetOf<String>()
     module.acceptVoid(object : IrElementVisitorVoid {

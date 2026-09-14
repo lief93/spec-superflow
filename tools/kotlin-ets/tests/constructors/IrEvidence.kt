@@ -12,7 +12,22 @@ fun main(args: Array<String>) {
         val factories = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>()
             .flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
             .filter { it.attributeOwnerId is IrConstructor }
-        check(factories.size == 11) { "Expected eleven source secondary constructors, got ${factories.size}" }
+        check(factories.size == 17) { "Expected seventeen source secondary factories, got ${factories.size}" }
+        val classes = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>()
+        val roots = classes.flatMap { it.constructors.toList() }.filterNot { it.isPrimary }
+        check(roots.size == 7) { "Expected seven original secondary allocation roots, got ${roots.size}" }
+        roots.forEach {
+            check(isEtsNativeConstructor(it) && it.parentAsClass.constructors.single() === it)
+            check(it.startOffset >= 0 && it.endOffset > it.startOffset)
+            check(it.parameters.all { parameter -> parameter.parent === it })
+        }
+        for ((childName, baseName) in listOf("RootChild" to "RootBase", "ConcreteNative" to "AbstractNative")) {
+            val child = classes.single { it.name.asString() == childName }
+            val base = classes.single { it.name.asString() == baseName }
+            val delegation = (child.constructors.single().body as IrBlockBody).statements.first() as IrDelegatingConstructorCall
+            check(delegation.symbol === base.constructors.single().symbol)
+            check(isEtsNativeConstructor(delegation.symbol.owner) && !delegation.symbol.owner.isPrimary)
+        }
         factories.forEach { factory ->
             val original = factory.attributeOwnerId as IrConstructor
             check(!original.isPrimary && original.parent === factory.parent)
@@ -20,11 +35,11 @@ fun main(args: Array<String>) {
             check(factory.dispatchReceiverParameter == null)
             check(factory.visibility == original.visibility)
             check(factory.valueParameters.map { it.name } == original.valueParameters.map { it.name })
-            check(factory.parentAsClass.constructors.single().isPrimary)
+            check(isEtsNativeConstructor(factory.parentAsClass.constructors.single()))
             val body = factory.body as IrBlockBody
             val instance = body.statements.first() as IrVariable
             when (val allocation = instance.initializer) {
-                is IrConstructorCall -> check(allocation.symbol.owner.isPrimary && allocation.symbol.owner.parent === factory.parent)
+                is IrConstructorCall -> check(isEtsNativeConstructor(allocation.symbol.owner) && allocation.symbol.owner.parent === factory.parent)
                 is IrCall -> check(allocation.symbol.owner in factories && allocation.symbol.owner.parent === factory.parent)
                 else -> error("Constructor must allocate through its resolved same-class delegation")
             }
@@ -43,10 +58,14 @@ fun main(args: Array<String>) {
         module.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
             override fun visitConstructorCall(expression: IrConstructorCall) {
-                check(expression.symbol.owner.isPrimary)
+                check(isEtsNativeConstructor(expression.symbol.owner))
                 super.visitConstructorCall(expression)
             }
+            override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall) {
+                check(isEtsNativeConstructor(expression.symbol.owner))
+                super.visitDelegatingConstructorCall(expression)
+            }
         })
-        println("PASS eleven symbol-bound factories, original source/parameters/visibility, one same-class allocation per chain link, remapped this/returns")
+        println("PASS seventeen symbol-bound factories, seven original secondary native roots, exact cross-class super symbols, original source/parameters/visibility and remapped this/returns")
     }
 }

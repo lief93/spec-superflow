@@ -45,3 +45,32 @@ fun privateChain(seed: Int): String {
 }
 
 fun reference(seed: Int): Int = createReference(::ReferenceConstructed).number + seed
+
+fun nativeRoot(seed: Int): String {
+    Events.text = ""
+    val first = NativeRoot(seed, "Q")
+    val second = NativeRoot()
+    val legacy = NoPrimary(seed)
+    return "${first.seed}:${first.stamp}:${second.seed}:${second.stamp}:${legacy.value}:${Events.text}"
+}
+
+fun genericRoot(seed: Int): String {
+    Events.text = ""
+    val first = GenericNative(seed) { Events.mark("C"); it + 1 }
+    val second = GenericNative("text")
+    return "${first.value}:${first.other}:${second.value}:${Events.text}"
+}
+
+fun inheritedRoot(seed: Int): String {
+    val trace = Trace()
+    val first: RootBase = RootChild(trace, seed)
+    val second: RootBase = RootChild(trace)
+    val third: AbstractNative = ConcreteNative(seed)
+    return "${first.result()}:${second.result()}:${third.read()}:${trace.value}"
+}
+
+fun privateRoot(seed: Int): String {
+    val trace = Trace()
+    val value = Closed(trace)
+    return "${value.value + seed}:${trace.value}"
+}

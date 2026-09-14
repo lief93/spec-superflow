@@ -4,14 +4,14 @@
 
 The Kotlin frontend resolves constructor symbols and delegation. After inherited
 defaults and inlining, before local-declaration lowering, the ETS-specific IR pass keeps
-one real primary constructor and converts secondary `this(...)` chains to static
+one real native allocation root and converts secondary `this(...)` chains to static
 factory methods in the original class. Calls are rewritten by constructor symbol,
 not by spelling, argument names or target overload guesses.
 
 The factory's first local receives the delegated constructor/factory result.
 Its remaining original body operates on that instance, and every constructor
 return returns the instance. Allocation and primary property/init blocks occur
-only at the native primary constructor, before secondary bodies unwind in order.
+only at the native constructor, before secondary bodies unwind in order.
 Ordinary methods and constructor parameter names remain source-owned. Kotlin
 secondary constructors have no separate method name; the minimum synthetic
 factory name is allocated by official JS NameTable, with user names reserved.
@@ -22,7 +22,17 @@ they are not virtual inherited method defaults. Native private primary
 constructors remain private and are called from their owning class's factory.
 Private secondary factories and private class methods also retain target private
 visibility, rather than exposing an additional public construction path. Protected
-secondary factories remain diagnosed until target member visibility supports them.
+secondary constructors remain diagnosed until target member visibility supports them.
+
+When the source has no primary constructor, the unique constructor directly
+delegating to a superclass is its native allocation root. Its original IR body,
+parameters, symbol and `isPrimary == false` remain intact. An official IR attribute
+registers the exact constructor/owner identity for the target consumer; copied or
+unrelated declarations cannot gain permission through a name or origin prefix.
+Cross-class `super(...)` may target this native root, including an abstract base
+with no extra constructor factories. Field/init blocks stay at the source
+`IrInstanceInitializerCall`, before the root body and delegating bodies. Native
+root early returns do not skip the caller's remaining secondary body.
 
 ## Official reuse
 
@@ -48,9 +58,10 @@ are not ETS APIs. No Reflect/prototype runtime is introduced into generated ETS.
 ## Boundaries and verification
 
 This is an increment within R2.3, not completion of all constructor forms.
-No-primary construction, abstract/sealed secondary constructors, delegation to
-superclass secondary constructors and local/inner secondary capture combinations
-still require further work. They must
+Multiple native allocation roots, abstract/sealed constructors requiring
+additional factories, superclass delegation to a factory-converted secondary,
+protected secondaries and local/inner secondary capture combinations still
+require further work. They must
 produce source-linked diagnostics and no output, not allocate the wrong class.
 Primary-only classes continue through the existing native constructor path.
 
@@ -82,3 +93,17 @@ boundaries and eleven real IR factories with original source/parameter/visibilit
 links. The inlined-reference case is checked at five inputs, including Int limits.
 All recorded implementation and fixture hashes match that run. No SDK/native
 claim follows from these host checks.
+
+No-primary RED run-HarJRs resolves valid Kotlin/JVM inputs but fails at the old
+primary-only allocation guard. Frozen GREEN run-pRFuAP passes 60 flat + 60
+multi-file JVM/ETS-host outcomes, strict types, deterministic reversed-input
+modules and six JVM-valid/source-linked rejection boundaries. It verifies
+seventeen factory identities, seven unchanged source secondary roots and exact
+cross-class native super targets. The former NoPrimary negative is now a named
+positive fixture, not skipped. New tests cover generic roots, private roots,
+abstract base allocation, initializer/body/argument effects, inherited defaults
+and native early returns at five inputs including Int limits.
+All 64 frozen inputs match. Inherited-default regression run-QYxcPz also passes
+45 flat + 45 module outcomes, five boundaries and official provider/dispatch
+checks against the same final implementation. Main self-check and whitespace
+validation pass; SDK/native acceptance is still reserved for the R2 gate.

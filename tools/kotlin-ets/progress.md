@@ -1,5 +1,29 @@
 # Execution progress
 
+## 2026-09-14: R2.3 original secondary native allocation roots
+
+- Compared official JS synthetic-primary, initializer and ES6 factory contracts.
+  ETS preserves the unique directly-super-delegating source constructor when
+  there is no primary; exact owner-bound official IR attributes authorize its
+  native target use without falsifying source isPrimary. Other this-chain entries
+  reuse the existing official declaration/body/value/type factory conversion.
+- Direct native super now works across classes, including abstract bases with
+  no extra factories. Root fields/init blocks, early returns and delegating bodies
+  preserve execution order. No copied initializer algorithm or JS newTarget/
+  Object.create runtime. Private native roots remain private.
+- RED run-HarJRs fails the old no-primary guard. Frozen GREEN run-pRFuAP passes
+  60 flat + 60 multi-file JVM/ETS-host results, strict target types, reversed-input
+  determinism, six JVM-valid/source-linked rejection boundaries, seventeen
+  factory identities and seven original secondary roots with exact super links.
+  All 64 implementation/fixture hashes match; the former NoPrimary rejection
+  is a positive regression. Output SHA256:
+  c44d7c7f396de1b54463405fdcb801cb23c334b881aa08d278b88e1a8a0f5fe6.
+- Final inherited-default run-QYxcPz passes 45 flat + 45 module results, five
+  boundaries and common default-provider/source/receiver/dispatch checks.
+  Main-only self-check and whitespace validation pass. No SDK/native or whole
+  R2 acceptance. Multiple roots, superclass factories, abstract factory bodies,
+  protected visibility and secondary capture combinations remain the next work.
+
 ## 2026-09-14: R2.3 native-primary secondary construction
 
 - Inspected both official JS constructor routes and their phase order. Reused

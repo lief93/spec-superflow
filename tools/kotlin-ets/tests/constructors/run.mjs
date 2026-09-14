@@ -29,7 +29,7 @@ function run(label, command, args, expectedStatus = 0) {
   assert.equal(value.status, expectedStatus, value.stdout + value.stderr);
   return value.stdout;
 }
-const sources = ['Construction.kt', 'Application.kt'].map(name => join(here, name));
+const sources = ['Construction.kt', 'Application.kt', 'Roots.kt', 'SupportedNoPrimary.kt'].map(name => join(here, name));
 const compiler = join(root, 'tests/stdlib/compiler.sh'), cli = join(root, 'kotlin-ets');
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim(), jar = join(work, 'oracle.jar');
 run('jvm-build', 'bash', [compiler, ...sources, join(here, 'Oracle.kt'), '-d', jar]);
@@ -58,6 +58,29 @@ assert.ok(isPrivate(secret.members.find(ts.isConstructorDeclaration)));
 assert.ok(isPrivate(secret.members.find(node => node.name?.text === 'adjusted')));
 assert.equal(secret.members.filter(node => ts.isMethodDeclaration(node) && isPrivate(node) &&
   node.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword)).length, 1);
+const isStatic = node => node.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword);
+for (const [name, parameters, factoryCount] of [
+  ['NativeRoot', ['seed'], 3], ['GenericNative', ['value'], 1], ['RootBase', ['trace', 'seed'], 0],
+  ['RootChild', ['trace', 'seed'], 1], ['AbstractNative', ['value'], 0], ['Closed', ['value'], 1],
+  ['NoPrimary', ['value'], 0],
+]) {
+  const declaration = tree.statements.find(node => ts.isClassDeclaration(node) && node.name.text === name);
+  assert.equal(declaration.members.filter(ts.isConstructorDeclaration).length, 1);
+  const constructor = declaration.members.find(ts.isConstructorDeclaration);
+  assert.deepEqual(constructor.parameters.map(p => p.name.text), parameters);
+  assert.equal(declaration.members.filter(node => ts.isMethodDeclaration(node) && isStatic(node)).length, factoryCount);
+  if (name === 'Closed') assert.ok(isPrivate(constructor));
+  if (name === 'GenericNative') {
+    const factory = declaration.members.find(node => ts.isMethodDeclaration(node) && isStatic(node));
+    assert.deepEqual(factory.typeParameters.map(p => p.name.text), ['T']);
+    assert.equal(factory.type.getText(tree), 'GenericNative<T>');
+  }
+  if (name === 'RootChild') {
+    const first = constructor.body.statements[0];
+    assert.ok(ts.isExpressionStatement(first) && ts.isCallExpression(first.expression) &&
+      first.expression.expression.kind === ts.SyntaxKind.SuperKeyword);
+  }
+}
 assert.doesNotMatch(code, /Reflect\.|setPrototypeOf|newTarget/, 'No JS-specific allocation runtime');
 const options = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS };
 const context = vm.createContext({ exports: {} });
@@ -65,7 +88,8 @@ vm.runInContext(ts.transpileModule(code, { compilerOptions: options }).outputTex
 function evaluate(exports, Trace) {
   const scope = vm.createContext({ exports });
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed => {
-    const values = ['construct', 'generic', 'inherited', 'captured', 'defaults', 'privateChain', 'reference'].map(name =>
+    const values = ['construct', 'generic', 'inherited', 'captured', 'defaults', 'privateChain', 'reference',
+      'nativeRoot', 'genericRoot', 'inheritedRoot', 'privateRoot'].map(name =>
       String(vm.runInContext(`exports.${name}(${seed})`, scope, { timeout: 1000 })));
     const trace = new Trace(); let outcome = 'ok';
     try { exports.failure(trace, seed); } catch (e) {
@@ -78,12 +102,12 @@ result.actual = evaluate(context.exports, context.exports.Trace); record(); asse
 const modules = join(work, 'modules'), reversed = join(work, 'reversed');
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Construction.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Construction.ets', 'Roots.ets', 'SupportedNoPrimary.ets']);
 for (const name of readdirSync(modules)) {
   assert.equal(readFileSync(join(modules, name), 'utf8'), readFileSync(join(reversed, name), 'utf8'));
   writeFileSync(join(modules, name.replace('.ets', '.ts')), readFileSync(join(modules, name), 'utf8'));
 }
-check(['Application.ts', 'Construction.ts'].map(name => join(modules, name)));
+check(sources.map(path => join(modules, path.split('/').at(-1).replace('.kt', '.ts'))));
 const cache = new Map();
 function load(name) {
   if (cache.has(name)) return cache.get(name);
@@ -96,7 +120,7 @@ function load(name) {
 }
 result.moduleActual = evaluate(load('Application'), load('Construction').Trace); assert.deepEqual(result.moduleActual, result.expected);
 result.negatives = [];
-for (const [name, message] of [['NoPrimary', /without a primary/], ['SuperSecondary', /derived-instance allocation/],
+for (const [name, message] of [['MultipleRoots', /one native allocating constructor root/], ['SuperSecondary', /derived-instance allocation/],
   ['Abstract', /derived-instance allocation/], ['Protected', /protected target member visibility/],
   ['Inner', /capture-aware allocation/], ['Local', /capture-aware allocation/]]) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');

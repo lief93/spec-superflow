@@ -69,19 +69,30 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, inherited defaults and native-primary secondary this-chains accepted; remaining constructor forms, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, inherited defaults and unique-root secondary construction accepted; remaining constructor forms, virtual overloads and generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
 ## Next action
 
-Continue R2.3 with remaining constructor allocation forms: no-primary classes,
-superclass secondary delegation, abstract construction and local/inner capture
-combinations. Protected secondary visibility also remains diagnosed. Then proceed
+Continue R2.3 with remaining constructor allocation forms: multiple native roots,
+superclass delegation to factory-converted secondaries, abstract constructor
+factories and local/inner capture combinations. Protected secondary visibility
+also remains diagnosed. Then proceed
 to virtual overloads and remaining source generic bounds/variance combinations.
 Use the inspected official constructor, delegation and initializer contracts.
 Do not replace constructor semantics with a renamed function: preserve delegation,
 allocation, field/init order, argument effects and source ownership.
+
+Unique-root no-primary GREEN run-pRFuAP passes 60 flat + 60 multi-file JVM/host
+results, strict target types, six JVM-valid boundaries, deterministic modules,
+seventeen symbol-bound factories and seven original secondary native roots.
+It also checks direct native super across classes, including an abstract base.
+No source constructor is falsely relabeled primary. RED run-HarJRs records the
+previous no-primary guard. This extends the accepted constructor family; multiple
+roots, base factories and capture/visibility combinations above remain pending.
+Final inherited-default regression run-QYxcPz passes 45 flat + 45 module
+outcomes, five boundaries and common provider/dispatch checks on this version.
 
 Constructor GREEN run-am3R7S passes 40 flat + 40 multi-file JVM/host results,
 strict target types, six JVM-valid boundaries, deterministic modules and eleven

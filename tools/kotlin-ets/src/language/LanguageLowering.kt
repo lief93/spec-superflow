@@ -621,8 +621,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 sourceName = identifier(declaration).takeUnless { it == classNaming.name(declaration) })
         }
         val constructors = declaration.declarations.filterIsInstance<IrConstructor>()
-        if (constructors.size != 1 || !constructors.single().isPrimary) {
-            diagnostics.unsupported(declaration, "A source class must have one primary constructor")
+        if (constructors.size != 1 || !isEtsNativeConstructor(constructors.single())) {
+            diagnostics.unsupported(declaration, "A source class must have one native allocating constructor")
         }
         val constructor = constructors.single()
         val captures = declaration.declarations.filterIsInstance<IrField>().filter(::hasCaptureOrigin)
@@ -694,7 +694,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         }
         if (constructorBody.statements.filterIsInstance<IrDelegatingConstructorCall>().size != 1 ||
             constructorBody.statements.getOrNull(capturePrefix.size + if (outerWrite != null) 1 else 0) !is IrDelegatingConstructorCall) {
-            diagnostics.unsupported(constructor, "A primary constructor requires one direct leading delegation")
+            diagnostics.unsupported(constructor, "A native constructor requires one direct leading delegation")
         }
         if (capturePrefix.isNotEmpty() && (!captureOwner(declaration) || parents.isNotEmpty()) ||
             capturePrefix.map { it.symbol.owner }.toSet() != captures.toSet() || capturePrefix.size != captures.size ||
@@ -729,7 +729,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             is IrDelegatingConstructorCall -> {
                 val target = child.symbol.owner.parent as? IrClass
                 if (base != null) {
-                    if (target?.symbol != base.symbol || !child.symbol.owner.isPrimary) {
+                    if (target?.symbol != base.symbol || !isEtsNativeConstructor(child.symbol.owner)) {
                         diagnostics.unsupported(child, "Unsupported constructor delegation")
                     }
                     rejectInitializationThis(child, declaration)

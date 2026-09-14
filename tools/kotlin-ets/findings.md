@@ -62,8 +62,12 @@ transitive serialized inline loading and typed UI modules have since progressed.
   provider selection and inherited-method restrictions must check the receiver
   kind, not just whether the parent class participates in inheritance.
 - A superclass secondary factory cannot initialize an already allocated derived
-  object by constructing a base object. Abstract/no-primary/capture combinations
-  need a further allocation contract; diagnose them until that is implemented.
+  object by constructing a base object. A unique directly-super-delegating
+  secondary can instead remain the source's native allocation root, even for an
+  abstract base. Register exact constructor/owner identity using official
+  irAttribute without changing its source isPrimary flag. Native super calls and
+  existing initializer consumers then compose; multiple roots, superclass
+  factories and capture combinations still need a broader allocation contract.
 - Official JS performs constructor conversion after inlining. Constructor
   references reproduce a real phase-order bug if ETS rewrites calls earlier:
   common inlining creates a fresh call to the old constructor symbol. If the

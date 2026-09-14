@@ -9,6 +9,10 @@ fun main() {
         println(defaults(seed))
         println(privateChain(seed))
         println(reference(seed))
+        println(nativeRoot(seed))
+        println(genericRoot(seed))
+        println(inheritedRoot(seed))
+        println(privateRoot(seed))
         val trace = Trace()
         try {
             failure(trace, seed)
