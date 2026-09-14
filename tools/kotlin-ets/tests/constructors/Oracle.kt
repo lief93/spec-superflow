@@ -13,6 +13,11 @@ fun main() {
         println(genericRoot(seed))
         println(inheritedRoot(seed))
         println(privateRoot(seed))
+        println(dispatchRoots(seed))
+        println(dispatchInheritance(seed))
+        println(dispatchGeneric(seed))
+        println(dispatchDefaults(seed))
+        println(dispatchEarly(seed))
         val trace = Trace()
         try {
             failure(trace, seed)

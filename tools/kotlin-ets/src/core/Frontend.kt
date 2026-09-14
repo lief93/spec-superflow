@@ -95,6 +95,7 @@ fun <T> withKotlinFrontend(arguments: List<String>, emit: (KotlinFrontendSession
         session = frontend
         lowerInheritedDefaults(translated)
         val unavailableInlineBodies = lowerSourceInlineFunctions(translated, frontend.bodies)
+        lowerNativeConstructorDispatch(translated)
         lowerSecondaryConstructors(translated)
         lowerLocalDeclarations(translated)
         lowerForLoops(translated)

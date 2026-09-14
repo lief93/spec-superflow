@@ -29,7 +29,7 @@ function run(label, command, args, expectedStatus = 0) {
   assert.equal(value.status, expectedStatus, value.stdout + value.stderr);
   return value.stdout;
 }
-const sources = ['Construction.kt', 'Application.kt', 'Roots.kt', 'SupportedNoPrimary.kt'].map(name => join(here, name));
+const sources = ['Construction.kt', 'Application.kt', 'Roots.kt', 'SupportedNoPrimary.kt', 'Dispatch.kt'].map(name => join(here, name));
 const compiler = join(root, 'tests/stdlib/compiler.sh'), cli = join(root, 'kotlin-ets');
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim(), jar = join(work, 'oracle.jar');
 run('jvm-build', 'bash', [compiler, ...sources, join(here, 'Oracle.kt'), '-d', jar]);
@@ -82,6 +82,14 @@ for (const [name, parameters, factoryCount] of [
   }
 }
 assert.doesNotMatch(code, /Reflect\.|setPrototypeOf|newTarget/, 'No JS-specific allocation runtime');
+for (const [name, privateEntry] of [['MultipleRoots', true], ['DispatchDefaults', true], ['EarlyDispatch', true],
+  ['DispatchParent', false], ['AbstractDispatch', false], ['GenericDispatch', false]]) {
+  const declaration = tree.statements.find(node => ts.isClassDeclaration(node) && node.name.text === name);
+  const constructors = declaration.members.filter(ts.isConstructorDeclaration);
+  assert.equal(constructors.length, 1);
+  assert.equal(Boolean(isPrivate(constructors[0])), privateEntry);
+  assert.equal(constructors[0].parameters[0].name.text, '__constructor');
+}
 const options = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS };
 const context = vm.createContext({ exports: {} });
 vm.runInContext(ts.transpileModule(code, { compilerOptions: options }).outputText, context, { timeout: 1000 });
@@ -89,7 +97,8 @@ function evaluate(exports, Trace) {
   const scope = vm.createContext({ exports });
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed => {
     const values = ['construct', 'generic', 'inherited', 'captured', 'defaults', 'privateChain', 'reference',
-      'nativeRoot', 'genericRoot', 'inheritedRoot', 'privateRoot'].map(name =>
+      'nativeRoot', 'genericRoot', 'inheritedRoot', 'privateRoot', 'dispatchRoots', 'dispatchInheritance',
+      'dispatchGeneric', 'dispatchDefaults', 'dispatchEarly'].map(name =>
       String(vm.runInContext(`exports.${name}(${seed})`, scope, { timeout: 1000 })));
     const trace = new Trace(); let outcome = 'ok';
     try { exports.failure(trace, seed); } catch (e) {
@@ -102,7 +111,8 @@ result.actual = evaluate(context.exports, context.exports.Trace); record(); asse
 const modules = join(work, 'modules'), reversed = join(work, 'reversed');
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Construction.ets', 'Roots.ets', 'SupportedNoPrimary.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['Application.ets', 'Construction.ets', 'Dispatch.ets', 'Roots.ets', 'SupportedNoPrimary.ets']);
+result.modules = readdirSync(modules).sort().map(name => ({ name, path: join(modules, name), sha256: hash(join(modules, name)) }));
 for (const name of readdirSync(modules)) {
   assert.equal(readFileSync(join(modules, name), 'utf8'), readFileSync(join(reversed, name), 'utf8'));
   writeFileSync(join(modules, name.replace('.ets', '.ts')), readFileSync(join(modules, name), 'utf8'));
@@ -118,11 +128,21 @@ function load(name) {
   } }, { timeout: 1000 });
   return exports;
 }
-result.moduleActual = evaluate(load('Application'), load('Construction').Trace); assert.deepEqual(result.moduleActual, result.expected);
+result.moduleActual = evaluate({ ...load('Application'), ...load('Dispatch') }, load('Construction').Trace); assert.deepEqual(result.moduleActual, result.expected);
+result.regressions = [];
+for (const name of ['MultipleRoots', 'SuperSecondary', 'Abstract']) {
+  const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
+  run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
+  run(name, 'bash', [cli, '--mode', 'language', '--out', out, input]);
+  const path = out.replace('.ets', '.ts'); writeFileSync(path, readFileSync(out)); check([path]);
+  result.regressions.push({ name, sha256: hash(out) });
+}
 result.negatives = [];
-for (const [name, message] of [['MultipleRoots', /one native allocating constructor root/], ['SuperSecondary', /derived-instance allocation/],
-  ['Abstract', /derived-instance allocation/], ['Protected', /protected target member visibility/],
-  ['Inner', /capture-aware allocation/], ['Local', /capture-aware allocation/]]) {
+for (const [name, message] of [['Protected', /protected target member visibility/],
+  ['Inner', /capture-aware allocation/], ['Local', /capture-aware allocation/],
+  ['DispatchInheritedInitialization', /Using this during inherited initialization/],
+  ['DispatchVirtualBody', /Using this during inherited initialization/],
+  ['DispatchLocalInitializer', /local-class popup/]]) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
   run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
   const diagnostic = JSON.parse(run(name, 'bash', [cli, '--mode', 'language', '--out', out, input], 2));
@@ -132,7 +152,7 @@ for (const [name, message] of [['MultipleRoots', /one native allocating construc
   assert.equal(existsSync(out), false); result.negatives.push(diagnostic);
 }
 const proofJar = join(work, 'ir-proof.jar');
-run('ir-build', 'bash', [compiler, ...['core/Frontend.kt', 'core/Constructors.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt',
+run('ir-build', 'bash', [compiler, ...['core/Frontend.kt', 'core/Constructors.kt', 'core/ConstructorDispatch.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt',
   'core/ExpectedNullability.kt', 'core/LibraryInlining.kt', 'core/BinaryBodies.kt', 'core/LocalDeclarations.kt',
   'core/ForLoops.kt', 'core/Contract.kt', 'target/Tree.kt', 'target/Validator.kt', 'target/TypeSubstitution.kt',
   'target/Traversal.kt'].map(file => join(root, 'src', file)), join(here, 'IrEvidence.kt'), '-d', proofJar]);

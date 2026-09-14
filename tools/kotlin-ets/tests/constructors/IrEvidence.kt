@@ -12,14 +12,24 @@ fun main(args: Array<String>) {
         val factories = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>()
             .flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
             .filter { it.attributeOwnerId is IrConstructor }
+            .filterNot { it.parentAsClass.constructors.any(::isEtsDispatchConstructor) }
         check(factories.size == 17) { "Expected seventeen source secondary factories, got ${factories.size}" }
         val classes = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>()
-        val roots = classes.flatMap { it.constructors.toList() }.filterNot { it.isPrimary }
+        val roots = classes.flatMap { it.constructors.toList() }.filterNot { it.isPrimary || isEtsDispatchConstructor(it) }
         check(roots.size == 7) { "Expected seven original secondary allocation roots, got ${roots.size}" }
         roots.forEach {
             check(isEtsNativeConstructor(it) && it.parentAsClass.constructors.single() === it)
             check(it.startOffset >= 0 && it.endOffset > it.startOffset)
             check(it.parameters.all { parameter -> parameter.parent === it })
+        }
+        val dispatchers = classes.flatMap { it.constructors.toList() }.filter(::isEtsDispatchConstructor)
+        check(dispatchers.size == 6) { "Expected six multi-entry native constructors, got ${dispatchers.size}" }
+        dispatchers.forEach { constructor ->
+            check(!constructor.isPrimary && isEtsNativeConstructor(constructor))
+            check(constructor.parentAsClass.constructors.single() === constructor)
+            check(constructor.valueParameters.first().name.asString() == "__constructor")
+            check(constructor.valueParameters.all { it.parent === constructor })
+            check(constructor.parentAsClass.declarations.none { it is IrSimpleFunction && it.name.asString() == "initialize" })
         }
         for ((childName, baseName) in listOf("RootChild" to "RootBase", "ConcreteNative" to "AbstractNative")) {
             val child = classes.single { it.name.asString() == childName }
@@ -65,7 +75,13 @@ fun main(args: Array<String>) {
                 check(isEtsNativeConstructor(expression.symbol.owner))
                 super.visitDelegatingConstructorCall(expression)
             }
+            override fun visitGetValue(expression: IrGetValue) {
+                val constructor = expression.symbol.owner.parent as? IrConstructor ?: return
+                check(constructor in constructor.parentAsClass.constructors.toList()) {
+                    "Value still refers to removed source constructor: ${expression.symbol.owner.name}"
+                }
+            }
         })
-        println("PASS seventeen symbol-bound factories, seven original secondary native roots, exact cross-class super symbols, original source/parameters/visibility and remapped this/returns")
+        println("PASS seventeen single-root factories, seven original secondary native roots, six multi-entry native constructors, exact cross-class super symbols and remapped constructor parameters")
     }
 }

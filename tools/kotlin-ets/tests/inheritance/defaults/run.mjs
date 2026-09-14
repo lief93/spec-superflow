@@ -108,7 +108,7 @@ for (const [name, message] of [['Star', /invariant receiver/], ['MultipleBounds'
   assert.equal(existsSync(out), false); result.negatives.push(diagnostic);
 }
 const proofJar = join(work, 'ir-proof.jar');
-run('ir-build', 'bash', [compiler, ...['core/Frontend.kt', 'core/Constructors.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt',
+run('ir-build', 'bash', [compiler, ...['core/Frontend.kt', 'core/Constructors.kt', 'core/ConstructorDispatch.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt',
   'core/ExpectedNullability.kt', 'core/LibraryInlining.kt', 'core/BinaryBodies.kt', 'core/LocalDeclarations.kt',
   'core/ForLoops.kt', 'core/Contract.kt', 'target/Tree.kt', 'target/Validator.kt', 'target/TypeSubstitution.kt',
   'target/Traversal.kt'].map(file => join(root, 'src', file)),

@@ -40,6 +40,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     private val sourceNames = mutableSetOf<String>()
     private var expressionDepth = 0
     private var currentElement: IrElement? = null
+    private data class NativeInitialization(val owner: IrClass, val base: IrClass?, val baseType: EtsNamedType?)
+    private var nativeInitialization: NativeInitialization? = null
 
     override fun source(element: IrElement): SourceSpan {
         val source = sourceSpan(element, diagnostics)
@@ -283,6 +285,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     }
 
     private fun statement(value: IrStatement, scope: Scope): List<EtsStatement> = withElement(value) { when (value) {
+        is IrDelegatingConstructorCall, is IrInstanceInitializerCall -> constructorStatement(value, scope)
         is IrVariable -> {
             val initializer = value.initializer?.let { expression(it, scope) }
             val name = bind(value, scope)
@@ -692,8 +695,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             }
             write
         }
-        if (constructorBody.statements.filterIsInstance<IrDelegatingConstructorCall>().size != 1 ||
-            constructorBody.statements.getOrNull(capturePrefix.size + if (outerWrite != null) 1 else 0) !is IrDelegatingConstructorCall) {
+        if (!isEtsDispatchConstructor(constructor) && (constructorBody.statements.filterIsInstance<IrDelegatingConstructorCall>().size != 1 ||
+            constructorBody.statements.getOrNull(capturePrefix.size + if (outerWrite != null) 1 else 0) !is IrDelegatingConstructorCall)) {
             diagnostics.unsupported(constructor, "A native constructor requires one direct leading delegation")
         }
         if (capturePrefix.isNotEmpty() && (!captureOwner(declaration) || parents.isNotEmpty()) ||
@@ -703,7 +706,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             } != capturePrefix.size) {
             diagnostics.unsupported(constructor, "Captured fields require one official initialization prefix before Any delegation")
         }
-        constructorBody.statements.forEach { child -> when (child) {
+        val previousInitialization = nativeInitialization
+        nativeInitialization = NativeInitialization(declaration, base, baseType)
+        try { constructorBody.statements.forEach { child -> when (child) {
             outerWrite -> {
                 val binding = checkNotNull(inner)
                 val field = outerFieldSymbol(binding.field)
@@ -726,33 +731,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                     EtsMember(thisReference(declaration, write.symbol.owner), field.name, field.type, field.source, field.id),
                     EtsReference(value.symbol, field.source), field.source), field.source))
             }
-            is IrDelegatingConstructorCall -> {
-                val target = child.symbol.owner.parent as? IrClass
-                if (base != null) {
-                    if (target?.symbol != base.symbol || !isEtsNativeConstructor(child.symbol.owner)) {
-                        diagnostics.unsupported(child, "Unsupported constructor delegation")
-                    }
-                    rejectInitializationThis(child, declaration)
-                    initialization.add(EtsSuperConstructorCall(checkNotNull(baseType), arguments(child, scope), source(child)))
-                } else if (target?.fqNameWhenAvailable?.asString() != "kotlin.Any") {
-                    diagnostics.unsupported(child, "Unsupported constructor delegation")
-                }
-            }
-            is IrInstanceInitializerCall -> declaration.declarations.forEach { initializer -> when (initializer) {
-                is IrProperty -> initializer.backingField?.initializer?.expression?.let {
-                    if (hasInheritance(declaration)) rejectInitializationThis(it, declaration)
-                    initialization.add(EtsExpressionStatement(EtsAssignment(
-                        EtsMember(thisReference(declaration, initializer), fieldName(initializer.backingField!!), type(initializer.backingField!!.type), source(initializer)),
-                        expression(it, scope), source(initializer))))
-                }
-                is IrAnonymousInitializer -> {
-                    if (hasInheritance(declaration)) rejectInitializationThis(initializer.body, declaration)
-                    initialization.addAll(statements(initializer.body, scope.fork()))
-                }
-                else -> Unit
-            } }
             else -> initialization.addAll(statement(child, scope))
-        } }
+        } } } finally { nativeInitialization = previousInitialization }
         members.add(EtsFunction("constructor", parameterText, EtsTypes.VOID, initialization, source(constructor),
             kind = EtsFunctionKind.CONSTRUCTOR, private = singleton || constructor.visibility == DescriptorVisibilities.PRIVATE))
         declaration.declarations.filterIsInstance<IrSimpleFunction>().filter { !it.isFakeOverride }.forEach { method ->
@@ -763,6 +743,37 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         EtsClass(classNaming.name(declaration), members, source(declaration), typeParameters = typeParameters,
             baseClass = baseType, interfaces = interfaces, abstract = declaration.modality == Modality.ABSTRACT,
             sourceName = identifier(declaration).takeUnless { it == classNaming.name(declaration) })
+    }
+
+    private fun constructorStatement(value: IrStatement, scope: Scope): List<EtsStatement> {
+        val context = nativeInitialization ?: diagnostics.unsupported(value, "Constructor initialization outside its native owner")
+        val declaration = context.owner
+        if (value is IrDelegatingConstructorCall) {
+            val target = value.symbol.owner.parent as? IrClass
+            if (context.base != null) {
+                if (target?.symbol != context.base.symbol || !isEtsNativeConstructor(value.symbol.owner))
+                    diagnostics.unsupported(value, "Unsupported constructor delegation")
+                rejectInitializationThis(value, declaration)
+                return listOf(EtsSuperConstructorCall(checkNotNull(context.baseType), arguments(value, scope), source(value)))
+            }
+            if (target?.fqNameWhenAvailable?.asString() != "kotlin.Any") diagnostics.unsupported(value, "Unsupported constructor delegation")
+            return emptyList()
+        }
+        if (value !is IrInstanceInitializerCall || value.classSymbol !== declaration.symbol)
+            diagnostics.unsupported(value, "Initializer does not belong to its native constructor")
+        return declaration.declarations.flatMap { initializer -> when (initializer) {
+            is IrProperty -> initializer.backingField?.initializer?.expression?.let {
+                if (hasInheritance(declaration)) rejectInitializationThis(it, declaration)
+                listOf(EtsExpressionStatement(EtsAssignment(
+                    EtsMember(thisReference(declaration, initializer), fieldName(initializer.backingField!!), type(initializer.backingField!!.type), source(initializer)),
+                    expression(it, scope), source(initializer))))
+            } ?: emptyList()
+            is IrAnonymousInitializer -> {
+                if (hasInheritance(declaration)) rejectInitializationThis(initializer.body, declaration)
+                statements(initializer.body, scope.fork())
+            }
+            else -> emptyList()
+        } }
     }
 
     private fun hasInheritance(declaration: IrClass): Boolean = declaration.kind == ClassKind.INTERFACE ||
@@ -792,14 +803,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     }
 
     private fun rejectInitializationThis(element: IrElement, declaration: IrClass) {
-        element.acceptVoid(object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
-            override fun visitGetValue(expression: IrGetValue) {
-                if (expression.symbol == declaration.thisReceiver?.symbol) {
-                    diagnostics.unsupported(expression, "Using this during inherited initialization is not supported")
-                }
-            }
-        })
+        rejectInheritedInitializerThis(element, declaration, diagnostics)
     }
 
     private fun functionSymbol(function: IrSimpleFunction): EtsSymbol {

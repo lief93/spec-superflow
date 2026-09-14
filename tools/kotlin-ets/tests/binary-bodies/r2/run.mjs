@@ -31,7 +31,7 @@ const oracle = join(work, 'oracle.jar');
 run('oracle-build', 'bash', [compiler, '-classpath', `${cp}:${library}`, join(here, 'Application.kt'), join(here, 'Oracle.kt'), '-d', oracle]);
 const expected = run('jvm', 'java', ['-cp', `${cp}:${library}:${oracle}`, 'genericconsumer.OracleKt']).trim().split('\n');
 assert.deepEqual(expected, ['3/5/5/9/6/IDBOIG', '0/2/2/0/6/IDBOIG', '-2147483647/-2147483645/-2147483645/-2147483645/6/IDBOIG']);
-const core = ['Frontend.kt', 'Constructors.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt', 'LocalDeclarations.kt',
+const core = ['Frontend.kt', 'Constructors.kt', 'ConstructorDispatch.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt', 'LocalDeclarations.kt',
   'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt'].map(name => join(root, 'src/core', name));
 const evidence = join(work, 'evidence.jar');
 writeFileSync(join(work, 'identity.json'), JSON.stringify([...core, ...sources.map(name => join(here, name)), library,

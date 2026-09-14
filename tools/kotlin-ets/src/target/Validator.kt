@@ -415,6 +415,7 @@ class EtsValidator {
     /** Track native allocation on every normal path, independently of ordinary type validation. */
     private fun constructorFlow(function: EtsFunction, base: EtsNamedType): List<EtsSuperConstructorCall> {
         val permitted = mutableListOf<EtsSuperConstructorCall>()
+        val jumps = mutableMapOf<Pair<String, Boolean>, Set<Boolean>>()
         fun inspect(node: EtsNode, states: Set<Boolean>, context: String = "nested body") {
             walkEts(node) { child ->
                 if (child is EtsSuperConstructorCall) reject(child, "Super delegation in $context is not supported")
@@ -448,10 +449,19 @@ class EtsValidator {
                         emptySet()
                     }
                     is EtsThrow -> { inspect(statement.value, states); emptySet() }
+                    is EtsJump -> {
+                        val target = statement.label to statement.isContinue
+                        jumps[target] = jumps[target].orEmpty() + states
+                        emptySet()
+                    }
                     is EtsLoop -> {
-                        inspect(statement, states, "loop")
-                        flow(statement.body, states)
-                        states
+                        // Official returnable blocks use a do/false loop, which cannot repeat super.
+                        val once = statement.doWhile && (statement.condition as? EtsLiteral)?.value == false
+                        if (!once) inspect(statement, states, "loop")
+                        val normal = flow(statement.body, states)
+                        val exits = jumps.remove(statement.label to false).orEmpty() +
+                            jumps.remove(statement.label to true).orEmpty()
+                        if (once) normal + exits else states
                     }
                     else -> {
                         inspect(statement, states)

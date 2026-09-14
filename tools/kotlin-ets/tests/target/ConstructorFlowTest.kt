@@ -67,6 +67,18 @@ fun checkConstructorFlowContract(): String {
     accept(listOf(thrown))
     val unrelated = EtsLambda(emptyList(), listOf(EtsReturn(f.literal(1), f.source)), f.number, f.source)
     accept(listOf(EtsExpressionStatement(unrelated), f.delegation, initialize))
+    fun once(body: List<EtsStatement>, label: String = "once") =
+        EtsLoop(label, EtsLiteral(false, EtsTypes.BOOLEAN, f.source), body, true, f.source)
+    fun exit(label: String = "once", continuing: Boolean = false) = EtsJump(label, continuing, f.source)
+    accept(listOf(once(listOf(f.delegation, initialize, exit()))))
+    accept(listOf(once(listOf(f.delegation, initialize, exit(continuing = true)))))
+    accept(listOf(once(listOf(f.choice(listOf(f.delegation, exit()), listOf(f.delegation)))), initialize))
+    accept(listOf(once(listOf(once(listOf(f.delegation, exit("once")), "inner"))), initialize))
+    reject("uninitialized single-execution break", listOf(once(listOf(exit(), f.delegation))), "Unreachable super")
+    reject("partially initialized break", listOf(once(listOf(f.choice(listOf(exit()), listOf(f.delegation))))), "before super")
+    reject("partially initialized continue", listOf(once(listOf(f.choice(listOf(exit(continuing = true)), listOf(f.delegation))))), "before super")
+    reject("duplicate after single execution", listOf(once(listOf(f.delegation)), f.delegation), "more than once")
+    reject("outer break skips initialization", listOf(once(listOf(once(listOf(exit("once")), "inner")))), "before super")
     reject("missing branch", listOf(f.choice(listOf(f.delegation), null)), "before super")
     reject("empty construction", emptyList(), "before super")
     reject("duplicate", listOf(f.delegation, f.delegation), "more than once")
@@ -92,7 +104,7 @@ fun checkConstructorFlowContract(): String {
     val child = p.files.single().declarations.filterIsInstance<EtsClass>().last()
     check(runCatching { printer.program(p.copy(files = listOf(p.files.single().copy(declarations =
         p.files.single().declarations.map { if (it === child) child.copy(members = child.members + member) else it })))) }.exceptionOrNull() is InvalidTarget)
-    println("PASS constructor flow: branch/block joins, abrupt exits, initialization ownership and seventeen source-linked refusals")
+    println("PASS constructor flow: branch/block joins, single-execution loops, abrupt exits, initialization ownership and twenty-two source-linked refusals")
     return code
 }
 

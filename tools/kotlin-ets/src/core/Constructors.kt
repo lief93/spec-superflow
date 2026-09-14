@@ -23,7 +23,32 @@ private val ETS_SECONDARY_CONSTRUCTOR by IrDeclarationOriginImpl
 private var IrConstructor.nativeAllocationOwner: IrClass? by irAttribute(followAttributeOwner = false)
 
 internal fun isEtsNativeConstructor(constructor: IrConstructor): Boolean =
-    constructor.isPrimary || constructor.nativeAllocationOwner?.let { it === constructor.parent } == true
+    constructor.isPrimary || isEtsDispatchConstructor(constructor) || constructor.nativeAllocationOwner?.let { it === constructor.parent } == true
+
+internal fun rejectInheritedInitializerThis(element: IrElement, owner: IrClass, diagnostics: DiagnosticSink,
+    allowFieldWrites: Boolean = false) {
+    element.acceptVoid(object : IrElementVisitorVoid {
+        override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
+        private fun ownThis(value: IrExpression?) = (value as? IrGetValue)?.symbol == owner.thisReceiver?.symbol
+        override fun visitSetField(expression: IrSetField) {
+            if (allowFieldWrites && expression.symbol.owner.parent === owner && ownThis(expression.receiver))
+                expression.value.acceptVoid(this)
+            else super.visitSetField(expression)
+        }
+        override fun visitCall(expression: IrCall) {
+            val property = expression.symbol.owner.correspondingPropertySymbol?.owner
+            if (allowFieldWrites && property?.parent === owner && property.modality == Modality.FINAL &&
+                property.setter?.symbol == expression.symbol && expression.symbol.owner.origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR &&
+                ownThis(expression.dispatchReceiver))
+                expression.symbol.owner.valueParameters.indices.forEach { expression.getValueArgument(it)?.acceptVoid(this) }
+            else super.visitCall(expression)
+        }
+        override fun visitGetValue(expression: IrGetValue) {
+            if (expression.symbol == owner.thisReceiver?.symbol)
+                diagnostics.unsupported(expression, "Using this during inherited initialization is not supported")
+        }
+    })
+}
 
 /** Runs after inlining can expand constructor references into calls, before local capture lowering. */
 internal fun lowerSecondaryConstructors(input: JvmFir2IrPipelineArtifact) {
@@ -32,7 +57,7 @@ internal fun lowerSecondaryConstructors(input: JvmFir2IrPipelineArtifact) {
     module.acceptVoid(object : IrElementVisitorVoid {
         override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
         override fun visitConstructor(declaration: IrConstructor) {
-            if (!declaration.isPrimary) constructors.add(declaration)
+            if (!isEtsNativeConstructor(declaration)) constructors.add(declaration)
             super.visitConstructor(declaration)
         }
     })

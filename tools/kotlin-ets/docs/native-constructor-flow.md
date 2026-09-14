@@ -1,8 +1,8 @@
 # Native constructor control flow
 
-This is an ETS target prerequisite for multiple source constructor entries, not
-an alternate source parser or a claim that constructor dispatch is already wired
-through the public Kotlin CLI.
+This describes the ETS constructor-flow contract and its source-dispatch
+integration. Both use the official Kotlin IR and the common typed ETS tree, not
+an alternate source parser.
 
 ## Target contract
 
@@ -16,8 +16,11 @@ through typed blocks and conditional branches:
 - A throwing path need not initialize an object it never returns.
 - Any `this` read, write or closure capture before initialization is rejected,
   including parameter defaults, conditions and super arguments.
-- Nested function/lambda and loop super calls remain explicit rejections. They
-  are not accepted merely because a matching super node occurs elsewhere.
+- Nested function/lambda and potentially repeating loop super calls remain
+  explicit rejections. A `do/false` loop executes at most once; its normal,
+  labeled break and continue exits preserve initialization state, including
+  exits from inner loops. This accepts common inliner returnable blocks without
+  accepting loops that can allocate twice or skip initialization.
 - Only identity-authorized super nodes in the owning constructor reach the
   existing type, argument and base-class checks. Ordinary methods cannot use
   those permissions. Readonly-field and closure checks remain in force.
@@ -26,13 +29,13 @@ This deliberately validates target allocation safety rather than re-running
 Kotlin symbol, type or constructor-delegation analysis. Existing typed nodes,
 traversal and printer are reused; no constructor text is injected into ETS.
 
-## Official phase work still required
+## Official phase integration
 
 Kotlin 2.1.20 common `DefaultArgumentStubGenerator` already supports constructors:
 it selects masked default arguments and delegates to the original constructor.
 `DefaultParameterInjector` rewrites both allocation and delegating constructor
-calls. Reuse those contracts when normalizing a multi-entry native constructor;
-do not add a separate ETS default-expression evaluator.
+calls. ConstructorDispatch reuses those contracts for selected source families,
+without JVM constructor-marker parameters or a separate default evaluator.
 
 The common `FunctionInlining` phase can remap parameters, generic types and
 returns in compiler-owned initializer helpers. Its function-access visitor does
@@ -42,12 +45,30 @@ synthetic-primary/ES6 phases provide the structural reference but depend on
 JS newTarget/prototype/box intrinsics. Those intrinsics are not native ETS
 allocation operations.
 
-Remaining implementation: normalize selected source constructor families to a
-single native entry, preserve every constructor's parameters/defaults/effects,
-keep super construction on the actual derived object, and consume nested
-initialization through the same target tree. Multiple roots, superclass factories
-and abstract factory bodies are still diagnosed by the public CLI until that
-source integration is verified. This target prerequisite does not close R2.3.
+The source pass selects multiple-root families, abstract families and source
+base classes addressed through a secondary constructor. Common initializer
+lowering and cleanup run before helper-body movement, so parameter/property and
+init statements are rebound by the official inliner with the constructor body.
+Initializer helpers disappear after inlining. A tagged native constructor and
+typed nullable argument slots preserve one allocation on the actual derived
+object; source-visible constructor calls use symbol-bound static factories.
+Generic class parameters remain class-owned in initializer helpers and are
+remapped to factory type parameters by official utilities.
+Final classes keep the tagged native entry private; source constructor factories
+retain original visibility. Extensible families require an accessible native
+entry for real derived-object initialization, not a base-object factory.
+
+The language consumer handles nested delegation through its existing statement
+and argument lowering. The target validator, not a special printer, authorizes
+each super node. No fake primary flag or raw target constructor text is used.
+Inherited-initializer `this` safety checks run before official initializer
+expansion, so cleanup cannot erase an existing unsupported-semantics boundary.
+The same guard covers selected inherited constructor bodies: writes to this
+class's own fields/default final setters are allowed, but reads, captures and
+virtual calls on the partially initialized instance remain diagnosed. Base
+secondary bodies execute before derived fields, just like base init blocks.
+Local initializer classes are diagnosed until the official popup prerequisite
+can be composed safely. This constructor family does not close R2.3.
 
 ## Verification
 
@@ -87,3 +108,28 @@ Recorded evidence:
   target-tests.V2MFnd passes the complete suite with seventeen rejection cases.
   The earlier SDK evidence predates this guard-only correction; it is not a
   new SDK claim for changed generated code.
+- Multi-entry target RED target-tests.XHNdij rejected the common inliner's
+  single-execution returnable block. GREEN target-tests.MM97q9 passes the full
+  target suite with twenty-two source-linked constructor-flow refusals,
+  including early/outer break, continue and duplicate initialization.
+- Public source run-BaC9cY first passed 85 flat + 85 module outcomes. Self-check
+  then exposed bypassed inherited-initializer `this` guards; the CLI accepted
+  DispatchInheritedInitialization before the shared guard was restored.
+  Runs run-xfOroR and run-VWFBmj pass five rejection boundaries, 85 flat + 85
+  module results, reversed-input determinism and real IR identity checks.
+  The latter also covers generic derived construction and an inline constructor
+  reference. Native entry privacy changed afterward; these are intermediate
+  evidence, not final-version SDK acceptance.
+- Final frozen run-1kz5Yn passes 85 flat + 85 multi-file JVM/ETS-host outcomes,
+  strict host types, three former rejection inputs as positive regressions,
+  six source-linked boundaries and all IR identity/binding checks. All 73
+  frozen implementation/test inputs match. The final guard also covers virtual
+  calls in secondary bodies (DispatchVirtualBody), not just property/init blocks.
+  Flat ETS SHA-256: `7e9c83371ae8847ff8db7840e34ad2301f2b4ac15905338c9be45eb5863a9458`.
+- SDK constructors-sdk-jxO1FE consumes that result, verifies source/output hashes,
+  clean semantic checker records and runtime module coverage, and compiles all
+  five unchanged ETS modules to ABC/HAP. Dispatch.ets SHA-256:
+  `8ba813eb1a020a0d125c8418a911cc2f464d7bcb2e1d988aa167e0b5a677c471`.
+  This is actual public-source conversion plus SDK compilation, not device
+  execution or UI parity. Main self-check and whitespace validation pass;
+  R2's combined native gate and remaining declaration families stay pending.

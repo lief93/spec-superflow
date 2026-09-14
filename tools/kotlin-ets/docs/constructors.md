@@ -58,11 +58,14 @@ are not ETS APIs. No Reflect/prototype runtime is introduced into generated ETS.
 ## Boundaries and verification
 
 This is an increment within R2.3, not completion of all constructor forms.
-Multiple native allocation roots, abstract/sealed constructors requiring
-additional factories, superclass delegation to a factory-converted secondary,
-protected secondaries and local/inner secondary capture combinations still
-require further work. They must
-produce source-linked diagnostics and no output, not allocate the wrong class.
+Multiple native allocation roots, abstract constructor families and superclass
+delegation through secondaries now use the native dispatcher described in
+native-constructor-flow.md. Unique-root source families retain the original
+minimal factory path. Protected secondaries, local/inner secondary capture
+combinations, local classes in duplicated initializers and inherited initialization
+reads/captures of `this` (including secondary bodies) remain source-linked
+diagnostics with no output. Supporting a
+new allocation form must not silently bypass the initialization-safety boundary.
 Primary-only classes continue through the existing native constructor path.
 
 Run `node tools/kotlin-ets/tests/constructors/run.mjs` from the repository root.
@@ -71,6 +74,12 @@ results, flat and module ETS-host results, strict host type checks, source-bound
 IR assertions and negative diagnostics under `tests/constructors/.work/run-*`.
 Host checks are not ArkTS SDK, device or UI-equivalence acceptance. The combined
 R2 SDK/native gate remains pending.
+
+After a successful frozen run, use
+`node tools/kotlin-ets/tests/constructors/sdk.mjs /absolute/run-evidence` to check
+the generated five modules unchanged with the real SDK. The verifier checks
+source/output hashes, semantic checker records, runtime module coverage and
+ABC/HAP artifacts; this is compilation evidence, not native behavior acceptance.
 
 ## Recorded evidence
 
@@ -107,3 +116,16 @@ All 64 frozen inputs match. Inherited-default regression run-QYxcPz also passes
 45 flat + 45 module outcomes, five boundaries and official provider/dispatch
 checks against the same final implementation. Main self-check and whitespace
 validation pass; SDK/native acceptance is still reserved for the R2 gate.
+
+Multi-entry final run-1kz5Yn passes 85 flat + 85 multi-file JVM/host outcomes,
+six source-linked boundaries, deterministic modules, seventeen unchanged
+single-root factory identities, seven original secondary roots and six tagged
+multi-entry native constructors. It covers default/named argument effects,
+property/init ordering, generic derived allocation, abstract bases, early return,
+inline constructor references and private final-class allocation protocols.
+The former MultipleRoots, SuperSecondary and Abstract negative inputs now run
+explicitly as positive regressions, not skipped coverage. All 73 frozen inputs
+match. SDK constructors-sdk-jxO1FE compiles the same five modules unchanged and
+records clean checker inputs, runtime module coverage and ABC/HAP artifacts.
+No device/runtime/UI-equivalence or whole-R2 acceptance is claimed. Detailed
+contract, intermediate failures and final hashes are in native-constructor-flow.md.
