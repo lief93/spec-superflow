@@ -40,7 +40,7 @@ fun main(arguments: Array<String>) {
             val module = frontend.module
             val diagnostics = DiagnosticSink()
             val stdlib = StandardLibraryRules()
-            val backend = EtsBackend(diagnostics, listOf(stdlib, images) + adapters.rules())
+            val backend = EtsBackend(diagnostics, listOf(stdlib, images) + adapters.rules(), frontend.types)
             if (mode == "page") {
                 backend.validateSource(module)
                 val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,

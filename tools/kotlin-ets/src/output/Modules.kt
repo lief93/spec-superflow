@@ -43,6 +43,7 @@ fun emitEtsModules(program: EtsProgram, runtime: EtsRuntimeSupport): Map<String,
                     type.typeParameters.forEach { it.upperBound?.let { bound -> typeReferences(bound, source) } }
                 }
                 is EtsNullableType -> typeReferences(type.inner, source)
+                is EtsCapturedType -> { typeReferences(type.readType, source); typeReferences(type.writeType, source) }
                 is EtsTupleType -> type.elements.forEach { typeReferences(it, source) }
                 is EtsTypeParameterType -> Unit
                 is EtsRecordType -> type.fields.values.forEach { typeReferences(it, source) }

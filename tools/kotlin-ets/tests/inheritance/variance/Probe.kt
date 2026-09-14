@@ -7,9 +7,10 @@ import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.types.Variance
 
 fun main(args: Array<String>) {
-    withKotlinModule(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0]) + args.drop(1)) { module ->
+    withKotlinFrontend(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0]) + args.drop(1)) { frontend ->
+        val module = frontend.module
         val sources = module.files.flatMap { it.declarations }.filterIsInstance<IrClass>()
-        val program = EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules())).lower(module)
+        val program = EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules()), frontend.types).lower(module)
         val targets = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>()
         for (source in sources) {
             val target = targets.single { it.name == source.name.asString() }
@@ -41,6 +42,22 @@ fun main(args: Array<String>) {
         }
         check(targets.filter { it.constraint }.size == constraints.size)
         val functions = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>()
+        for (name in listOf("readProjected", "writeProjected", "emptyProjected", "project", "readBounded", "readNested")) {
+            val original = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>().single { it.name.asString() == name }
+            val target = functions.single { it.name == name }
+            check(target.parameters.map { it.symbol.name } == original.valueParameters.map { it.name.asString() })
+            check(target.source.file == original.file.fileEntry.name)
+        }
+        fun capture(name: String) = ((functions.single { it.name == name }.parameters.first().symbol.type as EtsNamedType)
+            .arguments.single() as EtsCapturedType)
+        val valueType = targets.single { it.name == "Value" }.symbol.type
+        val specificType = targets.single { it.name == "Specific" }.symbol.type
+        check(capture("readProjected") == EtsCapturedType(valueType, EtsTypes.NEVER))
+        check(capture("writeProjected") == EtsCapturedType(EtsNullableType(EtsTypes.OBJECT), specificType))
+        check(capture("emptyProjected") == EtsCapturedType(EtsNullableType(EtsTypes.OBJECT), EtsTypes.NEVER))
+        check(capture("readBounded") == EtsCapturedType(valueType, specificType))
+        val project = functions.single { it.name == "project" }
+        check(((project.body.single() as EtsReturn).value as EtsReference).symbol == project.parameters.single().symbol)
         val bound = targets.single { it.name == "SpecificSource" }.symbol.type
         for (name in listOf("broadFirst", "narrowFirst")) {
             val function = functions.single { it.name == name }
@@ -53,6 +70,6 @@ fun main(args: Array<String>) {
             if (it === producer) producer.copy(typeParameters = producer.typeParameters.map { p -> p.copy(variance = EtsVariance.INVARIANT) }) else it
         }) })
         check(runCatching { EtsValidator().validate(corrupted, perFileNames = true) }.exceptionOrNull() is InvalidTarget)
-        println("PASS official IR declaration variance/names/ownership, canonical bounds, twelve named two-parent constraints, actual fake overrides and erased-metadata refusal")
+        println("PASS official IR variance/names/ownership, twelve named constraints, fake overrides, four retained capture intervals, identity return and erased-metadata refusal")
     }
 }

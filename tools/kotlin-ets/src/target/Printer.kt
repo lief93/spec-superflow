@@ -3,6 +3,7 @@ package dev.ets
 /** Formatting only: no Kotlin IR, symbol resolution, state selection, or library rules. */
 class EtsPrinter {
     fun type(value: EtsType): String = when (value) {
+        is EtsCapturedType -> type(value.readType)
         is EtsNamedType -> value.name + if (value.arguments.isEmpty()) "" else
             value.arguments.joinToString(", ", "<", ">") { type(it) }
         is EtsRecordType -> value.name

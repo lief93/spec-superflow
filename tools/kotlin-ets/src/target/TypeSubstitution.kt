@@ -2,6 +2,7 @@ package dev.ets
 
 /** Substitution is by declaration identity; a nested function's own binders remain bound. */
 fun etsSubstitute(type: EtsType, substitutions: Map<String, EtsType>): EtsType = when (type) {
+    is EtsCapturedType -> type.copy(readType = etsSubstitute(type.readType, substitutions), writeType = etsSubstitute(type.writeType, substitutions))
     is EtsTypeParameterType -> substitutions[type.id] ?: type
     is EtsNamedType -> type.copy(arguments = type.arguments.map { etsSubstitute(it, substitutions) })
     is EtsRecordType -> type.copy(fields = type.fields.mapValues { etsSubstitute(it.value, substitutions) })
@@ -19,6 +20,14 @@ fun etsSubstitute(type: EtsType, substitutions: Map<String, EtsType>): EtsType =
                 parameter.copy(upperBound = parameter.upperBound?.let { etsSubstitute(it, free) })
             })
     }
+}
+
+/** Captured arguments remain intervals; only a member's value position is approximated. */
+fun etsReadType(type: EtsType, write: Boolean = false): EtsType = when (type) {
+    is EtsCapturedType -> if (write) type.writeType else type.readType
+    is EtsNullableType -> etsReadType(type.inner, write).let { if (it is EtsNullableType) it else EtsNullableType(it) }
+    is EtsFunctionType -> type.copy(parameters = type.parameters.map { etsReadType(it, !write) }, result = etsReadType(type.result, write))
+    else -> type
 }
 
 fun etsInstantiate(signature: EtsFunctionType, arguments: List<EtsType>): EtsFunctionType {

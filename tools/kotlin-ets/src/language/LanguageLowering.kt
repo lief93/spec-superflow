@@ -20,12 +20,13 @@ import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.*
+import org.jetbrains.kotlin.ir.types.impl.IrCapturedType
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.util.isNullable
 import org.jetbrains.kotlin.ir.util.superTypes
 import org.jetbrains.kotlin.ir.visitors.*
 
-class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) : Language {
+class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, private val sourceTypes: SourceTypes? = null) : Language {
     override val callRules: List<CallRule> = rules
     private var nextTemporary = 0
     private val temporaryNames = IdentityHashMap<IrValueSymbol, String>()
@@ -64,7 +65,25 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         return if (binding != null && (declaration === binding.field || declaration === binding.parameter)) binding.source else source
     }
 
+    private val activeCaptures = java.util.Collections.newSetFromMap(IdentityHashMap<IrCapturedType, Boolean>())
+
+    private fun argumentType(type: IrType): EtsType = if (type is IrCapturedType) capturedType(type) else type(type)
+
+    private fun capturedType(captured: IrCapturedType): EtsCapturedType {
+        val queries = sourceTypes ?: unsupportedType(captured)
+        if (!activeCaptures.add(captured)) unsupportedType(captured)
+        try {
+            val bounds = captured.constructor.superTypes
+            val upper = bounds.firstOrNull { candidate -> bounds.all { queries.isSubtypeOf(candidate, it) } }
+                ?: unsupportedType(captured)
+            return EtsCapturedType(type(upper), captured.lowerType?.let(::type) ?: EtsTypes.NEVER)
+        } finally {
+            activeCaptures.remove(captured)
+        }
+    }
+
     override fun type(type: IrType): EtsType {
+        if (type is IrCapturedType) return capturedType(type).readType
         callRules.firstNotNullOfOrNull { it.mapType(type.makeNotNull(), this) }?.let { mapped ->
             return if (type.isNullable()) EtsNullableType(mapped) else mapped
         }
@@ -76,7 +95,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             return if (simple.nullability == SimpleTypeNullability.MARKED_NULLABLE) EtsNullableType(parameter) else parameter
         }
         val name = (owner as? IrClass)?.fqNameWhenAvailable?.asString()
-        val arguments = simple.arguments.map {
+        val instantiated = if (simple.arguments.any { it !is IrTypeProjection || it.variance != org.jetbrains.kotlin.types.Variance.INVARIANT })
+            sourceTypes?.capture(simple) ?: unsupportedType(type) else simple
+        val arguments = instantiated.arguments.map {
             val projection = it as? IrTypeProjection ?: unsupportedType(type)
             if (projection.variance != org.jetbrains.kotlin.types.Variance.INVARIANT) unsupportedType(type)
             projection.type
@@ -97,7 +118,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 EtsNamedType("__etsIntProgression", symbolId = "stdlib:__etsIntProgression", external = true)
             "kotlin.Array", "kotlin.collections.List", "kotlin.collections.MutableList",
             "kotlin.collections.Collection", "kotlin.collections.Iterable" ->
-                EtsNamedType("Array", listOf(type(arguments.singleOrNull() ?: unsupportedType(type))))
+                EtsNamedType("Array", listOf(argumentType(arguments.singleOrNull() ?: unsupportedType(type))))
             "kotlin.IntArray", "kotlin.FloatArray", "kotlin.DoubleArray", "kotlin.ByteArray",
             "kotlin.ShortArray" -> EtsNamedType("Array", listOf(EtsTypes.NUMBER))
             "kotlin.BooleanArray" -> EtsNamedType("Array", listOf(EtsTypes.BOOLEAN))
@@ -105,7 +126,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 name?.startsWith("kotlin.Function") == true && arguments.isNotEmpty() -> {
                     EtsFunctionType(arguments.dropLast(1).map { type(it) }, type(arguments.last()))
                 }
-                owner is IrClass && sourceFile(owner) != null -> classType(owner, arguments.map { type(it) })
+                owner is IrClass && sourceFile(owner) != null -> classType(owner, arguments.map(::argumentType))
                 else -> unsupportedType(type)
             }
         }
@@ -255,7 +276,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val substitutions = if (owner.dispatchReceiverParameter == null) emptyMap()
             else receiverSubstitution(parent as? IrClass, receiver)
         if (property != null) {
-            val propertyType = etsSubstitute(type(property.backingField?.type ?: property.getter!!.returnType), substitutions)
+            val propertyType = etsReadType(etsSubstitute(type(property.backingField?.type ?: property.getter!!.returnType), substitutions))
             val symbol = if ((parent as? IrClass)?.kind == ClassKind.INTERFACE || !requiresAccessor(property))
                 propertyField(property) else functionSymbol(property.getter!!)
             val access = receiver?.let { EtsMember(expression(it, scope), identifier(property), propertyType, source(call), symbol.id) }
@@ -263,9 +284,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             return if (property.setter?.symbol == owner.symbol)
                 discard(EtsAssignment(access, arguments(call, scope).single(), source(call)), call) else access
         }
-        val signature = etsSubstitute(EtsFunctionType(
+        val signature = etsReadType(etsSubstitute(EtsFunctionType(
             (listOfNotNull(owner.extensionReceiverParameter) + owner.valueParameters).map { type(it.type) },
-            type(owner.returnType), typeParameters(owner)), substitutions) as EtsFunctionType
+            type(owner.returnType), typeParameters(owner)), substitutions)) as EtsFunctionType
         val symbol = functionSymbol(owner)
         val callee = when {
             receiver != null -> EtsMember(expression(receiver, scope), symbol.name, signature, source(call), symbol.id)
@@ -1127,11 +1148,12 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val actual = receiver?.type
             ?: diagnostics.unsupported(owner, "Generic member requires a resolved receiver type")
         val substitution = ownerSubstitution(owner, actual, receiver)
-        return owner.typeParameters.associate { typeParameterType(it).id to type(substitution.substitute(it.defaultType)) }
+        return owner.typeParameters.associate { typeParameterType(it).id to argumentType(substitution.substitute(it.defaultType)) }
     }
 
     private fun ownerSubstitution(owner: IrClass, receiverType: IrType, element: IrElement): AbstractIrTypeSubstitutor {
-        val actual = receiverClassType(receiverType, element)
+        val raw = receiverClassType(receiverType, element)
+        val actual = sourceTypes?.capture(raw) ?: raw
         if (owner.typeParameters.isEmpty()) return AbstractIrTypeSubstitutor.Empty
         val receiver = actual.classifier.owner as? IrClass
             ?: diagnostics.unsupported(element, "Generic member requires a resolved class receiver")

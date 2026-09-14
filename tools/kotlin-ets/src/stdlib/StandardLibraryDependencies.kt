@@ -70,6 +70,7 @@ private class StandardLibraryDependencies {
                 value.typeParameters.forEach { it.upperBound?.let(::type) }
             }
             is EtsNullableType -> type(value.inner)
+            is EtsCapturedType -> { type(value.readType); type(value.writeType) }
             is EtsTupleType -> value.elements.forEach(::type)
             is EtsTypeParameterType -> Unit
         }

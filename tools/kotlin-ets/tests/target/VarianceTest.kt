@@ -42,4 +42,64 @@ fun checkDeclarationVariance() {
     reject("Out in returned callback input") { validate(a, a, producer.copy(members = listOf(read.copy(returnType = callback)))) }
     validate(a, a, producer.copy(members = listOf(consume.copy(parameters = listOf(EtsParameter(EtsSymbol("callback", "callback", callback, at)))))))
     println("PASS declaration variance, nested and nullable conversion, callback polarity and nine refusals")
+    checkCapturedArguments()
+}
+
+private fun checkCapturedArguments() {
+    val at = SourceSpan("Projections.kt", 1, 2)
+    val animal = EtsClass("Animal", emptyList(), at, kind = EtsClassKind.INTERFACE)
+    val a = animal.symbol.type as EtsNamedType
+    val dog = EtsClass("Dog", emptyList(), at, kind = EtsClassKind.INTERFACE, interfaces = listOf(a))
+    val d = dog.symbol.type as EtsNamedType
+    val t = EtsTypeParameter("Cell:T", "T")
+    val field = EtsField(EtsSymbol("Cell:value", "value", EtsTypeParameterType(t.id, t.name), at))
+    val cell = EtsClass("Cell", listOf(field), at, kind = EtsClassKind.INTERFACE, typeParameters = listOf(t))
+    val top = EtsNullableType(EtsTypes.OBJECT)
+    val out = EtsCapturedType(a, EtsTypes.NEVER)
+    val input = EtsCapturedType(top, d)
+    val star = EtsCapturedType(top, EtsTypes.NEVER)
+    fun applied(argument: EtsType) = (cell.symbol.type as EtsNamedType).copy(arguments = listOf(argument))
+    fun validate(function: EtsFunction) = EtsValidator().validate(EtsProgram(listOf(
+        EtsFile("Projections.kt", listOf(animal, dog, cell, function)))))
+    fun conversion(from: EtsType, to: EtsType) {
+        val p = EtsSymbol("input", "input", applied(from), at)
+        validate(EtsFunction("convert", listOf(EtsParameter(p)), applied(to), listOf(EtsReturn(EtsReference(p), at)), at))
+    }
+    fun write(argument: EtsCapturedType, assigned: EtsType) {
+        val p = EtsSymbol("input", "input", applied(argument), at)
+        val v = EtsSymbol("assigned", "assigned", assigned, at)
+        val access = EtsMember(EtsReference(p), "value", argument.readType, at, field.symbol.id)
+        validate(EtsFunction("write", listOf(EtsParameter(p), EtsParameter(v)), EtsTypes.VOID,
+            listOf(EtsExpressionStatement(EtsAssignment(access, EtsReference(v), at), at)), at))
+    }
+    fun read(argument: EtsCapturedType, claimed: EtsType, identity: String = field.symbol.id) {
+        val p = EtsSymbol("input", "input", applied(argument), at)
+        validate(EtsFunction("read", listOf(EtsParameter(p)), claimed,
+            listOf(EtsReturn(EtsMember(EtsReference(p), "value", claimed, at, identity), at)), at))
+    }
+    var refusals = 0
+    fun reject(label: String, action: () -> Unit) {
+        val failure = runCatching(action).exceptionOrNull()
+        check(failure is InvalidTarget && failure.source == at) { "$label: $failure" }; refusals++
+    }
+    conversion(d, out); conversion(a, input); conversion(out, star); conversion(input, star)
+    write(input, d); read(out, a); read(input, top); read(star, top)
+    reject("Out cannot be invariant") { conversion(out, a) }
+    reject("In cannot be invariant") { conversion(input, d) }
+    reject("Star cannot be invariant") { conversion(star, top) }
+    reject("Out cannot narrow") { conversion(out, EtsCapturedType(d, EtsTypes.NEVER)) }
+    reject("Out cannot write") { write(out, d) }
+    reject("Star cannot write even null") { write(star, EtsTypes.NULL) }
+    reject("In cannot write a supertype") { write(input, a) }
+    reject("In cannot read Specific") { read(input, d) }
+    reject("Invalid interval") { conversion(EtsCapturedType(d, a), star) }
+    reject("Capture cannot bypass member identity") { read(out, a, "unrelated") }
+    reject("Capture cannot be a standalone value type") {
+        val p = EtsSymbol("input", "input", out, at)
+        validate(EtsFunction("invalid", listOf(EtsParameter(p)), EtsTypes.VOID, emptyList(), at))
+    }
+    val callback = EtsFunctionType(listOf(out), input)
+    check(etsReadType(callback) == EtsFunctionType(listOf(EtsTypes.NEVER), top))
+    check(etsReadType(callback, write = true) == EtsFunctionType(listOf(a), d))
+    println("PASS captured read/write intervals, callback polarity and $refusals source-linked refusals")
 }

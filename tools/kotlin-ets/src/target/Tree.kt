@@ -3,6 +3,7 @@ package dev.ets
 data class SourceSpan(val file: String?, val start: Int, val end: Int)
 
 sealed interface EtsType
+data class EtsCapturedType(val readType: EtsType, val writeType: EtsType) : EtsType
 data class EtsNamedType(val name: String, val arguments: List<EtsType> = emptyList(), val symbolId: String? = null,
     val external: Boolean = false) : EtsType
 data class EtsRecordType(val name: String, val fields: Map<String, EtsType>) : EtsType

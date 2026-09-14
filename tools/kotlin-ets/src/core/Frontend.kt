@@ -13,7 +13,13 @@ import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.expressions.IrBody
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
+import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.IrTypeSystemContext
+import org.jetbrains.kotlin.ir.types.IrTypeSystemContextImpl
 import org.jetbrains.kotlin.ir.util.fileOrNull
+import org.jetbrains.kotlin.ir.util.isSubtypeOf
+import org.jetbrains.kotlin.types.model.CaptureStatus
 
 sealed interface FunctionBody {
     data class Available(val declaration: IrFunction, val body: IrBody, val source: SourceSpan,
@@ -38,12 +44,29 @@ fun interface FunctionBodies {
     fun resolve(symbol: IrFunctionSymbol): FunctionBody
 }
 
+interface SourceTypes {
+    fun capture(type: IrSimpleType): IrSimpleType
+    fun isSubtypeOf(actual: IrType, expected: IrType): Boolean
+}
+
 /** Borrowed official IR, valid only inside withKotlinFrontend. No serialized IR interchange. */
-class KotlinFrontendSession internal constructor(private val fragment: IrModuleFragment, private val binaryBodies: FunctionBodies) {
+class KotlinFrontendSession internal constructor(private val fragment: IrModuleFragment, private val binaryBodies: FunctionBodies,
+    private val typeSystem: IrTypeSystemContext) {
     private var active = true
     private val files = fragment.files.toSet()
     private fun checkActive() = check(active) { "Kotlin frontend session is closed" }
     val module: IrModuleFragment get() { checkActive(); return fragment }
+    private val typeQueries = object : SourceTypes {
+        override fun capture(type: IrSimpleType): IrSimpleType {
+            checkActive()
+            return typeSystem.captureFromArguments(type, CaptureStatus.FOR_SUBTYPING) ?: type
+        }
+        override fun isSubtypeOf(actual: IrType, expected: IrType): Boolean {
+            checkActive()
+            return actual.isSubtypeOf(expected, typeSystem)
+        }
+    }
+    val types: SourceTypes get() { checkActive(); return typeQueries }
     private val resolver = FunctionBodies { symbol ->
         checkActive()
         when {
@@ -91,7 +114,8 @@ fun <T> withKotlinFrontend(arguments: List<String>, emit: (KotlinFrontendSession
         check(!translated.diagnosticCollector.hasErrors && !messages.hasErrors()) {
             "Kotlin FIR2IR diagnostics prohibit target output"
         }
-        val frontend = KotlinFrontendSession(translated.result.irModuleFragment, BinaryBodies(translated))
+        val frontend = KotlinFrontendSession(translated.result.irModuleFragment, BinaryBodies(translated),
+            IrTypeSystemContextImpl(translated.result.irBuiltIns))
         session = frontend
         val unavailableInlineBodies = lowerSourceInlineFunctions(translated, frontend.bodies)
         lowerLocalDeclarations(translated)

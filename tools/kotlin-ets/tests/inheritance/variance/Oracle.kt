@@ -24,5 +24,12 @@ fun main() {
         println(classInterfaceReturn(seed))
         println(classInterfaceHolder(seed))
         println(classInterfaceMutation(seed))
+        println(projectedRead(seed))
+        println(projectedWrite(seed))
+        println(projectedStar(seed))
+        println(projectedBound(seed))
+        println(projectedNested(seed))
+        val cell = Cell(Specific(seed))
+        println(project(cell) === cell)
     }
 }

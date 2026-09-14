@@ -47,6 +47,15 @@ class EtsValidator {
             if (actual.arguments.size != parameters.size || expected.arguments.size != parameters.size) return false
             return parameters.indices.all { index ->
                 val a = actual.arguments[index]; val b = expected.arguments[index]
+                if (a is EtsCapturedType || b is EtsCapturedType) {
+                    fun interval(value: EtsType): EtsCapturedType = value as? EtsCapturedType ?: when (parameters[index].variance) {
+                        EtsVariance.INVARIANT -> EtsCapturedType(value, value)
+                        EtsVariance.OUT -> EtsCapturedType(value, EtsTypes.NEVER)
+                        EtsVariance.IN -> EtsCapturedType(parameters[index].upperBound ?: EtsNullableType(EtsTypes.OBJECT), value)
+                    }
+                    val from = interval(a); val to = interval(b)
+                    return@all assignable(to.writeType, from.writeType, seen) && assignable(from.readType, to.readType, seen)
+                }
                 when (parameters[index].variance) {
                     EtsVariance.INVARIANT -> a == b
                     EtsVariance.OUT -> assignable(a, b, seen)
@@ -76,6 +85,7 @@ class EtsValidator {
                         throw InvalidTarget(at, "Target type parameter used in incompatible variance position: ${it.name}")
                 }
                 is EtsNullableType -> position(type.inner, direction, at)
+                is EtsCapturedType -> { position(type.readType, direction, at); position(type.writeType, -direction, at) }
                 is EtsNamedType -> type.arguments.forEachIndexed { index, argument ->
                     val variance = classes[type.symbolId]?.typeParameters?.getOrNull(index)?.variance
                     position(argument, when (variance) { EtsVariance.OUT -> direction; EtsVariance.IN -> -direction; else -> 0 }, at)
@@ -333,10 +343,10 @@ class EtsValidator {
 
     private fun typeArguments(parameters: List<EtsTypeParameter>, arguments: List<EtsType>, source: SourceSpan): Map<String, EtsType> {
         if (parameters.size != arguments.size) throw InvalidTarget(source, "Generic target argument count differs from declaration")
-        arguments.forEach { type(it, source) }
+        arguments.forEach { type(it, source, argument = true) }
         val substitutions = parameters.map { it.id }.zip(arguments).toMap()
         parameters.zip(arguments).forEach { (parameter, argument) -> parameter.upperBound?.let {
-            if (!assignable(argument, etsSubstitute(it, substitutions))) throw InvalidTarget(source, "Generic target argument violates upper bound: ${parameter.name}")
+            if (!assignable(etsReadType(argument), etsSubstitute(it, substitutions))) throw InvalidTarget(source, "Generic target argument violates upper bound: ${parameter.name}")
         } }
         return substitutions
     }
@@ -351,11 +361,16 @@ class EtsValidator {
         bindingName(name, source)
         if (etsRestrictedValueBinding(name)) throw InvalidTarget(source, "Restricted strict-mode target binding: $name")
     }
-    private fun type(type: EtsType, source: SourceSpan) {
+    private fun type(type: EtsType, source: SourceSpan, argument: Boolean = false) {
         when (type) {
+            is EtsCapturedType -> {
+                if (!argument) throw InvalidTarget(source, "Captured type requires a generic argument position")
+                type(type.readType, source); type(type.writeType, source)
+                if (!assignable(type.writeType, type.readType)) throw InvalidTarget(source, "Invalid captured type interval")
+            }
             is EtsNamedType -> {
                 name(type.name, source)
-                type.arguments.forEach { type(it, source) }
+                type.arguments.forEach { type(it, source, argument = true) }
                 type.symbolId?.takeUnless { type.external }?.let { id ->
                     val declaration = classes[id] ?: throw InvalidTarget(source, "Unbound target class type: $id")
                     if (declaration.name != type.name) throw InvalidTarget(source, "Target class type name differs from its declaration")
@@ -697,7 +712,7 @@ class EtsValidator {
                     val classReceiver = (value.receiver as? EtsReference)?.symbol == declaration.symbol
                     val static = when (member) { is EtsField -> member.static; is EtsFunction -> member.static }
                     if (classReceiver != static) reject(value, "Target member requires ${if (static) "class" else "instance"} receiver")
-                    val substituted = memberType(owner, member)
+                    val substituted = etsReadType(memberType(owner, member))
                     val expected = if (member is EtsFunction && member.kind == EtsFunctionKind.GETTER)
                         (substituted as EtsFunctionType).result else substituted
                     if (expected != value.type) reject(value, "Target member type differs from receiver substitution")
@@ -778,22 +793,25 @@ class EtsValidator {
             }
             is EtsAssignment -> {
                 if (value.target !is EtsReference && value.target !is EtsMember) reject(value, "Target assignment is not addressable")
-                visit(value.target); visit(value.value); expect(value.value, value.target.type)
+                visit(value.target); visit(value.value)
                 val target = value.target as? EtsMember
                 val receiver = target?.let { if (it.receiver.type is EtsTypeParameterType) boundReceiver(it) else it.receiver.type as? EtsNamedType }
                 if (receiver?.symbolId in classes) {
                     val resolved = member(receiver!!, target!!.name)!!
                     val field = resolved.second as? EtsField
+                    if (field != null) expect(value.value, etsReadType(memberType(resolved.first, field), write = true))
                     if (resolved.second is EtsFunction) {
                         val setter = member(receiver, target.name, setter = true)
                             ?: reject(value, "Cannot assign a getter-only target property")
                         memberAccess(setter.first, setter.second, receiver, value)
+                        val setterType = etsReadType(memberType(setter.first, setter.second)) as EtsFunctionType
+                        expect(value.value, setterType.parameters.single())
                     }
                     if (field?.readonly == true && (initializingClass?.symbol?.id != resolved.first.symbolId ||
                         (target.receiver as? EtsReference)?.symbol?.name != "this")) {
                         reject(value, "Cannot assign a readonly target property")
                     }
-                }
+                } else expect(value.value, value.target.type)
             }
             is EtsCast -> visit(value.value)
             is EtsArray -> value.elements.forEach { visit(it); expect(it, value.elementType) }

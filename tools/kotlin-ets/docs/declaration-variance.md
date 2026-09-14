@@ -188,3 +188,66 @@ acceptance is claimed. Frozen hashes were rechecked before publication.
 
 - Variance.ets: 5fe6690ac0099031bc2059e752ebd8e616c772ef2431ddf8683cf2d75b7d844d
 - ClassBounds.ets: 84fa0c6333d13cf15f563a32b7c88304f4d356b623397706bd94852d08fc7131
+
+## Use-site capture contract
+
+The frontend session now lends SourceTypes alongside FunctionBodies. Both type
+queries delegate to pinned Kotlin 2.1.20: IrTypeSystemContext.captureFromArguments
+with FOR_SUBTYPING, and official isSubtypeOf/AbstractTypeChecker. Retained service
+references reject use after the frontend session closes. Official IR objects do
+not enter the compiler-independent target program.
+
+Capture preserves an interval, not just a type name. EtsCapturedType records the
+read upper bound and write lower bound of a generic argument. An out projection
+has no writable value (never); an in projection accepts its lower type and reads
+the declared upper bound; a star has no writable value and reads the declared
+upper bound. Official capture computes substituted source bounds. When one bound
+implies the others, the backend selects it using the official subtype query.
+Recursive captures without a representable single upper bound remain unsupported.
+
+The target substitutes these intervals into members and approximates only value
+positions: reads use the upper bound, writes the lower bound, and callback inputs
+reverse direction. Intervals stay in nested generic arguments for assignment and
+bound checks. Capture cannot masquerade as a standalone value type or bypass
+member identity, readonly, setter visibility or source-owned generic arity checks.
+Module and runtime dependency collection traverse both bounds.
+
+The printer uses the read bound for an ETS generic annotation, e.g. Cell<Value>
+for Cell<out Value>. It does not allocate wrappers or change source inheritance,
+method names, parameters or expressions. This is a checked translation of legal
+Kotlin callers, not a claim that the emitted annotation independently enforces
+Kotlin projection restrictions on arbitrary handwritten ETS callers. JS erases
+generic annotations; that is not justification to erase our typed-tree contract.
+
+The supported acceptance family here is source-class property reads/writes,
+in/out/star, finite nominal bounds and nested projections. Generic-call capture,
+recursive and independent capture-bound combinations still require composition
+work before R2.3 closure. This does not enable general external collection
+projection semantics, reified operations or source referential-equality lowering.
+Identity is checked by JVM/host test callers around the same emitted project
+function, not by pretending that Kotlin EQEQEQ lowering has been implemented.
+
+## Use-site capture evidence
+
+RED run-aUEER9 reaches the former out-projection rejection after the JVM oracle.
+run-T7FxgG separately proves official capture/subtype queries and closed-session
+refusals before the target implementation exists. Target bJN2Ih catches accidental
+standalone captured values; UnwlgV records the initially overbroad position guard.
+Final target aUczhk passes eleven projection refusals plus the existing suite.
+run-0NTlUT records unsupported source EQEQEQ; the final harness checks identity
+outside the translated source and does not count that operation as implemented.
+
+Frozen run-eL9G8F passes 140 flat + 140 multi-file JVM/host outcomes over 68 pinned
+inputs, seven-file reversed-input determinism, strict host types, four retained
+target intervals and source method/parameter/file identity checks. It verifies
+official in/out/star capture and two closed-session refusals; official FIR rejects
+four invalid projection uses, three declaration-variance errors and a missing
+bound. Original six module hashes remain unchanged. Bounded-receiver probe-zMFhD7
+passes all 40 earlier outcomes and existing explicit nullable/cycle boundaries.
+
+SDK constructors-sdk-cMLKGn checks all seven unchanged generated modules and
+compiles ABC/HAP. All recorded input hashes were rechecked. This is not native
+runtime, UI parity or whole-R2 acceptance.
+
+- Variance.ets: c6c19da2759b447b22e10a4a25056efc3f62c617814a0e2062818abdb954b347
+- Projections.ets: bbfcb471fdd653e046d65f9e8d4f029560eacd563d089b144c28b449c151207d

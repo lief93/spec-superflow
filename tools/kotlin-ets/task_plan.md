@@ -69,11 +69,24 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition, source virtual-overload bridges, bounded method/readonly-property covariance, declaration variance, redundant bounds and independent source-class/interface bounds accepted; remaining use-site projection combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition, source virtual-overload bridges, bounded method/readonly-property covariance, declaration variance, redundant bounds, independent source-class/interface bounds and finite use-site property projections accepted; remaining projection/generic-call/callback/bound compositions | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
 ## Next action
+
+Finite use-site property projections now reuse official captureFromArguments and
+isSubtypeOf through the borrowed frontend SourceTypes service. The typed ETS tree
+keeps read/write intervals; only emitted annotations use the read bound. Source
+names, object identity and nested generic contracts are retained without wrappers.
+Frozen run-eL9G8F passes 140 flat + 140 module JVM/host outcomes, seven-file
+determinism, source/target interval checks and official invalid-use refusals.
+Target aUczhk passes eleven capture refusals; probe-zMFhD7 retains 40 bounded
+receiver results. SDK constructors-sdk-cMLKGn checks all seven unchanged modules
+and compiles ABC/HAP. See declaration-variance.md for limitations and hashes.
+Next, exercise generic-call/callback and capture-bound compositions before
+R2.4 ownership closure; recursive captures and external collection projections
+are not implicitly covered. No native/UI or whole-R2 completion is claimed.
 
 Protected constructor visibility is accepted for the documented source family.
 The target contract now uses EtsVisibility for methods, fields and constructors;

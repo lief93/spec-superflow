@@ -6,8 +6,8 @@ import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.visitors.*
 
 /** Official IR stays alive only while lowering. The returned program is compiler-independent. */
-class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>) {
-    val language: Language = LanguageLowering(diagnostics, rules)
+class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceTypes: SourceTypes? = null) {
+    val language: Language = LanguageLowering(diagnostics, rules, sourceTypes)
 
     fun validateSource(module: IrModuleFragment) {
         module.files.forEach { file ->
