@@ -35,19 +35,22 @@ fun main(arguments: Array<String>) {
         } ?: requireNotNull(System.getenv("KOTLIN_ETS_STDLIB")) { "Kotlin stdlib path missing" }
         val compilerArgs = listOf("-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", classpath) + sources
         val images = options["--image-resources"]?.let { ImageResources.read(File(it).absoluteFile) } ?: ImageResources()
+        val adapters = AdapterModules.load()
         val target = withKotlinFrontend(compilerArgs) { frontend ->
             val module = frontend.module
             val diagnostics = DiagnosticSink()
             val stdlib = StandardLibraryRules()
-            val backend = EtsBackend(diagnostics, listOf(stdlib, images))
+            val backend = EtsBackend(diagnostics, listOf(stdlib, images) + adapters.rules())
             if (mode == "page") {
                 backend.validateSource(module)
-                val targetModule = ComposeLowering(backend.language, diagnostics).lower(module,
+                val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
                     requireNotNull(options["--entry"]) { "--entry is required for page mode" })
+                val targetModule = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
                 if ("--out-dir" in options) emitEtsModules(targetModule, ComposeRuntime(StandardLibraryRuntime))
                 else mapOf(output.name to emitEtsProgram(targetModule, ComposeRuntime(StandardLibraryRuntime)))
             } else {
-                val program = backend.lower(module)
+                val lowered = backend.lower(module)
+                val program = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
                 if ("--out-dir" in options) emitEtsModules(program, StandardLibraryRuntime)
                 else mapOf(output.name to emitEtsProgram(program, StandardLibraryRuntime))
             }

@@ -14,7 +14,8 @@ import org.jetbrains.kotlin.ir.visitors.acceptVoid
 import org.jetbrains.kotlin.name.FqName
 
 /** Consumes resolved, pre-Compose-lowering IR. No source spelling is used for API dispatch. */
-class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink) {
+class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
+    private val adapters: AdapterModules = AdapterModules()) {
     private val bindingSymbols = linkedMapOf<IrValueSymbol, EtsSymbol>()
     private data class Pager(val name: String, val count: IrExpression, val scope: Scope)
     private val fields = mutableListOf<EtsField>()
@@ -103,7 +104,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink) {
 
     private val target = ArkUiCalls(language, diagnostics)
     private val uiRules: List<CallRule> by lazy {
-        listOf(
+        adapters.rules(object : AdapterUiServices {
+            override fun content(expression: IrExpression, scope: Scope) = uiLambdaBody(expression, scope)
+            override fun decorate(modifier: IrExpression?, scope: Scope, element: EtsUiElement, boundaries: Set<String>) =
+                modifiers(modifier, scope, ComposeElement(element, boundaries))
+        }) + listOf(
             object : CallRule {
                 override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
                 override fun lowerUi(call: IrCall, language: Language, scope: Scope) = sourceUiCall(call, scope)

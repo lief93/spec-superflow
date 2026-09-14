@@ -41,7 +41,30 @@ only the accepted batch and its required dependencies; exclude unrelated dirty
 files, generated scratch output and any unreviewed work. Verify the pushed commit
 against the remote branch. Release/publishing beyond Git remains separately gated.
 
-### Current mainline: R2H ordinary inner classes (2026-09-14)
+### Current mainline: adapter modules accepted; serial cost sample next (2026-09-14)
+
+R2H passed fixed review and main acceptance, committed and pushed as `ee9c81a`.
+The user prioritizes independent adapter additions before another language slice.
+Follow `docs/adapter-module-contract.md`: main owns the public typed API and CLI/UI
+wiring; Parfit owns build-time SPI discovery, launcher, examples and user guide.
+No hot loading, new parsing engine or centralized per-control registration edits.
+Heavy builds remain serialized. Freeze both writers before Aristotle reviews.
+
+Independent adapter modules are now accepted: discovery 15 checks, eight fresh
+CLI cases, JVM parity, real Compose slots/modifiers, SDK ABC/HAP and fixed review
+PASS after one default-modifier finding. Main verified all 63 frozen input hashes.
+Publish this bounded batch before starting another requirement. The next approved
+backlog requirement uses Parfit as the ONLY developer, main coordination, same
+Aristotle reviewer. Do not dispatch two writers for the second cost sample.
+
+This is cost sample one, limited parallelism. Dispatch counters are saved in
+`.work/cost-trial/adapter-modules/dispatch-start.json` (08:08 UTC). Record end
+counters after acceptance and distinguish setup from implementation. Do not claim
+a measured speedup without a comparable serial baseline. Completed cost report:
+`docs/cost-sample-adapter-modules.md` (29m28s, uncached input 326,312, cached input
+12,904,960, output 52,170; excludes setup and publication).
+
+### Previous mainline: R2H ordinary inner classes (2026-09-14)
 
 Accepted R2E-R2G was committed and pushed as `2cf0b8f`; remote branch
 `andorid-to-hormony` was independently checked with ls-remote. R2H contract and

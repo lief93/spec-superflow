@@ -966,3 +966,24 @@
   `.work/cost-trial/adapter-modules/preparation-start.json`; it includes the last
   R2H reviewer completion, which must be excluded from adapter review costs.
   A fresh dispatch baseline will separate implementation from this setup.
+- R2H committed/pushed as `ee9c81a`. Adapter-module implementation dispatch
+  baseline captured at 08:08 UTC in `dispatch-start.json`. Main added typed SPI
+  contracts, conflict detection, used-import collection and CLI/Compose wiring.
+  Production main lane is frozen; Parfit owns the heavy build slot for independent
+  external-module CLI/real Compose tests and focused SDK validation.
+- Main checks pass: `tests/adapter-contract/run.sh` (evidence temporary directory
+  `kotlin-ets-adapter-contract.j2bsQO`) and `tests/ui/basic-controls.sh` (directory
+  `kotlin-ets-basic-controls.9Gmaso`), including typed negative checks, official
+  Compose IR and generated callback behavior. New module end-to-end checks and
+  fixed independent review remain pending. No adapter-feature acceptance yet.
+- Adapter modules accepted after Aristotle PASS/PASS re-review. The first review
+  found omitted Kotlin modifier defaults silently dropped by the Frame example;
+  prior-backend RED reproduced this, then an explicit-modifier requirement and
+  exact source-linked negative passed. Fresh CLI `cli-W0vMlh` has eight cases and
+  63 live/snapshot hashes verified by main. Fresh SDK `basic-controls-sdk-6pUyF4`
+  consumes unchanged ETS and produces ABC/HAP. No native visual claim.
+- First cost sample completed at 08:37:31 UTC, 29m28s from dispatch. Recorded
+  uncached input 326,312, cached input 12,904,960, output 52,170 across all three
+  roles, including review/fix. See docs/cost-sample-adapter-modules.md for limits.
+  No measured serial baseline, so no numeric speedup claim. Next sample switches
+  to one developer plus the same fixed reviewer; main coordinates only.

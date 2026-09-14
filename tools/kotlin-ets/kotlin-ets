@@ -17,8 +17,11 @@ CP="$CP:$(jar org.jetbrains.kotlinx kotlinx-coroutines-core-jvm 1.8.0):$(jar org
 BUILD="$(mktemp -d "${TMPDIR:-/tmp}/kotlin-ets-build.XXXXXX")"
 trap 'rm -rf "$BUILD"' EXIT
 SOURCES=()
-while IFS= read -r file; do SOURCES+=("$file"); done < <(find "$ROOT/src" -name '*.kt' -type f | sort)
+while IFS= read -r file; do SOURCES+=("$file"); done < <(find "$ROOT/src" -name '*.kt' -type f | LC_ALL=C sort)
+node "$ROOT/adapter-modules.mjs" "$ROOT" "$BUILD"
+while IFS= read -r -d '' file; do SOURCES+=("$file"); done < "$BUILD/adapter-sources.list"
 "$JDK/bin/java" -Xmx3g -cp "$CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
   -no-stdlib -no-reflect -classpath "$CP" -d "$BUILD/tool.jar" "${SOURCES[@]}"
+"$JDK/bin/jar" uf "$BUILD/tool.jar" -C "$BUILD/spi" META-INF/services/dev.ets.AdapterModule
 export KOTLIN_ETS_STDLIB="$STDLIB"
 "$JDK/bin/java" -Xmx3g -cp "$CP:$BUILD/tool.jar" dev.ets.MainKt "$@"
