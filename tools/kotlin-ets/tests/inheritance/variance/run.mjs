@@ -25,16 +25,16 @@ function run(label, command, args, status = 0) {
   assert.equal(r.error, undefined); assert.equal(r.status, status, r.stdout + r.stderr); return r.stdout;
 }
 const compiler = join(root, 'tests/stdlib/compiler.sh'), cli = join(root, 'kotlin-ets');
-const sources = ['Models.kt', 'Cases.kt'].map(p => join(here, p));
+const sources = ['Models.kt', 'Cases.kt', 'Bounds.kt'].map(p => join(here, p));
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim(), jar = join(work, 'oracle.jar');
 run('jvm-build', 'bash', [compiler, ...sources, join(here, 'Oracle.kt'), '-d', jar]);
 result.expected = run('jvm-run', 'java', ['-cp', `${jar}:${cp}`, 'declarationvariance.OracleKt']).trimEnd().split('\n');
-assert.equal(result.expected.length, 30);
+assert.equal(result.expected.length, 50);
 const flat = join(work, 'Variance.ets'), modules = join(work, 'modules'), reversed = join(work, 'reversed');
 run('flat', 'bash', [cli, '--mode', 'language', '--out', flat, ...sources]);
 run('modules', 'bash', [cli, '--mode', 'language', '--out-dir', modules, ...sources]);
 run('reversed', 'bash', [cli, '--mode', 'language', '--out-dir', reversed, ...sources.toReversed()]);
-assert.deepEqual(readdirSync(modules).sort(), ['Cases.ets', 'Models.ets']);
+assert.deepEqual(readdirSync(modules).sort(), ['Bounds.ets', 'Cases.ets', 'Models.ets']);
 result.modules = readdirSync(modules).sort().map(name => ({ name, path: join(modules, name), sha256: hash(join(modules, name)) }));
 const tsFiles = [flat, ...result.modules.map(m => m.path)].map(path => {
   const target = path.replace(/\.ets$/, '.ts'); writeFileSync(target, readFileSync(path)); return target;
@@ -52,10 +52,10 @@ function load(path) {
 function evaluate(exports) {
   const context = vm.createContext({ exports });
   return [0, -3, 7, -2147483648, 2147483647].flatMap(seed =>
-    ['covariance', 'contravariance', 'nested', 'property', 'mixed', 'nullable'].map(name =>
+    ['covariance', 'contravariance', 'nested', 'property', 'mixed', 'nullable', 'broadBound', 'narrowBound', 'classBound', 'nominalBound'].map(name =>
       String(vm.runInContext(`exports.${name}(${seed})`, context, { timeout: 1000 }))));
 }
-result.actual = evaluate(load(flat)); result.moduleActual = evaluate(load(join(modules, 'Cases.ets')));
+result.actual = evaluate(load(flat)); result.moduleActual = evaluate({ ...load(join(modules, 'Cases.ets')), ...load(join(modules, 'Bounds.ets')) });
 assert.deepEqual(result.actual, result.expected); assert.deepEqual(result.moduleActual, result.expected);
 for (const { name, path } of result.modules) assert.equal(readFileSync(path, 'utf8'), readFileSync(join(reversed, name), 'utf8'));
 const proof = join(work, 'proof.jar');
@@ -67,4 +67,4 @@ assert.equal(result.invalid.code, 'COMPILATION_REJECTED'); assert.equal(existsSy
 assert.equal((readFileSync(join(work, 'invalid.stderr'), 'utf8').match(/\[TYPE_VARIANCE_CONFLICT_ERROR\]/g) ?? []).length, 3);
 for (const input of result.inputs) assert.equal(hash(input.path), input.sha256);
 result.output = { path: flat, sha256: hash(flat) }; result.passed = true; record();
-console.log('PASS 30 flat + 30 module JVM/host variance results, deterministic two-file output and three official source refusals');
+console.log('PASS 50 flat + 50 module JVM/host variance/bound results, deterministic three-file output and three official source refusals');

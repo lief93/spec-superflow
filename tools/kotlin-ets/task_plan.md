@@ -69,7 +69,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | --- | --- | --- |
 | R2.1 accepted | Dependency-body contract and reachable ownership: typed source/serialized origin, precise missing-body reasons, checked target replacements kept separate | policy-trUFhB binary-only consumer and JVM/host parity; r1-V3lFKr transitive identity/negative checks; typed-etvKp3 adapter/source contract |
 | R2.2 accepted for selected family | Serialized JVM inline top-level/member/extension generic bodies and call-site binding; separate official KLIB-loader proof | run-OLRVgz/replay-VVr6bu upper-bound/result/rejection closure; KLIB run-MvqSU7 and module run-TP8ttw. Explicit unsupported body/receiver/format boundaries remain |
-| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition, source virtual-overload bridges and bounded method/readonly-property covariance accepted; remaining generic bounds/variance combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
+| R2.3 in progress | Bounded property overrides, default helpers, native construction/protected visibility, capture/heritage composition, source virtual-overload bridges, bounded method/readonly-property covariance, declaration variance and redundant bounds accepted; remaining independent bounds/use-site projection combinations | Declare each supported family and official-phase prerequisites; preserve names/order/dispatch/storage; positive composition and negative type/identity tests |
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
@@ -183,7 +183,14 @@ Target CvNTnK and regressions run-Q0nOFp, probe-wKg0i8 and cli-tsbVXo pass.
 SDK constructors-sdk-YlGtpt checks both unchanged modules and produces ABC/HAP.
 See declaration-variance.md. This is SDK legality, not native or whole-R2 parity.
 
-Next implement remaining generic bounds/use-site projection combinations,
+Redundant multiple bounds now use official IR isSubtypeOf/AbstractTypeChecker:
+only a declared bound proven to imply all others replaces the conjunction.
+run-zv3izn passes 50 + 50 results, three-file determinism, canonical bound/name
+checks and unchanged original two-module bytes. probe-BuvWYJ retains 40 results
+and independent/nullable-bound refusals. SDK constructors-sdk-OZE6qi checks all
+three unchanged modules and compiles ABC/HAP. See declaration-variance.md.
+
+Next implement independent generic bounds/use-site projection combinations,
 inspecting the pinned common/JS type substitution and override
 contracts first. External inherited slots, private shadowing and the documented
 unsupported receiver/parameter families remain explicit, not silently enabled.

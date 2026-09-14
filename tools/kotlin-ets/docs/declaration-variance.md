@@ -45,6 +45,27 @@ multiple independent upper bounds and generic external dependency variance are
 not implicitly enabled. Kotlin UnsafeVariance does not bypass target validation.
 See task_plan.md for the remaining R2 queue; this increment is not all of R2.
 
+## Redundant upper bounds
+
+GenericBounds.kt asks official IrTypeSystemContextImpl/isSubtypeOf (which calls
+AbstractTypeChecker through createIrTypeCheckerState) whether one declared bound
+implies all the others. Only a proven equivalent conjunction becomes one bound.
+The pass runs after official/common body lowering and before typed ETS lowering;
+source binder identities, names and offsets are unchanged, including copied
+helper binders. No target cast, synthetic constraint class or runtime check is
+needed for this family. Receiver substitution consumes the same canonical bound.
+
+For example, if SpecificSource extends Producer<Specific>, both orderings of
+`where T : Producer<Specific>, T : SpecificSource` emit `T extends SpecificSource`.
+Class-owned binders and class-plus-interface bounds use the same proof. Bounds
+with different generic instantiations that Kotlin itself rejects never reach
+this pass. No bound is selected merely because it is first or is a class.
+
+Independent constraints remain intact and are diagnosed by the existing target
+boundary. They require a separate representation: the pinned ArkTS SDK explicitly
+rejects intersection syntax (arkts-no-intersection-types). JS runtime erasure
+does not prove that discarding such constraints is a valid typed ETS contract.
+
 ## Evidence
 
 RED run-rKbhpm passes the original JVM oracle and then reaches the old variant
@@ -81,3 +102,25 @@ node tools/kotlin-ets/tests/inheritance/variance/run.mjs
 bash tools/kotlin-ets/tests/target/run.sh
 node tools/kotlin-ets/tests/constructors/sdk.mjs <successful-variance-evidence> tools/kotlin-ets/tests/inheritance/variance/Index.ets
 ```
+
+## Redundant-bound evidence
+
+RED run-5mOBtX passes JVM execution, then reaches the old multiple-bound target
+guard. Frozen run-zv3izn passes 50 flat + 50 module outcomes over 61 pinned inputs,
+three-file reversed-input determinism and strict host types. The actual IR/target
+probe checks both bound orderings and class-owned binders select SpecificSource,
+while retaining method, parameter and type-parameter names. The original Cases
+and Models module hashes above are unchanged. probe-BuvWYJ retains 40 bounded
+receiver outcomes and both independent/nullable-bound exclusions. All frozen
+hashes were rechecked before commit.
+
+SDK constructors-sdk-OZE6qi checks all three unchanged generated modules and
+compiles ABC/HAP with explicit calls to every public bound fixture. This is not
+native runtime or whole-R2 acceptance.
+
+- Variance.ets: 59b241574ab4b7b80f82b626f965d9ffc29e42e5fc60d5debaced1bd6b435855
+- Bounds.ets: 8047562c5d53b7a694801fc48c351f63ba8b9686f115bb37c18cff10bed36386
+
+run-TcrMlQ separately records invalid test constraints refused by official Kotlin
+itself (inconsistent generic ancestors and two class bounds); it is not counted
+as the target regression RED. The successful fixture uses legal source bounds.

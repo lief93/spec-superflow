@@ -20,11 +20,19 @@ fun main(args: Array<String>) {
             })
         }
         EtsValidator().validate(program, perFileNames = true)
+        val functions = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>()
+        val bound = targets.single { it.name == "SpecificSource" }.symbol.type
+        for (name in listOf("broadFirst", "narrowFirst")) {
+            val function = functions.single { it.name == name }
+            check(function.typeParameters.single().name == "T" && function.typeParameters.single().upperBound == bound)
+            check(function.parameters.single().symbol.name == "source")
+        }
+        check(targets.single { it.name == "BoundedBox" }.typeParameters.single().upperBound == bound)
         val producer = targets.single { it.name == "Producer" }
         val corrupted = program.copy(files = program.files.map { file -> file.copy(declarations = file.declarations.map {
             if (it === producer) producer.copy(typeParameters = producer.typeParameters.map { p -> p.copy(variance = EtsVariance.INVARIANT) }) else it
         }) })
         check(runCatching { EtsValidator().validate(corrupted, perFileNames = true) }.exceptionOrNull() is InvalidTarget)
-        println("PASS official IR declaration variance/names/ownership and erased-metadata refusal")
+        println("PASS official IR declaration variance/names/ownership, canonical redundant bounds and erased-metadata refusal")
     }
 }

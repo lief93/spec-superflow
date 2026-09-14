@@ -8,5 +8,9 @@ fun main() {
         println(property(seed))
         println(mixed(seed))
         println(nullable(seed))
+        println(broadBound(seed))
+        println(narrowBound(seed))
+        println(classBound(seed))
+        println(nominalBound(seed))
     }
 }

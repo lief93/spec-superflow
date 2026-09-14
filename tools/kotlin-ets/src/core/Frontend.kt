@@ -101,6 +101,7 @@ fun <T> withKotlinFrontend(arguments: List<String>, emit: (KotlinFrontendSession
         lowerForLoops(translated)
         lowerStringConcatenations(translated)
         lowerExpectedNullability(translated)
+        lowerRedundantGenericBounds(translated)
         check(!translated.diagnosticCollector.hasErrors && !messages.hasErrors()) {
             "Kotlin lowering diagnostics prohibit target output"
         }
