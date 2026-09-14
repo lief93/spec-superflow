@@ -47,6 +47,16 @@ fun main() {
         EtsFile("Consumer.kt", listOf(signatureOnly)))), runtime)
     check("import { Model } from \"./Model\";" in typed.getValue("Consumer.ets"))
     val duplicate = EtsProgram(listOf(EtsFile("Consumer.kt", listOf(local, local))))
-    rejects(duplicate, "Conflicting target declaration")
-    println("PASS per-file names, single-file conflict, value/type exports, import collisions, preflight before runtime")
+    rejects(duplicate, "Duplicate target declaration identity")
+    fun fileFailure(paths: List<String>, expectedFile: String, message: String) {
+        runtimeCalls = 0
+        val result = runCatching { emitEtsModules(EtsProgram(paths.map { EtsFile(it, emptyList()) }), runtime) }.exceptionOrNull()
+        check(result is InvalidTarget && message in result.message.orEmpty()) { "Expected source-linked $message; got $result" }
+        check(result.source.file == expectedFile && result.source.start == -1 && result.source.end == -1)
+        check(runtimeCalls == 0)
+    }
+    fileFailure(listOf("one/Same.kt", "two/Same.kt"), "two/Same.kt", "Source filenames collide")
+    fileFailure(listOf("one/Same.kt", "two/same.kt"), "two/same.kt", "Source filenames collide")
+    fileFailure(listOf("Same.kt", "Same.kt"), "Same.kt", "Duplicate source file")
+    println("PASS per-file names, single-file conflict, value/type exports, import collisions, source-linked file failures, preflight before runtime")
 }

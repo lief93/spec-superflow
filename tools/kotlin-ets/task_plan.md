@@ -98,6 +98,25 @@ captures and external collection projections remain unsupported. Before closing
 R2, report each remaining gap against the agreed bounded contract. No native/UI
 or whole-R2 completion is claimed.
 
+R2.4 closure checklist (do not expand into new declaration families):
+
+- [x] Flat output planning: structured, source-linked duplicate-file and filename
+  collision failures before runtime selection or file writes. Module contract
+  aP1xTf and frozen run-RF23YJ pass, including 44 JVM/module results, existing
+  value/type imports, private declarations and no-overwrite/no-partial-output
+  checks. This increment changes diagnostics, not successful module layout.
+- [ ] Generated declaration/member provenance: match existing bound constraints,
+  default/constructor helpers and bridges to original symbols and owning files.
+- [ ] Consolidate existing cross-file name/visibility/identity and reversed-input
+  evidence for the R2 declaration/dependency families; report any uncovered
+  agreed family instead of inventing new generic combinations.
+- [ ] Run the frozen combined R2 gate with separate host, SDK and native evidence;
+  explicitly account for remaining R2.3 composition gaps before stage acceptance.
+
+Current publication issue: commit 5e7bb19 is local; two HTTPS pushes failed with
+GitHub connection timeouts. Retry publication after connectivity recovers; do not
+claim the remote contains local commits. This does not block local R2.4 work.
+
 Protected constructor visibility is accepted for the documented source family.
 The target contract now uses EtsVisibility for methods, fields and constructors;
 source IR visibility drives both factories and official default-stub hooks.

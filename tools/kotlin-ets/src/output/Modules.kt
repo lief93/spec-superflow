@@ -12,10 +12,17 @@ fun emitEtsProgram(program: EtsProgram, runtime: EtsRuntimeSupport): String {
 /** Assemble files by declaration identity before printing; never infer imports from text. */
 fun emitEtsModules(program: EtsProgram, runtime: EtsRuntimeSupport): Map<String, String> {
     EtsValidator().validate(program, perFileNames = true)
-    val names = program.files.associate { it.sourcePath to File(it.sourcePath).nameWithoutExtension + ".ets" }
-    require(names.size == program.files.size) { "Duplicate source file in target program" }
-    require(names.values.map { it.lowercase(Locale.ROOT) }.distinct().size == names.size) {
-        "Source filenames collide in flat ETS output; use distinct source basenames"
+    val names = linkedMapOf<String, String>()
+    val outputOwners = mutableMapOf<String, String>()
+    for (file in program.files) {
+        val source = file.declarations.firstOrNull()?.source ?: SourceSpan(file.sourcePath, -1, -1)
+        if (file.sourcePath in names) throw InvalidTarget(source,
+            "Duplicate source file in target program: ${file.sourcePath}")
+        val name = File(file.sourcePath).nameWithoutExtension + ".ets"
+        val previous = outputOwners.putIfAbsent(name.lowercase(Locale.ROOT), file.sourcePath)
+        if (previous != null) throw InvalidTarget(source,
+            "Source filenames collide in flat ETS output: $previous and ${file.sourcePath} map to $name; use distinct source basenames")
+        names[file.sourcePath] = name
     }
     data class Owner(val path: String, val symbol: EtsSymbol, val exported: Boolean)
     val owners = program.files.flatMap { file -> file.declarations.map { declaration ->

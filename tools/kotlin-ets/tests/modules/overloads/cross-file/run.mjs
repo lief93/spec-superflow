@@ -175,7 +175,7 @@ if (originalBaseline) {
   assert.deepEqual(privateActual, privateExpected);
   for (const [label, names, status, message] of [
     ['package-collision', ['LeftNames.kt', 'RightNames.kt', 'PackageCalls.kt'], 2, /Conflicting module binding/],
-    ['filename-collision', ['left/Repeated.kt', 'right/Repeated.kt'], 1, /Source filenames collide/],
+    ['filename-collision', ['left/Repeated.kt', 'right/Repeated.kt'], 2, /Source filenames collide/],
   ]) {
     const paths = names.map(name => join(fixtures, 'negative', name));
     run(label + '-jvm', 'bash', [compiler, ...paths, '-d', join(work, label + '.jar')]);
@@ -188,6 +188,10 @@ if (originalBaseline) {
       assert.equal(diagnostic.code, 'INVALID_TARGET');
       assert.equal(diagnostic.source.file, paths[2]);
       assert.ok(diagnostic.source.start >= 0 && diagnostic.source.end > diagnostic.source.start);
+    } else {
+      assert.equal(diagnostic.code, 'INVALID_TARGET');
+      assert.ok(paths.includes(diagnostic.source.file));
+      for (const path of paths) assert.ok(diagnostic.message.includes(path));
     }
   }
   result.modules = outputs.map(name => ({ path: join(forward, 'modules', name), sha256: hash(join(forward, 'modules', name)) }));

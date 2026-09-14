@@ -158,3 +158,24 @@ Virtual-property follow-up:
   regression, not a new virtual-property multi-file acceptance fixture.
 - Self-check and `git diff --check` pass. No SDK/ArkVM/native/UI claim; R2's
   combined platform gate is still pending.
+
+## R2.4 module planning diagnostics
+
+Duplicate source paths and flat output filename collisions now produce
+INVALID_TARGET with the offending source file/span, instead of a generic
+exception with no source. Collision messages include both source paths and the
+target basename. Case-only collisions remain rejected for portable flat output.
+Empty files use file-level offsets (-1), not an invented declaration location.
+All module planning still precedes runtime selection and output writes; no
+automatic numbered aliases, overwrite or partial output is introduced.
+
+RED contract-n6Zx9Y records the unstructured collision exception. Earlier
+contract-3MOzWq first exposed an outdated duplicate-declaration message assertion;
+the assertion now matches the stricter existing symbol-identity guard.
+GREEN contract-aP1xTf covers the module contract and all three file-level
+refusals. Frozen run-RF23YJ passes 44 JVM/module cases, private/internal visibility,
+function/type imports, dependency closure, no-overwrite/no-partial-output checks
+and public CLI collision diagnostics. The CLI collision exit status is now 2
+(INVALID_TARGET), not 1 (generic COMPILATION_REJECTED). The cross-file overload
+runner's equivalent expectation is updated; that full suite was not rerun for
+this diagnostic-only increment. No new SDK/native/UI acceptance is claimed.
