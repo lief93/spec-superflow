@@ -724,3 +724,205 @@
   byte-identical to native-06. Compiler/test/SDK child sessions completed.
 - Tracked diff whitespace and all new-file whitespace checks passed.
   No review, commit or push for this increment.
+
+# 2026-09-14: return to R2 mainline, R2E in progress
+
+- User explicitly returned to the seven-round plan and parallel implementation.
+  R2 reconciliation confirmed implementation gaps, not just missing tests. R2D
+  finite evidence is real but does not close R2; R3-R7 remain incomplete.
+- Parfit owns cross-file overload naming and focused module tests. Tesla began
+  real serialized member-inline loading but hit the usage limit; main took over
+  its unfinished files. Main also owns private/internal source visibility and
+  final serial verification. No new controls/page-specific work was dispatched.
+- Visibility RED: immutable HEAD compiler plus updated owning tests rejects the
+  assertion that private functions remain local (`run-dgIHDv` under
+  `/tmp/kotlin-ets-r2e-baseline-20260914/tools/kotlin-ets/tests/modules/.work`).
+  An earlier invalid source fixture exposing an internal class was corrected
+  before that intended RED. Backend now uses official IR private visibility;
+  final owning suite is pending the production freeze.
+- Binary member focused GREEN: tests/binary-bodies/r2e/.work/run-CZBNJh loads
+  five actual inline blocks with canonical receiver identities, rejects the
+  declared unsupported members/missing provenance and keeps signature-only
+  bodies unavailable. Initial run-TnLR6Q found a test harness dependency omission;
+  main added the real target validator inputs, not a stub. Target replay with
+  explicit receiver type replacement is prepared, not yet claimed passing.
+- First cross-file overload slice has focused evidence, but private file scopes
+  need additional correction and regression before acceptance. Do not treat its
+  first green run as full naming fidelity. No review, commit, push or new native
+  integration in this increment.
+- Final cross-file naming GREEN r2e-green-Nl91IP: 15 JVM cases in flat and module
+  forms, five private-scope module cases, exact resolved IR bindings, unchanged
+  parameter names, deterministic reversed-file output and two collision rejects.
+  Earlier r2e-green-qpp6qU stopped at an invalid same-signature private/public
+  Kotlin fixture; public Double overload/call repairs the input, not the backend.
+- Member replay first exposed official inliner local `this` (replay-szE9s7).
+  Language now normalizes only the generated inlined-parameter receiver through
+  existing symbol allocation. replay-lgYLzV passes three JVM/target-host pairs,
+  default/named argument order RBALRCDP and overflow; unmapped public CLI rejects
+  instead of fabricating an external class. No SDK/native claim.
+- All production writers are frozen; owning modules run-dQ29nj is in progress.
+  Remaining serial queue: legacy generic-method/overload checks, refreshed member
+  focused loading and target replay, and top-level binary overload regression.
+- Owning modules run-dQ29nj completed GREEN: 28 JVM/module outcomes; private
+  function/class and internal import checks, illegal private access rejection,
+  generic/local-function closure and output safety checks. Generic method owning
+  suite probe-nuHwF6 now has the serialized build slot.
+- Generic methods owning suite probe-nuHwF6 completed GREEN: 35 JVM/host outcomes,
+  real IR identity/signature assertions, two unchanged former negatives now
+  positive, mandatory historical member-overload public proof and 16 source/
+  frontend rejection fixtures. Its 43 commands completed without production edits.
+- Refreshed binary member focused run-NKWEt6 and full-backend replay-hn4M5d GREEN:
+  five actual official inline blocks, original receiver identities/provenance,
+  signature-only refusal, seven unsupported/provenance cases and three exact
+  JVM/host result/effect pairs. No generated classes fabricated; unmapped CLI
+  rejects. Historical top-level binary public-xuabox is now running serially.
+- Historical binary public-xuabox completed GREEN: nine public CLI/JVM/host pairs
+  across three existing producer layouts plus three selected-body rejections.
+  Producer hashes match the prior completed focused run; this is fresh backend
+  output, not a claim that producers were rebuilt for this regression.
+- Historical top-level owning run-RQpn5s / overload-top-AWX1rN completed GREEN:
+  five unchanged-source JVM/public CLI/host outcomes. Both pending R2D legacy
+  owning-suite checks are now closed; combined integration stays deferred.
+- R2E implementation and focused verification complete. Tracked diff whitespace
+  and all 27 new files pass whitespace checks. No compiler sessions remain from
+  this final queue, no new SDK/native run, independent review, commit or push.
+  R2 is still incomplete; next work is bounded nested/local declaration inventory
+  and its ownership/capture contract, not more page/control special cases.
+
+### R2E independent review follow-up
+
+- The current workflow now requires fixed independent review. Aristotle
+  (`01a09e31-7ded-72d3-a8af-60e6aeda911c`) reviewed the frozen increment read-only
+  and requested changes: private calls moved across source files by inline,
+  same-package private/public overload import collision, and missing binary
+  receiver-dependent default coverage. R2F implementation has not started.
+- Parfit prepared and froze the resolved-import naming correction. Main reproduced
+  the private-inline failure in owning modules `run-ogu53Q` and is reusing
+  `KlibSyntheticAccessorGenerator`, preserving the original private helper.
+  The added generic-helper case exposed a type-parameter remapping gap in
+  `run-teuTTm`; it is being checked after applying official type remapping.
+- Binary member tests now retain the literal default case and add omitted and
+  supplied receiver-dependent defaults with effectful receiver/argument order.
+  Fresh focused and target replay evidence is pending. No acceptance, commit,
+  push, SDK or native success is implied by these prepared fixes.
+- Binary member focused `run-8BBxfT` and replay `replay-BFfK4x` pass the new
+  receiver-dependent defaults, eight official inline blocks, three result/trace
+  pairs and refusal boundaries. Source bridge default coverage additionally
+  exposed filtered omitted argument slots (`run-FVvHty`); preserving original
+  slots and official value-symbol remapping are now under owning regression.
+- Owning modules `run-iW7Gqe` pass all 40 JVM/module outcomes with the final
+  source-private accessor, generic type and default parameter/slot mapping.
+  No private helper is exported directly, and existing source rejection and
+  output safety checks remain unchanged. Naming RED/GREEN now has the build slot.
+- Naming `r2e-red-o3DU1b` proves the private/public import collision with the old
+  implementation after JVM success. `r2e-green-hXJOk5` passes the corrected
+  expanded cases in both input orders, module/flat outputs and unchanged
+  rejection guards. Main is refreshing binary replay against the final source
+  accessor implementation before freezing for the same independent reviewer.
+- Final binary replay `run-8BBxfT/replay-pv2Q7C` passes all three JVM/host
+  pairs and unmapped-CLI rejection on the final production sources. Owning
+  modules `run-iW7Gqe`, naming `r2e-green-hXJOk5`, and this replay are the
+  final affected-suite evidence. Whitespace checks pass. All writers and build
+  sessions are stopped for Aristotle's second read-only review; R2F remains
+  queued, and no commit/push or new native/SDK result is claimed.
+- Second fixed review closed the original import collision and receiver-default
+  findings, but requested private-overload/accessor composition. `run-KyCcNa`
+  reproduces the synthetic-name collision. Main added official Kotlin/JS
+  `NameTable` allocation keyed by original helper identity, preserving synthetic
+  offsets and reserving source names. Owning modules now include overloaded
+  helpers plus a user-name collision; its final verification is running.
+- Second-review follow-up verification is complete: owning modules `run-znizDA`
+  pass 44 JVM/module cases; naming `r2e-green-mtJgpg` retains exact identity,
+  deterministic import and collision proofs; binary `replay-lQQe6j` passes all
+  three JVM/host pairs. The worktree and all writers are now frozen again for
+  the same reviewer's third read-only pass. R2F is not dispatched before approval.
+- Aristotle's third review returned requirements PASS and code-quality PASS,
+  no actionable findings. It verified final affected-file hashes and the finite
+  evidence. Main accepts bounded R2E; no whole-R2, SDK/native or release claim.
+- Automatically continuing R2F declaration contract preparation: main inventories
+  official nested/local lowering and capture ownership, Parfit reads target
+  class identity/type/import consumers. Shared interfaces and finite cases must
+  be fixed before production edits. The same reviewer will remain the gate.
+- R2F shared target class identity contract is fixed in
+  `docs/nested-declarations.md`: optional original sourceName, canonical class ID
+  independent of emitted name, unchanged file ownership and strict references.
+  Added ClassIdentityTest; pre-contract target build xYShQq failed as expected,
+  full target suite w1X8UM passes. No nested/local source parity is claimed yet.
+  First slice is non-inner lexical nesting and noncapturing local classes;
+  capture semantics remain an explicit later gate. Parfit can now implement its
+  language naming/consumer lane while main implements bounded core lowering.
+- R2F core probe `tests/local-classes/.work/run-YfdkCV` passes: official common
+  closure analysis rejects captured values/type parameters; common popup and
+  bounded nested placement preserve spans, owning files and effective exports.
+  Legal Kotlin inner classes reject with source evidence. The probe does not
+  claim language parity. Main released the serial compiler slot to Parfit for
+  JVM/flat/module tests; production core/target are frozen during that check.
+- Parfit froze its R2F lane. `green-bM9IEq` matches 15 JVM outcomes in flat and
+  three-module host output, with class/reference/binder identity, five necessary
+  renames, stable reverse-input output and eleven target-negative checks.
+  Main added ClassNaming to the two explicit legacy compiler source lists and
+  started the existing local-function regression before independent review.
+- Existing regressions pass with the frozen R2F implementation: local functions
+  `run-djfj5V` (official lifting evidence plus JVM/host closure/capture/order
+  cases), typed language `typed-u3YIIy`, and inheritance `probe-HHPBKX`.
+  The initial local runner `run-Vxz2Q6` exposed a stale explicit source list;
+  adding the existing target validator/substitution/traversal fixed compilation.
+  No production workaround or semantics were changed for that runner failure.
+  Main freezes the finite R2F worktree for Aristotle; no next requirement is
+  dispatched before its review and main acceptance.
+- Aristotle requested R2F changes: lifted nested bases can follow derived class
+  declarations at runtime, and flattened class names can be shadowed by source
+  parameters at constructor uses. Main owns dependency-safe placement and a
+  JVM/flat/module order regression; Parfit owns lexical class-value naming.
+  `tests/local-classes/order/.work/run-PZ9Ut3` reproduces the old-backend runtime
+  failure in both output forms after original JVM succeeds. No R2F acceptance.
+- Main order fix passes `order/.work/run-8jK5ze`: original JVM equals flat and
+  module outputs for nested bases, forward class declarations and local
+  inheritance. It compiles the final source snapshot including Parfit's revised
+  naming. Core guard/ownership probe `run-zFdVRA` also passes. Slot released to
+  Parfit for the shadowing RED/GREEN and unchanged nested suite; all production
+  writers remain frozen for those commands.
+- Parfit released the slot: shadow RED `shadow-red-NrNISv`, GREEN
+  `shadow-green-Ableh3` (55 JVM outcomes in each output mode), original nested
+  `green-wl8Wgl` (15 per mode, eleven negatives) all pass. Current production
+  hashes match. Main freezes both reviewed fixes and returns them to Aristotle.
+- Aristotle's second R2F review passes requirements and code quality, no findings.
+  Main accepts bounded R2F and automatically begins R2G official local-class
+  value captures, with shared contract/ownership in docs/local-class-captures.md.
+  Whole R2 and native/SDK acceptance remain open; commit/push remain paused.
+- R2G core RED `run-hbDF4a` confirms prior blanket capture rejection; GREEN
+  `run-mKHYaN` checks official fields/constructor bindings/shared-cell identity
+  and retained guard diagnostics. Main released the heavy slot to Parfit for
+  language consumption tests and freezes production core/target meanwhile.
+- Heartbeat reconciled the latest user status question: commit/push remains
+  paused; no publication action was requested. Parfit's R2G lane is now frozen,
+  its slot released, all processes reaped. `red-9bnwut` reproduces the earlier
+  field-consumer rejection; `green-fEhNxA` passes 30 JVM outcomes per output mode
+  and eight negatives, current hashes verified. Noncapturing regression
+  `green-rHTaeq` passes. Main starts the existing local-function regression
+  before returning this finite increment to the fixed reviewer.
+- Existing local functions `run-vVgfoT` passes official lifting/shared-cell proof
+  and JVM/host generic/recursive/shared/escaping/order cases. Main freezes R2G
+  for Aristotle's read-only review. All needed test children have exited.
+- Aristotle requests one R2G correction: generated capture parameters can shadow
+  visible top-level function names or emitted overload names. Both reviewer
+  repros return 17 on JVM but the frozen target rejects the unbound function.
+  Parfit owns the same naming consumer/test fix and exclusive serial build slot;
+  core/target remain frozen. R2G remains unaccepted until re-review.
+- User explicitly unpaused Git publication: after required tests, fixed independent
+  review and main acceptance, commit and push the accepted batch without another
+  routine confirmation. Older paused notes are historical; unrelated/unreviewed
+  work remains excluded and release authorization is unchanged.
+- Parfit froze the R2G naming correction and released the compiler slot with no
+  children remaining. Shadow RED `shadow-red-h3o8XO`, GREEN
+  `shadow-green-xtyLVs` (15 JVM outcomes per output mode), and original capture
+  regression `green-I5AG8s` (30 outcomes and eight negatives) are complete.
+  Language SHA-256 is `811609674c8517ac016969e03674e548b377f99c6c1ac8390e687dd4dbb1d4ba`.
+  Core/target are unchanged. Return this frozen batch to the same reviewer before
+  acceptance and publication; SDK/native coverage is not claimed.
+- Aristotle's second R2G review passes requirements and code quality with no
+  remaining findings. Both final GREEN manifests match all 48 production hashes.
+  Main accepts the bounded capture functionality and its JVM/flat/module and
+  negative evidence. Accepted R2E-R2G changes will be committed together because
+  their shared-file dependencies accumulated while Git publication was paused;
+  unrelated control-verification documentation and old Python work are excluded.

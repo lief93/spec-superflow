@@ -1,5 +1,6 @@
 package dev.ets
 
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.visitors.*
@@ -28,8 +29,10 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>) {
         val program = EtsProgram(module.files.map { file ->
             diagnostics.currentFile = file.fileEntry.name
             EtsFile(file.fileEntry.name, file.declarations.map { declaration -> when (declaration) {
-                is IrSimpleFunction -> language.function(declaration).copy(exported = true)
-                is IrClass -> language.clazz(declaration).copy(exported = true)
+                is IrSimpleFunction -> language.function(declaration).copy(
+                    exported = !DescriptorVisibilities.isPrivate(declaration.visibility))
+                is IrClass -> language.clazz(declaration).copy(
+                    exported = sourceClassIsExported(declaration))
                 else -> diagnostics.unsupported(declaration, "Unsupported top-level declaration")
             } })
         })

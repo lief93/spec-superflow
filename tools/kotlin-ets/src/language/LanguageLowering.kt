@@ -2,14 +2,19 @@
 package dev.ets
 
 import java.util.IdentityHashMap
+import org.jetbrains.kotlin.backend.common.lower.BOUND_RECEIVER_PARAMETER
+import org.jetbrains.kotlin.backend.common.lower.BOUND_VALUE_PARAMETER
+import org.jetbrains.kotlin.backend.common.lower.LocalDeclarationsLowering
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
+import org.jetbrains.kotlin.ir.backend.js.utils.NameTable
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
+import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
@@ -23,6 +28,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     private val temporaryNames = IdentityHashMap<IrValueSymbol, String>()
     private val symbols = IdentityHashMap<IrValueSymbol, EtsSymbol>()
     private val overloadNaming = OverloadNaming()
+    private val classNaming = ClassNaming(overloadNaming)
+    private val capturedFields = IdentityHashMap<IrFieldSymbol, EtsSymbol>()
+    private val capturedParameters = IdentityHashMap<IrValueSymbol, String>()
     private var nextSymbol = 0
     private val loopNames = IdentityHashMap<IrLoop, String>()
     private val activeLoops = mutableListOf<IrLoop>()
@@ -107,11 +115,14 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         }
         is IrGetField -> {
             if (sourceFile(expression.symbol.owner) == null) diagnostics.unsupported(expression, "Unsupported external field")
+            val captured = expression.symbol.owner.takeIf(::hasCaptureOrigin)?.let(::capturedFieldSymbol)
             EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
-                fieldName(expression.symbol.owner), type(expression.type), source(expression))
+                captured?.name ?: fieldName(expression.symbol.owner), type(expression.type), source(expression), captured?.id)
         }
         is IrSetField -> {
             if (sourceFile(expression.symbol.owner) == null) diagnostics.unsupported(expression, "Unsupported external field assignment")
+            if (hasCaptureOrigin(expression.symbol.owner))
+                diagnostics.unsupported(expression, "Captured field writes require the official constructor prefix")
             val target = EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
                 fieldName(expression.symbol.owner), type(expression.symbol.owner.type), source(expression))
             discard(EtsAssignment(target, expression(expression.value, scope), source(expression)), expression)
@@ -526,6 +537,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
     }
 
     private fun parameters(function: IrFunction, scope: Scope): List<EtsParameter> {
+        prepareCapturedParameters(function)
         val parameters = listOfNotNull(function.extensionReceiverParameter) + function.valueParameters
         parameters.forEach { bind(it, scope) }
         return parameters.map { parameter -> withElement(parameter) {
@@ -563,17 +575,20 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             declaration.declarations.firstOrNull { it !is IrSimpleFunction }?.let {
                 diagnostics.unsupported(it, "Only method signatures are supported in interfaces")
             }
-            return@withFile EtsClass(identifier(declaration), declaration.declarations.filterIsInstance<IrSimpleFunction>()
+            return@withFile EtsClass(classNaming.name(declaration), declaration.declarations.filterIsInstance<IrSimpleFunction>()
                 .filterNot { it.isFakeOverride }.map { function(it, Scope()) }, source(declaration),
-                kind = EtsClassKind.INTERFACE, interfaces = interfaces, typeParameters = typeParameters)
+                kind = EtsClassKind.INTERFACE, interfaces = interfaces, typeParameters = typeParameters,
+                sourceName = identifier(declaration).takeUnless { it == classNaming.name(declaration) })
         }
         val constructors = declaration.declarations.filterIsInstance<IrConstructor>()
         if (constructors.size != 1 || !constructors.single().isPrimary) {
             diagnostics.unsupported(declaration, "A source class must have one primary constructor")
         }
         val constructor = constructors.single()
+        val captures = declaration.declarations.filterIsInstance<IrField>().filter(::hasCaptureOrigin)
+        captures.forEach(::capturedFieldSymbol)
         declaration.declarations.firstOrNull {
-            it !is IrConstructor && it !is IrProperty && it !is IrSimpleFunction && it !is IrAnonymousInitializer
+            it !is IrConstructor && it !is IrProperty && it !is IrSimpleFunction && it !is IrAnonymousInitializer && it !in captures
         }?.let { diagnostics.unsupported(it, "Unsupported nested source class declaration") }
         val scope = Scope()
         declaration.thisReceiver?.let { scope.bindings[it.symbol] = thisReference(declaration, declaration) }
@@ -588,6 +603,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
             }
         }
         val members = mutableListOf<EtsClassMember>()
+        captures.forEach { members.add(EtsField(capturedFieldSymbol(it), private = true)) }
         if (singleton) {
             val classType = classType(declaration)
             val field = synthetic("__etsSingleton", EtsNullableType(classType), declaration)
@@ -612,11 +628,34 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         val constructorBody = constructor.body as? IrBlockBody
             ?: diagnostics.unsupported(constructor, "Unsupported constructor body")
         val initialization = mutableListOf<EtsStatement>()
+        val capturePrefix = constructorBody.statements.takeWhile {
+            it is IrSetField && it.origin === IrStatementOrigin.STATEMENT_ORIGIN_INITIALIZER_OF_FIELD_FOR_CAPTURED_VALUE
+        }.filterIsInstance<IrSetField>()
         if (constructorBody.statements.filterIsInstance<IrDelegatingConstructorCall>().size != 1 ||
-            constructorBody.statements.firstOrNull() !is IrDelegatingConstructorCall) {
+            constructorBody.statements.getOrNull(capturePrefix.size) !is IrDelegatingConstructorCall) {
             diagnostics.unsupported(constructor, "A primary constructor requires one direct leading delegation")
         }
+        if (capturePrefix.isNotEmpty() && (!captureOwner(declaration) || parents.isNotEmpty()) ||
+            capturePrefix.map { it.symbol.owner }.toSet() != captures.toSet() || capturePrefix.size != captures.size ||
+            constructorBody.statements.filterIsInstance<IrSetField>().count {
+                it.origin === IrStatementOrigin.STATEMENT_ORIGIN_INITIALIZER_OF_FIELD_FOR_CAPTURED_VALUE
+            } != capturePrefix.size) {
+            diagnostics.unsupported(constructor, "Captured fields require one official initialization prefix before Any delegation")
+        }
         constructorBody.statements.forEach { child -> when (child) {
+            in capturePrefix -> {
+                val write = child as IrSetField
+                val parameter = (write.value as? IrGetValue)?.symbol?.owner as? IrValueParameter
+                if ((write.receiver as? IrGetValue)?.symbol !== declaration.thisReceiver?.symbol ||
+                    parameter == null || parameter.parent !== constructor || !isCapturedParameter(parameter)) {
+                    diagnostics.unsupported(write.symbol.owner, "Invalid official captured-field constructor binding")
+                }
+                val field = capturedFieldSymbol(write.symbol.owner)
+                val value = scope.bindings.getValue(parameter.symbol) as EtsReference
+                initialization.add(EtsExpressionStatement(EtsAssignment(
+                    EtsMember(thisReference(declaration, write.symbol.owner), field.name, field.type, field.source, field.id),
+                    EtsReference(value.symbol, field.source), field.source), field.source))
+            }
             is IrDelegatingConstructorCall -> {
                 val target = child.symbol.owner.parent as? IrClass
                 if (base != null) {
@@ -651,8 +690,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
                 method.name.asString() in setOf("equals", "hashCode")) return@forEach
             members.add(function(method, scope))
         }
-        EtsClass(identifier(declaration), members, source(declaration), typeParameters = typeParameters,
-            baseClass = baseType, interfaces = interfaces, abstract = declaration.modality == Modality.ABSTRACT)
+        EtsClass(classNaming.name(declaration), members, source(declaration), typeParameters = typeParameters,
+            baseClass = baseType, interfaces = interfaces, abstract = declaration.modality == Modality.ABSTRACT,
+            sourceName = identifier(declaration).takeUnless { it == classNaming.name(declaration) })
     }
 
     private fun hasInheritance(declaration: IrClass): Boolean = declaration.kind == ClassKind.INTERFACE ||
@@ -708,13 +748,14 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         listOfNotNull(property.getter, property.setter).any { it.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR }
 
     private fun fieldName(field: IrField): String {
+        if (hasCaptureOrigin(field)) return capturedFieldSymbol(field).name
         val property = field.correspondingPropertySymbol?.owner
         return if (property != null && hasCustomAccessor(property)) "__etsField_${identifier(property)}" else identifier(field)
     }
 
     private fun bind(value: IrValueDeclaration, scope: Scope): EtsSymbol {
         val generated = isGeneratedName(value)
-        val name = if (generated || etsRestrictedValueBinding(value.name.asString())) temporaryNames.getOrPut(value.symbol) {
+        val name = capturedParameters[value.symbol] ?: if (generated || etsRestrictedValueBinding(value.name.asString())) temporaryNames.getOrPut(value.symbol) {
             freshName(if (generated) "__etsTmp" else "${identifier(value)}_", scope)
         } else identifier(value)
         val symbol = symbols.getOrPut(value.symbol) { synthetic(name, withElement(value) { type(value.type) }, value) }
@@ -722,11 +763,76 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
         return symbol
     }
 
+    private fun hasCaptureOrigin(field: IrField): Boolean =
+        field.origin === LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE
+
+    private fun captureOwner(declaration: IrClass): Boolean = declaration.visibility == DescriptorVisibilities.LOCAL &&
+        declaration.kind == ClassKind.CLASS && !declaration.isInner && !declaration.name.isSpecial && sourceFile(declaration) != null &&
+        declaration.constructors.toList().let { it.size == 1 && it.single().isPrimary } &&
+        declaration.superTypes.all { it.classOrNull?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Any" }
+
+    private fun capturedFieldSymbol(field: IrField): EtsSymbol {
+        val owner = field.parent as? IrClass
+        if (!hasCaptureOrigin(field) || owner == null || !captureOwner(owner) || field !in owner.declarations ||
+            field.isStatic || field.isExternal || !field.isFinal || field.initializer != null) {
+            diagnostics.unsupported(field, "Unsupported captured field ownership or shape")
+        }
+        capturedFields[field.symbol]?.let { return it }
+        val fields = owner.declarations.filterIsInstance<IrField>().filter(::hasCaptureOrigin)
+        val occupied = mutableSetOf("constructor")
+        owner.declarations.filterIsInstance<IrProperty>().forEach { property ->
+            occupied += identifier(property)
+            property.backingField?.let { occupied += fieldName(it) }
+        }
+        owner.declarations.filterIsInstance<IrSimpleFunction>().filterNot { it.isFakeOverride }.forEach {
+            occupied += functionSymbol(it).name
+        }
+        val table = NameTable<IrField>(reserved = (occupied + fields.map { it.name.asString() }).toMutableSet())
+        for (capture in fields) {
+            if (capture.parent !== owner || capture.isStatic || capture.isExternal || !capture.isFinal || capture.initializer != null)
+                diagnostics.unsupported(capture, "Unsupported captured field ownership or shape")
+            val original = identifier(capture)
+            val name = if (original in occupied) table.declareFreshName(capture, original)
+                else original.also { table.declareStableName(capture, it) }
+            capturedFields[capture.symbol] = EtsSymbol("language:${nextSymbol++}", name, type(capture.type), declarationSource(capture))
+        }
+        return capturedFields.getValue(field.symbol)
+    }
+
+    private fun isCapturedParameter(parameter: IrValueParameter): Boolean =
+        parameter.origin === BOUND_VALUE_PARAMETER || parameter.origin === BOUND_RECEIVER_PARAMETER
+
+    private fun prepareCapturedParameters(function: IrFunction) {
+        val owner = function.parent as? IrClass ?: return
+        if (function !is IrConstructor || !captureOwner(owner)) return
+        val captures = function.valueParameters.filter(::isCapturedParameter)
+        if (captures.isEmpty() || captures.all { it.symbol in capturedParameters }) return
+        val occupied = function.valueParameters.filterNot(::isCapturedParameter).map { identifier(it) }.toMutableSet()
+        val reserved = mutableSetOf<String>()
+        sourceFile(owner)!!.module.acceptVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) {
+                if (element is IrDeclarationWithName && !element.name.isSpecial) reserved += element.name.asString()
+                // Root bindings are visible in flat output and through resolved module imports.
+                if (element is IrClass && element.parent is IrFile) occupied += classNaming.name(element)
+                if (element is IrSimpleFunction && element.parent is IrFile) occupied += overloadNaming.name(element)
+                element.acceptChildrenVoid(this)
+            }
+        })
+        reserved += occupied
+        val table = NameTable<IrValueParameter>(reserved = reserved)
+        for (parameter in captures) {
+            val original = identifier(parameter)
+            capturedParameters[parameter.symbol] = if (original in occupied) table.declareFreshName(parameter, original)
+                else original.also { table.declareStableName(parameter, it) }
+        }
+    }
+
     private fun synthetic(name: String, type: EtsType, element: IrElement, external: Boolean = false): EtsSymbol =
         EtsSymbol("language:${nextSymbol++}", name, type, source(element), external)
 
     private fun classReference(declaration: IrClass, element: IrElement): EtsExpression =
-        EtsReference(etsClassSymbol(identifier(declaration), declarationSource(declaration)), source(element))
+        EtsReference(etsClassSymbol(classNaming.name(declaration), declarationSource(declaration),
+            sourceName = identifier(declaration)), source(element))
 
     private fun declarationSource(declaration: IrDeclaration): SourceSpan =
         SourceSpan(sourceFile(declaration)?.fileEntry?.name ?: diagnostics.currentFile, declaration.startOffset, declaration.endOffset)
@@ -736,7 +842,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     private fun classType(declaration: IrClass,
         arguments: List<EtsType> = declaration.typeParameters.map(::typeParameterType)): EtsNamedType =
-        EtsNamedType(identifier(declaration), arguments, etsClassSymbol(identifier(declaration), declarationSource(declaration)).id)
+        EtsNamedType(classNaming.name(declaration), arguments,
+            etsClassSymbol(classNaming.name(declaration), declarationSource(declaration), sourceName = identifier(declaration)).id)
 
     private fun typeParameterType(parameter: IrTypeParameter): EtsTypeParameterType {
         val owner = parameter.parent as IrDeclarationWithName
@@ -830,7 +937,10 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>) :
 
     private fun isGeneratedName(declaration: IrDeclarationWithName): Boolean = declaration.name.isSpecial ||
         declaration.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE ||
-        declaration.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE_FOR_INLINED_EXTENSION_RECEIVER
+        declaration.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE_FOR_INLINED_EXTENSION_RECEIVER ||
+        // The official inliner strips <this> into a local named this, which ETS reserves.
+        (declaration.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE_FOR_INLINED_PARAMETER &&
+            declaration.name.asString() == "this")
 
     private fun identifier(value: IrDeclarationWithName): String {
         val name = value.name.asString()

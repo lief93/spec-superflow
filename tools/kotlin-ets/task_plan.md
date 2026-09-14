@@ -5,6 +5,116 @@ evidence, not the current backlog. Use the existing non-spec development workflo
 
 ## Acceptance contract
 
+### Current publication authorization (2026-09-14)
+
+The user now authorizes commit and push after each batch passes its required
+tests, the fixed independent reviewer, and main acceptance of functionality and
+evidence. This supersedes all older commit/push-paused notes below, which are
+historical. Do not wait for another routine user confirmation. Freeze and commit
+only the accepted batch and its required dependencies; exclude unrelated dirty
+files, generated scratch output and any unreviewed work. Verify the pushed commit
+against the remote branch. Release/publishing beyond Git remains separately gated.
+
+### Current mainline: R2G accepted; publish before the next R2 slice (2026-09-14)
+
+Aristotle's second R2G review passes requirements and code quality with no
+actionable findings; main accepts the documented finite capture subset and
+JVM/flat/module evidence. Both GREEN manifests match all 48 production hashes.
+Publish accepted R2E-R2G changes and required tests/docs now that the user has
+unpaused Git. Then fix the next declaration contract before implementation.
+This is not whole-R2, SDK/native, or seven-round acceptance.
+
+R2F is accepted by main after Aristotle's second read-only review: requirements
+PASS, code-quality PASS, no actionable findings. Final order `run-8jK5ze`, core
+`run-zFdVRA`, shadow `shadow-green-Ableh3`, and nested `green-wl8Wgl` match current
+production. This accepts the finite nesting/noncapturing slice, not whole R2.
+
+R2G now consumes official local-class value capture lowering. Contract and
+ownership are fixed in `docs/local-class-captures.md` before parallel edits.
+Main owns capture eligibility/core IR evidence; Parfit owns target field and
+constructor consumption plus JVM/flat/module behavior tests. Captured generic
+binders, inner/anonymous classes and captured-class inheritance are later gates.
+
+#### Completed R2F context
+
+R2E is accepted for its finite subset after Aristotle's third read-only review:
+requirements PASS, code quality PASS, no actionable findings. Final evidence is
+owning modules `run-znizDA` (44 JVM/module cases), naming
+`r2e-green-mtJgpg`, and binary replay `run-8BBxfT/replay-lQQe6j`. Main accepts
+the documented functionality and focused evidence. This is not whole-R2 or
+native/SDK acceptance, and commit/push remain paused.
+
+R2F's shared contract is fixed in `docs/nested-declarations.md` and its target
+tests pass. Main has implemented official local popup plus bounded non-inner
+nested placement and effective source linkage. Core probe `run-YfdkCV` passes
+ownership/export checks and source-linked capture/inner rejection cases. Parfit
+owns language naming/type/reference consumers and JVM/flat/module parity tests.
+Whole-chain parity and independent review are still pending. Capturing classes,
+inner classes and anonymous objects remain separate gates.
+
+#### Completed R2E review history
+
+Independent reviewer Aristotle (`01a09e31-7ded-72d3-a8af-60e6aeda911c`)
+requested changes on the frozen focused results: cross-file source inline
+references to private helpers (main), same-package private/public overload
+import collisions (Parfit), and receiver-dependent binary default-argument
+coverage (main). Fix and re-run affected checks, then return the frozen result
+to the same reviewer before starting R2F. Earlier passing results remain bounded
+evidence, not acceptance of these combinations.
+
+Second review closed the original import/default findings, but found generated
+accessor name collisions for same-file overloaded private helpers. Main owns the
+official NameTable allocation keyed by original helper identity and the module
+regression; R2F remains queued until this combination passes the fixed reviewer.
+
+User returned to the seven-round plan. The completed priority increments below
+are historical side work, not the next queue. Do not start more controls or
+page-specific fixes while closing the R2 declaration/dependency work.
+
+Parallel ownership for this finite increment:
+- Dependency (main took over after Tesla hit a usage limit): actual serialized final-class member inline loading;
+  `core/BinaryBodies.kt`, `tests/binary-bodies/r2e`, and its evidence document.
+- Language/output (Parfit): cross-file top-level overload identity and minimal
+  collision handling; `language/OverloadNaming.kt`, `output/Modules.kt`, and
+  `tests/modules/overloads` additions. Shared-tree changes require coordination.
+- Main: source top-level private/internal visibility in `core/Backend.kt`,
+  owning module tests, scope reconciliation and serial final verification.
+
+Use official compiler implementations and resolved declaration identities.
+Heavy builds are serialized. Baseline tests may run on an immutable source
+snapshot; final checks run only after production writers freeze. No new native
+page cycle for this increment. Independent review is required by the current
+workflow; commit/push remain paused.
+
+Still-open R2 work is not erased by this increment: nested/local classes,
+additional generic/inherited declarations, virtual overloads, binary constructor
+and reified bodies, and dependency-format boundaries. Local functions already
+use official lifting; do not report them as entirely missing. R2D's two legacy
+owning-suite checks and the deferred combined integration gate are evidence
+tasks, not substitutes for this remaining implementation. The two legacy owning
+checks are now complete; combined integration remains deferred to the R2 gate.
+
+R2E frozen results:
+- Split-file overloads: r2e-green-Nl91IP, 15 JVM cases in flat/module forms,
+  five private-scope module cases, exact identities and deterministic output.
+- Source visibility/modules: run-dQ29nj, 28 JVM/module cases and output guards.
+- Generic-method owning regression: probe-nuHwF6, 35 JVM/host cases, historical
+  member-overload positive and all 16 frontend/unsupported rejection fixtures.
+- Actual binary members: run-NKWEt6 plus replay-hn4M5d, five official inline
+  blocks and three JVM/host pairs with explicit external receiver type mapping.
+- Historical binary overloads: public-xuabox, nine public CLI/JVM/host pairs
+  and three selected-body rejection cases; existing producer hashes verified.
+- Historical top-level overload: run-RQpn5s / overload-top-AWX1rN, five unchanged
+  source JVM/public CLI/host pairs. No new SDK/native or independent review.
+
+Next R2 work starts with a bounded declaration inventory: distinguish class
+nesting from nested generic type arguments, inspect official local-class lifting
+and JS nested declaration handling, and fix target ownership/capture contracts
+before parallel production edits. Do not simply remove the current local-class
+guard or synthesize class bodies. Nested/local declarations, virtual overloads
+and binary constructors/reified bodies remain separate increments. No next-round
+implementation or whole-R2 acceptance is implied by the focused results above.
+
 ### Current completed increment: bounded images and materialized resources (2026-09-14)
 
 The legacy inventory now drives control priority. Image, Icon and bounded Coil 2
@@ -122,7 +232,7 @@ disjoint write ownership. A lane being done does not make a round accepted.
 | --- | --- | --- | --- |
 | R0 | Inventory existing capabilities/evidence and fix acceptance/ownership | Existing backend | Complete for planning; no new capability claimed |
 | R1 | Transitive serialized inline dependencies; initial interface/inheritance semantics; bounded collection expansion; UI multi-file ownership | R0/shared contracts | Accepted for the explicitly bounded R1A/R1B cases; remaining limitations retained in later rounds |
-| R2 | Generic/member dependency linking; generic dispatch, overloads, nested/local declarations; module visibility and name fidelity | R1 accepted | R2A/R2B/R2C accepted for their finite cases; R2D bounded overload identity/naming implementation underway |
+| R2 | Generic/member dependency linking; generic dispatch, overloads, nested/local declarations; module visibility and name fidelity | R1 accepted | R2A/B/C/E/F accepted finite slices; R2D owning regressions closed; R2G value capture implementation started; combined integration deferred, whole round incomplete |
 | R3 | Broader language/library semantics: nullability, casts, exceptions/finally, equality, numeric families and collection protocols | R2 accepted | Pending |
 | R4 | Compose structure/state completeness: nested slots, reactive derived values, event captures, conditional/repeated UI and list/pager linkage | R3 accepted | Pending |
 | R5 | UI fidelity: ordered modifiers, measurement, constraints, text/style inheritance, themes/resources, density/font scale and runtime insets | R4 accepted | Pending |
@@ -244,6 +354,13 @@ shared contract work locally while workers implement independent established API
   requires the user. Disable the matching heartbeat then; do not idle-poll forever.
 
 ## Next action
+
+Finish R2G value-capture language consumption and focused JVM/ETS checks. Core
+probe `run-mKHYaN` is green; Parfit owns the active language lane. Wait for that
+lane to freeze, run affected regression checks serially, and return to the same
+Aristotle review gate. Do not redispatch accepted R2A-F work from the history below.
+
+## Historical round evidence
 
 R1B passed full UI T87aMi, actual SDK apqWX0 (30 unchanged generated files) and
 fresh native -03: seven states, five touch boundaries, Hypium, unchanged gates.

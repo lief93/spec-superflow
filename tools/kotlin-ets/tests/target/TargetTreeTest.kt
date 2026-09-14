@@ -19,6 +19,7 @@ fun main() {
     checkBoundedReceiverContract()
     checkGenericMethodContract()
     checkOverloadIdentityContract()
+    checkClassIdentityContract()
     checkStrictBindingContract()
     checkGlobalBuilderContract()
     check(sum.source == source)

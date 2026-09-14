@@ -74,3 +74,108 @@ edits. Source-language allocation, JVM differential semantics, runtime ordering
 and native acceptance remain main/language integration gates. No inherited
 virtual overloads, constructor overloads, nested classes, runtime dispatch,
 devices, review, commit or push.
+
+## R2E split-file top-level groups
+
+Preparation implements one bounded extension in `src/language/OverloadNaming.kt`:
+top-level overload groups combine same-file/name groups with nonprivate
+`IrFile.packageFqName`/name groups within the current module. Official
+`DescriptorVisibilities.isPrivate` leaves private-only file groups independent
+unless an actual resolved cross-file call would import the retained source spelling
+into that private declaration's file. The traversal records `IrCall.symbol.owner`
+against the containing `IrFile`; allocation links only such colliding file groups.
+Once the public declaration receives a fresh name, other private groups stay
+independent even if they call it. Mixed private/public overloads in one
+file remain grouped and connect to public overloads in other files. Class-owned groups
+retain their actual declaration owner and existing restrictions. The official
+declaration-keyed `NameTable<IrSimpleFunction>` still reserves source bindings,
+orders by source path/offset, and assigns only N-1 fresh spellings. Calls keep the
+original resolved symbols and `sourceName` IDs; no target-type overload selection
+is introduced.
+
+The previous implementation had no explicit split-file rejection: it allocated
+each file independently, then `Modules.kt` rejected the two same-named imports.
+Current output has no symbol-aware import alias allocator. Distinct emitted
+bindings are necessary for a caller importing both overloads and for flat output.
+This increment uses that naming path; it does not edit output, shared target,
+Backend visibility, or LanguageLowering. Unrelated package names are not merged.
+Cross-package same-name import collisions and repeated flat output basenames
+remain explicit failures, not silently renamed packages or fabricated aliases.
+
+New fixtures and runner are in `tests/modules/overloads/cross-file/`:
+
+- `AInt.kt` and `BDouble.kt`: same-package, split-file Int/Double `choose` declarations
+  with identical target number signatures and different results, plus object/Int
+  `keep` overloads. `choose_0` and local `choose_1` reserve suffix candidates.
+- `Calls.kt` and `Trace.kt`: named-argument effects in source order (`SITD`),
+  repeated resolved calls, unchanged method/parameter names, mutation and object
+  identity. `JvmOracle.kt` independently checks the same inputs on JVM.
+- `CrossFileProbe.kt`: actual official IR source IDs, exact target call bindings,
+  two minimal renames, source spans/parameters and detached module/flat emission.
+- `negative/`: valid Kotlin cross-package import and repeated-basename inputs
+  must reject before publishing target output.
+- `private/`: private/private and private/public same names across files retain
+  their source names when no import collides. `PrivateLeft.kt` calls both its private
+  `pick(Int)` and `PrivateRight.kt`'s public `pick(Double)`. Only the public `pick`
+  gets a fresh name; `PrivateUnrelated.kt` preserves its private `pick` even while
+  calling that same public symbol. Exact call IDs and both private names are checked.
+  Mixed private/public overloads in one file connect to a
+  public overload in another file. Five original JVM outcomes must match emitted
+  modules, with no private exports/imports and stable reversed-input bytes.
+  Flat emission of duplicate private names is not added by this increment.
+
+The runner compiles only frozen snapshots after main grants the slot. The RED
+mode substitutes only the preserved old naming implementation while retaining
+the same frozen shared production and fixtures. Original JVM execution precedes
+target execution. GREEN requires fifteen cases to match in each output mode,
+identical module bytes with reversed source input order, structured import/export
+checks, five additional private-scope module cases, and two source/output collision negatives. It is focused compiler/JVM/host
+proof, not an actual SDK or native run.
+
+From the repository root, only after main's exclusive compiler grant:
+
+```sh
+KOTLIN_ETS_BUILD_SLOT=1 node tools/kotlin-ets/tests/modules/overloads/cross-file/run.mjs \
+  --baseline-naming tools/kotlin-ets/tests/modules/overloads/.work/r2e-before-7z3KMr/OverloadNaming.kt
+KOTLIN_ETS_BUILD_SLOT=1 node tools/kotlin-ets/tests/modules/overloads/cross-file/run.mjs
+```
+
+The pre-edit naming SHA256 is
+`47805bd604d599da3e404c1e9838633ea77256d74bf254812e45780b1630d3dc`.
+An immutable archive's corresponding original file can replace the baseline path.
+Initial evidence: `.work/r2e-red-FRHVTt/result.json` reproduced the old naming
+failure after the original JVM oracle succeeded; `.work/r2e-green-NnbhNU/result.json`
+passed fifteen JVM cases in both module and flat output, deterministic imports,
+and two collision negatives. These runs predate the private-scope correction and
+do not prove that correction. Final `.work/r2e-green-Nl91IP/result.json` passes
+all fifteen cases in both output modes, five private-scope module cases, exact
+IR bindings, reversed-input stability and the two collision negatives on the
+frozen current implementation. The preceding `r2e-green-qpp6qU` attempt exposed
+an invalid Kotlin test fixture: private/public functions in the same package had
+identical signatures. The public fixture now uses a distinct Double signature
+and its caller supplies Double; the independent JVM oracle runs before target
+checks. No production validator or naming assertion was weakened for this repair.
+That GREEN predates the independent review's private-to-public `pick` import case.
+The resolved-import correction and expanded regression are prepared, not yet
+compiler-verified. A separate RED mode substitutes only the pre-correction naming
+snapshot and requires the original JVM private fixture to succeed before the target
+rejects the actual `pick` import collision without publishing output:
+
+```sh
+KOTLIN_ETS_BUILD_SLOT=1 node tools/kotlin-ets/tests/modules/overloads/cross-file/run.mjs \
+  --baseline-naming tools/kotlin-ets/tests/modules/overloads/.work/r2e-import-before-GhksfL/OverloadNaming.kt \
+  --baseline-private-import
+KOTLIN_ETS_BUILD_SLOT=1 node tools/kotlin-ets/tests/modules/overloads/cross-file/run.mjs
+```
+
+No SDK/native tests are queued. R2 closure and unrelated declaration/linking/ownership
+boundaries are not claimed.
+
+Independent-review correction verification: `r2e-red-o3DU1b/result.json`
+reproduces the old resolved public-import collision after the original JVM
+oracle passes. `r2e-green-hXJOk5/result.json` passes the expanded fixture using
+the corrected naming implementation: fifteen JVM cases in module and flat forms,
+five private-scope outcomes including private-to-public overload calls, exact
+IR identities, reversed input stability and both unchanged collision negatives.
+The final source-accessor naming implementation is also covered by refreshed
+`r2e-green-mtJgpg/result.json` with the same passing assertions.

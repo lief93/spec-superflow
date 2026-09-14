@@ -5,11 +5,15 @@ import org.jetbrains.kotlin.backend.common.LoweringContext
 import org.jetbrains.kotlin.backend.common.ir.SharedVariablesManager
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.LocalDeclarationsLowering
+import org.jetbrains.kotlin.backend.common.lower.LocalClassPopupLowering
+import org.jetbrains.kotlin.backend.common.lower.ClosureAnnotator
 import org.jetbrains.kotlin.backend.common.lower.SharedVariablesLowering
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFir2IrPipelineArtifact
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.irAttribute
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.builders.declarations.*
 import org.jetbrains.kotlin.ir.declarations.*
@@ -20,13 +24,36 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.*
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.utils.DFS
 
 /** Identity, not an origin-name/prefix match, authorizes the generated runtime class. */
 val ETS_SHARED_VARIABLE_CELL = IrDeclarationOriginImpl("ETS_SHARED_VARIABLE_CELL", isSynthetic = true)
 
+private var IrClass.originalSourceExported: Boolean? by irAttribute(followAttributeOwner = true)
+
+internal fun sourceClassIsExported(declaration: IrClass): Boolean = declaration.originalSourceExported
+    ?: (declaration.visibility != DescriptorVisibilities.LOCAL && !DescriptorVisibilities.isPrivate(declaration.visibility))
+
 /** Capture discovery, lifting, recursion and type substitution belong to the official passes. */
 internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
     val module = input.result.irModuleFragment
+    val classes = sourceClasses(module)
+    classes.forEach { declaration ->
+        var current: IrDeclarationParent = declaration
+        var exported = true
+        while (current is IrDeclaration) {
+            if (current is IrFunction || (current is IrDeclarationWithVisibility &&
+                    (current.visibility == DescriptorVisibilities.LOCAL || DescriptorVisibilities.isPrivate(current.visibility)))) {
+                exported = false
+            }
+            current = current.parent
+        }
+        declaration.originalSourceExported = exported
+        if (declaration.parent !is IrFile && (declaration.isInner || declaration.isAnonymousObject || declaration.kind != ClassKind.CLASS)) {
+            DiagnosticSink(declaration.fileOrNull?.fileEntry?.name).unsupported(declaration,
+                "Nested/local declarations require a non-inner named source class")
+        }
+    }
     val work = mutableListOf<Pair<IrBody, IrDeclaration>>()
     module.acceptChildrenVoid(object : IrElementVisitorVoid {
         private var owner: IrDeclaration? = null
@@ -34,12 +61,12 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
             val previous = owner
             if (element is IrDeclaration) owner = element
             if (element is IrBody) {
-                if (namedLocals(element).isNotEmpty()) work.add(element to checkNotNull(owner))
+                if (namedLocals(element).isNotEmpty() || sourceClasses(element).isNotEmpty()) work.add(element to checkNotNull(owner))
             } else element.acceptChildrenVoid(this)
             owner = previous
         }
     })
-    if (work.isEmpty()) return
+    if (work.isEmpty() && classes.none { it.parent is IrClass }) return
     val context = createJvmLoweringContext(input)
     val cells = SourceCellManager(context)
     val sharedContext = object : LoweringContext by context {
@@ -49,19 +76,59 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
     val local = LocalDeclarationsLowering(context, remapTypesInExtractedLocalFunctions = true)
     for ((body, owner) in work) {
         val diagnostics = DiagnosticSink(owner.fileOrNull?.fileEntry?.name)
-        body.acceptChildrenVoid(object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) {
-                if (element is IrClass) diagnostics.unsupported(element, "Local classes are not supported by the ETS local declaration phase")
-                element.acceptChildrenVoid(this)
+        val localClasses = sourceClasses(body).filter { it.visibility == DescriptorVisibilities.LOCAL }
+        if (localClasses.isNotEmpty()) {
+            val closures = ClosureAnnotator(body, owner)
+            localClasses.forEach { declaration ->
+                val closure = closures.getClassClosure(declaration)
+                if (closure.capturedTypeParameters.isNotEmpty()) {
+                    diagnostics.unsupported(declaration, "Local class captured type parameters are not supported")
+                }
+                if (closure.capturedValues.isNotEmpty() && declaration.superTypes.any { !it.isAny() }) {
+                    diagnostics.unsupported(declaration, "Captured local class inheritance is not supported")
+                }
             }
-        })
+        }
         shared.lower(body, owner)
         local.lower(body, owner)
         namedLocals(body).firstOrNull()?.let {
             diagnostics.unsupported(it, "Official local declaration lowering left an unsupported nested function")
         }
     }
+    val popup = LocalClassPopupLowering(context)
+    module.files.forEach(popup::lower)
+    // Mirror JS static class placement, retaining the original symbols, names and source file.
+    fun extractNested(declaration: IrClass, file: IrFile) {
+        declaration.declarations.filterIsInstance<IrClass>().forEach { nested ->
+            extractNested(nested, file)
+            declaration.declarations.remove(nested)
+            nested.parent = file
+            file.declarations.add(nested)
+        }
+    }
+    module.files.forEach { file -> file.declarations.filterIsInstance<IrClass>().forEach { extractNested(it, file) } }
+    // ES class evaluation needs local bases first; use the compiler's graph utility.
+    module.files.forEach { file ->
+        val declarations = file.declarations.toList()
+        val owned = declarations.toSet()
+        val ordered = DFS.topologicalOrder(declarations) { declaration ->
+            (declaration as? IrClass)?.superTypes.orEmpty().mapNotNull { it.classOrNull?.owner }.filter { it in owned }
+        }.asReversed()
+        file.declarations.clear()
+        file.declarations.addAll(ordered)
+    }
     module.patchDeclarationParents()
+}
+
+private fun sourceClasses(element: IrElement): List<IrClass> {
+    val result = mutableListOf<IrClass>()
+    element.acceptVoid(object : IrElementVisitorVoid {
+        override fun visitElement(element: IrElement) {
+            if (element is IrClass) result.add(element)
+            element.acceptChildrenVoid(this)
+        }
+    })
+    return result
 }
 
 private fun namedLocals(body: IrBody): List<IrSimpleFunction> {

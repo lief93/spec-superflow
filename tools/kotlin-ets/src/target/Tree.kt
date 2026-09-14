@@ -105,8 +105,9 @@ data class EtsClass(val name: String, val members: List<EtsClassMember>, overrid
     val exported: Boolean = false, val typeParameters: List<EtsTypeParameter> = emptyList(),
     val component: Boolean = false, val entry: Boolean = false,
     val kind: EtsClassKind = EtsClassKind.CLASS, val baseClass: EtsNamedType? = null,
-    val interfaces: List<EtsNamedType> = emptyList(), val abstract: Boolean = false) : EtsDeclaration {
-    val symbol get() = etsClassSymbol(name, source)
+    val interfaces: List<EtsNamedType> = emptyList(), val abstract: Boolean = false,
+    val sourceName: String? = null) : EtsDeclaration {
+    val symbol get() = etsClassSymbol(name, source, sourceName ?: name)
 }
 data class EtsImport(val module: String, val name: String, val alias: String? = null, val default: Boolean = false)
 data class EtsFile(val sourcePath: String, val declarations: List<EtsDeclaration>)
@@ -125,7 +126,7 @@ fun etsFunctionSymbol(name: String, parameters: List<EtsType>, result: EtsType, 
     typeParameters: List<EtsTypeParameter> = emptyList(), sourceName: String = name) =
     EtsSymbol("function:${source.file}:${source.start}:$sourceName", name, EtsFunctionType(parameters, result, typeParameters), source)
 
-fun etsClassSymbol(name: String, source: SourceSpan): EtsSymbol {
-    val id = "class:${source.file}:${source.start}:$name"
+fun etsClassSymbol(name: String, source: SourceSpan, sourceName: String = name): EtsSymbol {
+    val id = "class:${source.file}:${source.start}:$sourceName"
     return EtsSymbol(id, name, EtsNamedType(name, symbolId = id), source)
 }

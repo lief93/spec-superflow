@@ -1,3 +1,7 @@
 package modulefixture
 
-class Counter(var value: Int)
+internal class Counter(var value: Int)
+
+private class LocalCounter(val value: Int)
+
+internal fun hiddenClassValue(value: Int): Int = LocalCounter(value).value

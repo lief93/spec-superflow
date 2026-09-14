@@ -7,6 +7,8 @@ import org.jetbrains.kotlin.backend.common.serialization.*
 import org.jetbrains.kotlin.backend.jvm.*
 import org.jetbrains.kotlin.backend.jvm.serialization.proto.JvmIr
 import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFir2IrPipelineArtifact
+import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
 import org.jetbrains.kotlin.ir.*
 import org.jetbrains.kotlin.ir.backend.jvm.serialization.JvmIrMangler
@@ -44,9 +46,16 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
     private val loaded = mutableSetOf<String>()
     private val provenance = mutableMapOf<IrFunctionSymbol, BinaryFileEntry>()
     private val visiting = linkedSetOf<IrFunctionSymbol>()
+    private val memberClasses = linkedSetOf<IrClassSymbol>()
 
     private fun types(owner: IrFunction) =
-        (listOfNotNull(owner.extensionReceiverParameter) + owner.valueParameters).map { it.type } + owner.returnType
+        (listOfNotNull(owner.dispatchReceiverParameter, owner.extensionReceiverParameter) + owner.valueParameters).map { it.type } + owner.returnType
+
+    private fun binary(function: IrFunction): KotlinJvmBinaryClass? = when (val source = function.containerSource) {
+        is JvmPackagePartSource -> source.knownJvmBinaryClass
+        is KotlinJvmBinarySourceElement -> source.binaryClass
+        else -> null
+    }
 
     private fun register(owner: IrSimpleFunction, signature: IdSignature, fail: (String) -> Nothing) {
         declarations[signature]?.let {
@@ -80,7 +89,7 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
             declaration.declarations.filterIsInstance<IrSimpleFunction>().forEach { member ->
                 val result = context.symbolTable.declareSimpleFunction(signatures.computeSignature(member), { member.symbol }) { member }
                 if (result !== member) fail("member signature conflicts with an existing declaration")
-                canonical.add(member.symbol)
+                if (declaration.symbol !in memberClasses) canonical.add(member.symbol)
             }
         }
     }
@@ -132,11 +141,7 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
         if (!symbol.isBound) return FunctionBody.Unavailable(FunctionBody.Reason.UNBOUND_SYMBOL)
         val function = symbol.owner
         if (!function.isInline) return FunctionBody.Unavailable(FunctionBody.Reason.OUTSIDE_MODULE)
-        val binary = when (val source = function.containerSource) {
-            is JvmPackagePartSource -> source.knownJvmBinaryClass
-            is KotlinJvmBinarySourceElement -> source.binaryClass
-            else -> null
-        } ?: return FunctionBody.Unavailable(FunctionBody.Reason.OUTSIDE_MODULE)
+        val binary = binary(function) ?: return FunctionBody.Unavailable(FunctionBody.Reason.OUTSIDE_MODULE)
         if (binary.classHeader.serializedIr == null) return FunctionBody.Unavailable(FunctionBody.Reason.NO_BODY)
         fun fail(message: String): Nothing = throw Unsupported(Diagnostic("UNSUPPORTED",
             "Binary inline body ${symbolName(function)}: $message", callSites[symbol]
@@ -157,19 +162,15 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
             fail("serialized inline dependency cycle: ${(visiting.toList() + function.symbol).joinToString(" -> ") { it.owner.name.asString() }}")
         }
         try {
-            if (!function.isInline || function.dispatchReceiverParameter != null) {
-                fail("unsupported binary inline dependency: ${symbolName(function)}; require top-level inline (members are unsupported)")
-            }
+            if (!function.isInline) fail("unsupported non-inline binary dependency: ${symbolName(function)}")
             if (function.typeParameters.any { it.isReified }) {
                 fail("unsupported reified binary inline dependency: ${symbolName(function)}")
             }
-            val source = function.containerSource as? JvmPackagePartSource
-                ?: fail("unsupported dependency format for ${symbolName(function)}")
-            val binary = source.knownJvmBinaryClass ?: fail("missing binary ownership for ${symbolName(function)}")
+            val binary = binary(function) ?: fail("missing binary ownership for ${symbolName(function)}")
             if (binary.classHeader.serializedIr == null) {
                 fail("missing serialized IR body for dependency ${symbolName(function)} at ${binary.location}")
             }
-            load(function, source, binary, fail)
+            load(function, binary, fail)
             if (types(function) != originalTypes[function.symbol]) fail("deserialization changed resolved signature type identity")
             val parameters = originalTypeParameters.getValue(function.symbol)
             if (function.typeParameters.size != parameters.size || parameters.withIndex().any { (index, original) ->
@@ -187,6 +188,10 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
                     if (element is IrDeclarationReference && !element.symbol.isBound) fail("unlinked serialized dependencies: ${element.symbol.signature}")
                     if (element is IrExpression) checkType(element.type)
                     if (element is IrValueDeclaration) checkType(element.type)
+                    if (function.dispatchReceiverParameter != null) {
+                        if (element is IrFieldAccessExpression) fail("binary inline state access is not supported")
+                        if (element is IrGetObjectValue) fail("binary inline object access is not supported")
+                    }
                     if (element is IrCall && element.symbol !in canonical) {
                         if (!element.symbol.owner.isInline) fail("unsupported serialized body call: ${symbolName(element.symbol.owner)}")
                         dependencies.add(element.symbol.owner)
@@ -206,10 +211,39 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
         }
     }
 
-    private fun load(function: IrFunction, source: JvmPackagePartSource, binary: KotlinJvmBinaryClass, fail: (String) -> Nothing) {
+    private fun memberClass(function: IrFunction, binary: KotlinJvmBinaryClass, fail: (String) -> Nothing): IrClass {
+        val owner = function.parent as? IrClass ?: fail("binary inline member has no class owner")
+        if (owner.kind != ClassKind.CLASS || owner.modality != Modality.FINAL || owner.isInner || owner.isValue ||
+            owner.isData || owner.parent !is IrPackageFragment || owner.typeParameters.isNotEmpty() ||
+            owner.superTypes.any { it.classOrNull != context.irBuiltIns.anyClass }) {
+            fail("binary inline members require a non-generic top-level final class with no inheritance")
+        }
+        if (function.typeParameters.isNotEmpty()) fail("generic binary members are unsupported")
+        if (function.contextReceiverParametersCount != 0 || function.extensionReceiverParameter != null) {
+            fail("binary inline member context/extension receivers are not supported")
+        }
+        if ((owner.source as? KotlinJvmBinarySourceElement)?.binaryClass != binary) {
+            fail("binary inline member class ownership does not match resolved FIR ownership")
+        }
+        if (function.dispatchReceiverParameter?.type?.classOrNull != owner.symbol ||
+            owner.thisReceiver?.type?.classOrNull != owner.symbol) {
+            fail("binary inline member receiver is not the canonical FIR class symbol")
+        }
+        if (owner.declarations.any { it is IrProperty || it is IrField || it is IrAnonymousInitializer }) {
+            fail("binary inline class state is not supported; pass a stateless receiver from source")
+        }
+        return owner
+    }
+
+    private fun load(function: IrFunction, binary: KotlinJvmBinaryClass, fail: (String) -> Nothing) {
+        // Validate each requested member even when another member already loaded this class.
+        val member = if (function.dispatchReceiverParameter != null) {
+            memberClass(function, binary, fail)
+        } else null
         if (binary.location in loaded) return
-        if (binary.classHeader.kind != KotlinClassHeader.Kind.FILE_FACADE) {
-            fail("unsupported serialized dependency format ${binary.classHeader.kind}; expected a JVM file facade")
+        if (binary.classHeader.kind != KotlinClassHeader.Kind.FILE_FACADE &&
+            !(binary.classHeader.kind == KotlinClassHeader.Kind.CLASS && member != null)) {
+            fail("unsupported serialized dependency format ${binary.classHeader.kind}; expected a JVM file facade or supported final class")
         }
         val virtual = binary as? VirtualFileKotlinClass
             ?: fail("unsupported binary provider ${binary.javaClass.name}; class bytes unavailable")
@@ -221,22 +255,41 @@ internal class BinaryBodies(private val input: JvmFir2IrPipelineArtifact) : Func
         val name = sourceName?.takeIf { it.isNotBlank() }
             ?: fail("class has no SourceFile attribute; source identity unavailable at ${binary.location}")
         val entry = BinaryFileEntry("${binary.location}#SourceFile=$name")
+        if (member != null) {
+            memberClasses.add(member.symbol)
+            member.declarations.filterIsInstance<IrSimpleFunction>().forEach { canonical.remove(it.symbol) }
+            member.declarations.filterIsInstance<IrConstructor>().forEach { constructor ->
+                val bound = context.symbolTable.declareConstructor(signatures.computeSignature(constructor), { constructor.symbol }) { constructor }
+                if (bound !== constructor) fail("constructor signature conflicts with an existing declaration")
+            }
+            member.declarations.filterIsInstance<IrSimpleFunction>().filter { it.isInline }.forEach {
+                register(it, signatures.computeSignature(it), fail)
+            }
+        }
         register(function as IrSimpleFunction, signatures.computeSignature(function), fail)
         index(binary, fail)
         val owners = declarations.values.filter {
-            it.isInline && (it.containerSource as? JvmPackagePartSource)?.knownJvmBinaryClass == binary
+            it.isInline && binary(it) == binary
         }
-        val facade = createJvmFileFacadeClass(IrDeclarationOrigin.FILE_CLASS,
-            source.className.fqNameForTopLevelClassMaybeWithDollars.shortName(), source) { false }.apply {
-            parent = function.parent
-            createThisReceiverParameter()
-            classNameOverride = source.className
+        val facade = member ?: run {
+            val source = function.containerSource as? JvmPackagePartSource
+                ?: fail("unsupported dependency format for ${symbolName(function)}")
+            createJvmFileFacadeClass(IrDeclarationOrigin.FILE_CLASS,
+                source.className.fqNameForTopLevelClassMaybeWithDollars.shortName(), source) { false }.apply {
+                parent = function.parent
+                createThisReceiverParameter()
+                classNameOverride = source.className
+            }
         }
+        val receiver = member?.thisReceiver
         owners.forEach { it.parent = facade }
         if (!JvmIrDeserializerImpl().deserializeTopLevelClass(facade, context.irBuiltIns,
                 context.symbolTable, context.irProviders, context.generatorExtensions)) {
             fail("official deserializer did not load serialized IR")
         }
+        if (member != null && (member.thisReceiver !== receiver || owners.any {
+                it.parent !== member || it.dispatchReceiverParameter?.type?.classOrNull != member.symbol
+            })) fail("deserialization changed canonical binary member receiver identity")
         // This represents the classfile's actual SourceFile record, not invented source contents.
         val file = IrFileImpl(entry, IrFileSymbolImpl(), binary.classId.packageFqName)
         facade.parent = file

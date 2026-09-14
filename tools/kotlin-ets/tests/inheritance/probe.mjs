@@ -10,7 +10,7 @@ mkdirSync(join(here, '.work'), { recursive: true });
 const work = mkdtempSync(join(here, '.work/probe-'));
 console.log(`Evidence: ${work}`);
 const files = ['target/Tree.kt', 'target/TypeSubstitution.kt', 'target/Traversal.kt', 'target/Validator.kt',
-  'core/Contract.kt', 'language/LanguageLowering.kt', 'language/OverloadNaming.kt', 'stdlib/StandardLibraryRules.kt', 'stdlib/IterationRules.kt',
+  'core/Contract.kt', 'language/LanguageLowering.kt', 'language/OverloadNaming.kt', 'language/ClassNaming.kt', 'stdlib/StandardLibraryRules.kt', 'stdlib/IterationRules.kt',
   'stdlib/StandardLibrarySupport.kt']
   .map(path => join(root, 'src', path)).concat(join(here, 'InheritanceProbe.kt'));
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');

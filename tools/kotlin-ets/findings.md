@@ -86,3 +86,60 @@ the official inliner expands only omitted defaults at a call site. Missing an
 unused default's dependency is conservatively rejected by the current symbol-only
 body contract. R2C tests this boundary explicitly; call-sensitive dependency
 selection is deferred, not implemented by dropping unresolved references.
+
+## R2E declaration identities
+
+Cross-file top-level overload groups must follow Kotlin package visibility, not
+only IrFile ownership. Private-only groups remain file-local; mixed private/public
+overloads in one file connect to visible sibling overloads. Official NameTable
+still keys allocations by declaration, while target calls/imports retain source
+IDs. The corrected current fixture passes 15 ordinary and five private-scope
+JVM/module cases (r2e-green-Nl91IP); flat duplicate private names and cross-package
+import aliases remain unsupported boundaries.
+
+Actual member inlining introduces IR_TEMPORARY_VARIABLE_FOR_INLINED_PARAMETER
+with local name `this`, just as extension inlining previously introduced its own
+receiver origin. Target replay-szE9s7 demonstrated the reserved binding failure.
+LanguageLowering now routes only that generated receiver binding through its
+existing symbol-keyed allocator. Replay-lgYLzV proves three JVM/host outcomes and
+receiver/argument/callback effects with explicit external receiver type mappings.
+Loading actual inline bodies does not supply an implementation of a binary class.
+
+## R2E review composition and R2F official inventory
+
+- Fixed review is now an active gate. R2E passed its third review after composing
+  private visibility with source inline, same-package imports and overloads.
+  Synthetic accessors use official KlibSyntheticAccessorGenerator plus the
+  official type/value remappers; omitted slots are retained because the shared
+  generator's receiverAndArgs filters nulls. Accessor names use official JS
+  NameTable keyed and ordered by real helper identities, not synthetic spans.
+- R2F reads pinned Kotlin 2.1.20 sources under
+  `/tmp/kotlin-official-lowering-readonly-EFO5dk/sources/org/jetbrains/kotlin`.
+  Common `LocalDeclarationsLowering` owns capture analysis, constructor/call
+  rewriting and capture fields. `LocalClassPopupLowering` moves local non-inner
+  classes to their nearest declaration container after that rewrite. Moving a
+  declaration alone cannot establish capture semantics.
+- JS `StaticMembersLowering` moves nested declarations to the source file and
+  records `originalFqName`, but requires JsCommonBackendContext and JS export
+  behavior. Its complete phase cannot be plugged into the current JVM-backed
+  context unchanged; ETS must retain source identity before any ownership move.
+- Official capture fields have the exact synthetic origin
+  LocalDeclarationsLowering.DECLARATION_ORIGIN_FIELD_FOR_CAPTURED_VALUE. Their
+  initializer writes precede constructor delegation and use the exact
+  STATEMENT_ORIGIN_INITIALIZER_OF_FIELD_FOR_CAPTURED_VALUE. Current ETS class
+  lowering accepts source properties, not these raw fields, and requires leading
+  delegation. Do not broadly relax constructor ordering or raw-field acceptance.
+- Current EtsClass identity incorporates its emitted name, unlike EtsFunction's
+  separate sourceName. The next shared contract must separate source class
+  identity/name/scope from emitted names/file placement. Existing documentation
+  about nested generic types does not prove lexical nested-class support.
+- Subsequent R2F implemented the sourceName class-identity contract and official
+  local/static placement, then passed independent review. R2G's consumer now
+  accepts the exact official value-capture fields and constructor prefix for
+  eligible local classes; it does not accept arbitrary raw fields or derived
+  constructor prefix writes. Earlier inventory bullets above describe the
+  pre-implementation state, not the current feature set.
+- R2G review shows synthetic parameter safety must include emitted overload
+  bindings, not just source constructor parameters. Reserving source spellings
+  only misses official NameTable-generated function names. The same existing
+  overload/class naming services must supply those emitted bindings.
