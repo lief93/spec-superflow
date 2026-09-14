@@ -448,7 +448,11 @@ class EtsValidator {
                         emptySet()
                     }
                     is EtsThrow -> { inspect(statement.value, states); emptySet() }
-                    is EtsLoop -> { inspect(statement, states, "loop"); states }
+                    is EtsLoop -> {
+                        inspect(statement, states, "loop")
+                        flow(statement.body, states)
+                        states
+                    }
                     else -> {
                         inspect(statement, states)
                         if (statement is EtsExpressionStatement && statement.expression.type == EtsTypes.NEVER) emptySet() else states

@@ -83,6 +83,8 @@ fun checkConstructorFlowContract(): String {
         EtsExpressionStatement(EtsLambda(emptyList(), listOf(f.delegation), EtsTypes.VOID, f.source))), "nested")
     reject("repeat allocation", listOf(EtsLoop("repeat", EtsLiteral(true, EtsTypes.BOOLEAN, f.source),
         listOf(f.delegation), false, f.source)), "loop")
+    reject("return in pre-initialization loop", listOf(EtsLoop("repeat", f.condition,
+        listOf(EtsReturn(null, f.source)), false, f.source), f.delegation), "before super")
     reject("wrong base", listOf(f.delegation.copy(baseClass = f.childShell.symbol.type as EtsNamedType)), "direct base")
     reject("wrong argument type", listOf(f.delegation.copy(arguments = listOf(EtsLiteral("wrong", EtsTypes.STRING, f.source)))), "type mismatch")
     val member = f.ctor.copy(name = "bad", kind = EtsFunctionKind.METHOD, body = listOf(f.delegation))
@@ -90,7 +92,7 @@ fun checkConstructorFlowContract(): String {
     val child = p.files.single().declarations.filterIsInstance<EtsClass>().last()
     check(runCatching { printer.program(p.copy(files = listOf(p.files.single().copy(declarations =
         p.files.single().declarations.map { if (it === child) child.copy(members = child.members + member) else it })))) }.exceptionOrNull() is InvalidTarget)
-    println("PASS constructor flow: branch/block joins, abrupt exits, initialization ownership and sixteen source-linked refusals")
+    println("PASS constructor flow: branch/block joins, abrupt exits, initialization ownership and seventeen source-linked refusals")
     return code
 }
 

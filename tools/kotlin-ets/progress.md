@@ -1,5 +1,15 @@
 # Execution progress
 
+## 2026-09-14: constructor-flow loop exit correction
+
+- While preparing source dispatch, self-check found that a pre-super loop could
+  contain a bare constructor return. RED target-tests.7mnPpR reproduces the false
+  acceptance. Loop bodies now run through return/exit validation while retaining
+  the incoming normal path, since a loop may execute zero times.
+- GREEN target-tests.V2MFnd passes the whole target suite with seventeen
+  source-linked constructor refusals. Main-only self-check; guard-only fix,
+  no new SDK/native/source-dispatch acceptance. Continue source integration.
+
 ## 2026-09-14: R2.3 typed native constructor-flow prerequisite
 
 - SDK experiment confirms native ArkTS permits pre-super argument preparation
