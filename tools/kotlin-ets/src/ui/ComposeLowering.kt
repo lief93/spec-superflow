@@ -126,8 +126,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 override fun lowerUi(call: IrCall, language: Language, scope: Scope) =
                     if (symbolName(call.symbol.owner) == "kotlin.repeat") repeatUi(call, scope) else null
             },
-            ComposeColumnRule(target, ::uiLambdaBody, ::modifiers),
-            ComposeRowRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
+            ComposeColumnRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "height") }, ::modifiers),
+            ComposeRowRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "width") }, touchBoxes, ::modifiers),
             ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
             ComposeMaterialThemeRule(target, ::provideMaterialContext),
             ComposeSurfaceRule(target, ::surfaceContent, ::modifiers),
@@ -487,12 +487,19 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     }
 
     private fun uiLambdaBody(expression: IrExpression, scope: Scope): List<EtsStatement> {
+        return uiLambdaBodyWithAxis(expression, scope, null)
+    }
+
+    private fun uiLambdaBodyWithAxis(expression: IrExpression, scope: Scope, axis: String?): List<EtsStatement> {
         val resolved = dereference(expression, scope)
         if (resolved is IrGetValue && resolved.symbol in slots)
             return listOf(EtsUiElement(call("builder", contextArguments(scope), expression, receiver = expression(resolved, scope))))
         val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected composable content lambda")
         if (fn.valueParameters.isNotEmpty()) diagnostics.unsupported(fn, "Unexpected content lambda parameters")
-        return withTextContext(fn) { uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing content body"), scope.fork()) }
+        val child = scope.fork()
+        child.ambientValues.remove(LAYOUT_AXIS)
+        if (axis != null) child.ambientValues[LAYOUT_AXIS] = literal(axis, expression)
+        return withTextContext(fn) { uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing content body"), child) }
     }
 
     private fun provideMaterialContext(context: EtsExpression, content: IrExpression, scope: Scope): List<EtsStatement> {
@@ -616,6 +623,23 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             }
         }
         collect(expression)
+        val weights = operations.filter(::isWeightModifier)
+        if (weights.size > 1) diagnostics.unsupported(weights[1], "Repeated weight modifiers require parent-data ordering support")
+        val weight = weights.singleOrNull()?.let { call ->
+            checkArguments(call, setOf("weight", "fill"))
+            val fill = argument(call, "fill")
+            if (fill != null && (expression(fill, scope) as? EtsLiteral)?.value != true)
+                diagnostics.unsupported(fill, "weight currently requires fill=true")
+            val value = argument(call, "weight") ?: diagnostics.unsupported(call, "Missing weight")
+            val emitted = expression(value, scope)
+            if (emitted !is EtsLiteral && !stableRead(value, scope))
+                diagnostics.unsupported(value, "weight requires an immutable scalar to preserve evaluation order")
+            layoutWeight(emitted, language.source(value))
+        }
+        operations.removeAll(weights.toSet())
+        val weightAxis = if (weight != null) (scope.ambientValues[LAYOUT_AXIS] as? EtsLiteral)?.value as? String else null
+        if (weight != null && weightAxis == null)
+            diagnostics.unsupported(weights.single(), "weight requires a known Row or Column parent; content slot parent is unresolved")
         val owner = expression ?: root
         fun stableArgument(value: EtsExpression): Boolean = when (value) {
             is EtsLiteral -> true
@@ -747,6 +771,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             if (requiresArgumentOrder && attributes.values.any { !stableArgument(it) })
                 diagnostics.unsupported(owner,
                     "UI argument evaluation order requires stable modifier values or an immutable alignment binding")
+            if (weight != null && attributes.values.any { !stableArgument(it) })
+                diagnostics.unsupported(owner, "Weighted modifiers require stable sibling arguments to preserve evaluation order")
             node.touch?.let { touch ->
                 val origin = operations.take(index).sumOf { touch.padding[it] ?: 0.0 }
                 if (index == 0) {
@@ -764,7 +790,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 return node.element.copy(attributes = node.element.attributes + attrs)
             return native("Stack", listOf(stackOptions(owner)), owner, listOf(layer(cursor, nextWidth, nextHeight))).copy(attributes = attrs)
         }
-        return listOf(layer(0, false, false))
+        val result = layer(0, weightAxis == "width", weightAxis == "height")
+        return listOf(if (weight == null) result else result.copy(attributes = result.attributes +
+            attribute("layoutWeight", listOf(weight), owner)))
     }
 
     companion object {

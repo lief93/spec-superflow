@@ -27,7 +27,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
         val expected = when (name) {
             "id", "accessibilityText", "accessibilityLevel" -> EtsTypes.STRING
             "enabled", "loop", "indicator", "select", "vertical", "clip" -> EtsTypes.BOOLEAN
-            "index", "fontSize", "fontColor", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity" -> EtsTypes.NUMBER
+            "index", "fontSize", "fontColor", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight" -> EtsTypes.NUMBER
             "hitTestBehavior" -> EtsNamedType("HitTestMode")
             "align" -> EtsNamedType("Alignment")
             "objectFit" -> EtsNamedType("ImageFit")

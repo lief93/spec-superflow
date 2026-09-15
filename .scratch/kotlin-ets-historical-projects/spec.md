@@ -181,3 +181,12 @@ values crossing methods remain explicit unsupported cases, never silently empty.
 Use a minimal source-component fixture and SDK output, then replay Banking.
 Correct default-argument source ownership when evaluating another declaration's
 default; no offsets from a callee may be attributed to the caller's file.
+
+Seventeenth requirement: map resolved RowScope/ColumnScope weight as parent
+layout data, not an attribute trapped inside generated padding layers. Support
+positive weight constants and immutable scalar parameters with fill=true;
+validate dynamic positivity and Float infinity coercion. Reject unsupported
+fill=false, repeated weights or unstable ordering rather than guessing sizes.
+Preserve the actual parent Row/Column axis, pass allocated constraints through
+generated modifier layers, and verify fixed-plus-weighted native bounds before
+replaying the unchanged Banking page.
