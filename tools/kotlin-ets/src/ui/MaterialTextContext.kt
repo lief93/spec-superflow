@@ -22,12 +22,14 @@ internal fun materialTextContexts(root: IrSimpleFunction, diagnostics: Diagnosti
     val active = mutableSetOf<IrFunction>()
     val composable = FqName("androidx.compose.runtime.Composable")
     fun scan(function: IrFunction, scope: Scope, context: MaterialTextContext) {
+        val previousFile = diagnostics.currentFile
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
         val previous = contexts.put(function, context)
         if (previous != null && previous != context)
             diagnostics.unsupported(function, "Source builder used with different inherited Material text styles")
         if (!active.add(function)) diagnostics.unsupported(function, "Recursive UI text context is unsupported")
-        function.body?.acceptVoid(object : IrElementVisitorVoid {
+        try {
+            function.body?.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) { element.acceptChildrenVoid(this) }
             override fun visitVariable(declaration: IrVariable) {
                 declaration.initializer?.let { scope.aliases[declaration.symbol] = it }
@@ -62,10 +64,21 @@ internal fun materialTextContexts(root: IrSimpleFunction, diagnostics: Diagnosti
                     scan(content, scope.fork(), MaterialTextContext.LabelLarge)
                     return
                 }
+                // External controls/adapters can receive an existing slot, not
+                // only a literal lambda visible to the child visitor.
+                target.valueParameters.forEachIndexed { index, parameter ->
+                    val value = expression.getValueArgument(index)
+                    if (parameter.type.hasAnnotation(composable) && value !is IrFunctionExpression) {
+                        lambda(value, scope)?.let { scan(it, scope.fork(), context) }
+                    }
+                }
                 expression.acceptChildrenVoid(this)
             }
-        })
-        active.remove(function)
+            })
+        } finally {
+            active.remove(function)
+            diagnostics.currentFile = previousFile
+        }
     }
     scan(root, Scope(), MaterialTextContext.BodyLarge)
     return contexts

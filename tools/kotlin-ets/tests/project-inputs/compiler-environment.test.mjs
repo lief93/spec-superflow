@@ -28,17 +28,23 @@ test('records Compose ownership and excludes scripting for kt/java-only input', 
   assert.ok(result.excluded.some(x => x.reason.includes('ArkUI')));
   assert.ok(result.excluded.some(x => x.reason.includes('scripts')));
 });
-test('rejects unsupported versions, plugins, options and missing plugin artifacts', () => {
+test('rejects unsupported versions, arguments and missing plugin artifacts', () => {
   for (const input of [
     { compilerVersion: '2.0.0', compilerArguments: [] },
-    { compilerArguments: ['-Xplugin=' + jar('third-party.jar')] },
-    { compilerArguments: ['-Xplugin=' + jar('kotlin-serialization-compiler-plugin-embeddable-2.0.0.jar')] },
     { compilerArguments: ['-Xplugin=' + join(dir, 'missing.jar')] },
-    { compilerArguments: ['-P', 'plugin:some.plugin:key=value'] },
     { compilerArguments: ['-Xsomething-new=true'] },
     { compilerArguments: ['-language-version'] },
-    { compilerArguments: ['-P', 'plugin:org.jetbrains.kotlinx.serialization:disableIntrinsic=true'] },
   ]) assert.throws(() => compilerEnvironment(input));
+});
+
+test('preserves plugin classloader dependencies and delegates option ownership to Kotlin', () => {
+  const implementation = jar('example-processor.jar');
+  const dependency = jar('helper-library.jar');
+  const classpath = `-Xplugin=${implementation},${dependency},${serialization}`;
+  const option = 'plugin:example.processor:mode=normal';
+  const result = compilerEnvironment({ compilerArguments: [classpath, '-P', option] });
+  assert.deepEqual(result.arguments, [classpath, '-P', option]);
+  assert.deepEqual(result.excluded, []);
 });
 
 test('keeps serialization options when Gradle serializes mixed plugin options in one token', () => {

@@ -28,7 +28,7 @@ fun symbolName(declaration: IrDeclarationWithName): String =
 
 class DiagnosticSink(var currentFile: String? = null) {
     fun unsupported(element: IrElement, message: String): Nothing = throw Unsupported(
-        Diagnostic("UNSUPPORTED", message, SourceSpan(currentFile, element.startOffset, element.endOffset)))
+        Diagnostic("UNSUPPORTED", message, sourceSpan(element, this)))
 }
 
 class Scope(
@@ -98,7 +98,8 @@ fun adaptCall(call: IrCall, language: Language, scope: Scope, context: CallConte
 }
 
 fun sourceSpan(element: IrElement, diagnostics: DiagnosticSink) =
-    SourceSpan(diagnostics.currentFile, element.startOffset, element.endOffset)
+    SourceSpan((element as? IrDeclaration)?.let(::sourceFile)?.fileEntry?.name ?: diagnostics.currentFile,
+        element.startOffset, element.endOffset)
 
 fun argument(call: IrFunctionAccessExpression, name: String): IrExpression? =
     call.symbol.owner.valueParameters.indexOfFirst { it.name.asString() == name }

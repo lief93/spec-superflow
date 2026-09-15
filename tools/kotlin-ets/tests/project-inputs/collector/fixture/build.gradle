@@ -11,7 +11,20 @@ def generated = tasks.register('generateCollectorSource', Sync) {
     into layout.buildDirectory.dir('generated/collector')
 }
 kotlin.sourceSets.main.kotlin.srcDir(generated)
+def generatedClasses = layout.buildDirectory.dir('generated/empty-plugin-classes')
+def producer = tasks.register('generateCollectorClasses') {
+    outputs.dir(generatedClasses)
+    onlyIf { !providers.gradleProperty('disabledProducer').isPresent() }
+    doLast {
+        if (providers.gradleProperty('failedProducer').isPresent()) throw new GradleException('CLASSPATH_PRODUCER_FAILED')
+        if (providers.gradleProperty('presentProducer').isPresent()) generatedClasses.get().asFile.mkdirs()
+        else delete(generatedClasses)
+    }
+}
 tasks.named('compileKotlin') {
+    if (providers.gradleProperty('producerClasspath').isPresent()) {
+        libraries.from(files(generatedClasses).builtBy(producer))
+    }
     exclude '**/Excluded.kt'
     doFirst { throw new GradleException('SELECTED_KOTLIN_COMPILE_MUST_NOT_EXECUTE') }
 }

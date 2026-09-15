@@ -53,7 +53,7 @@ const compilerSources = readdirSync(join(root, 'src'), { recursive: true }).filt
 const build = run('build-probe', 'java', ['-Xmx3g', '-cp', cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
   '-no-stdlib', '-no-reflect', '-classpath', cp, '-d', tool, ...compilerSources, join(here, 'FrontendProbe.kt')]);
 assert.equal(build.status, 0, build.stderr);
-const probe = file => run(file === empty ? 'without-plugin' : 'with-plugin', 'java', ['-Xmx3g', '-cp', cp + ':' + tool,
+const probe = (file, label = file === empty ? 'without-plugin' : 'with-plugin') => run(label, 'java', ['-Xmx3g', '-cp', cp + ':' + tool,
   'dev.ets.FrontendProbeKt', file, join(evidence, 'classpath.txt'), join(evidence, 'sources.txt')]);
 const without = probe(empty);
 assert.notEqual(without.status, 0);
@@ -61,6 +61,24 @@ assert.match(without.stderr, /descriptor|does not implement/);
 const withPlugin = probe(extra);
 assert.equal(withPlugin.status, 0, withPlugin.stdout + withPlugin.stderr);
 assert.match(withPlugin.stdout, /serialization-generated descriptor IR/);
+const pluginPath = environment.arguments.find(arg => arg.startsWith('-Xplugin=')).slice(9).split(',')
+  .find(path => path.includes('kotlin-serialization-compiler-plugin-embeddable'));
+const renamedPlugin = join(work, 'project-semantic-plugin.jar');
+cpSync(pluginPath, renamedPlugin);
+const helper = inputs.classpath.find(path => /kotlinx-serialization-core.*\.jar$/.test(path));
+assert.ok(helper);
+const mixed = compilerEnvironment({ compilerVersion: inputs.compilerVersion, compilerArguments:
+  environment.arguments.map(arg => arg.startsWith('-Xplugin=') ? `-Xplugin=${renamedPlugin},${helper}` : arg) });
+const mixedFile = join(work, 'mixed-plugin-arguments.txt');
+writeFileSync(mixedFile, mixed.arguments.join('\n') + '\n');
+const renamed = probe(mixedFile, 'renamed-plugin-and-helper');
+assert.equal(renamed.status, 0, renamed.stdout + renamed.stderr);
+assert.match(renamed.stdout, /serialization-generated descriptor IR/);
+const invalidFile = join(work, 'invalid-plugin-option.txt');
+writeFileSync(invalidFile, mixed.arguments.concat('-P', 'plugin:org.jetbrains.kotlinx.serialization:unknownOption=true').join('\n') + '\n');
+const invalid = probe(invalidFile, 'official-invalid-option');
+assert.notEqual(invalid.status, 0);
+assert.match(invalid.stderr, /unsupported plugin option|unknownOption/i);
 const output = join(work, 'not-yet-supported.ets');
 const publicRun = run('public-project', 'bash', [join(root, 'kotlin-ets'), '--project', project, '--module', ':',
   '--compile-task', 'compileKotlin', '--mode', 'language', '--out', output, '--offline', '--work-dir', join(work, 'public')]);
@@ -73,6 +91,6 @@ assert.equal(existsSync(output), false);
 for (const input of hashes) assert.equal(hash(input.path), input.sha256, `Input changed during acceptance: ${input.path}`);
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, environment,
   inputs: hashes,
-  frontend: 'original Gradle success; missing plugin fails; captured plugin generates typed IR',
+  frontend: 'original Gradle success; missing plugin fails; captured and renamed mixed-classpath plugins generate typed IR; official loader rejects invalid option',
   backend: diagnostic, nativeExecution: false }, null, 2));
 console.log('PASS real Gradle serialization -> frontend generated IR; public backend limitation remains explicit');

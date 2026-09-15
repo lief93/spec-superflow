@@ -2,7 +2,6 @@ import { statSync } from 'node:fs';
 import { basename, isAbsolute } from 'node:path';
 
 const version = '2.1.20';
-const serializationId = 'org.jetbrains.kotlinx.serialization';
 const composeId = 'androidx.compose.compiler.plugins.kotlin';
 const valued = new Set(['-language-version', '-api-version', '-jvm-target', '-module-name', '-opt-in',
   '-jdk-home', '-Xjvm-default', '-Xjsr305', '-Xjdk-release', '-Xnullability-annotations', '-Xfriend-paths']);
@@ -24,8 +23,6 @@ export function compilerEnvironment(inputs) {
   }
   const result = { compilerVersion: version, arguments: [], excluded: [] };
   const exclude = (argument, reason) => result.excluded.push({ argument, reason });
-  let hasSerialization = false;
-  let needsSerialization = false;
   for (let i = 0; i < source.length; i++) {
     const argument = source[i];
     const equals = argument.indexOf('=');
@@ -37,26 +34,25 @@ export function compilerEnvironment(inputs) {
     };
     if (key === '-Xplugin') {
       const paths = value().split(',');
+      const retained = [];
       for (const path of paths) {
         if (!isAbsolute(path) || !statSync(path).isFile()) throw new Error(`Invalid compiler plugin path: ${path}`);
         const name = basename(path);
-        if (name === `kotlin-serialization-compiler-plugin-embeddable-${version}.jar`) {
-          result.arguments.push(`-Xplugin=${path}`); hasSerialization = true;
-        } else if (name === `kotlin-compose-compiler-plugin-embeddable-${version}.jar`) {
+        if (name === `kotlin-compose-compiler-plugin-embeddable-${version}.jar`) {
           exclude(path, 'Compose source UI is lowered by the ArkUI backend, not JVM Compose lowering');
-        } else if (new RegExp(`^kotlin-(?:scripting-(?:compiler(?:-impl)?-embeddable|jvm|common)|script-runtime|stdlib)-${version.replaceAll('.', '\\.')}\\.jar$`).test(name)
-          || name === 'annotations-13.0.jar') {
+        } else if (new RegExp(`^kotlin-scripting-(?:compiler(?:-impl)?-embeddable)-${version.replaceAll('.', '\\.')}\\.jar$`).test(name)) {
           exclude(path, 'Gradle scripting support; input collection admits kt/java files, not scripts');
-        } else throw new Error(`Unsupported compiler plugin artifact: ${path}; supported semantic plugin: serialization ${version}`);
+        } else retained.push(path);
       }
+      // -Xplugin is a classloader path, including ordinary dependencies. Kotlin's
+      // service loader, not artifact filenames, identifies implementations.
+      if (retained.length) result.arguments.push(`-Xplugin=${retained.join(',')}`);
     } else if (key === '-P') {
       // CommonCompilerArguments.pluginOptions uses the official comma delimiter.
       for (const option of value().split(',')) {
-        if (option.startsWith(`plugin:${serializationId}:`)) {
-          result.arguments.push('-P', option); needsSerialization = true;
-        } else if (option.startsWith(`plugin:${composeId}:`)) {
+        if (option.startsWith(`plugin:${composeId}:`)) {
           exclude(option, 'Compose compiler option belongs to JVM Compose lowering; ArkUI backend owns UI conversion');
-        } else throw new Error(`Unsupported compiler plugin option: ${option}`);
+        } else result.arguments.push('-P', option);
       }
     } else if (valued.has(key)) {
       const v = value(); result.arguments.push(...(equals < 0 ? [key, v] : [argument]));
@@ -68,6 +64,5 @@ export function compilerEnvironment(inputs) {
       exclude(argument, 'JVM task/output option; ETS entry owns source validation and target output');
     } else throw new Error(`Unsupported compiler argument: ${argument}; not silently discarded`);
   }
-  if (needsSerialization && !hasSerialization) throw new Error('Serialization options have no serialization compiler plugin artifact');
   return result;
 }

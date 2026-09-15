@@ -64,6 +64,17 @@ for (const name of ['dep', 'leaf']) {
   assert.ok(jvm.data.classpath.some(path => path.startsWith(join(project, name, 'build'))));
 }
 assert.ok(jvm.data.classpath.some(path => /kotlin-stdlib.*\.jar$/.test(path)));
+const empty = run('empty-producer', project, ':', 'compileKotlin', ['-PproducerClasspath=true']);
+assert.ok(empty.graph.includes(':generateCollectorClasses'));
+assert.ok(!empty.data.classpath.some(path => path.endsWith('/generated/empty-plugin-classes')));
+assert.equal(empty.data.omittedClasspath.length, 1);
+assert.equal(empty.data.omittedClasspath[0].producer, ':generateCollectorClasses');
+assert.equal(empty.data.omittedClasspath[0].reason, 'completed-producer-without-output');
+run('disabled-producer', project, ':', 'compileKotlin', ['-PproducerClasspath=true', '-PdisabledProducer=true'], /missing or unreadable/);
+run('failed-producer', project, ':', 'compileKotlin', ['-PproducerClasspath=true', '-PfailedProducer=true', '--rerun-tasks'], /CLASSPATH_PRODUCER_FAILED/);
+const present = run('present-producer', project, ':', 'compileKotlin', ['-PproducerClasspath=true', '-PpresentProducer=true', '--rerun-tasks']);
+assert.ok(present.data.classpath.some(path => path.endsWith('/generated/empty-plugin-classes')));
+assert.deepEqual(present.data.omittedClasspath, []);
 run('missing-library', project, ':', 'compileKotlin', ['-PmissingLibrary=true'], /missing-library\.jar/);
 run('wrong-task', project, ':', 'help', [], /KotlinCompile/);
 run('missing-task', project, ':', 'notACompileTask', [], /notACompileTask/);
@@ -85,6 +96,6 @@ assert.ok(android.data.classpath.some(path => /transforms\/.*\.jar$/.test(path))
 assert.deepEqual(sourceHashes(join(host, 'app/src')), before);
 writeFileSync(join(work, 'complete.json'), JSON.stringify({ jvmSources: jvm.data.sources.length,
   jvmClasspath: jvm.data.classpath.length, androidSources: android.data.sources.length,
-  androidClasspath: android.data.classpath.length, negatives: 6, selectedCompileTasksAbsent: true,
+  androidClasspath: android.data.classpath.length, negatives: 8, producerCases: 4, selectedCompileTasksAbsent: true,
   androidSourcesUnchanged: true, scriptSha256: createHash('sha256').update(readFileSync(script)).digest('hex') }, null, 2));
-console.log('PASS actual Gradle inputs, generated source, transitive projects, Android boot/transformed classpath, six closed boundaries');
+console.log('PASS actual Gradle inputs, generated sources/classes, empty producer provenance, transitive projects, Android classpath, eight closed boundaries');

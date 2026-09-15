@@ -73,9 +73,15 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
         }
         declaration.originalSourceExported = exported
         if (declaration.isInner) validateInnerClass(declaration)
-        if (declaration.parent !is IrFile && (declaration.isAnonymousObject || declaration.kind != ClassKind.CLASS)) {
+        if (declaration.isCompanion && declaration.declarations.any { member ->
+                member is IrAnonymousInitializer || member is IrProperty && member.backingField?.initializer?.expression?.let { it !is IrConst } == true
+            }) {
             DiagnosticSink(declaration.fileOrNull?.fileEntry?.name).unsupported(declaration,
-                "Nested/local declarations require a non-inner named source class")
+                "Stateful companion initialization requires enclosing-class initialization support")
+        }
+        if (declaration.parent !is IrFile && (declaration.isAnonymousObject || declaration.kind !in setOf(ClassKind.CLASS, ClassKind.OBJECT))) {
+            DiagnosticSink(declaration.fileOrNull?.fileEntry?.name).unsupported(declaration,
+                "Nested/local declarations require a named source class or object")
         }
     }
     val work = mutableListOf<Pair<IrBody, IrDeclaration>>()

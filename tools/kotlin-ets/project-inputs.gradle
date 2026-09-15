@@ -37,13 +37,35 @@ gradle.projectsEvaluated {
         dependsOn { compile.taskDependencies.getDependencies(compile) }
         dependsOn compile.sources.buildDependencies, compile.javaSources.buildDependencies, compile.libraries.buildDependencies
         doLast {
+            def completedOutputs = [:]
+            def visited = new HashSet()
+            def visitProducer
+            visitProducer = { producer ->
+                if (producer == compile || !visited.add(producer)) return
+                producer.taskDependencies.getDependencies(producer).each { visitProducer(it) }
+                def state = producer.state
+                if (state.executed && state.failure == null && (!state.skipped || state.noSource || state.upToDate)) {
+                    producer.outputs.files.files.each { file ->
+                        completedOutputs[file.toPath().toAbsolutePath().normalize().toString()] = producer.path
+                    }
+                }
+            }
+            (compile.taskDependencies.getDependencies(compile) + compile.libraries.buildDependencies.getDependencies(compile)).each { visitProducer(it) }
+            def omittedClasspath = []
             def checked = { Collection<File> files, String kind ->
                 def paths = new LinkedHashSet<String>()
                 files.each { file ->
+                    def path = file.toPath().toAbsolutePath().normalize().toString()
+                    // Producers may legally emit no classes. Never infer this
+                    // from a plugin name, path suffix, or an unexecuted task.
+                    if (kind == 'classpath' && !file.exists() && completedOutputs.containsKey(path)) {
+                        omittedClasspath.add([path: path, producer: completedOutputs[path], reason: 'completed-producer-without-output'])
+                        return
+                    }
                     if (!file.exists() || !file.canRead()) {
                         throw new GradleException("Kotlin/ETS: ${compile.path} ${kind} path is missing or unreadable: ${file.absolutePath}")
                     }
-                    paths.add(file.toPath().toAbsolutePath().normalize().toString())
+                    paths.add(path)
                 }
                 paths.toList()
             }
@@ -60,7 +82,7 @@ gradle.projectsEvaluated {
             }
             def classpath = checked(libraries, 'classpath')
             def manifest = [schemaVersion: 1, project: root.projectDir.absolutePath,
-                module: project.path, task: compile.path, sources: sources, classpath: classpath,
+                module: project.path, task: compile.path, sources: sources, classpath: classpath, omittedClasspath: omittedClasspath,
                 compilerVersion: compile.class.classLoader.loadClass('org.jetbrains.kotlin.config.KotlinCompilerVersion').getField('VERSION').get(null),
                 compilerArguments: compile.serializedCompilerArguments]
             Files.createDirectories(output.toPath().parent)

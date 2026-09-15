@@ -69,6 +69,13 @@ Kotlin JVM compile task. Gradle resolves transitive dependencies, project output
 and Android transformed classpath artifacts; the tool does not glob the global
 cache or guess dependency versions. Android boot classpath is also included.
 
+A completed prerequisite may legitimately emit no classes. An absent classpath
+entry is omitted only when its exact path is a declared output of a completed
+producer (including UP-TO-DATE/NO-SOURCE), not a disabled or failed task.
+`inputs.json.omittedClasspath` records the path, producer and reason. Missing
+unowned dependencies and unreadable existing inputs still fail. This rule uses
+Gradle output identity, not plugin names or inferred directory layouts.
+
 Collection runs the selected task's prerequisites so generated sources and
 dependent module outputs exist, but does not execute the selected Kotlin compile
 task itself. Therefore it may run generators and compile dependency modules; it
@@ -108,19 +115,23 @@ JDK home and the supported semantic flags are forwarded by `compiler-environment
 No extra command option or manually supplied plugin JAR is required in project mode.
 
 The backend still uses its pinned compiler version; a different collected compiler
-version fails before compilation. Unknown plugin artifacts or compiler arguments
-also fail explicitly at `compiler-environment`, rather than silently dropping
-potentially necessary semantics. The initial artifact boundary admits the official
-serialization 2.1.20 embeddable JAR; it is not arbitrary third-party plugin support.
+version fails before compilation. Unknown compiler arguments still fail explicitly
+at `compiler-environment`. Plugin classpaths and options are forwarded to Kotlin's
+official loader: a classpath can contain both plugin implementations and helper
+JARs, so artifact filenames are not an implementation whitelist. Kotlin validates
+registration, option ownership and compatibility. Invalid plugins/options fail
+in official configuration/frontend phases, with compiler logs retained.
 
 Gradle destination/classpath settings are replaced by the ETS entry's own paths.
-Scripting support is excluded because collection accepts only `.kt`/`.java`, not
-scripts. The known Compose JVM plugin/options are recorded as target-owned
+Known scripting registrar JARs are excluded because collection accepts only
+`.kt`/`.java`, not scripts; ordinary helper dependencies remain on the plugin
+classpath. The known Compose JVM plugin/options are recorded as target-owned
 exclusions: Compose is handled by the existing ArkUI adapter, not rewritten into
 JVM Composer calls before that adapter. This does not claim every Compose compiler
 option has an ArkUI equivalent. All exclusions are visible in the environment report.
 
-Plugin-generated declarations may still hit a source-linked backend limitation.
+This reuses plugin loading, not arbitrary JVM backend execution. Plugin-generated
+declarations may still hit a source-linked backend limitation.
 In particular, accepting serialization in the frontend does not implement
 `KSerializer`, descriptors, encoders/decoders or generated serializers in ETS.
 Plugins which mutate inputs only inside the selected task's execution actions are
