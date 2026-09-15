@@ -600,6 +600,7 @@ class EtsValidator {
                         emptySet()
                     }
                     is EtsThrow -> { inspect(statement.value, states); emptySet() }
+                    is EtsTry -> reject(statement, "Try in derived constructors requires exception-aware allocation flow")
                     is EtsJump -> {
                         val target = statement.label to statement.isContinue
                         jumps[target] = jumps[target].orEmpty() + states
@@ -645,6 +646,16 @@ class EtsValidator {
                 if (result != EtsTypes.VOID) reject(value, "Missing target return value")
             } else { expression(value.value, scope); expect(value.value, result) }
             is EtsThrow -> expression(value.value, scope)
+            is EtsTry -> {
+                if (value.handler == null && value.finallyBody == null) reject(value, "Target try requires catch or finally")
+                statements(value.body, scope, result, loops)
+                value.handler?.let { handler ->
+                    if (handler.parameter.type != EtsTypes.OBJECT) reject(value, "Target catch binding requires Object; narrow inside its body")
+                    statements(handler.body, parameters(listOf(EtsParameter(handler.parameter)), scope), result, loops,
+                        setOf(handler.parameter.name))
+                }
+                value.finallyBody?.let { statements(it, scope, result, loops) }
+            }
             is EtsSuperConstructorCall -> {
                 if (allowedSuper.none { it === value }) reject(value, "Super delegation outside its constructor")
                 type(value.baseClass, value.source)

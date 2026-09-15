@@ -88,6 +88,10 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 else -> diagnostics.unsupported(declaration, "Unsupported top-level UI module declaration")
             }
         }
+        for (source in declarations.mapNotNull(::sourceFile).distinct()) {
+            diagnostics.currentFile = source.fileEntry.name
+            files.getOrPut(source.fileEntry.name) { mutableListOf() } += lowerFileInitialization(source, language)
+        }
         diagnostics.currentFile = sourceFile(root)?.fileEntry?.name
         val name = root.name.asString()
         val entryBody = native("Stack", listOf(stackOptions(root)), root,
@@ -187,6 +191,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         function.hasAnnotation(COMPOSABLE) && function.returnType.isUnit()
 
     private fun builder(function: IrSimpleFunction): EtsFunction = withTextContext(function) {
+        if ((function.parent as? IrFile)?.let(::requiresFileInitialization) == true) {
+            diagnostics.unsupported(function, "Compose builder in a lazily initialized file requires a lifecycle entry bridge")
+        }
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
         builderSymbol(function)
         if (function.extensionReceiverParameter != null || function.dispatchReceiverParameter != null)

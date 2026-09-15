@@ -2,10 +2,11 @@
 
 The approved main-path scope and issue queue are now
 `../../.scratch/kotlin-ets-main-path/spec.md` and its `issues/` directory.
-The user approved implementation on 2026-09-15. Issue 01 (computed properties)
-and 01b (stored custom accessors) passed focused acceptance. File initialization
-is next, including the shared failure-handling prerequisite recorded in issue 02;
-the remaining language requirements stay queued. Full L1 is not yet complete.
+The user approved implementation on 2026-09-15. Issues 01 (computed properties),
+01b (stored custom accessors) and 02 (ordinary-language file initialization) passed
+focused acceptance. L2 object/data-class equality is next; L2-L8 remain queued.
+Issue 02 records the bounded initialization/default/failure contract and actual
+SDK evidence, not full exception lowering, Compose lifecycle or native parity.
 This document retains architecture, round inventory and historical evidence;
 older next-action instructions below do not override that queue.
 
@@ -64,8 +65,8 @@ Proceed in this delivery order:
    same typed target path and actual callback replay. Continue the scoped language
    gaps in the active spec before the next integration milestone; host replay does
    not prove native state redraw.
-   General file initialization remains explicit unsupported work, not implicit
-   eager execution in ETS.
+   Ordinary file initialization now preserves first-use execution rather than
+   eager ETS effects. Its boundaries and evidence are recorded in issue 02.
 3. Generate a representative page with nested component calls, resources and
    ordinary UI state. Compile/install it and verify pager/button/indicator linkage.
    Preserve method/parameter names and source structure where the target allows.

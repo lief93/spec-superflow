@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -14,9 +14,8 @@ console.log(`Evidence: ${work}`);
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const sources = ['State.kt', 'Application.kt'].map(p => join(here, p));
 const uiSources = ['UiState.kt', 'UiPage.kt'].map(p => join(here, p));
-const negatives = [['Initialized.kt', /file-initialization lowering/]];
 const inputs = [...readdirSync(join(root, 'src'), { recursive: true }).filter(p => p.endsWith('.kt')).map(p => join(root, 'src', p)),
-  ...sources, ...uiSources, join(here, 'GlobalUiProbe.kt'), ...negatives.map(([name]) => join(here, name)), join(here, 'Oracle.kt'), fileURLToPath(import.meta.url)].map(path => ({ path, sha256: hash(path) }));
+  ...sources, ...uiSources, join(here, 'GlobalUiProbe.kt'), join(here, 'Oracle.kt'), fileURLToPath(import.meta.url)].map(path => ({ path, sha256: hash(path) }));
 const result = { inputs, commands: [], passed: false, level: 'JVM/ETS host; not SDK or native' };
 const record = () => writeFileSync(join(work, 'result.json'), JSON.stringify(result, null, 2));
 function run(label, command, args, status = 0) {
@@ -83,15 +82,7 @@ const isExported = node => node.modifiers?.some(m => m.kind === ts.SyntaxKind.Ex
 const privateStorage = state.statements.find(s => ts.isVariableStatement(s) && s.declarationList.declarations.some(d => d.name.getText(state) === 'visits'));
 assert.equal(isExported(privateStorage), false);
 assert.ok(!state.statements.some(s => ts.isFunctionDeclaration(s) && ['__etsSet_revision', '__etsSet_visits'].includes(s.name?.text)));
-result.negatives = [];
-for (const [name, reason] of negatives) {
-  const input = join(here, name), output = join(work, name.replace('.kt', '.ets'));
-  run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
-  const diagnostic = JSON.parse(run(name, 'bash', [cli, '--mode', 'language', '--out', output, input], 2));
-  assert.equal(diagnostic.code, 'UNSUPPORTED'); assert.match(diagnostic.message, reason);
-  assert.equal(diagnostic.source.file, input); assert.ok(diagnostic.source.line > 0);
-  assert.equal(existsSync(output), false); result.negatives.push(diagnostic);
-}
+// Initialized.kt is exercised positively by ../initialization/run.mjs.
 for (const input of inputs) assert.equal(hash(input.path), input.sha256);
 result.modules = files.map(path => ({ path, sha256: hash(path) })); result.passed = true; record();
 console.log(`PASS ${result.actual.length} flat + module JVM/host global-state results, relocated Compose callback replay, names and deterministic imports; SDK/native not run`);

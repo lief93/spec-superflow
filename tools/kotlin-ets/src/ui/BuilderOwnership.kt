@@ -58,6 +58,9 @@ internal class BuilderOwnership(functions: List<EtsFunction>, rootId: String, pr
         is EtsExpressionStatement -> value.copy(expression = expression(value.expression))
         is EtsReturn -> value.copy(value = value.value?.let(::expression))
         is EtsThrow -> value.copy(value = expression(value.value))
+        is EtsTry -> value.copy(body = value.body.map(::statement),
+            handler = value.handler?.let { it.copy(body = it.body.map(::statement)) },
+            finallyBody = value.finallyBody?.map(::statement))
         is EtsSuperConstructorCall -> value.copy(arguments = value.arguments.map(::expression))
         is EtsBlock -> value.copy(statements = value.statements.map(::statement))
         is EtsIf -> value.copy(branches = value.branches.map { it.copy(condition = it.condition?.let(::expression), body = it.body.map(::statement)) })

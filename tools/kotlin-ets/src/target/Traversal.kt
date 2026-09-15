@@ -23,6 +23,7 @@ fun walkEts(node: EtsNode, visit: (EtsNode) -> Unit) {
         is EtsExpressionStatement -> walk(node.expression)
         is EtsReturn -> node.value?.let(::walk)
         is EtsThrow -> walk(node.value)
+        is EtsTry -> { node.body.forEach(::walk); node.handler?.body?.forEach(::walk); node.finallyBody?.forEach(::walk) }
         is EtsSuperConstructorCall -> node.arguments.forEach(::walk)
         is EtsBlock -> node.statements.forEach(::walk)
         is EtsIf -> node.branches.forEach { branch ->

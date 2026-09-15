@@ -26,6 +26,11 @@ import java.util.IdentityHashMap
 
 internal val ETS_DEFAULT_VISIBILITY_BRIDGE by IrDeclarationOriginImpl
 
+// Shared with the ETS initializer consumer: defaults run after the file guard.
+internal fun requiresFileInitialization(file: IrFile): Boolean = file.declarations.filterIsInstance<IrProperty>().any {
+    !it.isConst && it.backingField?.initializer?.expression?.let { value -> value !is IrConst } == true
+}
+
 /** Common default dispatch is resolved before ETS emission; user method bodies stay callable. */
 internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
     val module = input.result.irModuleFragment
@@ -34,13 +39,14 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
         override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
         override fun visitSimpleFunction(declaration: IrSimpleFunction) {
             val owner = declaration.parent as? IrClass
-            if (owner != null && declaration.dispatchReceiverParameter != null &&
-                !declaration.isFakeOverride && !declaration.isInline && !declaration.isSuspend &&
-                declaration.extensionReceiverParameter == null && declaration.contextReceiverParametersCount == 0 &&
-                declaration.valueParameters.any { it.defaultValue != null } &&
+            val inherited = owner != null && declaration.dispatchReceiverParameter != null &&
                 (owner.modality != Modality.FINAL || owner.superTypes.any {
                     it.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"
-                })) providers.add(declaration)
+                })
+            val initializedFile = (declaration.parent as? IrFile)?.let(::requiresFileInitialization) == true
+            if ((inherited || initializedFile) && !declaration.isFakeOverride && !declaration.isInline && !declaration.isSuspend &&
+                declaration.extensionReceiverParameter == null && declaration.contextReceiverParametersCount == 0 &&
+                declaration.valueParameters.any { it.defaultValue != null }) providers.add(declaration)
             super.visitSimpleFunction(declaration)
         }
     })
@@ -107,20 +113,21 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
     })
     val names = NameTable<IrFunction>(reserved = reserved)
     val helpers = stubs.sortedWith(compareBy({ it.file.fileEntry.name }, { it.startOffset }, { it.name.asString() })).associateWith { stub ->
-        val owner = stub.parentAsClass
-        val destination = if (owner.kind == ClassKind.INTERFACE) stub.file else owner
+        val owner = stub.parent as? IrClass
+        val destination = if (owner == null || owner.kind == ClassKind.INTERFACE) stub.file else owner
         val helper = context.irFactory.createStaticFunctionWithReceivers(destination,
-            Name.identifier(names.declareFreshName(stub, "${owner.name}_${stub.name}")), stub,
-            typeParametersFromContext = owner.typeParameters,
+            Name.identifier(names.declareFreshName(stub, if (owner == null) stub.name.asString() else "${owner.name}_${stub.name}")), stub,
+            typeParametersFromContext = owner?.typeParameters.orEmpty(),
             remapMultiFieldValueClassStructure = { _, _, _ -> })
         // This official attribute does not follow copyAttributes' attributeOwnerId.
         helper.defaultArgumentsOriginalFunction = stub.defaultArgumentsOriginalFunction
         // Inner lowering can use the class receiver inside a default lambda.
         // Moving to a static helper must remap that identity as well as parameters.
         helper.body = stub.moveBodyTo(helper, stub.parameters.zip(helper.parameters).toMap() +
-            (checkNotNull(owner.thisReceiver) to helper.valueParameters.first()))
-        val parameters = (owner.typeParameters + stub.typeParameters).zip(helper.typeParameters).toMap() +
-            stub.defaultArgumentsOriginalFunction!!.typeParameters.zip(helper.typeParameters.drop(owner.typeParameters.size))
+            if (owner == null) emptyMap() else mapOf(checkNotNull(owner.thisReceiver) to helper.valueParameters.first()))
+        val ownerParameters = owner?.typeParameters.orEmpty()
+        val parameters = (ownerParameters + stub.typeParameters).zip(helper.typeParameters).toMap() +
+            stub.defaultArgumentsOriginalFunction!!.typeParameters.zip(helper.typeParameters.drop(ownerParameters.size))
         helper.remapTypes(object : TypeRemapper {
             override fun enterScope(irTypeParametersContainer: IrTypeParametersContainer) = Unit
             override fun leaveScope() = Unit
@@ -177,13 +184,13 @@ internal fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) {
             expression.transformChildrenVoid(this)
             val stub = expression.symbol.owner
             val helper = helpers[stub]?.let { accessibleHelper(expression, it) } ?: return expression
-            val owner = stub.parentAsClass
+            val owner = stub.parent as? IrClass
             val diagnostics = DiagnosticSink(file.fileEntry.name)
-            val ownerType = defaultReceiverType(owner, expression, diagnostics)
-            val types = ownerType.arguments.map { it.typeOrNull!! } + expression.typeArguments.map {
+            val ownerType = owner?.let { defaultReceiverType(it, expression, diagnostics) }
+            val types = ownerType?.arguments.orEmpty().map { it.typeOrNull!! } + expression.typeArguments.map {
                 it ?: diagnostics.unsupported(expression, "Default dispatch requires resolved method type arguments")
             }
-            val sourceSubstitution = IrTypeSubstitutor((owner.typeParameters + stub.typeParameters).map { it.symbol },
+            val sourceSubstitution = IrTypeSubstitutor((owner?.typeParameters.orEmpty() + stub.typeParameters).map { it.symbol },
                 types.map { makeTypeProjection(it, org.jetbrains.kotlin.types.Variance.INVARIANT) },
                 allowEmptySubstitution = true)
             // Common injection types omitted-argument sentinels with the provider's T.

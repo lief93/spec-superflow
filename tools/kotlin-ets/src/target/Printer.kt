@@ -99,6 +99,9 @@ class EtsPrinter {
         is EtsExpressionStatement -> listOf("${expression(value.expression)};")
         is EtsReturn -> listOf("return${value.value?.let { " ${expression(it)}" } ?: ""};")
         is EtsThrow -> listOf("throw ${expression(value.value)};")
+        is EtsTry -> listOf("try {") + indent(statements(value.body)) + "}" +
+            (value.handler?.let { listOf("catch (${it.parameter.name}) {") + indent(statements(it.body)) + "}" } ?: emptyList()) +
+            (value.finallyBody?.let { listOf("finally {") + indent(statements(it)) + "}" } ?: emptyList())
         is EtsSuperConstructorCall -> listOf(value.arguments.joinToString(", ", "super(", ");") { expression(it) })
         is EtsBlock -> listOf("{") + indent(statements(value.statements)) + "}"
         is EtsIf -> value.branches.flatMapIndexed { index, branch ->

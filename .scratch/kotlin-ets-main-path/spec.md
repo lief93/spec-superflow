@@ -33,9 +33,11 @@ An already runnable page is not a new deliverable for this round.
 
 ## Existing capability versus remaining work
 
-Progress after approval: issues 01 and 01b passed focused acceptance. L1 computed
-and constant-backed custom accessors are implemented; nonconstant initialization
-is next. L2-L8 remain pending. The inventory below records the original baseline,
+Progress after approval: issues 01, 01b and 02 passed focused acceptance. L1
+computed/stored accessors and the documented ordinary-language nonconstant file
+initialization contract are implemented. L2-L8 remain pending; L2 is next.
+Compose lifecycle entry and full exception representation remain distinct work.
+The inventory below records the original baseline,
 not a claim that implemented accessor work is still missing.
 
 Paths below are relative to `tools/kotlin-ets`. Existing means bounded support,

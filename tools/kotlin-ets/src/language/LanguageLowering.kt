@@ -161,7 +161,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             if (sourceFile(expression.symbol.owner) == null) diagnostics.unsupported(expression, "Unsupported external field")
             val property = expression.symbol.owner.correspondingPropertySymbol?.owner
             if (property?.parent is IrFile) {
-                EtsReference(topLevelStorage(property, this), source(expression))
+                readTopLevelProperty(property, source(expression), this)
             } else {
                 val captured = when {
                     hasCaptureOrigin(expression.symbol.owner) -> capturedFieldSymbol(expression.symbol.owner)
@@ -288,10 +288,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                 type(call.type), source(call))
         }
         if (property?.parent is IrFile) {
-            val storage = topLevelStorage(property, this)
             return if (property.setter?.symbol == owner.symbol)
                 writeTopLevelProperty(property, arguments(call, scope).single(), source(call), this)
-            else EtsReference(storage, source(call))
+            else readTopLevelProperty(property, source(call), this)
         }
         val substitutions = if (owner.dispatchReceiverParameter == null) emptyMap()
             else receiverSubstitution(parent as? IrClass, receiver)
@@ -538,7 +537,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
     override fun function(function: IrSimpleFunction, scope: Scope): EtsFunction = withFile(function) {
         reserveNames(function)
         val property = function.correspondingPropertySymbol?.owner
-        val originalName = property?.let { identifier(it) } ?: identifier(function)
+        val originalName = if (topLevelAccessorName(function) != null) function.name.asString()
+            else property?.let { identifier(it) } ?: identifier(function)
         val emittedName = topLevelAccessorName(function) ?:
             if (property == null) overloadNaming.name(function) else originalName
         val sourceName = originalName.takeUnless { it == emittedName }
@@ -586,7 +586,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         expressionDepth = 0
         returnTargets.add(function)
         try {
-            val lines = statements(body, nested)
+            val initializer = (function.parent as? IrFile)?.takeIf { property?.isConst != true && requiresFileInitialization(it) }
+            val lines = listOfNotNull(initializer?.let(::fileInitializationCall)) + statements(body, nested)
             EtsFunction(emittedName, parameters,
                 type(function.returnType), lines, source(function), kind,
                 static = function.parent is IrClass && function.dispatchReceiverParameter == null,
@@ -942,7 +943,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
 
     private fun functionSymbol(function: IrSimpleFunction): EtsSymbol {
         val property = function.correspondingPropertySymbol?.owner
-        val originalName = property?.let { identifier(it) } ?: identifier(function)
+        val originalName = if (topLevelAccessorName(function) != null) function.name.asString()
+            else property?.let { identifier(it) } ?: identifier(function)
         val emittedName = topLevelAccessorName(function) ?:
             if (property == null) overloadNaming.name(function) else originalName
         return etsFunctionSymbol(emittedName,

@@ -4,6 +4,7 @@ package dev.ets
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.types.isChar
 
 private fun propertySource(property: IrProperty) =
     SourceSpan(sourceFile(property)?.fileEntry?.name, property.startOffset, property.endOffset)
@@ -16,7 +17,7 @@ private fun hasCustomAccessor(property: IrProperty): Boolean =
 
 internal fun topLevelAccessorName(function: IrSimpleFunction): String? {
     val property = function.correspondingPropertySymbol?.owner ?: return null
-    if (property.parent !is IrFile || (property.backingField != null && !hasCustomAccessor(property))) return null
+    if (property.parent !is IrFile || (property.backingField != null && !hasCustomAccessor(property) && !lazyTopLevelProperty(property))) return null
     if (sourceFile(property) == null || property.isExternal || property.isExpect ||
         property.isDelegated || property.isLateinit ||
         listOfNotNull(property.getter, property.setter).any { it.extensionReceiverParameter != null ||
@@ -35,11 +36,20 @@ internal fun topLevelStorage(property: IrProperty, language: Language): EtsSymbo
         rejectProperty(property, "Top-level properties require ordinary source storage and accessors")
     }
     val field = property.backingField ?: rejectProperty(property, "Top-level property has no backing storage")
-    if (field.initializer?.expression !is IrConst) rejectProperty(property,
-        "Top-level property initializer requires file-initialization lowering; only constant initial values are supported")
+    if (field.initializer == null) rejectProperty(property, "Top-level storage requires an initializer")
     val at = propertySource(property)
-    val name = (if (hasCustomAccessor(property)) "__etsField_" else "") + property.name.asString()
-    return EtsSymbol("global:${at.file}:${at.start}:$name", name, language.type(field.type), at)
+    val lazy = lazyTopLevelProperty(property)
+    val name = (if (hasCustomAccessor(property) || lazy) "__etsField_" else "") + property.name.asString()
+    val originalType = language.type(field.type)
+    val storageType = if (lazy && originalType !in setOf(EtsTypes.NUMBER, EtsTypes.BOOLEAN) &&
+        originalType !is EtsNullableType && !field.type.isChar()) EtsNullableType(originalType) else originalType
+    return EtsSymbol("global:${at.file}:${at.start}:$name", name, storageType, at)
+}
+
+internal fun readTopLevelProperty(property: IrProperty, at: SourceSpan, language: Language): EtsExpression {
+    val storage = EtsReference(topLevelStorage(property, language), at)
+    val original = language.type(property.backingField!!.type)
+    return if (storage.type == original) storage else EtsCast(storage, original, at)
 }
 
 private fun exportedSetter(property: IrProperty): Boolean = property.setter?.let {
@@ -58,8 +68,14 @@ internal fun lowerTopLevelProperty(property: IrProperty, language: Language): Li
     val accessors = property.getter?.let(::topLevelAccessorName) != null
     val storage = if (accessors && property.backingField == null) null else topLevelStorage(property, language)
     val declarations = storage?.let {
-        val initializer = language.expression(property.backingField!!.initializer!!.expression, Scope())
-        listOf<EtsDeclaration>(EtsGlobal(it, initializer, property.isVar,
+        val lazy = lazyTopLevelProperty(property)
+        val initializer = if (!lazy) language.expression(property.backingField!!.initializer!!.expression, Scope()) else when {
+            it.type == EtsTypes.NUMBER -> EtsLiteral(0, EtsTypes.NUMBER, it.source)
+            it.type == EtsTypes.BOOLEAN -> EtsLiteral(false, EtsTypes.BOOLEAN, it.source)
+            property.backingField!!.type.isChar() -> EtsLiteral("\u0000", EtsTypes.STRING, it.source)
+            else -> EtsLiteral(null, it.type, it.source)
+        }
+        listOf<EtsDeclaration>(EtsGlobal(it, initializer, property.isVar || lazy,
             !accessors && !DescriptorVisibilities.isPrivate(property.visibility)))
     }.orEmpty()
     return declarations + if (accessors) {
@@ -76,7 +92,7 @@ internal fun writeTopLevelProperty(property: IrProperty, value: EtsExpression, a
     if (!property.isVar) rejectProperty(property, "Cannot assign an immutable top-level property")
     // Bodies can move to another target file (for example an ArkUI slot method).
     // Custom-accessor field writes must bypass the setter, which may be this body.
-    if (!hasCustomAccessor(property) && exportedSetter(property)) {
+    if (!hasCustomAccessor(property) && !lazyTopLevelProperty(property) && exportedSetter(property)) {
         val setter = setterFunction(storage).symbol
         return EtsCall(EtsReference(setter, at), listOf(value), EtsTypes.VOID, at)
     }

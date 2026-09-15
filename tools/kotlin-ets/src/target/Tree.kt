@@ -81,6 +81,9 @@ data class EtsExpressionStatement(val expression: EtsExpression,
     override val source: SourceSpan = expression.source) : EtsStatement
 data class EtsReturn(val value: EtsExpression?, override val source: SourceSpan) : EtsStatement
 data class EtsThrow(val value: EtsExpression, override val source: SourceSpan) : EtsStatement
+data class EtsCatch(val parameter: EtsSymbol, val body: List<EtsStatement>)
+data class EtsTry(val body: List<EtsStatement>, val handler: EtsCatch? = null,
+    val finallyBody: List<EtsStatement>? = null, override val source: SourceSpan) : EtsStatement
 data class EtsSuperConstructorCall(val baseClass: EtsNamedType, val arguments: List<EtsExpression>,
     override val source: SourceSpan) : EtsStatement
 data class EtsBlock(val statements: List<EtsStatement>, override val source: SourceSpan) : EtsStatement
