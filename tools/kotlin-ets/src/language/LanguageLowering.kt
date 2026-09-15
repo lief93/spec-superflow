@@ -278,10 +278,6 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         if (sourceFile(owner) == null || owner.isExternal) {
             diagnostics.unsupported(call, "Unsupported external call: ${symbolName(owner)}")
         }
-        if (parent is IrClass && parent.isData && owner.origin == IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER &&
-            owner.name.asString() in setOf("equals", "hashCode")) {
-            diagnostics.unsupported(call, "Data class ${owner.name} is outside the first language slice")
-        }
         val property = owner.correspondingPropertySymbol?.owner
         if (topLevelAccessorName(owner) != null) {
             return EtsCall(EtsReference(functionSymbol(owner), source(call)), arguments(call, scope),
@@ -801,8 +797,6 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         members.add(EtsFunction("constructor", parameterText, EtsTypes.VOID, initialization, source(constructor),
             kind = EtsFunctionKind.CONSTRUCTOR, visibility = if (singleton) EtsVisibility.PRIVATE else memberVisibility(constructor.visibility)))
         declaration.declarations.filterIsInstance<IrSimpleFunction>().filter { !it.isFakeOverride }.forEach { method ->
-            if (declaration.isData && method.origin == IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER &&
-                method.name.asString() in setOf("equals", "hashCode")) return@forEach
             val implementation = function(method, scope)
             members.add(implementation)
             if (method.correspondingPropertySymbol == null && method.dispatchReceiverParameter != null) {
@@ -840,6 +834,11 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                     name, listOf(functionSymbol(original).id)))
             }
         }
+        if (base == null && declaration.declarations.filterIsInstance<IrSimpleFunction>().any {
+            it.name.asString() == "hashCode" && it.isFakeOverride && it.collectRealOverrides().any { parent ->
+                symbolName(parent) == "kotlin.Any.hashCode"
+            }
+        }) members.addAll(identityHashMembers(thisReference(declaration, declaration), source(declaration)))
         EtsClass(classNaming.name(declaration), members, source(declaration), typeParameters = typeParameters,
             baseClass = baseType, interfaces = interfaces, abstract = declaration.modality == Modality.ABSTRACT,
             sourceName = identifier(declaration).takeUnless { it == classNaming.name(declaration) })

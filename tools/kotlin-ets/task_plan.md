@@ -4,7 +4,8 @@ The approved main-path scope and issue queue are now
 `../../.scratch/kotlin-ets-main-path/spec.md` and its `issues/` directory.
 The user approved implementation on 2026-09-15. Issues 01 (computed properties),
 01b (stored custom accessors) and 02 (ordinary-language file initialization) passed
-focused acceptance. L2 object/data-class equality is next; L2-L8 remain queued.
+focused acceptance. Issue 03 accepts ordinary source/data-class equality with
+documented supported properties. L3 enums is next; L3-L8 remain queued.
 Issue 02 records the bounded initialization/default/failure contract and actual
 SDK evidence, not full exception lowering, Compose lifecycle or native parity.
 This document retains architecture, round inventory and historical evidence;

@@ -4,6 +4,55 @@ private data class SupportFunction(val symbol: String, val source: String, val d
 
 // Pinned target runtime, in stable dependency-before-consumer order. Bodies do not depend on input IR.
 private val supportFunctions = listOf(
+    SupportFunction("stdlib:__etsIntArrayHash", """
+        function __etsIntArrayHash(values: Array<number> | null): number {
+          if (values === null) { return 0; }
+          let hash = 1;
+          for (const value of values) { hash = (Math.imul(hash, 31) + value) | 0; }
+          return hash;
+        }
+    """.trimIndent()),
+    SupportFunction("stdlib:__etsIntArrayString", """
+        function __etsIntArrayString(values: Array<number> | null): string {
+          return values === null ? 'null' : '[' + values.join(', ') + ']';
+        }
+    """.trimIndent()),
+    SupportFunction("stdlib:__etsFloatHash", """
+        function __etsFloatHash(value: number): number {
+          if (Number.isNaN(value)) { return 2143289344; }
+          const bits = new DataView(new ArrayBuffer(4));
+          bits.setFloat32(0, value);
+          return bits.getInt32(0);
+        }
+    """.trimIndent()),
+    SupportFunction("stdlib:__etsDoubleHash", """
+        function __etsDoubleHash(value: number): number {
+          if (Number.isNaN(value)) { return 2146959360; }
+          const bits = new DataView(new ArrayBuffer(8));
+          bits.setFloat64(0, value);
+          return bits.getInt32(0) ^ bits.getInt32(4);
+        }
+    """.trimIndent()),
+    SupportFunction("stdlib:__etsFloatingCompare", """
+        function __etsFloatingCompare(left: number, right: number): number {
+          if (left < right) { return -1; }
+          if (left > right) { return 1; }
+          if (left === right) {
+            if (left === 0 && 1 / left !== 1 / right) { return 1 / left < 0 ? -1 : 1; }
+            return 0;
+          }
+          return Number.isNaN(left) ? (Number.isNaN(right) ? 0 : 1) : -1;
+        }
+    """.trimIndent()),
+    SupportFunction("stdlib:__etsStringHash", """
+        function __etsStringHash(value: string): number {
+          let hash = 0;
+          for (let index = 0; index < value.length; index++) {
+            hash = (Math.imul(hash, 31) + value.charCodeAt(index)) | 0;
+          }
+          return hash;
+        }
+    """.trimIndent()),
     SupportFunction("stdlib:__etsIntDiv", """
         function __etsIntDiv(a: number, b: number): number {
           if (b === 0) { throw new Error('ArithmeticException: / by zero'); }

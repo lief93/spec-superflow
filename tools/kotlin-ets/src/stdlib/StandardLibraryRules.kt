@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.ir.util.isNullable
 
 class StandardLibraryRules : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
+        EqualityRules.lower(call, language, scope)?.let { return it }
         IterationRules.lower(call, language, scope)?.let { return it }
         FloatingPointRules.lower(call, language, scope)?.let { return it }
         CollectionEmptinessRules.lower(call, language, scope)?.let { return it }
