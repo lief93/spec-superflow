@@ -57,3 +57,13 @@ forwarding, and follow resolved composable arguments at external call boundaries
 just as direct lambda arguments are visited. Validate an external UI adapter with
 a forwarded slot, retaining contents and inherited typography. Do not replace
 unresolved external theme/provider semantics with defaults to make a page pass.
+
+Sixth requirement: framework Color values must use the shared CallRule type and
+value contracts, including source methods, parameters, properties and control
+flow. Native color attributes consume the same typed expression, not a second
+UI-only expression parser. Support sRGB ARGB Int and constant Long constructors,
+named sRGB constants and toArgb; preserve the low 32 bits and signed Int result.
+Other color spaces and Unspecified remain rejected rather than guessed. Verify
+JVM parity, multi-branch values and actual SDK compilation of parameterized UI.
+Effectful Color temporaries must follow the existing one-evaluation bridge,
+including named argument reordering; they are not unconditional textual aliases.

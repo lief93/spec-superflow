@@ -49,7 +49,7 @@ private class ObservedLanguage(private val delegate: Language) : Language by del
 fun main(args: Array<String>) {
     val detached = withKotlinModule(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) { module ->
         val diagnostics = DiagnosticSink()
-        val backend = EtsBackend(diagnostics, listOf(StandardLibraryRules()))
+        val backend = EtsBackend(diagnostics, listOf(StandardLibraryRules(), ComposeColorValueRule()))
         backend.validateSource(module)
         val observed = ObservedLanguage(backend.language)
         val program = ComposeLowering(observed, diagnostics).lower(module, "sample.Page")

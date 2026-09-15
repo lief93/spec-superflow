@@ -246,7 +246,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     return@forEachIndexed
                 }
                 val platformValue = initial.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() in
-                    setOf("androidx.compose.ui.unit.Dp", "androidx.compose.ui.unit.TextUnit", "androidx.compose.ui.graphics.Color", "androidx.compose.ui.Modifier")
+                    setOf("androidx.compose.ui.unit.Dp", "androidx.compose.ui.unit.TextUnit", "androidx.compose.ui.Modifier")
                 if (initial is IrFunctionExpression ||
                     (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE && platformValue)) {
                     scope.aliases[statement.symbol] = initial
@@ -544,27 +544,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     }
 
     private fun colorValue(expression: IrExpression, scope: Scope): EtsExpression {
-        val resolved = dereference(expression, scope)
-        if (resolved is IrWhen) {
-            val branches = resolved.branches
-            if (branches.size != 2 || branches.last() !is IrElseBranch)
-                diagnostics.unsupported(resolved, "Color condition requires if/else")
-            return EtsConditional(language.expression(branches[0].condition, scope),
-                colorValue(branches[0].result, scope), colorValue(branches[1].result, scope),
-                EtsTypes.NUMBER, language.source(expression))
-        }
-        val call = resolved as? IrCall ?: diagnostics.unsupported(expression, "Expected resolved Color")
-        val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
-        val colors = mapOf("Black" to 0xFF000000L, "White" to 0xFFFFFFFFL, "Gray" to 0xFF888888L, "Red" to 0xFFFF0000L, "Transparent" to 0L)
-        for ((name, value) in colors) if (property == "androidx.compose.ui.graphics.Color.Companion.$name")
-            return EtsLiteral(value, EtsTypes.NUMBER, language.source(expression))
-        if (symbolName(call.symbol.owner) == "androidx.compose.ui.graphics.Color" && call.symbol.owner.valueParameters.size == 1) {
-            val value = call.getValueArgument(0) ?: diagnostics.unsupported(call, "Missing Color value")
-            if (value.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() !in setOf("kotlin.Int", "kotlin.Long"))
-                diagnostics.unsupported(value, "Only ARGB Int/Long Color is supported")
-            return language.expression(value, scope)
-        }
-        diagnostics.unsupported(expression, "Unsupported resolved Color API")
+        return language.expression(expression, scope)
     }
 
     private fun modifiers(expression: IrExpression?, scope: Scope, node: ComposeElement): List<EtsStatement> {
