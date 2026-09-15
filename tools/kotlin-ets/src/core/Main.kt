@@ -14,7 +14,7 @@ fun main(arguments: Array<String>) {
         while (index < arguments.size) {
             val item = arguments[index++]
             if (item.startsWith("--")) {
-                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources")) { "Unknown option $item" }
+                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--frontend-arguments-file")) { "Unknown option $item" }
                 require(index < arguments.size) { "Missing value for $item" }
                 options[item] = arguments[index++]
             } else sources.add(item)
@@ -29,7 +29,11 @@ fun main(arguments: Array<String>) {
         val classpath = options["--classpath"] ?: options["--classpath-file"]?.let { path ->
             File(path).readLines().filter { it.isNotBlank() }.joinToString(File.pathSeparator)
         } ?: requireNotNull(System.getenv("KOTLIN_ETS_STDLIB")) { "Kotlin stdlib path missing" }
-        val compilerArgs = listOf("-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", classpath) + sources
+        val frontendArgs = options["--frontend-arguments-file"]?.let { File(it).readLines().filter(String::isNotBlank) }.orEmpty()
+        val defaultJvmTarget = if (frontendArgs.any { it == "-jvm-target" || it.startsWith("-jvm-target=") ||
+            it == "-Xjdk-release" || it.startsWith("-Xjdk-release=") }) emptyList() else listOf("-jvm-target", "17")
+        val compilerArgs = defaultJvmTarget + frontendArgs +
+            listOf("-no-stdlib", "-no-reflect", "-classpath", classpath) + sources
         val images = options["--image-resources"]?.let { ImageResources.read(File(it).absoluteFile) } ?: ImageResources()
         val adapters = AdapterModules.load()
         val target = withKotlinFrontend(compilerArgs) { frontend ->

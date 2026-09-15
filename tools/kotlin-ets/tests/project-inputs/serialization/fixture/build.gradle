@@ -1,0 +1,19 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.1.20'
+    id 'org.jetbrains.kotlin.plugin.serialization' version '2.1.20'
+}
+repositories { mavenCentral() }
+dependencies { implementation 'org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1' }
+kotlin { jvmToolchain(17) }
+tasks.named('compileKotlin') {
+    compilerOptions {
+        freeCompilerArgs.add('-opt-in=kotlinx.serialization.InternalSerializationApi')
+        freeCompilerArgs.add('-P')
+        freeCompilerArgs.add('plugin:org.jetbrains.kotlinx.serialization:disableIntrinsic=true')
+    }
+    doFirst {
+        if (providers.gradleProperty('kotlinEtsInputsOutput').isPresent()) {
+            throw new GradleException('SELECTED_COMPILE_MUST_NOT_RUN_DURING_COLLECTION')
+        }
+    }
+}

@@ -48,7 +48,10 @@ diagnosis. Output ETS must not already exist, including user-owned files.
 
 The run directory contains:
 
-- `inputs.json`: source and classpath paths with Gradle project/task provenance.
+- `inputs.json`: source/classpath paths, compiler version and the selected task's
+  serialized compiler arguments (including plugin paths/options), with provenance.
+- `compiler-environment.json`: forwarded arguments and every intentional exclusion
+  when conversion is requested; `frontend-arguments.txt` is its internal launcher input.
 - `sources.txt`, `classpath.txt`: the exact lists passed to the backend.
 - `gradle.command.json`, `gradle.stdout.log`, `gradle.stderr.log`.
 - `compiler.command.json`, `compiler.stdout.log`, `compiler.stderr.log` when run.
@@ -79,20 +82,60 @@ compilations. All source inputs of the selected task are passed to the frontend;
 Other declarations in that module may still expose unsupported backend features.
 Dependencies on classpath are available for resolution, not automatically copied
 or fully rewritten into ETS. Source ownership, binary-body coverage and framework
-support remain the backend's existing bounded contracts. Custom Kotlin compiler
-plugin behavior and all Gradle compiler options are not automatically reproduced.
+support remain the backend's existing bounded contracts.
+
+### Compiler plugins (bounded to Kotlin 2.1.20)
+
+Project mode now captures `serializedCompilerArguments` from the real task. It
+loads the captured serialization compiler plugin and forwards its `-P` options
+through the official configuration/FIR/FIR2IR phases. There is no custom plugin
+execution engine. Ordinary language/API version, opt-ins, JVM target/module name,
+JDK home and the supported semantic flags are forwarded by `compiler-environment.mjs`.
+No extra command option or manually supplied plugin JAR is required in project mode.
+
+The backend still uses its pinned compiler version; a different collected compiler
+version fails before compilation. Unknown plugin artifacts or compiler arguments
+also fail explicitly at `compiler-environment`, rather than silently dropping
+potentially necessary semantics. The initial artifact boundary admits the official
+serialization 2.1.20 embeddable JAR; it is not arbitrary third-party plugin support.
+
+Gradle destination/classpath settings are replaced by the ETS entry's own paths.
+Scripting support is excluded because collection accepts only `.kt`/`.java`, not
+scripts. The known Compose JVM plugin/options are recorded as target-owned
+exclusions: Compose is handled by the existing ArkUI adapter, not rewritten into
+JVM Composer calls before that adapter. This does not claim every Compose compiler
+option has an ArkUI equivalent. All exclusions are visible in the environment report.
+
+Plugin-generated declarations may still hit a source-linked backend limitation.
+In particular, accepting serialization in the frontend does not implement
+`KSerializer`, descriptors, encoders/decoders or generated serializers in ETS.
+Plugins which mutate inputs only inside the selected task's execution actions are
+not replayed: that task is deliberately not executed during collection.
 
 ## Failure handling
 
 Configuration/collection failures return `PROJECT_INPUTS_FAILED` with a stage,
 message and work directory. Inspect the Gradle logs for missing modules/tasks,
 SDK setup, unresolved transitive dependencies or prerequisite task errors.
+`stage: compiler-environment` identifies unsupported plugin/version/argument inputs;
+the unfiltered task arguments remain available in `inputs.json`.
 Compiler exit codes and JSON diagnostics are preserved in the compiler logs and
 stdout. `UNSUPPORTED` identifies a backend capability gap; a Kotlin resolution
 error may instead require project/compiler configuration support.
 Do not report collection or generation as successful application installation.
 
-## Verification (2026-09-14)
+## Plugin verification (2026-09-15)
+
+- `tests/project-inputs/serialization/.work/run-CQjFG5/result.json`: real Gradle
+  serialization compilation, missing-plugin negative and generated descriptor IR
+  passed. Public conversion progresses to a source-linked external KSerializer
+  heritage rejection, not a Kotlin resolution error; no ETS output is emitted.
+- `tests/project-inputs/collector/.work/run-Xdv3HN/complete.json`: real JVM/Android
+  inputs and compiler-environment classification passed with six rejection cases.
+- `tests/project-inputs/.work/public-Pr1fhR/result.json`: plugin-free project
+  generation and function host execution still pass. Policy/launcher tests: 12 passed.
+
+## Earlier verification (2026-09-14)
 
 - `node --test tools/kotlin-ets/tests/project-inputs/launcher.test.mjs`: seven
   parameter/path/manifest/log/no-overwrite checks passed. The Gradle failure-log

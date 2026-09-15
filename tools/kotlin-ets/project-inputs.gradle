@@ -60,7 +60,9 @@ gradle.projectsEvaluated {
             }
             def classpath = checked(libraries, 'classpath')
             def manifest = [schemaVersion: 1, project: root.projectDir.absolutePath,
-                module: project.path, task: compile.path, sources: sources, classpath: classpath]
+                module: project.path, task: compile.path, sources: sources, classpath: classpath,
+                compilerVersion: compile.class.classLoader.loadClass('org.jetbrains.kotlin.config.KotlinCompilerVersion').getField('VERSION').get(null),
+                compilerArguments: compile.serializedCompilerArguments]
             Files.createDirectories(output.toPath().parent)
             try {
                 Files.write(output.toPath(), (JsonOutput.prettyPrint(JsonOutput.toJson(manifest)) + '\n').getBytes('UTF-8'),

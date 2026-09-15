@@ -3,6 +3,7 @@ import { closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, rea
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compilerEnvironment } from './compiler-environment.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const help = `Kotlin to ETS: Gradle project input
@@ -120,9 +121,15 @@ export function main(args) {
       process.stdout.write(JSON.stringify({ ok: true, collectedOnly: true, inputs: manifest, sourceCount: inputs.sources.length, classpathCount: inputs.classpath.length }) + '\n');
       return 0;
     }
+    stage = 'compiler-environment';
+    const environment = compilerEnvironment(inputs);
+    const frontendArguments = join(workDir, 'frontend-arguments.txt');
+    writeFileSync(frontendArguments, environment.arguments.join('\n') + '\n', { flag: 'wx' });
+    writeFileSync(join(workDir, 'compiler-environment.json'), JSON.stringify(environment, null, 2), { flag: 'wx' });
     stage = 'compiler';
     const compilerArgs = [join(root, 'kotlin-ets'), '--mode', options.mode, options.outputFlag, options.output,
-      '--classpath-file', classpath, '--sources-file', sources, ...(options.entry ? ['--entry', options.entry] : []),
+      '--classpath-file', classpath, '--sources-file', sources, '--frontend-arguments-file', frontendArguments,
+      ...(options.entry ? ['--entry', options.entry] : []),
       ...(options.imageResources ? ['--image-resources', options.imageResources] : [])];
     const result = runLogged('bash', compilerArgs, options.project, workDir, stage);
     process.stdout.write(readFileSync(join(workDir, 'compiler.stdout.log')));

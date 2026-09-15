@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compilerEnvironment } from '../../../compiler-environment.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../..');
@@ -38,6 +39,9 @@ function run(label, directory, module, task, extra = [], failure) {
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const data = JSON.parse(readFileSync(output));
   assert.equal(data.schemaVersion, 1);
+  assert.equal(data.compilerVersion, '2.1.20');
+  assert.ok(Array.isArray(data.compilerArguments));
+  compilerEnvironment(data);
   assert.equal(data.project, directory);
   assert.equal(data.module, module);
   assert.equal(data.task, `${module === ':' ? '' : module}:${task}`);
