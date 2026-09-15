@@ -128,3 +128,12 @@ unsupported qualifiers must diagnose the referenced resource, not become blank.
 Verify unchanged generated ETS plus emitted resources with the SDK/native host,
 then replay Banking with its compiled module resource inputs. This increment
 does not infer Gradle overlays by scanning arbitrary source directories.
+
+Twelfth requirement: ordinary Dp and sp TextUnit construction/value reads use the
+shared CallRule contract, including source methods, immutable locals and parameters.
+UI dimension consumers use that same typed lowering instead of recognizing only
+inline getter syntax. Match AndroidX Float precision for Int/Double constructors,
+preserve argument evaluation through existing value bridges, and emit native
+numeric vp/fp values without invented density contexts. Em, Unspecified, special
+density operations and unsupported unit arithmetic remain explicit. Verify scalar
+behavior and SDK output, then replay the unchanged historical page.

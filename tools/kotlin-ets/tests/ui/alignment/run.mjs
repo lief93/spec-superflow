@@ -45,7 +45,7 @@ for (const entry of ['ColumnOrder', 'RowOrder', 'BoxOrder']) {
   assert.match(compile(entry, 'Order.kt', 2), /UI argument evaluation order/);
 }
 const bound = compile('BoundOrder', 'Order.kt');
-assert.match(bound, /\.alignItems\(alignment\)\.width\(width\)/);
+assert.match(bound, /\.alignItems\(alignment\)\.width\(Math\.fround\(width\)\)/);
 assert.equal((bound.match(/nextWidth\(\)/g) ?? []).length, 2, 'declaration plus one invocation');
 assert.equal((bound.match(/afterWidth\(\)/g) ?? []).length, 2, 'declaration plus one invocation');
 console.log('PASS typed alignment methods, parameter/branch flow and explicit custom-alignment rejection');

@@ -262,8 +262,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     scope.aliases[statement.symbol] = initial
                     return@forEachIndexed
                 }
-                val platformValue = initial.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() in
-                    setOf("androidx.compose.ui.unit.Dp", "androidx.compose.ui.unit.TextUnit", "androidx.compose.ui.Modifier")
+                val platformValue = initial.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() == "androidx.compose.ui.Modifier"
                 if (initial is IrFunctionExpression ||
                     (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE && platformValue)) {
                     scope.aliases[statement.symbol] = initial
@@ -578,12 +577,18 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private fun checkArguments(call: IrCall, supported: Set<String>) = target.checkArguments(call, supported)
 
     private fun dimension(expression: IrExpression, scope: Scope, unit: String): EtsExpression {
-        val resolved = dereference(expression, scope) as? IrCall
-            ?: diagnostics.unsupported(expression, "Expected resolved $unit dimension")
-        val property = resolved.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
-        if (property != "androidx.compose.ui.unit.$unit") diagnostics.unsupported(expression, "Unsupported $unit dimension expression")
-        val receiver = resolved.extensionReceiver ?: diagnostics.unsupported(resolved, "Dimension has no numeric receiver")
-        return expression(receiver, scope)
+        val expected = if (unit == "dp") "androidx.compose.ui.unit.Dp" else "androidx.compose.ui.unit.TextUnit"
+        if (expression.type.classOrNull?.owner?.let(::symbolName) != expected)
+            diagnostics.unsupported(expression, "Expected resolved $unit dimension")
+        return language.expression(expression, scope)
+    }
+
+    private fun stableDimension(value: IrExpression, emitted: EtsExpression, scope: Scope): Boolean {
+        if (emitted is EtsLiteral || stableRead(value, scope)) return true
+        val getter = dereference(value, scope) as? IrCall ?: return false
+        val property = getter.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+        return property in setOf("androidx.compose.ui.unit.dp", "androidx.compose.ui.unit.sp") &&
+            getter.extensionReceiver?.let { stableRead(it, scope) } == true
     }
 
     private fun colorValue(expression: IrExpression, scope: Scope): EtsExpression {
@@ -657,8 +662,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                             val value = argument(call, "size") ?: argument(call, name)
                                 ?: diagnostics.unsupported(call, "Missing size $name")
                             val emitted = dimension(value, scope, "dp")
-                            val scalar = (dereference(value, scope) as? IrCall)?.extensionReceiver
-                            if (scalar == null || !stableRead(scalar, scope)) diagnostics.unsupported(value,
+                            if (!stableDimension(value, emitted, scope)) diagnostics.unsupported(value,
                                 "size currently requires stable dimensions to preserve evaluation count")
                             if (name == "width") {
                                 if (!nextWidth) attributes[name] = emitted
@@ -677,8 +681,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         val constrained = if (name == "width") nextWidth else nextHeight
                         if (!constrained) attributes[name] = emitted
                         else {
-                            val scalar = (dereference(value, scope) as IrCall).extensionReceiver!!
-                            if (!stableRead(scalar, scope)) diagnostics.unsupported(value,
+                            if (!stableDimension(value, emitted, scope)) diagnostics.unsupported(value,
                                 "A size already fixed by an outer modifier requires a stable scalar argument")
                         }
                         if (name == "width") nextWidth = true else nextHeight = true
@@ -701,8 +704,16 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         checkArguments(call, setOf("all", "horizontal", "vertical", "start", "top", "end", "bottom"))
                         fun edge(name: String) = argument(call, name)?.let { dimension(it, scope, "dp") } ?: literal(0, call)
                         attributes["padding"] = if (argument(call, "all") != null) edge("all")
-                        else if (call.symbol.owner.valueParameters.any { it.name.asString() == "horizontal" })
-                            record("Padding", linkedMapOf("left" to edge("horizontal"), "right" to edge("horizontal"), "top" to edge("vertical"), "bottom" to edge("vertical")), call)
+                        else if (call.symbol.owner.valueParameters.any { it.name.asString() == "horizontal" }) {
+                            val horizontal = edge("horizontal")
+                            val vertical = edge("vertical")
+                            val stable = listOf("horizontal" to horizontal, "vertical" to vertical).all { (name, emitted) ->
+                                argument(call, name)?.let { stableDimension(it, emitted, scope) } != false
+                            }
+                            if (stable) record("Padding", linkedMapOf("left" to horizontal, "right" to horizontal,
+                                "top" to vertical, "bottom" to vertical), call)
+                            else symmetricPadding(horizontal, vertical, language.source(call))
+                        }
                         else record("Padding", linkedMapOf("left" to edge("start"), "right" to edge("end"), "top" to edge("top"), "bottom" to edge("bottom")), call)
                     }
                     "androidx.compose.foundation.background" -> {
