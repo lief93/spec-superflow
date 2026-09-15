@@ -162,18 +162,22 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             }
         }
         is IrGetField -> {
-            if (sourceFile(expression.symbol.owner) == null) diagnostics.unsupported(expression, "Unsupported external field")
-            val property = expression.symbol.owner.correspondingPropertySymbol?.owner
-            if (property?.parent is IrFile) {
-                readTopLevelProperty(property, source(expression), this)
+            if (sourceFile(expression.symbol.owner) == null) {
+                adaptField(expression, this, scope)
+                    ?: diagnostics.unsupported(expression, "Unsupported external field: ${symbolName(expression.symbol.owner)}")
             } else {
-                val captured = when {
-                    hasCaptureOrigin(expression.symbol.owner) -> capturedFieldSymbol(expression.symbol.owner)
-                    expression.symbol.owner.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS -> outerFieldSymbol(expression.symbol.owner)
-                    else -> null
+                val property = expression.symbol.owner.correspondingPropertySymbol?.owner
+                if (property?.parent is IrFile) {
+                    readTopLevelProperty(property, source(expression), this)
+                } else {
+                    val captured = when {
+                        hasCaptureOrigin(expression.symbol.owner) -> capturedFieldSymbol(expression.symbol.owner)
+                        expression.symbol.owner.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS -> outerFieldSymbol(expression.symbol.owner)
+                        else -> null
+                    }
+                    EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
+                        captured?.name ?: fieldName(expression.symbol.owner), type(expression.type), source(expression), captured?.id)
                 }
-                EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
-                    captured?.name ?: fieldName(expression.symbol.owner), type(expression.type), source(expression), captured?.id)
             }
         }
         is IrSetField -> {

@@ -18,6 +18,18 @@ ASCII keys and values compatible with Java Properties:
 example.R.drawable.banner = img_<sha256_of_complete_symbol>
 ```
 
+When a resource ID crosses an ordinary `Int` parameter, also supply the selected
+Android build's final `R.txt`, for example with `--symbols /absolute/R.txt`.
+The tool writes `source-resource-ids.properties` beside the mapping. These are
+actual Android IDs, not hashes or invented target IDs. Zero/unresolved IDs,
+missing selected symbols and duplicate numeric IDs are rejected. The backend
+keeps method parameter types/numbers and emits a typed `painterResource` lookup;
+an unknown runtime ID fails explicitly.
+
+Use `--include banner,logo` to prepare only an explicitly selected asset set.
+Unselected assets are not converted. Selected missing assets and ambiguous
+variants still fail. Omitting `--include` retains the complete drawable scan.
+
 The actual value is `img_` plus the complete 64-character lowercase SHA-256 of
 `example.R.drawable.banner`, not the placeholder above. File extensions are not
 part of the mapped value. Namespace and source symbol participate in naming;
@@ -74,10 +86,14 @@ success. Existing output, including an empty directory or symlink, is never
 reused or overwritten.
 
 Pass the resulting properties file to the backend's `--image-resources` option.
-**The tool does not automatically copy media into the target project.** Copy the
-files from `output/media/` to the target module's
+The backend publishes consumed media under `<output>.resources/base/media/`
+after successful target validation. Dynamic resource-ID lookup includes every
+entry in its supplied ID map, because any may be passed at runtime. Direct
+symbol calls include only their used images.
+**The tool does not automatically modify the target project.** Copy the emitted
+media files to the target module's
 `src/main/resources/base/media/` (typically `entry/src/main/resources/base/media/`),
-preserving exact filenames. The properties file stays adjacent to its original
+preserving exact filenames. The properties and optional ID map stay adjacent to the original
 `media/` directory for the backend reader's existence validation.
 
 ## Focused Evidence

@@ -6,6 +6,7 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetObjectValue
+import org.jetbrains.kotlin.ir.expressions.IrGetField
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
 
@@ -14,6 +15,7 @@ interface AdapterModule {
     val id: String
     val sourceCalls: Set<String>
     val sourceTypes: Set<String> get() = emptySet()
+    val sourceFields: Set<String> get() = emptySet()
     val targetCalls: List<AdapterTargetCall> get() = emptyList()
     val imports: List<EtsImport> get() = emptyList()
     fun create(target: AdapterTargetApi, ui: AdapterUiServices?): CallRule
@@ -51,11 +53,12 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
         val ids = mutableSetOf<String>()
         val calls = mutableMapOf<String, String>()
         val types = mutableMapOf<String, String>()
+        val fields = mutableMapOf<String, String>()
         val targets = linkedMapOf<String, AdapterTargetCall>()
         val bindings = mutableMapOf<String, EtsImport>()
         for (module in ordered) {
             require(module.id.isNotBlank() && ids.add(module.id)) { "Duplicate or blank adapter module ID: ${module.id}" }
-            require(module.sourceCalls.isNotEmpty() || module.sourceTypes.isNotEmpty()) { "Adapter module ${module.id} claims no source API" }
+            require(module.sourceCalls.isNotEmpty() || module.sourceTypes.isNotEmpty() || module.sourceFields.isNotEmpty()) { "Adapter module ${module.id} claims no source API" }
             fun claim(values: Set<String>, owners: MutableMap<String, String>, kind: String) {
                 values.sorted().forEach { value ->
                     require(value.isNotBlank()) { "Blank $kind claim in adapter ${module.id}" }
@@ -65,6 +68,7 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
             }
             claim(module.sourceCalls, calls, "source call")
             claim(module.sourceTypes, types, "source type")
+            claim(module.sourceFields, fields, "source field")
             module.targetCalls.forEach { declaration ->
                 require(declaration.id.isNotBlank() && declaration.name.isNotBlank()) { "Blank target API in adapter ${module.id}" }
                 require(declaration.signature.typeParameters.isEmpty()) { "Adapter target API must have an instantiated signature: ${declaration.id}" }
@@ -108,6 +112,10 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
             override fun lowerObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? =
                 if (ui == null && symbolName(value.symbol.owner) in module.sourceTypes)
                     track(delegate.lowerObject(value, language, scope)) else null
+
+            override fun lowerField(value: IrGetField, language: Language, scope: Scope): EtsExpression? =
+                if (ui == null && symbolName(value.symbol.owner) in module.sourceFields)
+                    track(delegate.lowerField(value, language, scope)) else null
 
             override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
                 if (ui == null && claimed(call)) track(delegate.lowerStatement(call, language, scope)) else null

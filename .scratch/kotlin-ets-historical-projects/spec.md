@@ -200,3 +200,13 @@ build snapshots across ordinary methods. Do not infer arbitrary Context values,
 drop unknown request options, or claim that a request descriptor alone implements
 loading. AsyncImage consumption is the next explicit requirement. Validate
 generated values against the official Coil contract, SDK output, and replay.
+
+Nineteenth requirement: support typed external field reads through the shared
+adapter/SPI contract, without accepting void or changing ordinary source fields.
+For image resources, preserve actual Android Int IDs from the selected build's
+R.txt across ordinary parameters and resolve painterResource through a typed
+target lookup. Never derive IDs from spelling or hashes. Extend the existing
+asset tool with explicit symbol metadata and optional resource selection, emit
+referenced media beside ETS, and reject missing/ambiguous mappings. Validate
+field adapter types, helper-parameter resource flow, artifact bytes and SDK
+output, then replay Banking; resource writes remain unsupported.

@@ -242,6 +242,18 @@ The executable example and rejection tests are in
 between `IrCall` and `IrConstructorCall`; Kotlin/JS also redirects constructor
 symbols in `SecondaryCtorLowering`, while our adapter provides ETS semantics.
 
+## External field values
+
+Claim resolved field identities in `sourceFields`, for example
+`setOf("example.NativeConstants.size")`, and implement
+`lowerField(value: IrGetField, language: Language, scope: Scope)`.
+Return a typed expression, or `null` to decline. Fields use the same shared
+result checker as calls/constructors; `void` cannot stand in for an `Int` or
+object value. Field-only modules may declare empty `sourceCalls`/`sourceTypes`.
+Duplicate field claims are rejected. An instance-field implementation must
+preserve receiver evaluation. Unclaimed fields and external field writes remain
+explicit diagnostics; ordinary source field reads/writes are unchanged.
+
 ## External singleton values
 
 `CallRule.lowerObject(IrGetObjectValue, Language, Scope)` adapts a resolved

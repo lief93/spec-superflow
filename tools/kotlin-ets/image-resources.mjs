@@ -52,7 +52,7 @@ function bitmap(path, extension) {
   return bytes;
 }
 
-export function materializeImages({ resDir, namespace, out }) {
+export function materializeImages({ resDir, namespace, out, symbolsFile, include }) {
   if (!/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(namespace ?? '')) {
     throw new Error('namespace must be an ASCII Java package name');
   }
@@ -68,12 +68,16 @@ export function materializeImages({ resDir, namespace, out }) {
   if (exists(destination)) throw new Error(`Output already exists: ${destination}`);
   const entries = [];
   const symbols = new Set();
+  const selected = include === undefined ? null : new Set(include);
+  if (selected && (!selected.size || [...selected].some(name => !/^[a-z_][a-z0-9_]*$/.test(name)))) {
+    throw new Error('include requires nonempty drawable resource names');
+  }
   for (const directory of readdirSync(source).sort()) {
     if (directory !== 'drawable' && !directory.startsWith('drawable-')) continue;
     const folder = join(source, directory);
     const folderStat = lstatSync(folder);
     if (folderStat.isSymbolicLink() || !folderStat.isDirectory()) throw new Error(`Drawable directory is not a real directory (symlink unsupported): ${folder}`);
-    const names = readdirSync(folder).sort();
+    const names = readdirSync(folder).sort().filter(name => !selected || selected.has(basename(name, extname(name))));
     if (names.length && !['drawable', 'drawable-nodpi'].includes(directory)) {
       throw new Error(`Unsupported qualified drawable directory: ${folder}; no density/theme/API variant selection is available`);
     }
@@ -95,11 +99,35 @@ export function materializeImages({ resDir, namespace, out }) {
       entries.push({ path, extension, symbol, target });
     }
   }
+  if (selected) for (const name of selected) {
+    if (!symbols.has(`${namespace}.R.drawable.${name}`)) throw new Error(`Selected drawable is missing: ${name}`);
+  }
   if (!entries.length) throw new Error(`No supported drawable resources found: ${source}`);
+  let sourceIds;
+  if (symbolsFile !== undefined) {
+    if (!isAbsolute(symbolsFile)) throw new Error('symbols must be an absolute R.txt path');
+    const ids = new Map(), numbers = new Set();
+    for (const line of readFileSync(symbolsFile, 'utf8').split(/\r?\n/)) {
+      const match = /^int\s+drawable\s+([a-z_][a-z0-9_]*)\s+(0x[0-9a-fA-F]+|\d+)\s*$/.exec(line);
+      if (!match) continue;
+      const symbol = `${namespace}.R.drawable.${match[1]}`;
+      if (!symbols.has(symbol)) continue;
+      const id = Number(match[2]);
+      if (!Number.isInteger(id) || id <= 0 || id > 0x7fffffff || ids.has(symbol) || numbers.has(id)) {
+        throw new Error(`Invalid or ambiguous R.txt image ID: ${symbol}`);
+      }
+      ids.set(symbol, id); numbers.add(id);
+    }
+    sourceIds = entries.map(entry => {
+      if (!ids.has(entry.symbol)) throw new Error(`R.txt has no final image ID: ${entry.symbol}`);
+      return `${entry.symbol} = ${ids.get(entry.symbol)}\n`;
+    }).join('');
+  }
   mkdirSync(dirname(destination), { recursive: true });
   const stage = mkdtempSync(join(dirname(destination), `.${basename(destination)}-stage-`));
   let claimed = false;
   let mediaPublished = false;
+  let idsPublished = false;
   try {
     mkdirSync(join(stage, 'media'));
     for (const entry of entries) {
@@ -109,15 +137,21 @@ export function materializeImages({ resDir, namespace, out }) {
     }
     const properties = entries.map(entry => `${entry.symbol} = ${entry.target}\n`).join('');
     writeFileSync(join(stage, 'image-resources.properties'), properties, { encoding: 'ascii', flag: 'wx' });
+    if (sourceIds !== undefined) writeFileSync(join(stage, 'source-resource-ids.properties'), sourceIds, { encoding: 'ascii', flag: 'wx' });
     // Exclusive mkdir prevents overwriting even an empty existing directory.
     // The complete mapping is the last publication step, never a partial map.
     mkdirSync(destination);
     claimed = true;
     renameSync(join(stage, 'media'), join(destination, 'media'));
     mediaPublished = true;
+    if (sourceIds !== undefined) {
+      renameSync(join(stage, 'source-resource-ids.properties'), join(destination, 'source-resource-ids.properties'));
+      idsPublished = true;
+    }
     renameSync(join(stage, 'image-resources.properties'), join(destination, 'image-resources.properties'));
     return { output: destination, properties: join(destination, 'image-resources.properties'), count: entries.length };
   } catch (error) {
+    if (idsPublished) rmSync(join(destination, 'source-resource-ids.properties'), { force: true });
     if (mediaPublished) rmSync(join(destination, 'media'), { recursive: true, force: true });
     if (claimed) {
       try { rmdirSync(destination); } catch { /* Keep unexpected concurrent files, never delete them. */ }
@@ -132,12 +166,13 @@ function main(args) {
   const values = {};
   for (let i = 0; i < args.length; i += 2) {
     const key = args[i];
-    if (!['--res-dir', '--namespace', '--out'].includes(key) || values[key] !== undefined || !args[i + 1]) {
+    if (!['--res-dir', '--namespace', '--out', '--symbols', '--include'].includes(key) || values[key] !== undefined || !args[i + 1]) {
       throw new Error('Usage: node image-resources.mjs --res-dir /android/res --namespace example --out /fresh/output');
     }
     values[key] = args[i + 1];
   }
-  return materializeImages({ resDir: values['--res-dir'], namespace: values['--namespace'], out: values['--out'] });
+  return materializeImages({ resDir: values['--res-dir'], namespace: values['--namespace'], out: values['--out'],
+    symbolsFile: values['--symbols'], include: values['--include']?.split(',') });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

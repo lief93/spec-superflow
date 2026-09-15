@@ -72,6 +72,8 @@ fun interface CallRule {
 
     fun lowerObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? = null
 
+    fun lowerField(value: IrGetField, language: Language, scope: Scope): EtsExpression? = null
+
     /** Only consulted when the source result is discarded. Empty means a handled no-op. */
     fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? = null
 
@@ -116,6 +118,7 @@ private fun checkedAdapterValue(call: IrExpression, expression: EtsExpression,
         "Invalid call adapter result for ${when (call) {
             is IrFunctionAccessExpression -> symbolName(call.symbol.owner)
             is IrGetObjectValue -> symbolName(call.symbol.owner)
+            is IrGetField -> symbolName(call.symbol.owner)
             else -> call.javaClass.simpleName
         }}: expected $expected, got ${expression.type}",
         language.source(call)))
@@ -132,6 +135,13 @@ fun adaptConstructor(call: IrConstructorCall, language: Language, scope: Scope):
 fun adaptObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? {
     for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
         rule.lowerObject(value, language, scope)?.let { return checkedAdapterValue(value, it, language) }
+    }
+    return null
+}
+
+fun adaptField(value: IrGetField, language: Language, scope: Scope): EtsExpression? {
+    for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
+        rule.lowerField(value, language, scope)?.let { return checkedAdapterValue(value, it, language) }
     }
     return null
 }
