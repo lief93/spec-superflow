@@ -5,7 +5,8 @@ The approved main-path scope and issue queue are now
 The user approved implementation on 2026-09-15. Issues 01 (computed properties),
 01b (stored custom accessors) and 02 (ordinary-language file initialization) passed
 focused acceptance. Issue 03 accepts ordinary source/data-class equality with
-documented supported properties. L3 enums is next; L3-L8 remain queued.
+documented supported properties. Issue 04 accepts basic source enums. L4 nullable
+and runtime type combinations is next; L4-L8 remain queued.
 Issue 02 records the bounded initialization/default/failure contract and actual
 SDK evidence, not full exception lowering, Compose lifecycle or native parity.
 This document retains architecture, round inventory and historical evidence;

@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import vm from 'node:vm';
 import ts from '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/typescript.js';
 
-export function verify(here, packageName, names) {
+export function verify(here, packageName, names, additional = () => []) {
   const root = resolve(here, '../../..');
   mkdirSync(join(here, '.work'), { recursive: true });
   const work = mkdtempSync(join(here, '.work/run-'));
@@ -50,7 +50,8 @@ export function verify(here, packageName, names) {
         vm.runInNewContext(code, { exports, require: name => load(resolve(dirname(path), name + '.ets')) }, { timeout: 2000 });
         return exports;
       }
-      return Array.from(load(entry).observations(), String);
+      const api = load(entry);
+      return Array.from(api.observations(), String).concat(additional(api));
     }
     result.actual = evaluate(flat); result.moduleActual = evaluate(join(modules, 'Application.ets'));
     assert.deepEqual(result.actual, result.expected); assert.deepEqual(result.moduleActual, result.expected);

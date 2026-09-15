@@ -46,6 +46,7 @@ internal object EqualityRules {
                 primitive.isInt() || primitive.isByte() || primitive.isShort() || primitive.isChar()))
                 return same(lower(left), lower(right))
             val klass = left.type.classOrNull?.owner ?: return null
+            if (klass.kind == org.jetbrains.kotlin.descriptors.ClassKind.ENUM_CLASS) return same(lower(left), lower(right))
             if (sourceFile(klass) == null) return null
             val method = klass.declarations.filterIsInstance<IrSimpleFunction>().singleOrNull {
                 it.name.asString() == "equals" && it.valueParameters.size == 1 && it.valueParameters[0].type.isNullableAny()

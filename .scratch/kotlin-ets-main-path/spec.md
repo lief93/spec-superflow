@@ -36,7 +36,8 @@ An already runnable page is not a new deliverable for this round.
 Progress after approval: issues 01, 01b and 02 passed focused acceptance. L1
 computed/stored accessors and the documented ordinary-language nonconstant file
 initialization contract are implemented. L2 ordinary source/data-class equality
-has focused acceptance in issue 03. L3-L8 remain pending; L3 is next.
+has focused acceptance in issue 03. L3 basic enums passed issue 04. L4-L8 remain
+pending; L4 is next.
 Compose lifecycle entry and full exception representation remain distinct work.
 The inventory below records the original baseline,
 not a claim that implemented accessor work is still missing.

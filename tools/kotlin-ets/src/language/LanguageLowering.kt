@@ -116,7 +116,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                 EtsNamedType("__etsIterator", listOf(EtsTypes.NUMBER), "stdlib:__etsIterator", external = true)
             "kotlin.ranges.IntRange", "kotlin.ranges.IntProgression" ->
                 EtsNamedType("__etsIntProgression", symbolId = "stdlib:__etsIntProgression", external = true)
-            "kotlin.Array", "kotlin.collections.List", "kotlin.collections.MutableList",
+            "kotlin.Array", "kotlin.collections.List", "kotlin.collections.MutableList", "kotlin.enums.EnumEntries",
             "kotlin.collections.Collection", "kotlin.collections.Iterable" ->
                 EtsNamedType("Array", listOf(argumentType(arguments.singleOrNull() ?: unsupportedType(type))))
             "kotlin.IntArray", "kotlin.FloatArray", "kotlin.DoubleArray", "kotlin.ByteArray",
@@ -142,6 +142,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
 
     override fun expression(expression: IrExpression, scope: Scope): EtsExpression = withElement(expression) { when (expression) {
         is IrConst -> constant(expression)
+        is IrGetEnumValue -> enumEntryReference(expression.symbol.owner, this, source(expression))
         is IrGetValue -> scope.bindings[expression.symbol]
             ?: scope.aliases[expression.symbol]?.let { expression(it, scope) }
             ?: diagnostics.unsupported(expression, "Unbound value: ${expression.symbol.owner.name}")
@@ -224,9 +225,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             it.name.asString() == "toString" && !it.isFakeOverride && !it.isExternal &&
                 it.valueParameters.isEmpty() && it.extensionReceiverParameter == null && it.body != null && it.returnType.isString()
         }
-        if (owner != null && sourceFile(owner) != null && override != null) {
+        if (owner != null && sourceFile(owner) != null && (override != null || owner.kind == ClassKind.ENUM_CLASS)) {
             val rendered = expression(value, scope)
-            fun invoke(receiver: EtsExpression) = EtsCall(EtsMember(receiver, identifier(override),
+            fun invoke(receiver: EtsExpression) = EtsCall(EtsMember(receiver, override?.let(::identifier) ?: "toString",
                 EtsFunctionType(emptyList(), EtsTypes.STRING), source(value)), emptyList(), EtsTypes.STRING, source(value))
             if (!value.type.isNullable()) return invoke(rendered)
             val temporary = synthetic(freshName("__etsString", scope), rendered.type, value)
@@ -631,10 +632,12 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         val typeParameters = typeParameters(declaration)
         val singleton = declaration.kind == org.jetbrains.kotlin.descriptors.ClassKind.OBJECT
         val isInterface = declaration.kind == ClassKind.INTERFACE
-        if (!singleton && declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE)) {
+        val isEnum = declaration.kind == ClassKind.ENUM_CLASS
+        if (!singleton && !isEnum && declaration.kind !in setOf(ClassKind.CLASS, ClassKind.INTERFACE)) {
             diagnostics.unsupported(declaration, "Only simple source classes are supported")
         }
-        val parents = declaration.superTypes.filterNot { it.classOrNull?.owner?.fqNameWhenAvailable?.asString() == "kotlin.Any" }
+        val parents = declaration.superTypes.filterNot { it.classOrNull?.owner?.fqNameWhenAvailable?.asString() in
+            (if (isEnum) setOf("kotlin.Any", "kotlin.Enum") else setOf("kotlin.Any")) }
         val parentClasses = parents.map { parent ->
             val klass = parent.classOrNull?.owner ?: unsupportedType(parent)
             if (sourceFile(klass) == null) {
@@ -650,7 +653,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         }
         val baseType = parents.singleOrNull { it.classOrNull?.owner == base }?.let { type(it) as EtsNamedType }
         val interfaces = parents.filter { it.classOrNull?.owner?.kind == ClassKind.INTERFACE }.map { type(it) as EtsNamedType }
-        if (hasInheritance(declaration)) validateInheritedMembers(declaration)
+        if (!isEnum && hasInheritance(declaration)) validateInheritedMembers(declaration)
         if (!isInterface && declaration.origin === ETS_BOUND_CONSTRAINT) {
             val signatures = declaration.declarations.flatMap { member -> when (member) {
                 is IrSimpleFunction -> listOf(member)
@@ -691,15 +694,19 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         captures.forEach(::capturedFieldSymbol)
         declaration.declarations.firstOrNull {
             it !is IrConstructor && it !is IrProperty && it !is IrSimpleFunction && it !is IrAnonymousInitializer &&
-                it !in captures && it !== inner?.field
+                it !in captures && it !== inner?.field && !(isEnum && it is IrEnumEntry)
         }?.let {
             if (inner != null) rejectInner(inner, it, "Unsupported inner class declaration")
             diagnostics.unsupported(it, "Unsupported nested source class declaration")
         }
         val scope = Scope()
         declaration.thisReceiver?.let { scope.bindings[it.symbol] = thisReference(declaration, declaration) }
-        val parameterText = parameters(constructor, scope)
-        val fields = declaration.declarations.filterIsInstance<IrProperty>().filterNot { it.isFakeOverride }
+        val enumParameters = if (isEnum) listOf(
+            EtsParameter(synthetic("__etsName", EtsTypes.STRING, declaration)),
+            EtsParameter(synthetic("__etsOrdinal", EtsTypes.NUMBER, declaration))) else emptyList()
+        val parameterText = enumParameters + parameters(constructor, scope)
+        val fields = declaration.declarations.filterIsInstance<IrProperty>().filterNot { it.isFakeOverride ||
+            isEnum && it.getter?.body is IrSyntheticBody }
         for (field in fields) {
             if (field.isDelegated || field.getter?.extensionReceiverParameter != null) {
                 diagnostics.unsupported(field, "Delegated and extension properties are not supported")
@@ -709,6 +716,13 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             }
         }
         val members = mutableListOf<EtsClassMember>()
+        if (isEnum) members.addAll(enumMembers(declaration, this) { entry, index ->
+            if (entry.correspondingClass != null) diagnostics.unsupported(entry, "Per-entry enum subclasses are not supported")
+            val initializer = entry.initializerExpression?.expression as? IrEnumConstructorCall
+                ?: diagnostics.unsupported(entry, "Enum entry requires a resolved constructor")
+            EtsNew(classType(declaration), listOf(EtsLiteral(entry.name.asString(), EtsTypes.STRING, source(entry)),
+                EtsLiteral(index, EtsTypes.NUMBER, source(entry))) + arguments(initializer, Scope()), source(entry))
+        })
         captures.forEach { members.add(EtsField(capturedFieldSymbol(it), visibility = EtsVisibility.PRIVATE)) }
         inner?.let {
             // Flattened descendants still traverse this registered outer link.
@@ -740,6 +754,10 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         val constructorBody = constructor.body as? IrBlockBody
             ?: diagnostics.unsupported(constructor, "Unsupported constructor body")
         val initialization = mutableListOf<EtsStatement>()
+        if (isEnum) enumParameters.zip(listOf("name", "ordinal")).forEach { (parameter, name) ->
+            initialization.add(EtsExpressionStatement(EtsAssignment(EtsMember(thisReference(declaration, declaration),
+                name, parameter.symbol.type, source(declaration)), EtsReference(parameter.symbol), source(declaration))))
+        }
         val capturePrefix = constructorBody.statements.takeWhile {
             it is IrSetField && it.origin === IrStatementOrigin.STATEMENT_ORIGIN_INITIALIZER_OF_FIELD_FOR_CAPTURED_VALUE
         }.filterIsInstance<IrSetField>()
@@ -754,7 +772,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             }
             write
         }
-        if (!isEtsDispatchConstructor(constructor) && (constructorBody.statements.filterIsInstance<IrDelegatingConstructorCall>().size != 1 ||
+        if (!isEnum && !isEtsDispatchConstructor(constructor) && (constructorBody.statements.filterIsInstance<IrDelegatingConstructorCall>().size != 1 ||
             constructorBody.statements.getOrNull(capturePrefix.size + if (outerWrite != null) 1 else 0) !is IrDelegatingConstructorCall)) {
             diagnostics.unsupported(constructor, "A native constructor requires one direct leading delegation")
         }
@@ -770,6 +788,10 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         val previousInitialization = nativeInitialization
         nativeInitialization = NativeInitialization(declaration, base, baseType, captureInitialization)
         try { constructorBody.statements.forEach { child -> when (child) {
+            is IrEnumConstructorCall -> {
+                if (!isEnum || symbolName(child.symbol.owner.parentAsClass) != "kotlin.Enum")
+                    diagnostics.unsupported(child, "Unsupported enum constructor delegation")
+            }
             outerWrite -> {
                 val binding = checkNotNull(inner)
                 val field = outerFieldSymbol(binding.field)
@@ -795,8 +817,9 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             else -> initialization.addAll(statement(child, scope))
         } } } finally { nativeInitialization = previousInitialization }
         members.add(EtsFunction("constructor", parameterText, EtsTypes.VOID, initialization, source(constructor),
-            kind = EtsFunctionKind.CONSTRUCTOR, visibility = if (singleton) EtsVisibility.PRIVATE else memberVisibility(constructor.visibility)))
-        declaration.declarations.filterIsInstance<IrSimpleFunction>().filter { !it.isFakeOverride }.forEach { method ->
+            kind = EtsFunctionKind.CONSTRUCTOR, visibility = if (singleton || isEnum) EtsVisibility.PRIVATE else memberVisibility(constructor.visibility)))
+        declaration.declarations.filterIsInstance<IrSimpleFunction>().filter { !it.isFakeOverride &&
+            !(isEnum && it.body is IrSyntheticBody) }.forEach { method ->
             val implementation = function(method, scope)
             members.add(implementation)
             if (method.correspondingPropertySymbol == null && method.dispatchReceiverParameter != null) {

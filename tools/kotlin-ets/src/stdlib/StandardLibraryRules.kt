@@ -6,16 +6,19 @@ import org.jetbrains.kotlin.ir.IrBuiltIns
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import org.jetbrains.kotlin.ir.util.collectRealOverrides
 import org.jetbrains.kotlin.ir.util.isNullable
 
 class StandardLibraryRules : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
+        EnumRules.lower(call, language, scope)?.let { return it }
         EqualityRules.lower(call, language, scope)?.let { return it }
         IterationRules.lower(call, language, scope)?.let { return it }
         FloatingPointRules.lower(call, language, scope)?.let { return it }
         CollectionEmptinessRules.lower(call, language, scope)?.let { return it }
         LetRule.lower(call, language, scope)?.let { return it }
-        val name = symbolName(call.symbol.owner)
+        val owner = call.symbol.owner
+        val name = symbolName(if (owner.isFakeOverride) owner.collectRealOverrides().singleOrNull() ?: owner else owner)
         val receiver = call.dispatchReceiver ?: call.extensionReceiver
         val args = (0 until call.valueArgumentsCount).map { call.getValueArgument(it) }
         val source = language.source(call)
@@ -55,6 +58,11 @@ class StandardLibraryRules : CallRule {
 
         if (name == "kotlin.internal.ir.illegalArgumentException" && staticSignature("kotlin.Nothing", "kotlin.String")) {
             return external("__etsIllegalArgumentException", listOf(EtsTypes.STRING), EtsTypes.NEVER, listOf(arg(0)))
+        }
+        if (name == "kotlin.internal.ir.noWhenBranchMatchedException" && owner.origin == IrBuiltIns.BUILTIN_OPERATOR &&
+            staticSignature("kotlin.Nothing")) {
+            return EtsCall(EtsLambda(emptyList(), listOf(EtsThrow(namedTargetFailure("NoWhenBranchMatchedException", source), source)),
+                EtsTypes.NEVER, source), emptyList(), EtsTypes.NEVER, source)
         }
         if (name == "kotlin.internal.ProgressionUtilKt.getProgressionLastElement" &&
             staticSignature("kotlin.Int", "kotlin.Int", "kotlin.Int", "kotlin.Int")) {
@@ -253,7 +261,7 @@ private fun IrType?.isExactly(name: String): Boolean =
     this is IrSimpleType && !isNullable() && classOrNull?.owner?.fqNameWhenAvailable?.asString() == name
 
 private fun IrType?.isList(): Boolean =
-    isExactly("kotlin.collections.List") || isExactly("kotlin.collections.MutableList")
+    isExactly("kotlin.collections.List") || isExactly("kotlin.collections.MutableList") || isExactly("kotlin.enums.EnumEntries")
 
 private fun IrType?.listElement(): IrType? =
     if (isList()) ((this as IrSimpleType).arguments.singleOrNull() as? IrTypeProjection)?.type else null
