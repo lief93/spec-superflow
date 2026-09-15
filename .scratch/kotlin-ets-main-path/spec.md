@@ -1,6 +1,6 @@
 # Kotlin to ETS main-path completion
 
-Status: active
+Status: scoped implementation and round acceptance complete; independent review deferred
 Baseline: c77e580 (2026-09-15)
 
 Approved by the user with "实施" on 2026-09-15. Implement one finite issue at a
@@ -40,7 +40,9 @@ has focused acceptance in issue 03. L3 basic enums passed issue 04. L4 nullable
 types passed focused acceptance in issue 05. L5 common Map/Set operations passed
 issue 06. L6 basic exception flow passed issue 07. L7 explicit super passed issue
 08. L8 interface defaults passed focused acceptance in issue 09. All L1-L8
-have focused acceptance; the frozen whole-round regression gate is pending.
+have focused acceptance; all 15 stages of the frozen whole-round regression gate
+passed on compiler revision `69b3e00`. See [acceptance](acceptance.md) for evidence,
+reproduction and the distinction between host execution and SDK compilation.
 Compose lifecycle entry and complete platform exception APIs remain distinct work.
 The inventory below records the original baseline,
 not a claim that implemented accessor work is still missing.
@@ -72,7 +74,7 @@ gap. A passing fixture is not proof of complete feature coverage.
 
 ## Requirements and acceptance cases
 
-The cases below are proposed concrete acceptance details for the confirmed scope.
+The cases below are approved concrete acceptance details for the confirmed scope.
 They define outcomes rather than prescribing a new compiler architecture.
 
 ### L1. Top-level properties and initialization
@@ -109,7 +111,7 @@ They define outcomes rather than prescribing a new compiler architecture.
   needed to use enums as normal program data; unknown lookup must fail correctly.
 - Verify enum values returned from another file and used in equality and Map/Set.
   Per-entry anonymous subclasses and complex generic enum hierarchies are outside
-  the basic form in this draft.
+  the approved basic form.
 
 ### L4. Nullable values and runtime type operations
 
