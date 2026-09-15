@@ -3,6 +3,7 @@ package dev.ets
 import java.util.ServiceLoader
 import java.util.ServiceConfigurationError
 import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
@@ -89,6 +90,10 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
 
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
                 if (ui == null && claimed(call)) track(delegate.lower(call, language, scope)) else null
+
+            override fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? =
+                if (ui == null && symbolName(call.symbol.owner) in module.sourceCalls)
+                    track(delegate.lowerConstructor(call, language, scope)) else null
 
             override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
                 if (ui == null && claimed(call)) track(delegate.lowerStatement(call, language, scope)) else null

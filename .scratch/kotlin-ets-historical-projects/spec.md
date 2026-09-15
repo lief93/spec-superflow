@@ -137,3 +137,14 @@ preserve argument evaluation through existing value bridges, and emit native
 numeric vp/fp values without invented density contexts. Em, Unspecified, special
 density operations and unsupported unit arithmetic remain explicit. Verify scalar
 behavior and SDK output, then replay the unchanged historical page.
+
+Thirteenth requirement: external object construction participates in the same
+typed adapter contract as ordinary calls. Add a constructor entry point to
+CallRule and route it through shared result validation and independent SPI
+modules. A constructor must produce the mapped source value type, never void
+or an unrelated value. Preserve normal source constructors and exception
+construction; do not execute library JVM constructor bodies in the target.
+Validate a separately compiled library, once-only argument effects, rejected
+wrong/void results, and unclaimed constructors. This is a shared prerequisite
+for FontFamily/TextStyle model adaptation, not a claim that those types or the
+historical page are already supported.

@@ -220,3 +220,24 @@ The fresh CLI/JVM command logs total 115.976 seconds, in addition to the one
 targeted RED compilation and focused SDK. Unchanged discovery and main API/control
 proofs were not rerun here. No second implementation correction was needed.
 All children finished and the heavy slot was released before this evidence update.
+# External constructors
+
+`CallRule.lowerConstructor(IrConstructorCall, Language, Scope)` handles object
+construction through the same typed value checker as `lower(IrCall, ...)`.
+Return `null` to decline. Declare the resolved constructor symbol in
+`sourceCalls`, for example `example.Amount.<init>`, and its mapped class in
+`sourceTypes`. Inspect parameter types to distinguish overloads; do not match
+source text. Constructors cannot use the statement/UI hooks to bypass the
+return-type check, including when the caller discards the result.
+
+Use `language.expression(argument(call, "value")!!, scope)` for an explicitly
+required argument and return a typed target expression. Handle defaults and
+argument evaluation order in the adapter contract; do not evaluate a source
+argument twice or assume a library constructor has no effects. Ordinary source
+constructors keep the existing `EtsNew` path when no adapter claims them.
+
+The executable example and rejection tests are in
+`tests/adapter-constructors/module/ConstructorModule.kt` and
+`tests/adapter-constructors/run.mjs`. This follows the official IR distinction
+between `IrCall` and `IrConstructorCall`; Kotlin/JS also redirects constructor
+symbols in `SecondaryCtorLowering`, while our adapter provides ETS semantics.

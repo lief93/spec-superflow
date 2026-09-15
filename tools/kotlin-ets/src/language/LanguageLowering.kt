@@ -155,7 +155,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         is IrCall -> call(expression, scope)
         is IrConstructorCall -> {
             val owner = expression.symbol.owner.parent as IrClass
-            ExceptionRules.constructor(expression, this, scope) ?: run {
+            adaptConstructor(expression, this, scope) ?: ExceptionRules.constructor(expression, this, scope) ?: run {
                 if (sourceFile(owner) == null) diagnostics.unsupported(expression, "Unsupported external constructor: ${symbolName(owner)}")
                 EtsNew(type(expression.type) as? EtsNamedType ?: unsupportedType(expression.type),
                     arguments(expression, scope), source(expression))

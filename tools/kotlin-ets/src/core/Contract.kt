@@ -62,6 +62,9 @@ fun interface CallRule {
     /** A typed value, or null to decline. Never return void for an object-valued call. */
     fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression?
 
+    /** Object construction is value-producing, even when its result is discarded. */
+    fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? = null
+
     /** Only consulted when the source result is discarded. Empty means a handled no-op. */
     fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? = null
 
@@ -80,13 +83,26 @@ sealed interface CallResult {
     data class Ui(val statements: List<EtsStatement>) : CallResult
 }
 
+private fun checkedAdapterValue(call: IrFunctionAccessExpression, expression: EtsExpression,
+    language: Language): EtsExpression {
+    val expected = language.type(call.type)
+    if (!etsAssignable(expression.type, expected)) throw Unsupported(Diagnostic("UNSUPPORTED",
+        "Invalid call adapter result for ${symbolName(call.symbol.owner)}: expected $expected, got ${expression.type}",
+        language.source(call)))
+    return expression
+}
+
+fun adaptConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? {
+    for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
+        rule.lowerConstructor(call, language, scope)?.let { return checkedAdapterValue(call, it, language) }
+    }
+    return null
+}
+
 fun adaptCall(call: IrCall, language: Language, scope: Scope, context: CallContext): CallResult? {
     fun reject(message: String): Nothing = throw Unsupported(Diagnostic("UNSUPPORTED", message, language.source(call)))
     fun checkedValue(expression: EtsExpression): CallResult.Value {
-        val expected = language.type(call.type)
-        if (!etsAssignable(expression.type, expected)) reject(
-            "Invalid call adapter result for ${symbolName(call.symbol.owner)}: expected $expected, got ${expression.type}")
-        return CallResult.Value(expression)
+        return CallResult.Value(checkedAdapterValue(call, expression, language))
     }
     for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
         when (context) {
