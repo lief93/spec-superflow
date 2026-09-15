@@ -11,11 +11,13 @@ internal class ComposeRowRule(
 ) : ComposeControlRule(decorate) {
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         if (symbolName(call.symbol.owner) != "androidx.compose.foundation.layout.Row") return null
-        target.checkArguments(call, setOf("modifier", "content"))
+        target.checkArguments(call, setOf("modifier", "verticalAlignment", "content"))
         val touch = touchTargets(call, scope, target.diagnostics)
         if (touch != null) touchBoxes[touch.box] = touch
         val children = argument(call, "content")?.let { content(it, scope) } ?: emptyList()
-        val attrs = mutableListOf(target.attribute("alignItems", listOf(target.enumValue("VerticalAlign", "Top", call)), call))
+        val alignment = argument(call, "verticalAlignment")?.let { language.expression(it, scope) }
+            ?: target.enumValue("VerticalAlign", "Top", call)
+        val attrs = mutableListOf(target.attribute("alignItems", listOf(alignment), call))
         if (touch != null) {
             val source = language.source(call)
             attrs += target.attribute("responseRegion", listOf(touch.rowRegion(source)), call)
@@ -26,6 +28,6 @@ internal class ComposeRowRule(
             attrs += target.attribute("onChildTouchTest", listOf(EtsLambda(listOf(EtsParameter(items)),
                 listOf(EtsReturn(dispatch, source)), dispatch.type, source)), call)
         }
-        return ComposeElement(target.native("Row", emptyList(), call, children).copy(attributes = attrs))
+        return ComposeElement(target.native("Row", emptyList(), call, children).copy(attributes = attrs), orderedArguments = listOf(alignment))
     }
 }

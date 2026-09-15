@@ -11,8 +11,12 @@ internal class ComposeBoxRule(
 ) : ComposeControlRule(decorate) {
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         if (symbolName(call.symbol.owner) != "androidx.compose.foundation.layout.Box") return null
-        target.checkArguments(call, setOf("modifier", "content"))
+        target.checkArguments(call, setOf("modifier", "contentAlignment", "content"))
         val children = argument(call, "content")?.let { content(it, scope) } ?: emptyList()
-        return ComposeElement(target.native("Stack", listOf(target.stackOptions(call)), call, children), touch = touchBoxes[call])
+        val alignment = argument(call, "contentAlignment")?.let { language.expression(it, scope) }
+            ?: target.enumValue("Alignment", "TopStart", call)
+        val options = target.record("StackOptions", linkedMapOf("alignContent" to alignment), call)
+        return ComposeElement(target.native("Stack", listOf(options), call, children), touch = touchBoxes[call],
+            orderedArguments = listOf(alignment))
     }
 }

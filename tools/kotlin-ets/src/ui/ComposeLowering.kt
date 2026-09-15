@@ -606,6 +606,26 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         }
         collect(expression)
         val owner = expression ?: root
+        fun stableArgument(value: EtsExpression): Boolean = when (value) {
+            is EtsLiteral -> true
+            is EtsReference -> scope.bindings.any { (symbol, binding) ->
+                binding == value && when (val declaration = symbol.owner) {
+                    is IrVariable -> !declaration.isVar
+                    is IrValueParameter -> true
+                    else -> false
+                }
+            }
+            is EtsMember -> (value.receiver as? EtsReference)?.symbol?.id in
+                setOf("arkui:Alignment", "arkui:HorizontalAlign", "arkui:VerticalAlign")
+            is EtsBinary -> stableArgument(value.left) && stableArgument(value.right)
+            is EtsUnary -> stableArgument(value.operand)
+            is EtsConditional -> stableArgument(value.condition) && stableArgument(value.whenTrue) && stableArgument(value.whenFalse)
+            is EtsObject -> value.fields.values.all(::stableArgument)
+            is EtsArray -> value.elements.all(::stableArgument)
+            is EtsLambda -> true
+            else -> false
+        }
+        val requiresArgumentOrder = node.orderedArguments.any { !stableArgument(it) }
         fun layer(index: Int, width: Boolean, height: Boolean): EtsUiElement {
             val attributes = linkedMapOf<String, EtsExpression>()
             if (width) attributes["width"] = literal("100%", owner)
@@ -705,6 +725,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 cursor++
             }
             val attrs = attributes.map { (name, value) -> attribute(name, listOf(value), owner) }.toMutableList()
+            // Native attributes may execute after constructor arguments and child builders.
+            // Do not move an unknown read/call across another unknown modifier expression.
+            if (requiresArgumentOrder && attributes.values.any { !stableArgument(it) })
+                diagnostics.unsupported(owner,
+                    "UI argument evaluation order requires stable modifier values or an immutable alignment binding")
             node.touch?.let { touch ->
                 val origin = operations.take(index).sumOf { touch.padding[it] ?: 0.0 }
                 if (index == 0) {

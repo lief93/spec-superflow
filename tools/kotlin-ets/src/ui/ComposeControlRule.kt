@@ -4,7 +4,8 @@ package dev.ets
 import org.jetbrains.kotlin.ir.expressions.*
 
 internal data class ComposeElement(val element: EtsUiElement,
-    val modifierBoundaries: Set<String> = emptySet(), val touch: TouchTargets? = null)
+    val modifierBoundaries: Set<String> = emptySet(), val touch: TouchTargets? = null,
+    val orderedArguments: List<EtsExpression> = emptyList())
 
 internal abstract class ComposeControlRule(
     private val decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,

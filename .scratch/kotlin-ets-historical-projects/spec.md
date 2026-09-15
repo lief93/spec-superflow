@@ -106,3 +106,14 @@ stack or a fixed preview value. Nested providers must restore the outer context.
 Keep unsupported typography/shapes, system dynamic palettes and out-of-context
 value helpers explicit, not silently skipped. Validate nested and forwarded slots
 with native SDK output, then replay the historical page to its next failure.
+
+Tenth requirement: map resolved Compose Alignment, Alignment.Horizontal and
+Alignment.Vertical values through the shared typed CallRule contract. Preserve
+function/parameter/conditional flow; consume the same values in Box content
+alignment, Column horizontal alignment and Row vertical alignment. Use native
+logical Start/End, not physical Left/Right. Bias/custom alignment and arrangement
+algorithms remain explicit unsupported calls. Verify generated SDK output and
+native child positions, then replay Banking without editing source or output.
+Until UI argument sequencing is generalized, reject combinations of an unknown
+alignment read/call and unstable modifier expressions. Do not reorder their
+effects silently; immutable source bindings and constant modifiers remain valid.
