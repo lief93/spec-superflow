@@ -56,6 +56,11 @@ fun interface CallRule {
     /** Owned target declarations participate in the same validation and module linking as source declarations. */
     fun targetFiles(program: EtsProgram): List<EtsFile> = emptyList()
 
+    fun targetImports(program: EtsProgram): List<EtsImport> = emptyList()
+
+    /** Native type signatures for validation only; these declarations are not printed. */
+    fun targetContracts(program: EtsProgram): List<EtsClass> = emptyList()
+
     /** Platform value representation; the shared call checker still validates every result. */
     fun mapType(type: IrType, language: Language): EtsType? = null
 
@@ -72,8 +77,27 @@ fun interface CallRule {
     fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? = null
 }
 
-fun linkAdapterDeclarations(program: EtsProgram, rules: List<CallRule>): EtsProgram =
-    program.copy(files = program.files + rules.flatMap { it.targetFiles(program) })
+fun linkAdapterDeclarations(program: EtsProgram, rules: List<CallRule>): EtsProgram {
+    val files = program.files.associateByTo(linkedMapOf()) { it.sourcePath }
+    var linked = program
+    while (true) {
+        var changed = false
+        rules.flatMap { it.targetFiles(linked) }.forEach { file ->
+            val previous = files[file.sourcePath]
+            require(previous == null || previous == file) { "Conflicting adapter target file: ${file.sourcePath}" }
+            if (previous == null) { files[file.sourcePath] = file; changed = true }
+        }
+        linked = program.copy(files = files.values.toList())
+        if (!changed) {
+            val contracts = linked.externalClasses.toMutableMap()
+            rules.flatMap { it.targetContracts(linked) }.forEach { declaration ->
+                val previous = contracts.putIfAbsent(declaration.symbol.id, declaration)
+                require(previous == null || previous == declaration) { "Conflicting adapter native type: ${declaration.name}" }
+            }
+            return linked.copy(imports = (linked.imports + rules.flatMap { it.targetImports(linked) }).distinct(), externalClasses = contracts)
+        }
+    }
+}
 
 enum class CallContext { VALUE, STATEMENT, UI }
 

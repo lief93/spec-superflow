@@ -159,3 +159,15 @@ do not register fonts as a side effect of constructing a source descriptor.
 Native registration/selection and TextStyle consumption are the next dependent
 requirement. Validate JVM descriptor parity and SDK value ownership, then replay
 Banking to locate the next failure without changing its Kotlin source.
+
+Fifteenth requirement: consume shared TextStyle values in native Text, retaining
+explicit argument precedence and the distinction between omitted Material style
+and an explicit partial TextStyle. Support the common color/size/weight/style/
+family/tracking/line-height/logical-alignment fields; diagnose other explicit
+fields. Select blocking local font faces using the official weight/style matching
+order and register the selected native font only during Text consumption. Keep
+source method/parameter flow and once-only style evaluation. Target declarations,
+their transitive owned dependencies and imports use the shared typed linker.
+Validate value parity, selection and override behavior, unchanged SDK output and
+native text/font attributes; rerun Banking. MaterialTheme typography providers,
+advanced paragraph attributes and complete font synthesis are separate gaps.

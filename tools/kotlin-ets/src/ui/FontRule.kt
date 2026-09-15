@@ -7,7 +7,8 @@ import org.jetbrains.kotlin.ir.types.*
 
 internal class ComposeFontRule(private val resources: FontResources) : CallRule {
     private val prefix = "androidx.compose.ui.text.font."
-    override fun targetFiles(program: EtsProgram) = fontValueFiles(program)
+    override fun targetFiles(program: EtsProgram) = fontValueFiles(program) + fontSelectionFiles(program)
+    override fun targetImports(program: EtsProgram) = fontSelectionImports(program)
     override fun mapType(type: IrType, language: Language): EtsType? {
         val owner = type.classOrNull?.owner ?: return null
         if (sourceFile(owner) != null) return null

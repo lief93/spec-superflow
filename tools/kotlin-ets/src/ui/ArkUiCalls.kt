@@ -41,6 +41,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "alignItems" -> value.type.takeIf { it in listOf(EtsNamedType("HorizontalAlign"), EtsNamedType("VerticalAlign")) }
             "justifyContent" -> EtsNamedType("FlexAlign")
             "attributeModifier" -> EtsNamedType("__etsMaterialTypography", symbolId = "compose:materialTypography", external = true)
+                .takeIf { value.type == it } ?: textAttributeModifierType
             else -> null
         } ?: diagnostics.unsupported(owner, "Unsupported target attribute signature: $name")
         return call(name, args, owner, listOf(expected))

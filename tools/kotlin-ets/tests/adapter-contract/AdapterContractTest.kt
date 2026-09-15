@@ -45,5 +45,30 @@ fun main() {
     check(modules.rules().size == 2 && created == listOf("a", "b"))
     check(modules.imports.isEmpty())
     check(AdapterModules().rules().isEmpty())
+    val root = EtsFile("Root.kt", emptyList())
+    val first = EtsFile("First.kt", emptyList())
+    val second = EtsFile("Second.kt", emptyList())
+    val native = EtsClass("NativeContract", emptyList(), source, kind = EtsClassKind.INTERFACE)
+    val import = EtsImport("native", "NativeContract")
+    val chain = object : CallRule {
+        override fun lower(call: org.jetbrains.kotlin.ir.expressions.IrCall, language: Language, scope: Scope): EtsExpression? = null
+        override fun targetFiles(program: EtsProgram) =
+            if (first in program.files) listOf(first, second) else listOf(first)
+        override fun targetImports(program: EtsProgram) = if (second in program.files) listOf(import) else emptyList()
+        override fun targetContracts(program: EtsProgram) = if (second in program.files) listOf(native) else emptyList()
+    }
+    val linked = linkAdapterDeclarations(EtsProgram(listOf(root)), listOf(chain, chain))
+    check(linked.files == listOf(root, first, second))
+    check(linked.imports == listOf(import))
+    check(linked.externalClasses.values.toList() == listOf(native))
+    check(linkAdapterDeclarations(linked, listOf(chain)) == linked)
+    val conflicting = object : CallRule by chain {
+        override fun targetFiles(program: EtsProgram) = listOf(first.copy(declarations = listOf(native)))
+    }
+    check(runCatching { linkAdapterDeclarations(linked, listOf(conflicting)) }.exceptionOrNull() is IllegalArgumentException)
+    val conflictingType = object : CallRule by chain {
+        override fun targetContracts(program: EtsProgram) = listOf(native.copy(exported = true))
+    }
+    check(runCatching { linkAdapterDeclarations(linked, listOf(conflictingType)) }.exceptionOrNull() is IllegalArgumentException)
     println("PASS: adapter contract, deterministic providers, conflicts, shared target validation")
 }

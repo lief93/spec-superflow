@@ -81,6 +81,15 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
     fun rules(ui: AdapterUiServices? = null): List<CallRule> = ordered.map { module ->
         val delegate = module.create(target, ui)
         object : CallRule {
+            override fun targetFiles(program: EtsProgram): List<EtsFile> =
+                if (ui == null && module.id in used) delegate.targetFiles(program) else emptyList()
+
+            override fun targetImports(program: EtsProgram): List<EtsImport> =
+                if (ui == null && module.id in used) delegate.targetImports(program) else emptyList()
+
+            override fun targetContracts(program: EtsProgram): List<EtsClass> =
+                if (ui == null && module.id in used) delegate.targetContracts(program) else emptyList()
+
             private fun claimed(call: IrCall) = symbolName(call.symbol.owner) in module.sourceCalls
             private fun <T> track(value: T?): T? = value.also { if (it != null) used.add(module.id) }
 
