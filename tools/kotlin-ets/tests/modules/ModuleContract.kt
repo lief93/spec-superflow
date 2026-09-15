@@ -48,6 +48,16 @@ fun main() {
     check("import { Model } from \"./Model\";" in typed.getValue("Consumer.ets"))
     val duplicate = EtsProgram(listOf(EtsFile("Consumer.kt", listOf(local, local))))
     rejects(duplicate, "Duplicate target declaration identity")
+    val child = EtsClass("Child", listOf(EtsField(EtsSymbol("child:value", "value", EtsTypes.NUMBER, origin("Child.kt")),
+        EtsLiteral(0, EtsTypes.NUMBER, origin("Child.kt")), prop = true)), origin("Child.kt"), exported = true, component = true)
+    val childCall = EtsUiComponent(EtsReference(child.symbol, origin("Consumer.kt")),
+        mapOf("value" to EtsLiteral(7, EtsTypes.NUMBER, origin("Consumer.kt"))))
+    val content = EtsFunction("Content", emptyList(), EtsTypes.VOID, listOf(childCall), origin("Consumer.kt"), builder = true)
+    val components = EtsProgram(listOf(EtsFile("Child.kt", listOf(child)), EtsFile("Consumer.kt", listOf(content))))
+    val componentFiles = emitEtsModules(components, runtime)
+    check("import { Child } from \"./Child\";" in componentFiles.getValue("Consumer.ets"))
+    check("Child({ value: 7 })" in componentFiles.getValue("Consumer.ets"))
+    rejects(components.copy(files = listOf(EtsFile("Child.kt", listOf(child.copy(exported = false))), components.files[1])), "not exported")
     fun fileFailure(paths: List<String>, expectedFile: String, message: String) {
         runtimeCalls = 0
         val result = runCatching { emitEtsModules(EtsProgram(paths.map { EtsFile(it, emptyList()) }), runtime) }.exceptionOrNull()

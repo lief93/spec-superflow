@@ -210,3 +210,12 @@ asset tool with explicit symbol metadata and optional resource selection, emit
 referenced media beside ETS, and reject missing/ambiguous mappings. Validate
 field adapter types, helper-parameter resource flow, artifact bytes and SDK
 output, then replay Banking; resource writes remain unsupported.
+
+Twentieth requirement: represent owned ArkUI component invocations, input props
+and property-change observers in the shared typed target tree. Validate bindings,
+input names/types and observer method signatures before printing; preserve
+cross-file dependency discovery and builder argument substitution. This supplies
+the lifecycle/state contract needed by asynchronous image consumption, without
+adding raw ETS templates or claiming that image loading is implemented. Verify
+positive and rejected target contracts and compile the unmodified generated
+parent/child fixture with the real SDK.

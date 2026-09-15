@@ -67,6 +67,7 @@ internal class BuilderOwnership(functions: List<EtsFunction>, rootId: String, pr
         is EtsLoop -> value.copy(condition = expression(value.condition), body = value.body.map(::statement))
         is EtsJump -> value
         is EtsUiElement -> value.copy(call = expression(value.call) as EtsCall, children = value.children?.map(::statement), attributes = value.attributes.map { expression(it) as EtsCall })
+        is EtsUiComponent -> value.copy(properties = value.properties.mapValues { expression(it.value) })
         is EtsUiForEach -> value.copy(items = expression(value.items), item = parameter(value.item), body = value.body.map(::statement))
         is EtsFunction -> rewrite(value)
     }

@@ -30,6 +30,7 @@ fun main() {
     checkClassIdentityContract()
     checkStrictBindingContract()
     checkGlobalBuilderContract()
+    checkComponentPropsContract()
     checkGlobalVariableContract()
     checkTryContract()
     check(sum.source == source)

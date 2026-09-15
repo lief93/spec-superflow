@@ -248,7 +248,7 @@ class EtsValidator {
                 if (declaration.kind == EtsClassKind.INTERFACE) when (value) {
                     is EtsFunction -> if (!value.abstract || value.kind != EtsFunctionKind.METHOD || value.visibility != EtsVisibility.PUBLIC)
                         reject(value, "Only abstract method signatures are supported in interfaces")
-                    is EtsField -> if (value.initializer != null || value.visibility != EtsVisibility.PUBLIC || value.static || value.state)
+                    is EtsField -> if (value.initializer != null || value.visibility != EtsVisibility.PUBLIC || value.static || value.state || value.prop || value.watch != null)
                         reject(value, "Interface property must be a public instance signature")
                 }
                 if (value is EtsFunction) {
@@ -457,6 +457,20 @@ class EtsValidator {
                         if (!memberNames.add(key)) reject(member, "Conflicting target member: $key")
                         if (member is EtsFunction && (member.builder || member.build) && !declaration.component) reject(member, "UI method requires a target component")
                         if (member is EtsField && member.state && (!declaration.component || member.static)) reject(member, "State field requires a component instance")
+                        if (member is EtsField) {
+                            if (member.prop && (!declaration.component || member.static || member.readonly || member.state ||
+                                member.visibility != EtsVisibility.PUBLIC || member.initializer == null))
+                                reject(member, "Prop requires a public initialized component instance field")
+                            member.watch?.let { watcher ->
+                                name(watcher, member.source)
+                                if (!member.state && !member.prop) reject(member, "Watch requires an observed field")
+                                val method = declaration.members.filterIsInstance<EtsFunction>().singleOrNull { it.name == watcher }
+                                if (method == null || method.kind != EtsFunctionKind.METHOD || method.static || method.builder ||
+                                    method.build || method.abstract || method.typeParameters.isNotEmpty() || method.returnType != EtsTypes.VOID ||
+                                    method.parameters.size > 1 || method.parameters.any { it.symbol.type != EtsTypes.STRING || it.defaultValue != null })
+                                    reject(member, "Watch requires a declared void method with zero parameters or one string parameter")
+                            }
+                        }
                     }
                     withTypeParameters(declaration.typeParameters, declaration.source) { }
                     varianceContract(declaration)
@@ -636,7 +650,7 @@ class EtsValidator {
         val scope = outer.toMutableMap()
         val names = occupiedNames.toMutableSet()
         values.forEach { value ->
-            if (ui && value !is EtsUiElement && value !is EtsUiForEach && value !is EtsIf) reject(value, "Ordinary statement cannot occur directly in target UI DSL")
+            if (ui && value !is EtsUiElement && value !is EtsUiComponent && value !is EtsUiForEach && value !is EtsIf) reject(value, "Ordinary statement cannot occur directly in target UI DSL")
             when (value) {
             is EtsVariable -> {
                 valueBindingName(value.symbol.name, value.source); type(value.symbol.type, value.source)
@@ -689,6 +703,18 @@ class EtsValidator {
                     if (attribute.callee !is EtsReference) reject(attribute, "UI attribute requires a declared attribute symbol")
                     expression(attribute, scope); expect(attribute, EtsTypes.VOID)
                     if (attribute.arguments.size != (attribute.callee.type as EtsFunctionType).parameters.size) reject(attribute, "Missing UI attribute argument")
+                }
+            }
+            is EtsUiComponent -> {
+                if (!ui) reject(value, "Component invocation requires a builder or component build body")
+                val component = classes[value.component.symbol.id]
+                if (component == null || component.symbol != value.component.symbol || !component.component ||
+                    component.entry || component.typeParameters.isNotEmpty()) reject(value, "UI component requires a declared non-entry component")
+                expression(value.component, scope)
+                val properties = component.members.filterIsInstance<EtsField>().filter { it.prop }.associateBy { it.symbol.name }
+                value.properties.forEach { (name, argument) ->
+                    val property = properties[name] ?: reject(value, "Unknown component prop: $name")
+                    expression(argument, scope); expect(argument, property.symbol.type)
                 }
             }
             is EtsUiForEach -> {

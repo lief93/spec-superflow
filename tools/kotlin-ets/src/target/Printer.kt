@@ -129,6 +129,9 @@ class EtsPrinter {
             else if (children.isEmpty()) listOf("$call {}$attrs")
             else listOf("$call {") + indent(statements(children)) + "}$attrs"
         }
+        is EtsUiComponent -> listOf(value.properties.entries.joinToString(", ", "${expression(value.component)}({ ", " })") {
+            "${it.key}: ${expression(it.value)}"
+        })
         is EtsUiForEach -> listOf("ForEach(${expression(value.items)}, (${parameters(listOf(value.item))}) => {") +
             indent(statements(value.body)) + "})"
     } }
@@ -162,7 +165,8 @@ class EtsPrinter {
             is EtsFunction -> if (value.kind == EtsClassKind.INTERFACE)
                 listOf("${member.name}${typeParameters(member.typeParameters)}(${parameters(member.parameters)}): ${type(member.returnType)};")
                 else function(member)
-            is EtsField -> listOf((if (member.state) "@State " else "") + visibility(member.visibility) + (if (member.static) "static " else "") +
+            is EtsField -> listOf((if (member.state) "@State " else if (member.prop) "@Prop " else "") +
+                (member.watch?.let { "@Watch(\"$it\") " } ?: "") + visibility(member.visibility) + (if (member.static) "static " else "") +
                 (if (member.readonly) "readonly " else "") +
                 "${member.symbol.name}: ${type(member.symbol.type)}" +
                 (member.initializer?.let { " = ${expression(it)}" } ?: "") + ";")
