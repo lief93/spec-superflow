@@ -70,7 +70,9 @@ class EtsPrinter {
             (if (receiver is EtsLiteral && receiver.value is Number)
                 "(${expression(receiver)})" else expression(receiver, 17)) + ".${value.name}"
         }
-        is EtsCall -> expression(value.callee, 17) +
+        // es2abc misparses annotated IIFEs after an `as` inside a conditional.
+        // Their result remains typed in the target tree and inferred from the body.
+        is EtsCall -> (if (value.callee is EtsLambda) "(${lambda(value.callee, false)})" else expression(value.callee, 17)) +
             (if (value.typeArguments.isEmpty()) "" else value.typeArguments.joinToString(", ", "<", ">") { type(it) }) +
             value.arguments.joinToString(", ", "(", ")") { expression(it) }
         is EtsNew -> "new ${type(value.classType)}" + value.arguments.joinToString(", ", "(", ")") { expression(it) }
@@ -81,9 +83,12 @@ class EtsPrinter {
         is EtsCast -> "${expression(value.value, 10)} as ${type(value.type)}"
         is EtsArray -> value.elements.joinToString(", ", "[", "] as ${type(value.type)}") { expression(it) }
         is EtsObject -> value.fields.entries.joinToString(", ", "{ ", " }") { (name, field) -> "$name: ${expression(field)}" }
-        is EtsLambda -> "(${parameters(value.parameters)}): ${type(value.returnType)} => {\n" +
-            indent(statements(value.body)).joinToString("\n") + "\n}"
+        is EtsLambda -> lambda(value, true)
     }
+
+    private fun lambda(value: EtsLambda, annotated: Boolean): String =
+        "(${parameters(value.parameters)})" + (if (annotated) ": ${type(value.returnType)}" else "") + " => {\n" +
+            indent(statements(value.body)).joinToString("\n") + "\n}"
 
     private fun parameters(values: List<EtsParameter>): String = values.joinToString(", ") {
         "${it.symbol.name}: ${type(it.symbol.type)}" + (it.defaultValue?.let { default -> " = ${expression(default)}" } ?: "")

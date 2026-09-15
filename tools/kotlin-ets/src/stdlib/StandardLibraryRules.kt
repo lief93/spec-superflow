@@ -64,6 +64,17 @@ class StandardLibraryRules : CallRule {
             return EtsCall(EtsLambda(emptyList(), listOf(EtsThrow(namedTargetFailure("NoWhenBranchMatchedException", source), source)),
                 EtsTypes.NEVER, source), emptyList(), EtsTypes.NEVER, source)
         }
+        if (name == "kotlin.internal.ir.CHECK_NOT_NULL" && owner.origin == IrBuiltIns.BUILTIN_OPERATOR &&
+            receiver == null && args.size == 1 && args[0] != null) {
+            val value = arg(0)
+            val result = language.type(call.type)
+            val parameter = EtsSymbol("not-null:${source.file}:${source.start}", "value", value.type, source)
+            val reference = EtsReference(parameter)
+            return EtsCall(EtsLambda(listOf(EtsParameter(parameter)), listOf(
+                EtsIf(listOf(EtsBranch(binary("===", reference, EtsLiteral(null, EtsTypes.NULL, source), EtsTypes.BOOLEAN),
+                    listOf(EtsThrow(namedTargetFailure("NullPointerException", source), source)))), source),
+                EtsReturn(EtsCast(reference, result, source), source)), result, source), listOf(value), result, source)
+        }
         if (name == "kotlin.internal.ProgressionUtilKt.getProgressionLastElement" &&
             staticSignature("kotlin.Int", "kotlin.Int", "kotlin.Int", "kotlin.Int")) {
             return external("__etsProgressionLastElement", List(3) { EtsTypes.NUMBER }, EtsTypes.NUMBER,

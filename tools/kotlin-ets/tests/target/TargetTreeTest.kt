@@ -102,5 +102,7 @@ private fun checkPrinterPrecedence() {
     expect(EtsAssignment(a, EtsAssignment(b, c, source), source), "a = b = c")
     expect(EtsUnary("-", EtsUnary("-", a, number, source), number, source), "- - a")
     val lambda = EtsLambda(emptyList(), listOf(EtsReturn(a, source)), number, source)
-    expect(EtsCall(lambda, emptyList(), number, source), "((): number => {\n  return a;\n})()")
+    expect(EtsCall(lambda, emptyList(), number, source), "(() => {\n  return a;\n})()")
+    expect(EtsConditional(a, EtsCast(b, number, source), EtsCall(lambda, emptyList(), number, source), number, source),
+        "a ? b as number : (() => {\n  return a;\n})()")
 }

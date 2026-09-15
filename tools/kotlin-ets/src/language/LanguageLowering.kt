@@ -480,10 +480,12 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
     private fun discard(value: EtsExpression, element: IrElement): EtsExpression =
         etsDiscard(value, source(element))
 
-    private fun failure(message: String, element: IrElement): EtsThrow = EtsThrow(
-        EtsNew(EtsNamedType("Error"), listOf(EtsLiteral(message, EtsTypes.STRING, source(element))), source(element)), source(element))
+    private fun failure(message: String, element: IrElement): EtsThrow =
+        EtsThrow(namedTargetFailure(message, source(element)), source(element))
 
     private fun typeOperator(value: IrTypeOperatorCall, scope: Scope): EtsExpression {
+        if (value.argument.type.makeNotNull().isChar() && value.typeOperand.makeNotNull().isAny())
+            diagnostics.unsupported(value, "Char boxing to Any requires a distinct target representation; String storage cannot preserve runtime type identity")
         if (value.operator == IrTypeOperator.IMPLICIT_COERCION_TO_UNIT && value.argument is IrCall) {
             adaptedStatement(value.argument as IrCall, scope)?.let {
                 return iife(it, EtsTypes.VOID, value)
@@ -503,7 +505,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                 fun scalar(name: String) = binary("===", EtsUnary("typeof", reference, EtsTypes.STRING, source(value)),
                     EtsLiteral(name, EtsTypes.STRING, source(value)))
                 val target = value.typeOperand.classOrNull?.owner
-                if (target?.kind == ClassKind.INTERFACE) {
+                if (target?.kind == ClassKind.INTERFACE && sourceFile(target) == null) {
                     diagnostics.unsupported(value, "Runtime interface discrimination is not supported")
                 }
                 val targetName = target?.fqNameWhenAvailable?.asString()
@@ -513,16 +515,23 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                     "kotlin.Int", "kotlin.Short", "kotlin.Byte", "kotlin.Char", "kotlin.Float", "kotlin.Double" ->
                         diagnostics.unsupported(value, "Runtime boxed scalar discrimination is outside the first language slice")
                     "kotlin.Any" -> binary("&&", binary("!==", reference, nullValue), binary("!==", reference, EtsUndefined(source(value))))
-                    else -> if (target != null && sourceFile(target) != null) binary("instanceof", reference, classReference(target, value))
+                    else -> if (target?.kind == ClassKind.INTERFACE && sourceFile(target) != null) {
+                        val member = EtsMember(EtsCast(EtsCast(reference, EtsTypes.OBJECT, source(value)), type(value.typeOperand.makeNotNull()), source(value)),
+                            interfaceTypeMarker(target), EtsTypes.BOOLEAN, source(value))
+                        binary("&&", binary("&&", scalar("object"), binary("!==", reference, nullValue)),
+                            binary("===", member, EtsLiteral(true, EtsTypes.BOOLEAN, source(value))))
+                    } else if (target != null && sourceFile(target) != null) binary("instanceof", reference, classReference(target, value))
                         else diagnostics.unsupported(value, "Unsupported runtime type check: ${value.typeOperand.render()}")
                 }
                 val condition = if (value.typeOperand.isNullable()) binary("||", binary("===", reference, nullValue), check) else check
-                val cast = EtsCast(reference, type(value.typeOperand), source(value))
+                val cast = EtsCast(EtsCast(reference, EtsNullableType(EtsTypes.OBJECT), source(value)), type(value.typeOperand), source(value))
                 val result = when (value.operator) {
                     IrTypeOperator.INSTANCEOF -> listOf(EtsReturn(condition, source(value)))
                     IrTypeOperator.NOT_INSTANCEOF -> listOf(EtsReturn(EtsUnary("!", condition, EtsTypes.BOOLEAN, source(value)), source(value)))
                     IrTypeOperator.SAFE_CAST -> listOf(EtsReturn(EtsConditional(condition, cast, nullValue, type(value.type), source(value)), source(value)))
-                    else -> listOf(EtsIf(listOf(EtsBranch(EtsUnary("!", condition, EtsTypes.BOOLEAN, source(value)),
+                    else -> (if (!value.typeOperand.isNullable()) listOf(EtsIf(listOf(EtsBranch(binary("===", reference, nullValue),
+                        listOf(failure("NullPointerException", value)))), source(value))) else emptyList()) +
+                        listOf(EtsIf(listOf(EtsBranch(EtsUnary("!", condition, EtsTypes.BOOLEAN, source(value)),
                         listOf(failure("ClassCastException", value)))), source(value)), EtsReturn(cast, source(value)))
                 }
                 iife(listOf(EtsVariable(temporary, operand, false)) + result, type(value.type), value)
@@ -680,7 +689,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                     }
                     else -> diagnostics.unsupported(member, "Unsupported interface declaration")
                 } }
-            return@withFile EtsClass(classNaming.name(declaration), signatures, source(declaration),
+            return@withFile EtsClass(classNaming.name(declaration), signatures + interfaceTypeMembers(declaration, source(declaration)), source(declaration),
                 kind = EtsClassKind.INTERFACE, interfaces = interfaces, typeParameters = typeParameters,
                 sourceName = identifier(declaration).takeUnless { it == classNaming.name(declaration) },
                 constraint = declaration.origin === ETS_BOUND_CONSTRAINT)
@@ -716,6 +725,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             }
         }
         val members = mutableListOf<EtsClassMember>()
+        members.addAll(interfaceTypeMembers(declaration, source(declaration)))
         if (isEnum) members.addAll(enumMembers(declaration, this) { entry, index ->
             if (entry.correspondingClass != null) diagnostics.unsupported(entry, "Per-entry enum subclasses are not supported")
             val initializer = entry.initializerExpression?.expression as? IrEnumConstructorCall
