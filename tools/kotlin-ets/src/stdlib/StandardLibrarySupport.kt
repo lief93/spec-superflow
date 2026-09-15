@@ -1,9 +1,9 @@
 package dev.ets
 
-private data class SupportFunction(val symbol: String, val source: String, val dependencies: List<String> = emptyList())
+internal data class SupportFunction(val symbol: String, val source: String, val dependencies: List<String> = emptyList())
 
 // Pinned target runtime, in stable dependency-before-consumer order. Bodies do not depend on input IR.
-private val supportFunctions = listOf(
+private val supportFunctions = collectionSupportFunctions + listOf(
     SupportFunction("stdlib:__etsIntArrayHash", """
         function __etsIntArrayHash(values: Array<number> | null): number {
           if (values === null) { return 0; }

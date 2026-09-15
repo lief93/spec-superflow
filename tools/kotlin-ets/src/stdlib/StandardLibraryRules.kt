@@ -10,7 +10,9 @@ import org.jetbrains.kotlin.ir.util.collectRealOverrides
 import org.jetbrains.kotlin.ir.util.isNullable
 
 class StandardLibraryRules : CallRule {
+    override fun mapType(type: IrType, language: Language): EtsType? = MapSetRules.mapType(type, language)
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
+        MapSetRules.lower(call, language, scope)?.let { return it }
         EnumRules.lower(call, language, scope)?.let { return it }
         EqualityRules.lower(call, language, scope)?.let { return it }
         IterationRules.lower(call, language, scope)?.let { return it }

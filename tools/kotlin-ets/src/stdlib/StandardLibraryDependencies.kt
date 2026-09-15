@@ -49,7 +49,8 @@ private class StandardLibraryDependencies {
                 val id = value.symbolId
                 if (id?.startsWith("stdlib:") == true) {
                     val arity = when (id) {
-                        "stdlib:__etsIterator" -> 1
+                        "stdlib:__etsIterator", "stdlib:__etsSet" -> 1
+                        "stdlib:__etsMap", "stdlib:__etsMapEntry", "stdlib:__etsPair" -> 2
                         "stdlib:__etsIntProgression" -> 0
                         else -> error("Unknown standard library runtime type: $id")
                     }
