@@ -498,7 +498,8 @@ class EtsValidator {
         val current = currentClass
         val static = when (member) { is EtsFunction -> member.static; is EtsField -> member.static }
         if (member.visibility == EtsVisibility.PROTECTED && current != null && derivesFrom(current, owner.symbolId) &&
-            (static || receiver.symbolId?.let { classes[it] }?.let { derivesFrom(it, current.symbol.id) } == true)) return
+            (static || (node as? EtsMember)?.receiver is EtsSuper ||
+                receiver.symbolId?.let { classes[it] }?.let { derivesFrom(it, current.symbol.id) } == true)) return
         reject(node, "Invalid target member access: ${member.visibility}")
     }
 
@@ -573,7 +574,7 @@ class EtsValidator {
         fun inspect(node: EtsNode, states: Set<Boolean>, context: String = "nested body") {
             walkEts(node) { child ->
                 if (child is EtsSuperConstructorCall) reject(child, "Super delegation in $context is not supported")
-                if (false in states && child is EtsReference && child.symbol.name == "this")
+                if (false in states && (child is EtsSuper || child is EtsReference && child.symbol.name == "this"))
                     reject(child, "Target this is read or captured before super initialization")
             }
         }
@@ -706,6 +707,8 @@ class EtsValidator {
         if (!classValue) type(value.type, value.source)
         fun visit(child: EtsExpression) = expression(child, scope)
         when (value) {
+            is EtsSuper -> if (currentClass?.baseClass != value.type)
+                reject(value, "Target super requires the owning class's immediate base")
             is EtsReference -> {
                 name(value.symbol.name, value.source)
                 if (value.symbol.name == "this" && currentClass == null) reject(value, "Target this requires an owning class")

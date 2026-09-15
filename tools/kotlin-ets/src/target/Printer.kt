@@ -65,6 +65,7 @@ class EtsPrinter {
         }
         is EtsUndefined -> "undefined"
         is EtsReference -> value.symbol.name
+        is EtsSuper -> "super"
         is EtsMember -> {
             val receiver = value.receiver
             (if (receiver is EtsLiteral && receiver.value is Number)

@@ -53,6 +53,15 @@ fun checkVisibilityContract() {
     check("protected constructor()" in code && "protected secret: number" in code && "protected read()" in code)
     check("private set value(" in code)
     printer.program(program(listOf(access(childType, "value"))))
+    val superRead = reader.copy(name = "baseRead", source = at.copy(start = 61),
+        visibility = EtsVisibility.PUBLIC, body = listOf(EtsReturn(EtsCall(
+            EtsMember(EtsSuper(baseType, at), reader.name, reader.symbol.type, at, reader.symbol.id),
+            emptyList(), EtsTypes.NUMBER, at), at)))
+    check("super.read()" in printer.program(program(listOf(superRead))))
+    reject("super outside class", program(globals = listOf(superRead.copy(kind = EtsFunctionKind.FUNCTION))),
+        "Target super requires")
+    val wrongSuper = superRead.copy(body = listOf(EtsExpressionStatement(EtsSuper(peerType, at))))
+    reject("super unrelated class", program(listOf(wrongSuper)), "Target super requires")
     reject("base receiver in derived scope", program(listOf(access(baseType))), "member access")
     reject("sibling receiver", program(listOf(access(peerType))), "member access")
     reject("private inherited field", program(listOf(access(childType)),

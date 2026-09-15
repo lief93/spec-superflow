@@ -47,6 +47,7 @@ data class EtsUndefined(override val source: SourceSpan) : EtsExpression { overr
 data class EtsReference(val symbol: EtsSymbol, override val source: SourceSpan = symbol.source) : EtsExpression {
     override val type get() = symbol.type
 }
+data class EtsSuper(override val type: EtsNamedType, override val source: SourceSpan) : EtsExpression
 data class EtsMember(val receiver: EtsExpression, val name: String, override val type: EtsType,
     override val source: SourceSpan, val symbolId: String? = null) : EtsExpression
 data class EtsCall(val callee: EtsExpression, val arguments: List<EtsExpression>, override val type: EtsType,

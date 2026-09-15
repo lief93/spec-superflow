@@ -250,7 +250,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
     }
 
     private fun adaptedStatement(call: IrCall, scope: Scope): List<EtsStatement>? =
-        when (val result = adaptCall(call, this, scope, CallContext.STATEMENT)) {
+        if (call.superQualifierSymbol != null) null else when (val result = adaptCall(call, this, scope, CallContext.STATEMENT)) {
             null -> null
             is CallResult.Statements -> result.statements
             is CallResult.Value -> listOf(expressionStatement(result.expression))
@@ -258,8 +258,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         }
 
     private fun call(call: IrCall, scope: Scope, adapt: Boolean = true): EtsExpression {
-        if (call.superQualifierSymbol != null) diagnostics.unsupported(call, "Explicit super member calls are not supported")
-        if (adapt) {
+        if (adapt && call.superQualifierSymbol == null) {
             adaptCall(call, this, scope, CallContext.VALUE)?.let {
                 check(it is CallResult.Value) { "Non-value result in value context" }
                 return it.expression
@@ -270,6 +269,18 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             ?: if (resolved.modality != Modality.ABSTRACT) findConcreteSuperDeclaration(IrBasedFunctionHandle(resolved))?.function else null)
             ?: diagnostics.unsupported(call, "Ambiguous inherited declaration: ${symbolName(resolved)}") else resolved
         val receiver = call.dispatchReceiver
+        val targetReceiver = receiver?.let { input ->
+            call.superQualifierSymbol?.owner?.let { qualifier ->
+                if (qualifier.kind == ClassKind.INTERFACE)
+                    diagnostics.unsupported(call, "Qualified interface calls require a default implementation bridge")
+                val owner = input.type.classOrNull?.owner
+                    ?: diagnostics.unsupported(call, "Super call requires a source class receiver")
+                val base = owner.superTypes.singleOrNull {
+                    it.classOrNull?.owner?.kind == ClassKind.CLASS && it.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Any"
+                } ?: diagnostics.unsupported(call, "Super call requires one immediate source base")
+                EtsSuper(type(base) as EtsNamedType, source(call))
+            } ?: expression(input, scope)
+        }
         val constraint = receiver?.takeIf { sourceFile(original) != null }?.type?.let { receiverType ->
             if ((receiverType as? IrSimpleType)?.classifier?.owner is IrTypeParameter)
                 receiverClassType(receiverType, call).classOrNull?.owner else receiverType.classOrNull?.owner
@@ -303,7 +314,10 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             val propertyType = etsReadType(etsSubstitute(type(property.backingField?.type ?: property.getter!!.returnType), substitutions))
             val symbol = if ((parent as? IrClass)?.kind == ClassKind.INTERFACE || !requiresAccessor(property))
                 propertyField(property) else functionSymbol(property.getter!!)
-            val access = receiver?.let { EtsMember(expression(it, scope), identifier(property), propertyType, source(call), symbol.id) }
+            // Final stored properties live on the instance, not the prototype.
+            val propertyReceiver = if (targetReceiver is EtsSuper && !requiresAccessor(property))
+                expression(checkNotNull(receiver), scope) else targetReceiver
+            val access = propertyReceiver?.let { EtsMember(it, identifier(property), propertyType, source(call), symbol.id) }
                 ?: diagnostics.unsupported(call, "Top-level stored properties are outside the first language slice")
             return if (property.setter?.symbol == owner.symbol)
                 discard(EtsAssignment(access, arguments(call, scope).single(), source(call)), call) else access
@@ -313,7 +327,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             type(owner.returnType), typeParameters(owner)), substitutions)) as EtsFunctionType
         val symbol = functionSymbol(owner)
         val callee = when {
-            receiver != null -> EtsMember(expression(receiver, scope), symbol.name, signature, source(call), symbol.id)
+            targetReceiver != null -> EtsMember(targetReceiver, symbol.name, signature, source(call), symbol.id)
             parent is IrClass -> EtsMember(classReference(parent, call), symbol.name, signature, source(call), symbol.id)
             else -> EtsReference(symbol.copy(type = signature), source(call))
         }

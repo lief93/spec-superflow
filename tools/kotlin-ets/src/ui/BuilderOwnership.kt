@@ -37,7 +37,7 @@ internal class BuilderOwnership(functions: List<EtsFunction>, rootId: String, pr
 
     private fun parameter(value: EtsParameter) = value.copy(defaultValue = value.defaultValue?.let(::expression))
     private fun expression(value: EtsExpression): EtsExpression = when (value) {
-        is EtsReference, is EtsLiteral, is EtsUndefined -> value
+        is EtsReference, is EtsSuper, is EtsLiteral, is EtsUndefined -> value
         is EtsMember -> if (value.symbolId in globalIds && isPage(value.receiver))
             EtsReference(symbols.getValue(value.symbolId!!), value.source)
             else value.copy(receiver = expression(value.receiver))

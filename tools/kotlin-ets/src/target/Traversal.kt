@@ -6,7 +6,7 @@ fun walkEts(node: EtsNode, visit: (EtsNode) -> Unit) {
     fun walk(child: EtsNode) = walkEts(child, visit)
     fun parameters(values: List<EtsParameter>) = values.forEach { it.defaultValue?.let(::walk) }
     when (node) {
-        is EtsReference, is EtsLiteral, is EtsUndefined, is EtsJump -> Unit
+        is EtsReference, is EtsSuper, is EtsLiteral, is EtsUndefined, is EtsJump -> Unit
         is EtsMember -> walk(node.receiver)
         is EtsCall -> { walk(node.callee); node.arguments.forEach(::walk) }
         is EtsNew -> node.arguments.forEach(::walk)
