@@ -39,7 +39,8 @@ initialization contract are implemented. L2 ordinary source/data-class equality
 has focused acceptance in issue 03. L3 basic enums passed issue 04. L4 nullable
 types passed focused acceptance in issue 05. L5 common Map/Set operations passed
 issue 06. L6 basic exception flow passed issue 07. L7 explicit super passed issue
-08. L8 interface defaults is next.
+08. L8 interface defaults passed focused acceptance in issue 09. All L1-L8
+have focused acceptance; the frozen whole-round regression gate is pending.
 Compose lifecycle entry and complete platform exception APIs remain distinct work.
 The inventory below records the original baseline,
 not a claim that implemented accessor work is still missing.

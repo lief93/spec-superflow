@@ -46,6 +46,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
     private data class NativeInitialization(val owner: IrClass, val base: IrClass?, val baseType: EtsNamedType?,
         val captures: List<EtsStatement>)
     private var nativeInitialization: NativeInitialization? = null
+    private var emittingInterfaceDefault: IrSimpleFunction? = null
 
     override fun source(element: IrElement): SourceSpan {
         val source = sourceSpan(element, diagnostics)
@@ -269,7 +270,14 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             ?: if (resolved.modality != Modality.ABSTRACT) findConcreteSuperDeclaration(IrBasedFunctionHandle(resolved))?.function else null)
             ?: diagnostics.unsupported(call, "Ambiguous inherited declaration: ${symbolName(resolved)}") else resolved
         val receiver = call.dispatchReceiver
-        val targetReceiver = receiver?.let { input ->
+        if (call.superQualifierSymbol?.owner?.kind == ClassKind.INTERFACE) {
+            return interfaceDefaultCall(original, expression(receiver
+                ?: diagnostics.unsupported(call, "Interface super requires a receiver"), scope),
+                arguments(call, scope), type(call.type), source(call),
+                original.typeParameters.indices.map { type(call.getTypeArgument(it)
+                    ?: diagnostics.unsupported(call, "Missing default method type argument")) })
+        }
+        var targetReceiver = receiver?.let { input ->
             call.superQualifierSymbol?.owner?.let { qualifier ->
                 if (qualifier.kind == ClassKind.INTERFACE)
                     diagnostics.unsupported(call, "Qualified interface calls require a default implementation bridge")
@@ -291,6 +299,10 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             else -> emptyList()
         } }?.singleOrNull { it.modality == Modality.ABSTRACT && original in it.collectRealOverrides() } ?: original
         val parent = owner.parent
+        if (parent is IrClass && parent.kind == ClassKind.INTERFACE && targetReceiver != null) {
+            val contract = etsSubstitute(classType(parent), receiverSubstitution(parent, receiver))
+            targetReceiver = EtsCast(targetReceiver, contract, source(call))
+        }
         if (owner.name.asString() == "invoke" && parent is IrClass &&
             parent.fqNameWhenAvailable?.asString()?.startsWith("kotlin.Function") == true && receiver != null) {
             return EtsCall(expression(receiver, scope), arguments(call, scope), type(call.type), source(call))
@@ -627,7 +639,10 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             diagnostics.unsupported(function, "Suspend source methods are outside the first language slice")
         }
         val nested = scope.fork()
-        function.dispatchReceiverParameter?.let { nested.bindings[it.symbol] = thisReference(function.parent as IrClass, function) }
+        function.dispatchReceiverParameter?.let {
+            if (emittingInterfaceDefault !== function)
+                nested.bindings[it.symbol] = thisReference(function.parent as IrClass, function)
+        }
         val parameters = parameters(function, nested)
         val genericParameters = typeParameters(function)
         val parentClass = function.parent as? IrClass
@@ -653,8 +668,10 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             function.parent is IrClass -> EtsFunctionKind.METHOD
             else -> EtsFunctionKind.FUNCTION
         }
-        if (parentClass?.kind == ClassKind.INTERFACE && function.body != null) {
-            diagnostics.unsupported(function, "Default interface method bodies are not supported")
+        if (parentClass?.kind == ClassKind.INTERFACE && emittingInterfaceDefault !== function) {
+            return@withFile EtsFunction(emittedName, parameters, type(function.returnType), emptyList(),
+                source(function), kind = kind, typeParameters = genericParameters, abstract = true,
+                visibility = memberVisibility(function.visibility), overrides = overrideIds, sourceName = sourceName)
         }
         if (function.modality == Modality.ABSTRACT && parentClass != null) {
             if (function.body != null) diagnostics.unsupported(function, "Abstract method cannot have a body")
@@ -757,8 +774,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                     is IrSimpleFunction -> function(member, Scope())
                     is IrProperty -> {
                         if (member.backingField != null || member.isDelegated ||
-                            listOfNotNull(member.getter, member.setter).any { it.body != null || it.extensionReceiverParameter != null }) {
-                            diagnostics.unsupported(member, "Interface property requires abstract non-extension accessors")
+                            listOfNotNull(member.getter, member.setter).any { it.extensionReceiverParameter != null }) {
+                            diagnostics.unsupported(member, "Interface property requires non-extension accessors without storage")
                         }
                         EtsField(propertyField(member), readonly = !member.isVar)
                     }
@@ -918,6 +935,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         declaration.declarations.filterIsInstance<IrSimpleFunction>().filter {
             it.isFakeOverride && it.modality != Modality.ABSTRACT && it.correspondingPropertySymbol == null
         }.forEach { method ->
+            inheritedInterfaceDefault(method, declaration)?.let(members::add)
             overloadNaming.bridges(method).forEach { (from, to) ->
                 if (sourceFile(from) == null || sourceFile(to) == null)
                     diagnostics.unsupported(declaration, "Inherited bridges require source-owned declarations")
@@ -926,6 +944,11 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                 val (implementation, destination) = inheritedBridgeSignature(to, declaration)
                 members.add(etsVirtualBridge(implementation, thisReference(declaration, declaration),
                     overloadNaming.name(from), listOf(functionSymbol(from).id), destination))
+            }
+        }
+        declaration.declarations.filterIsInstance<IrProperty>().filter { it.isFakeOverride }.forEach { property ->
+            listOfNotNull(property.getter, property.setter).forEach { accessor ->
+                inheritedInterfaceDefault(accessor, declaration)?.let(members::add)
             }
         }
         val inheritedEntries = base?.declarations.orEmpty().filterIsInstance<IrSimpleFunction>()
@@ -1048,8 +1071,76 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             EtsParameter(EtsSymbol("bridge-parameter:${at.file}:${at.start}:$index", identifier(parameter), signature.parameters[index], at))
         }
         return EtsFunction(destination.name, parameters, signature.result, emptyList(), at,
-            kind = EtsFunctionKind.METHOD, visibility = memberVisibility(method.visibility),
+            kind = when (method) {
+                method.correspondingPropertySymbol?.owner?.getter -> EtsFunctionKind.GETTER
+                method.correspondingPropertySymbol?.owner?.setter -> EtsFunctionKind.SETTER
+                else -> EtsFunctionKind.METHOD
+            }, visibility = memberVisibility(method.visibility),
             typeParameters = signature.typeParameters) to destination
+    }
+
+    private fun interfaceDefaultSymbol(method: IrSimpleFunction): EtsSymbol {
+        val owner = method.parentAsClass
+        if (owner.kind != ClassKind.INTERFACE || method.body == null || sourceFile(method) == null)
+            diagnostics.unsupported(method, "Interface default requires a concrete source implementation")
+        if (owner.typeParameters.isNotEmpty())
+            diagnostics.unsupported(method, "Generic interface default owners are outside this simple default-method slice")
+        val signature = functionSymbol(method).type as EtsFunctionType
+        val suffix = when (method) {
+            method.correspondingPropertySymbol?.owner?.getter -> "_get"
+            method.correspondingPropertySymbol?.owner?.setter -> "_set"
+            else -> ""
+        }
+        val name = "__etsDefault_" + classNaming.name(owner) + "_" + functionSymbol(method).name + suffix
+        return etsFunctionSymbol(name, listOf(classType(owner)) + signature.parameters,
+            signature.result, declarationSource(method), signature.typeParameters)
+    }
+
+    private fun interfaceDefaultCall(method: IrSimpleFunction, receiver: EtsExpression,
+        arguments: List<EtsExpression>, result: EtsType, at: SourceSpan,
+        typeArguments: List<EtsType> = emptyList()): EtsExpression =
+        EtsCall(EtsReference(interfaceDefaultSymbol(method), at), listOf(receiver) + arguments, result, at, typeArguments)
+
+    override fun interfaceDefaults(declaration: IrClass): List<EtsFunction> = withFile(declaration) {
+        if (declaration.kind != ClassKind.INTERFACE) return@withFile emptyList()
+        declaration.declarations.flatMap { member -> when (member) {
+            is IrSimpleFunction -> listOf(member)
+            is IrProperty -> listOfNotNull(member.getter, member.setter)
+            else -> emptyList()
+        } }.filter { !it.isFakeOverride && it.body != null }.map { method ->
+            val symbol = interfaceDefaultSymbol(method)
+            val receiver = EtsParameter(synthetic("__etsReceiver", classType(declaration), method))
+            val scope = Scope()
+            scope.bindings[checkNotNull(method.dispatchReceiverParameter).symbol] = EtsReference(receiver.symbol)
+            val previous = emittingInterfaceDefault
+            emittingInterfaceDefault = method
+            try {
+                function(method, scope).let { lowered -> lowered.copy(name = symbol.name,
+                    parameters = listOf(receiver) + lowered.parameters, kind = EtsFunctionKind.FUNCTION,
+                    exported = sourceClassIsExported(declaration), overrides = emptyList(), sourceName = null) }
+            } finally { emittingInterfaceDefault = previous }
+        }
+    }
+
+    private fun inheritedInterfaceDefault(method: IrSimpleFunction, owner: IrClass): EtsFunction? {
+        val provider = method.resolveFakeOverride() ?: return null
+        if (provider.parentAsClass.kind != ClassKind.INTERFACE || provider.body == null) return null
+        val base = owner.superTypes.mapNotNull { it.classOrNull?.owner }.singleOrNull {
+            it.kind == ClassKind.CLASS && it.fqNameWhenAvailable?.asString() != "kotlin.Any"
+        }
+        val inherited = base?.declarations.orEmpty().flatMap { declaration -> when (declaration) {
+            is IrSimpleFunction -> listOf(declaration)
+            is IrProperty -> listOfNotNull(declaration.getter, declaration.setter)
+            else -> emptyList()
+        } }
+        if (inherited.any { it.resolveFakeOverride() === provider }) return null
+        val (signature, _) = inheritedBridgeSignature(provider, owner)
+        val call = interfaceDefaultCall(provider, thisReference(owner, owner),
+            signature.parameters.map { EtsReference(it.symbol) }, signature.returnType, source(owner),
+            signature.typeParameters.map { EtsTypeParameterType(it.id, it.name) })
+        return signature.copy(body = if (signature.returnType == EtsTypes.VOID) listOf(EtsExpressionStatement(call))
+            else listOf(EtsReturn(call, source(owner))),
+            overrides = if (provider.correspondingPropertySymbol == null) listOf(functionSymbol(provider).id) else emptyList())
     }
 
     private fun functionSymbol(function: IrSimpleFunction): EtsSymbol {

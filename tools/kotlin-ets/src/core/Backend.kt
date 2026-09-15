@@ -35,7 +35,7 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceT
                 is IrSimpleFunction -> listOf(language.function(declaration).copy(
                     exported = !DescriptorVisibilities.isPrivate(declaration.visibility)))
                 is IrClass -> listOf(language.clazz(declaration).copy(
-                    exported = sourceClassIsExported(declaration)))
+                    exported = sourceClassIsExported(declaration))) + language.interfaceDefaults(declaration)
                 is IrProperty -> lowerTopLevelProperty(declaration, language)
                 else -> diagnostics.unsupported(declaration, "Unsupported top-level declaration")
             } } + lowerFileInitialization(file, language))

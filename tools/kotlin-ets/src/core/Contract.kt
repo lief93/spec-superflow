@@ -48,6 +48,7 @@ interface Language {
     fun statements(body: IrBody, scope: Scope): List<EtsStatement>
     fun function(function: IrSimpleFunction, scope: Scope = Scope()): EtsFunction
     fun clazz(declaration: IrClass): EtsClass
+    fun interfaceDefaults(declaration: IrClass): List<EtsFunction> = emptyList()
 }
 
 fun interface CallRule {
