@@ -94,6 +94,7 @@ class KotlinFrontendSession internal constructor(private val fragment: IrModuleF
         }
     }
     val bodies: FunctionBodies get() { checkActive(); return resolver }
+    internal fun rebindInlinedCaptures() { checkActive(); callCaptures.rebindInlined(fragment) }
     internal fun close() { active = false }
 }
 
@@ -137,6 +138,7 @@ fun <T> withKotlinFrontend(arguments: List<String>, emit: (KotlinFrontendSession
         lowerStringConcatenations(translated)
         lowerExpectedNullability(translated)
         lowerGenericBounds(translated)
+        frontend.rebindInlinedCaptures()
         check(!translated.diagnosticCollector.hasErrors && !messages.hasErrors()) {
             "Kotlin lowering diagnostics prohibit target output"
         }

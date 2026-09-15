@@ -127,6 +127,16 @@ This closes the joint native gap for those existing families, not whole R2:
 remaining capture-bound/copied-inline compositions and broader regression
 coverage must still be accounted for before checking the stage gate above.
 
+The finite copied-inline/local/upper-bound check is now implemented: composition
+run-d7tzxk passes 30 flat + 30 module JVM/host outcomes and original/copy binding
+checks. It found stale capture metadata after common inlining; the frontend now
+consumes the official copied read type and substitutes write bounds using the
+retained inline call scopes. No new target runtime or generic inference engine.
+See declaration-variance.md. Existing variance run-kuEsmN (160 + 160 outcomes,
+eight unchanged modules), complete target ScRIJZ and inline run-2aRMQw pass.
+Next is the explicit remaining-boundary accounting and overall gate coverage,
+not expanding the six-scenario corpus into an open-ended generic feature queue.
+
 Publication recovered: commits through 67bce63 were pushed successfully. The
 earlier HTTPS failures are no longer a publication blocker.
 

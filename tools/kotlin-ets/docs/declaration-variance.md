@@ -247,9 +247,9 @@ lambda body. A void or incompatible return cannot satisfy an object result.
 
 Source getCell/Channel methods and parameters retain their names, ordinary
 declarations and calling structure. No runtime wrapper or cast is introduced.
-Nested function-type captures, multiple independent capture bounds, and capture
-metadata requiring remapping across inline/local transformations are not proved
-by this batch. Exact FIR/IR association is required; lack of association produces
+Nested function-type captures and multiple independent capture bounds are not
+proved by this batch. The bounded inline/local composition follow-up below
+checks copied capture metadata separately. Exact FIR/IR association is required; lack of association produces
 a source-linked diagnostic. This prepass currently visits all input function
 calls, so an unsupported capture can reject an input before reachability pruning.
 These are explicit limitations, not complete generic-call support.
@@ -268,6 +268,56 @@ run-jbjSiR failed before semantic execution because the probe compilation list
 omitted CallCaptures and GenericBounds. The explicit frontend probe source lists
 now include both files; other runners' source-list updates are mechanical and
 do not constitute rerunning all of their semantic suites.
+
+## Copied capture metadata
+
+The existing R2 composition check exposed a stale frontend attachment: the common
+inliner correctly remapped its IR, while CallCaptures still supplied the original
+inline function's type parameter. This failed with an unbound target parameter.
+Merely substituting that parameter with the call-site class was also incorrect:
+the common inliner's InlineFunctionBodyPreprocessor erases non-reified expression
+types to their bound, so narrowing the attachment disagreed with the copied call.
+
+After the existing official lowering phases, the session now rebinds attached
+capture facts per actual IrCall, not per shared attributeOwnerId. Reads consume
+the official copied type argument. Write lower bounds use IrTypeSubstitutor with
+the enclosing IrInlinedFunctionBlock.inlineCall bindings, inside-out for nested
+calls. The original capture identity, function symbol, arity and source span are
+still checked. The original generic function retains its own parameter; rebinding
+one copied call cannot overwrite another call or the original function.
+
+Reference: Kotlin 2.1.20 ir/inline/FunctionInlining.kt,
+ir/inline/InlineFunctionBodyPreprocessor.kt, ir/types/IrTypeSubstitutor.kt and
+ir/util/IrInlineUtils.kt. The current borrowed JVM frontend retains inlineCall;
+using this JVM-marked metadata does not establish support for importing arbitrary
+serialized KLIB inline scopes. No Kotlin type inference, inliner, target runtime,
+cast insertion or target validator bypass is added by this change.
+
+Frozen composition/run-d7tzxk passes 30 flat + 30 module JVM/host outcomes for six
+existing-feature compositions: concrete inline capture, lifted local capture,
+generic inline substitution, nested inline substitution, contravariant input
+capture and a finite declared upper bound. The probe checks original versus
+copied binder identity, erased reads, substituted write bounds and a changed
+function-symbol refusal. Exported scenario methods retain their original names
+and seed parameters. Reproduce with:
+
+```sh
+node tools/kotlin-ets/tests/inheritance/composition/run.mjs
+```
+
+Regression variance/run-kuEsmN passes all 160 flat + 160 module outcomes,
+eight-file reversed-input determinism, original FIR/IR and bound probes, and
+official invalid variance/projection/bound refusals. All eight module hashes
+remain identical to run-pNnkNQ. Target ScRIJZ passes the complete target suite,
+including thirteen capture/return-contract refusals. Inline run-2aRMQw retains
+the official ten inlined blocks, three library blocks, JVM/host argument effects
+and source-linked unavailable binary-body refusal. Production/fixture hashes
+in the frozen composition and variance reports were rechecked before commit.
+
+This is not general nested-function capture inference, independent intersecting
+capture bounds or generic local-owner remapping. It proves these six compositions,
+not all generic syntax or whole R2. SDK/native evidence for the preceding joint
+declaration corpus remains version-pinned; it is not evidence for this new fix.
 
 ## Property-projection evidence
 

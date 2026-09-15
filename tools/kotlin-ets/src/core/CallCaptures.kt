@@ -13,9 +13,14 @@ import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.visitors.FirVisitorVoid
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.expressions.IrInlinedFunctionBlock
+import org.jetbrains.kotlin.ir.util.JvmIrInlineExperimental
+import org.jetbrains.kotlin.ir.util.inlineCall
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.IrTypeSubstitutor
 import org.jetbrains.kotlin.ir.visitors.*
 import org.jetbrains.kotlin.types.AbstractTypeChecker
 
@@ -26,6 +31,7 @@ internal class CallCaptures(analyzed: FirResult, translated: Fir2IrActualizedRes
     private data class Key(val file: String, val start: Int, val end: Int, val symbol: IrFunctionSymbol)
     private data class Binding(val key: Key, val arity: Int, val arguments: Map<Int, SourceCapture>)
     private val bindings = IdentityHashMap<Any, Binding>()
+    private val loweredBindings = IdentityHashMap<IrCall, Binding>()
 
     init {
         fun path(value: String) = Path.of(value).toAbsolutePath().normalize().toString()
@@ -66,11 +72,46 @@ internal class CallCaptures(analyzed: FirResult, translated: Fir2IrActualizedRes
         })
     }
 
+    /** Keep attached FIR facts in the same type scope as the official copied body. */
+    @OptIn(JvmIrInlineExperimental::class)
+    fun rebindInlined(module: IrModuleFragment) {
+        loweredBindings.clear()
+        val scopes = mutableListOf<IrTypeSubstitutor>()
+        module.acceptChildrenVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) { element.acceptChildrenVoid(this) }
+            override fun visitInlinedFunctionBlock(inlinedBlock: IrInlinedFunctionBlock) {
+                val call = inlinedBlock.inlineCall
+                val substitution = call?.symbol?.owner?.typeParameters.orEmpty().mapIndexed { index, parameter ->
+                    parameter.symbol to checkNotNull(call!!.getTypeArgument(index))
+                }.toMap()
+                scopes.add(IrTypeSubstitutor(substitution, allowEmptySubstitution = true))
+                try { inlinedBlock.acceptChildrenVoid(this) } finally { scopes.removeAt(scopes.lastIndex) }
+            }
+            override fun visitCall(expression: IrCall) {
+                bindings[expression.attributeOwnerId]?.let { binding ->
+                    checkBinding(expression, binding)
+                    fun remap(type: IrType) = scopes.asReversed().fold(type) { value, substitutor -> substitutor.substitute(value) }
+                    loweredBindings[expression] = binding.copy(arguments = binding.arguments.mapValues { (index, capture) ->
+                        // Common inlining erases non-reified reads to their bound.
+                        // Consume its copied IR type instead of narrowing it again.
+                        val read = if (scopes.isEmpty()) capture.readType else checkNotNull(expression.getTypeArgument(index))
+                        SourceCapture(read, capture.writeType?.let(::remap))
+                    })
+                }
+                expression.acceptChildrenVoid(this)
+            }
+        })
+    }
+
     fun arguments(call: IrCall): Map<Int, SourceCapture> {
-        val binding = bindings[call.attributeOwnerId] ?: return emptyMap()
+        val binding = loweredBindings[call] ?: bindings[call.attributeOwnerId] ?: return emptyMap()
+        checkBinding(call, binding)
+        return binding.arguments
+    }
+
+    private fun checkBinding(call: IrCall, binding: Binding) {
         if (call.symbol != binding.key.symbol || call.typeArgumentsCount != binding.arity) throw Unsupported(Diagnostic(
             "UNSUPPORTED", "Lowered captured call changed its original generic binding",
             SourceSpan(binding.key.file, binding.key.start, binding.key.end)))
-        return binding.arguments
     }
 }
