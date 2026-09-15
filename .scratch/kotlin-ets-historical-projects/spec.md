@@ -83,3 +83,16 @@ across custom layout boundaries. Foundation BasicText keeps its independent
 default black color. Until ordered argument binding is generalized for scoped
 UI adapters, Surface accepts stable color values and diagnoses direct effectful
 calls/mutable reads; source val bindings use the existing once-only bridge.
+
+Eighth requirement: represent Material3 ColorScheme values through the shared
+CallRule type/value contract. Preserve light/dark factory defaults, explicit
+overrides, property reads, source parameters/returns and evaluation order.
+Take defaults from the pinned AndroidX implementation and compare all supported
+roles against the actual JVM library; surfaceTint defaults to the supplied
+primary and must not reevaluate it. Do not identify project theme names or infer
+colors from property spelling. Factory dispatch uses resolved library symbols.
+This is a prerequisite to composition-scoped MaterialTheme/contentColorFor,
+not a claim that a theme provider or the Banking page already works.
+The value class has one target-program owner. Multi-file factories and consumers
+must import that same declaration; independently printed structural copies are
+not acceptable in ArkTS. Verify actual SDK compilation across the file boundary.

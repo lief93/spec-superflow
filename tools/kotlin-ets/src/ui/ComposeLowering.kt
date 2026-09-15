@@ -103,8 +103,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val pageMethods = (methods.filter { it.symbol.id !in ownership.globalIds } + slotMethods).map(ownership::rewrite)
         val component = EtsClass(name, fields + pageMethods + build, language.source(root), exported = true, component = true, entry = true)
         files.getOrPut(language.source(root).file!!) { mutableListOf() }.add(component)
-        return EtsProgram(files.filterValues { it.isNotEmpty() }.map { (path, declarations) -> EtsFile(path, declarations) },
-            if (usesMaterialTypography) listOf(EtsImport("@ohos.graphics.drawing", "__etsDrawing", default = true)) else emptyList())
+        return linkAdapterDeclarations(EtsProgram(files.filterValues { it.isNotEmpty() }.map { (path, declarations) -> EtsFile(path, declarations) },
+            if (usesMaterialTypography) listOf(EtsImport("@ohos.graphics.drawing", "__etsDrawing", default = true)) else emptyList()), language.callRules)
     }
 
     private val target = ArkUiCalls(language, diagnostics)

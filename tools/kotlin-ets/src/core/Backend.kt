@@ -29,7 +29,7 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceT
     /** Modules selected for translation share symbol identity; their IR ownership stays intact. */
     fun lower(modules: List<IrModuleFragment>): EtsProgram {
         modules.forEach(::validateSource)
-        val program = EtsProgram(modules.flatMap { it.files }.map { file ->
+        val program = linkAdapterDeclarations(EtsProgram(modules.flatMap { it.files }.map { file ->
             diagnostics.currentFile = file.fileEntry.name
             EtsFile(file.fileEntry.name, file.declarations.flatMap { declaration -> when (declaration) {
                 is IrSimpleFunction -> listOf(language.function(declaration).copy(
@@ -39,7 +39,7 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceT
                 is IrProperty -> lowerTopLevelProperty(declaration, language)
                 else -> diagnostics.unsupported(declaration, "Unsupported top-level declaration")
             } } + lowerFileInitialization(file, language))
-        }, externalClasses = exceptionTargetContracts())
+        }, externalClasses = exceptionTargetContracts()), language.callRules)
         EtsValidator().validate(program, perFileNames = true)
         return program
     }

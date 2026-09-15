@@ -52,6 +52,9 @@ interface Language {
 }
 
 fun interface CallRule {
+    /** Owned target declarations participate in the same validation and module linking as source declarations. */
+    fun targetFiles(program: EtsProgram): List<EtsFile> = emptyList()
+
     /** Platform value representation; the shared call checker still validates every result. */
     fun mapType(type: IrType, language: Language): EtsType? = null
 
@@ -64,6 +67,9 @@ fun interface CallRule {
     /** Only consulted in UI context. Empty means a handled no-op; source result must be Unit. */
     fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? = null
 }
+
+fun linkAdapterDeclarations(program: EtsProgram, rules: List<CallRule>): EtsProgram =
+    program.copy(files = program.files + rules.flatMap { it.targetFiles(program) })
 
 enum class CallContext { VALUE, STATEMENT, UI }
 
