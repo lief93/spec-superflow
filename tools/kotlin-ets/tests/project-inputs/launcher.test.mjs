@@ -41,6 +41,12 @@ test('project entry retains the separate string resource input directory', () =>
   assert.equal(options.stringResources, '/tmp/string inputs');
 });
 
+test('project entry retains the separate font registry path', () => {
+  const options = parseOptions(['--project', '/tmp/p', '--module', ':app', '--variant', 'debug',
+    '--entry', 'sample.Page', '--out', '/tmp/Page.ets', '--font-resources', '/tmp/font inputs/fonts.properties']);
+  assert.equal(options.fontResources, '/tmp/font inputs/fonts.properties');
+});
+
 test('invalid or ambiguous project input is rejected before invoking Gradle', () => {
   const base = ['--project', '/tmp/p', '--module', ':app', '--variant', 'debug', '--entry', 'sample.Page', '--out', '/tmp/Page.ets'];
   for (const extra of [['--variant', 'release'], ['--classpath', 'other.jar'], ['--compile-task', 'compileKotlin'], ['--out-dir', '/tmp/modules']]) {

@@ -148,3 +148,14 @@ Validate a separately compiled library, once-only argument effects, rejected
 wrong/void results, and unclaimed constructors. This is a shared prerequisite
 for FontFamily/TextStyle model adaptation, not a claim that those types or the
 historical page are already supported.
+
+Fourteenth requirement: preserve blocking local Font/FontFamily descriptors as
+owned typed target values, including source parameters, return values, weights
+and styles. Materialize explicitly supplied module font resources, carrying only
+referenced TTF/OTF bytes into the generated resource bundle. Resolve R.font by
+symbol, never integer value or project names. Reject missing/unsupported fonts,
+empty families, async/variation settings and unimplemented weight operations;
+do not register fonts as a side effect of constructing a source descriptor.
+Native registration/selection and TextStyle consumption are the next dependent
+requirement. Validate JVM descriptor parity and SDK value ownership, then replay
+Banking to locate the next failure without changing its Kotlin source.

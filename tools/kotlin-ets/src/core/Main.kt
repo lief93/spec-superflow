@@ -14,7 +14,7 @@ fun main(arguments: Array<String>) {
         while (index < arguments.size) {
             val item = arguments[index++]
             if (item.startsWith("--")) {
-                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--string-resources", "--frontend-arguments-file")) { "Unknown option $item" }
+                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--string-resources", "--font-resources", "--frontend-arguments-file")) { "Unknown option $item" }
                 require(index < arguments.size) { "Missing value for $item" }
                 options[item] = arguments[index++]
             } else sources.add(item)
@@ -38,8 +38,9 @@ fun main(arguments: Array<String>) {
             listOf("-no-stdlib", "-no-reflect", "-classpath", classpath) + sources
         val images = options["--image-resources"]?.let { ImageResources.read(File(it).absoluteFile) } ?: ImageResources()
         val strings = options["--string-resources"]?.let { StringResources.read(File(it).absoluteFile) } ?: StringResources()
+        val fonts = options["--font-resources"]?.let { FontResources.read(File(it).absoluteFile) } ?: FontResources()
         val resourceOutput = File(output.absolutePath + ".resources")
-        if ("--string-resources" in options) require(!Files.exists(resourceOutput.toPath(), NOFOLLOW_LINKS)) {
+        if ("--string-resources" in options || "--font-resources" in options) require(!Files.exists(resourceOutput.toPath(), NOFOLLOW_LINKS)) {
             "Refusing to overwrite existing resource output: $resourceOutput"
         }
         val adapters = AdapterModules.load()
@@ -47,7 +48,7 @@ fun main(arguments: Array<String>) {
             val module = frontend.module
             val diagnostics = DiagnosticSink()
             val stdlib = StandardLibraryRules()
-            val backend = EtsBackend(diagnostics, listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeAlignmentRule(), ComposeDimensionRule()) + adapters.rules(), frontend.types)
+            val backend = EtsBackend(diagnostics, listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeAlignmentRule(), ComposeDimensionRule(), ComposeFontRule(fonts)) + adapters.rules(), frontend.types)
             if (mode == "page") {
                 backend.validateSource(module)
                 val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
@@ -64,12 +65,18 @@ fun main(arguments: Array<String>) {
         }
         Files.createDirectories(output.absoluteFile.parentFile.toPath())
         val resources = strings.artifacts()
-        if (resources.isNotEmpty()) {
+        val fontFiles = fonts.artifacts()
+        if (resources.isNotEmpty() || fontFiles.isNotEmpty()) {
             Files.createDirectory(resourceOutput.toPath())
             resources.forEach { (name, content) ->
                 val file = resourceOutput.resolve(name)
                 Files.createDirectories(file.parentFile.toPath())
                 Files.writeString(file.toPath(), content, CREATE_NEW)
+            }
+            fontFiles.forEach { (name, original) ->
+                val file = resourceOutput.resolve(name)
+                Files.createDirectories(file.parentFile.toPath())
+                Files.copy(original.toPath(), file.toPath())
             }
         }
         if ("--out-dir" in options) {
@@ -77,7 +84,7 @@ fun main(arguments: Array<String>) {
             target.forEach { (name, code) -> Files.writeString(output.resolve(name).toPath(), code, CREATE_NEW) }
         } else Files.writeString(output.toPath(), target.getValue(output.name), CREATE_NEW)
         println("{\"ok\":true,\"frontend\":\"Kotlin-2.1.20-K2-FIR2IR\",\"output\":" + quote(output.path) +
-            ",\"resources\":" + (if (resources.isEmpty()) "null" else quote(resourceOutput.path)) + "}")
+            ",\"resources\":" + (if (resources.isEmpty() && fontFiles.isEmpty()) "null" else quote(resourceOutput.path)) + "}")
     } catch (failure: InvalidTarget) {
         println("{\"ok\":false,\"code\":\"INVALID_TARGET\",\"message\":" + quote(failure.message) +
             ",\"source\":" + diagnosticSourceJson(failure.source) + "}")
