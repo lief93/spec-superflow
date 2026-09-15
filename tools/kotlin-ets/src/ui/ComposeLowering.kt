@@ -678,6 +678,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     "androidx.compose.foundation.layout.fillMaxSize", "androidx.compose.foundation.layout.size" -> setOf("width", "height")
                     "androidx.compose.foundation.layout.padding" -> setOf("padding")
                     "androidx.compose.foundation.background" -> setOf("backgroundColor")
+                    "androidx.compose.ui.draw.clip" -> setOf("borderRadius", "clip")
                     "androidx.compose.ui.platform.testTag" -> setOf("id")
                     "androidx.compose.foundation.clickable" -> setOf("onClick", "enabled")
                     else -> diagnostics.unsupported(call, "Unsupported resolved Modifier API: $api")
@@ -685,6 +686,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 // Padding changes the next operation's coordinate space. Repeated attributes
                 // must also keep their own layer instead of overwriting an earlier operation.
                 if ("padding" in seen || keys.any { it in seen }) break
+                if (api == "androidx.compose.ui.draw.clip" && "backgroundColor" in seen) break
                 when (api) {
                     "androidx.compose.foundation.layout.size" -> {
                         checkArguments(call, setOf("size", "width", "height"))
@@ -749,6 +751,12 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     "androidx.compose.foundation.background" -> {
                         checkArguments(call, setOf("color"))
                         attributes["backgroundColor"] = colorValue(argument(call, "color") ?: diagnostics.unsupported(call, "Missing background color"), scope)
+                    }
+                    "androidx.compose.ui.draw.clip" -> {
+                        checkArguments(call, setOf("shape"))
+                        val shape = argument(call, "shape") ?: diagnostics.unsupported(call, "Missing clip shape")
+                        attributes["borderRadius"] = language.expression(shape, scope)
+                        attributes["clip"] = literal(true, call)
                     }
                     "androidx.compose.ui.platform.testTag" -> {
                         checkArguments(call, setOf("tag"))

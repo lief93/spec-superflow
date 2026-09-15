@@ -48,7 +48,7 @@ fun main(arguments: Array<String>) {
             val module = frontend.module
             val diagnostics = DiagnosticSink()
             val stdlib = StandardLibraryRules()
-            val backend = EtsBackend(diagnostics, listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeAlignmentRule(), ComposeDimensionRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule()) + adapters.rules(), frontend.types)
+            val backend = EtsBackend(diagnostics, listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeAlignmentRule(), ComposeDimensionRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), ComposeShapeRule()) + adapters.rules(), frontend.types)
             if (mode == "page") {
                 backend.validateSource(module)
                 val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,

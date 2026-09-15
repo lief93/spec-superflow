@@ -35,7 +35,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "onClick" -> EtsFunctionType(emptyList(), EtsTypes.VOID)
             "onChange" -> EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.VOID)
             "onChildTouchTest" -> EtsFunctionType(listOf(EtsNamedType("Array", listOf(EtsNamedType("TouchTestInfo")))), EtsNamedType("TouchResult"))
-            "width", "height" -> value.type.takeIf { it == EtsTypes.NUMBER || it == EtsTypes.STRING }
+            "width", "height", "borderRadius" -> value.type.takeIf { it == EtsTypes.NUMBER || it == EtsTypes.STRING }
             "padding" -> value.type.takeIf { it == EtsTypes.NUMBER || it is EtsRecordType && it.name == "Padding" }
             "responseRegion", "mouseResponseRegion" -> value.type.takeIf { it is EtsRecordType && it.name == "Rectangle" }
             "alignItems" -> value.type.takeIf { it in listOf(EtsNamedType("HorizontalAlign"), EtsNamedType("VerticalAlign")) }

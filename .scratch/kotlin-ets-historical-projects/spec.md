@@ -240,3 +240,10 @@ reject source calls, allocations and mutable ordinary reads in affected argument
 lists rather than changing side effects/order. Add conditional non-consumption
 and reversed-consumer negative tests. Full effectful composition boundaries
 remain explicitly unsupported, not claimed complete by the image fixture.
+
+Twenty-second requirement: preserve resolved rectangular/circular clip shapes
+through the ordinary typed value adapter and ordered modifier lowering. Keep
+background-before-clip outside the clipping layer, and preserve padding order.
+Reject other shape implementations rather than erase them. Verify square and
+non-square clipping, source shape parameters, ordering, SDK output and native
+pixels, then replay the unchanged Banking entry to the next real failure.
