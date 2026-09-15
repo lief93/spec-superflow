@@ -41,15 +41,19 @@ for the supported formats, variant restrictions and no-overwrite policy.
   custom Painter implementations are not converted by this increment.
 - Painter parameters and source helper-method boundaries are preserved. A
   conditional R resource stays conditional in generated ETS, not a preview value.
-- Coil 2 AsyncImage accepts literal HTTP(S) model URLs without credentials,
-  contentDescription, modifier, alpha and the same ContentScale subset. It
-  becomes native Image URL loading, not a port of Coil. Request objects, dynamic
-  models, custom loaders, placeholders and callbacks reject. The application
-  must configure target networking permissions/policy; no network fetch is made
-  during compilation and no network/device rendering was tested here.
-- Resource IDs must retain resolved static R fields. Numeric/inlined IDs and
-  resource-ID parameters without a symbolic binding are rejected. Namespace
-  binding is explicit in the materializer, not inferred from a field's name.
+- Coil 2 AsyncImage accepts literal HTTP(S) URLs and the supported typed
+  ImageRequest builder (string/null data, crossfade duration, default SVG decoder).
+  Requests and placeholders use an owned typed component with native Image IO;
+  model replacement, loading placeholders, completion/error and stale callbacks
+  are handled there. Request loading requires bounded width and height. Null
+  data and errors use empty output, not an invented fallback image. Custom
+  loaders, explicit callbacks and other request options reject. Configure the
+  host application's networking permission/policy; compilation performs no IO.
+  This does not reproduce Coil cache policy or its complete decoder pipeline.
+- Actual integer resource IDs may flow through parameters and local variables
+  when the resource pack includes the selected variant's R.txt (`--symbols`).
+  Unknown IDs fail at the typed lookup; no IDs are guessed from field names.
+  Native LocalInspectionMode.current is false, preserving source conditionals.
 - Non-null description expressions and literal null are supported. Arbitrary
   nullable expressions require explicit branches. Null marks decorative images
   inaccessible; descriptions become accessibilityText.
@@ -82,6 +86,25 @@ method/parameter retention, source-linked failures, the shared void-result
 rejection, registry validation and executed tint-matrix arithmetic.
 SDK compilation is not a device or visual-equivalence test. Neither private
 project readiness nor full image-loader compatibility is implied.
+
+Request lifecycle and emitted-code tests:
+
+```sh
+bash tools/kotlin-ets/tests/ui/async-request/reactive.sh
+node tools/kotlin-ets/tests/ui/async-request/run.mjs /absolute/compose-coil-classpath.txt
+node tools/kotlin-ets/tests/ui/async-request/native.mjs /absolute/fixture-signed.hap
+```
+
+The native fixture requires INTERNET permission and reinstalls `com.joker.kit`
+without its app data to avoid URL cache contamination. It uses a gated local
+HTTP server, native SVG decoding, placeholder pixel checks and a button-triggered
+request change. Lifecycle arithmetic is separately tested from emitted methods.
+The reactive Builder lowering uses ArkUI API 20 `Binding`/`UIUtils.makeBinding`
+for state-dependent single-immediate-consumer argument chains of repeatable
+values. Source calls, allocations and mutable non-observed reads in these
+arguments reject rather than moving their evaluation into a getter. Repeated or
+deferred consumption is also explicitly rejected until a composition boundary can
+preserve evaluation semantics; it is not silently copied into multiple getters.
 
 Latest evidence (2026-09-14):
 

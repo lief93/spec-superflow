@@ -219,3 +219,24 @@ the lifecycle/state contract needed by asynchronous image consumption, without
 adding raw ETS templates or claiming that image loading is implemented. Verify
 positive and rejected target contracts and compile the unmodified generated
 parent/child fixture with the real SDK.
+
+Twenty-first requirement: consume supported Coil ImageRequest values in a typed
+owned ArkUI component, preserving placeholder, success/error, request changes
+and crossfade duration. Use native Image for IO and SVG decoding, not a new
+network runtime. Require bounded size while intrinsic-size negotiation remains
+unsupported; continue rejecting unimplemented loader options and callbacks.
+Native applications resolve LocalInspectionMode.current to false without
+deleting source branches. Verify loading state, stale callback isolation,
+placeholder/fade transitions, SDK compilation and native loading; then replay
+the unchanged historical page. Do not claim identical Coil caching policy.
+Native replay exposed frozen by-value builder argument chains. Preserve
+state-dependent single-consumer forwarding through the SDK Binding/makeBinding
+contract; reject repeated or deferred consumers until shared composition
+evaluation is represented. Ordinary language methods and constant-only builder
+signatures must stay unchanged. Verify this independently of image loading.
+Review correction for requirement 21: a Binding getter can execute zero or many
+times even with one syntactic consumer. Limit this pass to repeatable values;
+reject source calls, allocations and mutable ordinary reads in affected argument
+lists rather than changing side effects/order. Add conditional non-consumption
+and reversed-consumer negative tests. Full effectful composition boundaries
+remain explicitly unsupported, not claimed complete by the image fixture.

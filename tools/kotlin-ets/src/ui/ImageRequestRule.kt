@@ -7,7 +7,7 @@ import org.jetbrains.kotlin.ir.types.*
 
 /** Request values are separate from native loading and never reduced to their URL. */
 internal class CoilImageRequestRule : CallRule {
-    override fun targetFiles(program: EtsProgram) = imageRequestValueFiles(program)
+    override fun targetFiles(program: EtsProgram) = imageRequestValueFiles(program) + asyncImageFiles(program)
     override fun mapType(type: IrType, language: Language): EtsType? {
         val owner = type.classOrNull?.owner ?: return null
         if (sourceFile(owner) != null) return null

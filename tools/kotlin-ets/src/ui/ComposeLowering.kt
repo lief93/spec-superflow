@@ -106,8 +106,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val pageMethods = (methods.filter { it.symbol.id !in ownership.globalIds } + slotMethods).map(ownership::rewrite)
         val component = EtsClass(name, fields + pageMethods + build, language.source(root), exported = true, component = true, entry = true)
         files.getOrPut(language.source(root).file!!) { mutableListOf() }.add(component)
-        return linkAdapterDeclarations(EtsProgram(files.filterValues { it.isNotEmpty() }.map { (path, declarations) -> EtsFile(path, declarations) },
-            if (usesMaterialTypography) listOf(EtsImport("@ohos.graphics.drawing", "__etsDrawing", default = true)) else emptyList()), language.callRules)
+        return linkAdapterDeclarations(bindReactiveBuilderArguments(EtsProgram(files.filterValues { it.isNotEmpty() }.map { (path, declarations) -> EtsFile(path, declarations) },
+            if (usesMaterialTypography) listOf(EtsImport("@ohos.graphics.drawing", "__etsDrawing", default = true)) else emptyList())), language.callRules)
     }
 
     private val target = ArkUiCalls(language, diagnostics)
@@ -786,6 +786,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 attrs += attribute("mouseResponseRegion", listOf(record("Rectangle", linkedMapOf("x" to literal(0, touch.box), "y" to literal(0, touch.box),
                     "width" to literal("100%", touch.box), "height" to literal("100%", touch.box)), touch.box)), touch.box)
             }
+            if (cursor == operations.size && node.requiresBoundedSize && (!nextWidth || !nextHeight))
+                diagnostics.unsupported(owner, "Asynchronous image loading requires bounded width and height; intrinsic-size negotiation is not yet supported")
             if (cursor == operations.size && seen.none { it in node.modifierBoundaries })
                 return node.element.copy(attributes = node.element.attributes + attrs)
             return native("Stack", listOf(stackOptions(owner)), owner, listOf(layer(cursor, nextWidth, nextHeight))).copy(attributes = attrs)
