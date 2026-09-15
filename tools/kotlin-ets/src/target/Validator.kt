@@ -22,6 +22,9 @@ class EtsValidator {
     private var genericScope = emptyMap<String, EtsTypeParameter>()
     private var classes = emptyMap<String, EtsClass>()
     private var globalFunctions = emptyMap<String, EtsFunction>()
+    private var globalVariables = emptyMap<String, EtsGlobal>()
+    private var globalOwners = emptyMap<String, String>()
+    private var currentFile: String? = null
     private var currentClass: EtsClass? = null
     private var allowedSuper = emptyList<EtsSuperConstructorCall>()
     private var initializingClass: EtsClass? = null
@@ -399,7 +402,7 @@ class EtsValidator {
         allowedSuper = emptyList()
         val declarationIds = mutableSetOf<String>()
         program.files.flatMap { it.declarations }.forEach { declaration ->
-            val id = when (declaration) { is EtsFunction -> declaration.symbol.id; is EtsClass -> declaration.symbol.id }
+            val id = when (declaration) { is EtsFunction -> declaration.symbol.id; is EtsClass -> declaration.symbol.id; is EtsGlobal -> declaration.symbol.id }
             if (!declarationIds.add(id)) reject(declaration, "Duplicate target declaration identity: $id")
             if (declaration is EtsClass) {
                 val memberIds = mutableSetOf<Pair<String, EtsFunctionKind>>()
@@ -410,11 +413,15 @@ class EtsValidator {
         }
         classes = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>().associateBy { it.symbol.id }
         globalFunctions = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>().associateBy { it.symbol.id }
+        globalVariables = program.files.flatMap { it.declarations }.filterIsInstance<EtsGlobal>().associateBy { it.symbol.id }
+        globalOwners = program.files.flatMap { file -> file.declarations.filterIsInstance<EtsGlobal>()
+            .map { it.symbol.id to file.sourcePath } }.toMap()
         hierarchy()
         val names = mutableSetOf<String>()
         val globals = program.files.flatMap { it.declarations }.map { when (it) {
             is EtsFunction -> it.symbol
             is EtsClass -> it.symbol
+            is EtsGlobal -> it.symbol
         } }.associateBy { it.id }
         program.imports.forEach {
             val source = SourceSpan(null, -1, -1)
@@ -423,14 +430,20 @@ class EtsValidator {
         }
         val importedNames = names.toSet()
         program.files.forEach { file ->
+            currentFile = file.sourcePath
             if (perFileNames) { names.clear(); names.addAll(importedNames) }
             file.declarations.forEach { declaration ->
-            val declaredName = when (declaration) { is EtsFunction -> declaration.name; is EtsClass -> declaration.name }
+            val declaredName = when (declaration) { is EtsFunction -> declaration.name; is EtsClass -> declaration.name; is EtsGlobal -> declaration.symbol.name }
             if (declaration is EtsClass && declaration.kind == EtsClassKind.INTERFACE)
                 bindingName(declaredName, declaration.source)
             else valueBindingName(declaredName, declaration.source)
             if (!names.add(declaredName)) reject(declaration, "Conflicting target declaration: $declaredName")
             when (declaration) {
+                is EtsGlobal -> {
+                    type(declaration.symbol.type, declaration.source)
+                    expression(declaration.initializer, globals)
+                    expect(declaration.initializer, declaration.symbol.type)
+                }
                 is EtsFunction -> function(declaration, globals)
                 is EtsClass -> {
                     currentClass = declaration
@@ -796,6 +809,10 @@ class EtsValidator {
             is EtsAssignment -> {
                 if (value.target !is EtsReference && value.target !is EtsMember) reject(value, "Target assignment is not addressable")
                 visit(value.target); visit(value.value)
+                (value.target as? EtsReference)?.symbol?.id?.let { id -> globalVariables[id]?.let { global ->
+                    if (!global.mutable) reject(value, "Cannot assign a readonly target global")
+                    if (globalOwners[id] != currentFile) reject(value, "Imported target global writes require an owner-file setter")
+                } }
                 val target = value.target as? EtsMember
                 val receiver = target?.let { if (it.receiver.type is EtsTypeParameterType) boundReceiver(it) else it.receiver.type as? EtsNamedType }
                 if (receiver?.symbolId in classes) {

@@ -130,6 +130,9 @@ class EtsPrinter {
         EtsVisibility.PRIVATE -> "private "
     }
 
+    fun global(value: EtsGlobal): List<String> = listOf((if (value.exported) "export " else "") +
+        "${if (value.mutable) "let" else "const"} ${value.symbol.name}: ${type(value.symbol.type)} = ${expression(value.initializer)};")
+
     fun function(value: EtsFunction): List<String> {
         val prefix = (if (value.exported) "export " else "") + visibility(value.visibility) +
             (if (value.static) "static " else "") + (if (value.abstract) "abstract " else "") + when (value.kind) {
@@ -174,6 +177,7 @@ class EtsPrinter {
             when (declaration) {
                 is EtsFunction -> function(declaration)
                 is EtsClass -> clazz(declaration)
+                is EtsGlobal -> global(declaration)
             }.joinToString("\n")
         } }
         return (imports + listOfNotNull(support.takeIf { it.isNotEmpty() }?.joinToString("\n")) + declarations).joinToString("\n\n") + "\n"

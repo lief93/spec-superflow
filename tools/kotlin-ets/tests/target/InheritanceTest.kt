@@ -40,7 +40,8 @@ fun checkInheritanceContract() {
     fun reject(label: String, vararg changed: EtsDeclaration) {
         val next = declarations.map { original -> changed.firstOrNull {
             when (it) { is EtsClass -> original is EtsClass && it.name == original.name
-                is EtsFunction -> original is EtsFunction && it.name == original.name }
+                is EtsFunction -> original is EtsFunction && it.name == original.name
+                is EtsGlobal -> false }
         } ?: original }
         check(runCatching { EtsPrinter().program(program(*next.toTypedArray())) }.exceptionOrNull() is InvalidTarget) { label }
     }

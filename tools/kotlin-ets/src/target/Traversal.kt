@@ -19,6 +19,7 @@ fun walkEts(node: EtsNode, visit: (EtsNode) -> Unit) {
         is EtsObject -> node.fields.values.forEach(::walk)
         is EtsLambda -> { parameters(node.parameters); node.body.forEach(::walk) }
         is EtsVariable -> node.initializer?.let(::walk)
+        is EtsGlobal -> walk(node.initializer)
         is EtsExpressionStatement -> walk(node.expression)
         is EtsReturn -> node.value?.let(::walk)
         is EtsThrow -> walk(node.value)

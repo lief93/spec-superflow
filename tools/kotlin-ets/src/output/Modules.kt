@@ -29,10 +29,12 @@ fun emitEtsModules(program: EtsProgram, runtime: EtsRuntimeSupport): Map<String,
         val symbol = when (declaration) {
             is EtsFunction -> declaration.symbol
             is EtsClass -> declaration.symbol
+            is EtsGlobal -> declaration.symbol
         }
         val exported = when (declaration) {
             is EtsFunction -> declaration.exported
             is EtsClass -> declaration.exported
+            is EtsGlobal -> declaration.exported
         }
         symbol.id to Owner(file.sourcePath, symbol, exported)
     } }.toMap()
@@ -62,6 +64,7 @@ fun emitEtsModules(program: EtsProgram, runtime: EtsRuntimeSupport): Map<String,
             if (node is EtsExpression) typeReferences(node.type, node.source)
             when (node) {
                 is EtsVariable -> typeReferences(node.symbol.type, node.source)
+                is EtsGlobal -> typeReferences(node.symbol.type, node.source)
                 is EtsField -> typeReferences(node.symbol.type, node.source)
                 is EtsFunction -> typeReferences(node.symbol.type, node.source)
                 is EtsClass -> {
@@ -94,6 +97,7 @@ fun emitEtsModules(program: EtsProgram, runtime: EtsRuntimeSupport): Map<String,
         val declarations = file.declarations.map { declaration -> when (declaration) {
             is EtsFunction -> printer.function(declaration)
             is EtsClass -> printer.clazz(declaration)
+            is EtsGlobal -> printer.global(declaration)
         }.joinToString("\n") }
         val header = printer.program(EtsProgram(emptyList(), imports)).trim()
         names.getValue(file.sourcePath) to

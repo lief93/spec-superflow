@@ -84,6 +84,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 }
                 is IrClass -> file += language.clazz(declaration).copy(exported =
                     declaration.visibility != org.jetbrains.kotlin.descriptors.DescriptorVisibilities.PRIVATE)
+                is IrProperty -> file += lowerTopLevelProperty(declaration, language)
                 else -> diagnostics.unsupported(declaration, "Unsupported top-level UI module declaration")
             }
         }

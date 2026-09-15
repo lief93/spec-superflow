@@ -18,8 +18,9 @@ Unsupported semantics are diagnosed, not replaced with empty UI or default value
 
 ## Operating rules
 
-- Main assistant implements, tests and self-checks, one requirement at a time.
-  No developer/reviewer subagents and no scheduled wakeups.
+- Main assistant implements and tests one requirement at a time. Following the
+  latest project instructions, reuse the fixed read-only reviewer after freezing
+  each increment, then accept the evidence before proceeding. No scheduled wakeups.
 - Inspect pinned Kotlin common/JS implementations before designing new language
   machinery. Reuse compatible stages; do not transplant JS runtime conventions
   or write API-name string substitutions to approximate language semantics.
@@ -52,9 +53,11 @@ Proceed in this delivery order:
    numerical calculations/conversions, variables and initialization, nullable
    values, ordinary data models and collection transformations. Check existing
    support before adding implementations; do not expand speculative generic or
-   constructor combinations. Common numerical support is accepted below;
-   next check top-level values/variables and initialization, which the current
-   backend rejects even though local variables and class initializers exist.
+   constructor combinations. Common numerical support and constant-initialized
+   top-level storage have focused evidence below. Next check ordinary nullable
+   values, data models and collection transformations against existing support.
+   General file initialization remains explicit unsupported work, not implicit
+   eager execution in ETS.
    Then reuse Compose fixtures to verify the same official IR -> typed ETS path.
 3. Generate a representative page with nested component calls, resources and
    ordinary UI state. Compile/install it and verify pager/button/indicator linkage.
@@ -85,6 +88,28 @@ finite Float literals retain JVM precision. Reference and limits are in
   `tests/stdlib/double-relations/.work/symbols-5rzVeH`: resolved-call checks,
   newly supported paths and all 68 existing malformed-signature checks pass.
 No SDK/native or page visual acceptance is claimed for this increment.
+
+Top-level storage increment (2026-09-15): the same official property/field
+resolution feeds `EtsGlobal` in language and Compose modes. Original names,
+constant initialization, mutability and cross-file reads/writes are preserved;
+owner-file setter bridges avoid assigning imported ETS bindings. See
+`docs/top-level-properties.md` for the bounded contract and official references.
+Focused verification:
+- `tests/language/globals/.work/run-YEd3Z4`: 26 flat + 26 multi-file JVM/host
+  results; reversed-input output is identical; two unsupported initializer/accessor
+  cases report source lines and publish no ETS. A two-file Compose slot callback
+  validates through the shared target tree and updates owner storage from 0 to 2
+  when its actual lowered callback is replayed twice on the host.
+- `kotlin-ets-target-tests.MXoGKF`: target suite passes, including global storage,
+  traversal, printing and five invalid-tree rejections.
+- `kotlin-ets-backend-tests.WSzjpH`: official-IR/backend regression passes for
+  original/renamed fixtures, printer independence and JVM/host differential.
+The latter two evidence directories are under the host temporary directory.
+SDK/native/UI acceptance has not been run for this increment.
+Review caught source-file-based write selection failing after Compose slot
+relocation (reproduced in `globals/.work/run-FfkWlB`). Visible mutable-property
+writes now consistently use their owner setter before target ownership is chosen.
+Private storage relocated across files remains diagnosed, not made public.
 
 | Stage | Deliverable | Current state | Exit gate |
 | --- | --- | --- | --- |

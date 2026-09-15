@@ -159,28 +159,38 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         }
         is IrGetField -> {
             if (sourceFile(expression.symbol.owner) == null) diagnostics.unsupported(expression, "Unsupported external field")
-            val captured = when {
-                hasCaptureOrigin(expression.symbol.owner) -> capturedFieldSymbol(expression.symbol.owner)
-                expression.symbol.owner.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS -> outerFieldSymbol(expression.symbol.owner)
-                else -> null
+            val property = expression.symbol.owner.correspondingPropertySymbol?.owner
+            if (property?.parent is IrFile) {
+                EtsReference(topLevelStorage(property, this), source(expression))
+            } else {
+                val captured = when {
+                    hasCaptureOrigin(expression.symbol.owner) -> capturedFieldSymbol(expression.symbol.owner)
+                    expression.symbol.owner.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS -> outerFieldSymbol(expression.symbol.owner)
+                    else -> null
+                }
+                EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
+                    captured?.name ?: fieldName(expression.symbol.owner), type(expression.type), source(expression), captured?.id)
             }
-            EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
-                captured?.name ?: fieldName(expression.symbol.owner), type(expression.type), source(expression), captured?.id)
         }
         is IrSetField -> {
             if (sourceFile(expression.symbol.owner) == null) diagnostics.unsupported(expression, "Unsupported external field assignment")
-            if (hasCaptureOrigin(expression.symbol.owner))
-                diagnostics.unsupported(expression, "Captured field writes require the official constructor prefix")
-            if (expression.symbol.owner.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS) {
-                val owner = expression.symbol.owner.parent as? IrClass
-                    ?: diagnostics.unsupported(expression, "Outer field requires a registered class owner")
-                val binding = innerBinding(owner)
-                    ?: diagnostics.unsupported(owner, "Outer field requires a registered inner class")
-                rejectInner(binding, expression, "Outer field writes require the registered constructor prefix")
+            val property = expression.symbol.owner.correspondingPropertySymbol?.owner
+            if (property?.parent is IrFile) {
+                writeTopLevelProperty(property, expression(expression.value, scope), source(expression), this)
+            } else {
+                if (hasCaptureOrigin(expression.symbol.owner))
+                    diagnostics.unsupported(expression, "Captured field writes require the official constructor prefix")
+                if (expression.symbol.owner.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS) {
+                    val owner = expression.symbol.owner.parent as? IrClass
+                        ?: diagnostics.unsupported(expression, "Outer field requires a registered class owner")
+                    val binding = innerBinding(owner)
+                        ?: diagnostics.unsupported(owner, "Outer field requires a registered inner class")
+                    rejectInner(binding, expression, "Outer field writes require the registered constructor prefix")
+                }
+                val target = EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
+                    fieldName(expression.symbol.owner), type(expression.symbol.owner.type), source(expression))
+                discard(EtsAssignment(target, expression(expression.value, scope), source(expression)), expression)
             }
-            val target = EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
-                fieldName(expression.symbol.owner), type(expression.symbol.owner.type), source(expression))
-            discard(EtsAssignment(target, expression(expression.value, scope), source(expression)), expression)
         }
         is IrTypeOperatorCall -> typeOperator(expression, scope)
         is IrWhen -> whenExpression(expression, scope)
@@ -273,6 +283,12 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             diagnostics.unsupported(call, "Data class ${owner.name} is outside the first language slice")
         }
         val property = owner.correspondingPropertySymbol?.owner
+        if (property?.parent is IrFile) {
+            val storage = topLevelStorage(property, this)
+            return if (property.setter?.symbol == owner.symbol)
+                writeTopLevelProperty(property, arguments(call, scope).single(), source(call), this)
+            else EtsReference(storage, source(call))
+        }
         val substitutions = if (owner.dispatchReceiverParameter == null) emptyMap()
             else receiverSubstitution(parent as? IrClass, receiver)
         if (property != null) {

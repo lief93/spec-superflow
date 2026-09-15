@@ -75,6 +75,8 @@ data class EtsLambda(val parameters: List<EtsParameter>, val body: List<EtsState
 
 data class EtsVariable(val symbol: EtsSymbol, val initializer: EtsExpression?, val mutable: Boolean,
     override val source: SourceSpan = symbol.source) : EtsStatement
+data class EtsGlobal(val symbol: EtsSymbol, val initializer: EtsExpression, val mutable: Boolean,
+    val exported: Boolean = false, override val source: SourceSpan = symbol.source) : EtsDeclaration
 data class EtsExpressionStatement(val expression: EtsExpression,
     override val source: SourceSpan = expression.source) : EtsStatement
 data class EtsReturn(val value: EtsExpression?, override val source: SourceSpan) : EtsStatement

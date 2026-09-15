@@ -31,11 +31,12 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceT
         modules.forEach(::validateSource)
         val program = EtsProgram(modules.flatMap { it.files }.map { file ->
             diagnostics.currentFile = file.fileEntry.name
-            EtsFile(file.fileEntry.name, file.declarations.map { declaration -> when (declaration) {
-                is IrSimpleFunction -> language.function(declaration).copy(
-                    exported = !DescriptorVisibilities.isPrivate(declaration.visibility))
-                is IrClass -> language.clazz(declaration).copy(
-                    exported = sourceClassIsExported(declaration))
+            EtsFile(file.fileEntry.name, file.declarations.flatMap { declaration -> when (declaration) {
+                is IrSimpleFunction -> listOf(language.function(declaration).copy(
+                    exported = !DescriptorVisibilities.isPrivate(declaration.visibility)))
+                is IrClass -> listOf(language.clazz(declaration).copy(
+                    exported = sourceClassIsExported(declaration)))
+                is IrProperty -> lowerTopLevelProperty(declaration, language)
                 else -> diagnostics.unsupported(declaration, "Unsupported top-level declaration")
             } })
         })

@@ -30,6 +30,7 @@ fun main() {
     checkClassIdentityContract()
     checkStrictBindingContract()
     checkGlobalBuilderContract()
+    checkGlobalVariableContract()
     check(sum.source == source)
     val bad = function.copy(body = listOf(EtsReturn(EtsLiteral("wrong", EtsTypes.STRING, source), source)))
     val failure = runCatching { EtsPrinter().program(program.copy(files = listOf(EtsFile("Arithmetic.kt", listOf(bad))))) }.exceptionOrNull()
