@@ -224,3 +224,21 @@ constructors-sdk-r7kmWt checks all six unchanged current modules and builds
 ABC/HAP. Input/output hashes were rechecked. This is SDK legality, not native
 execution, UI fidelity or acceptance of all R2 capture compositions. The combined
 R2 gate remains pending.
+
+Separate native smoke follow-up: the existing HarmonyKitPhone emulator was
+started with data-preserving coldboot after snapshot boot failed to expose HDC.
+On OpenHarmony-6.1.1.125, device 127.0.0.1:16555, the unchanged signed HAP from
+constructors-sdk-r7kmWt was installed with hdc install -r and EntryAbility launched.
+uitest dumpLayout -b com.joker.kit captured its actual pages/Index Text node.
+At seed 7, construct, nativeRoot, dispatchRoots, dispatchInheritance,
+dispatchGeneric, dispatchDefaults, dispatchEarly and protectedConstruction match
+the concatenation of the corresponding eight JVM oracle results exactly.
+The assertion verifies the bundle/ability/page, visible Text, all SDK input/module/
+HAP hashes and the passed oracle. It does not extrapolate to the other seeds,
+other R2 families, physical devices or UI fidelity.
+
+- HAP SHA-256: 2d9349adc900569f905758180fec363dcff1f797afd8b92dbbf723bfb4e1530c
+- Layout: /private/tmp/kotlin-ets-constructors-sdk-r7kmWt/native-layout.json
+- Layout SHA-256: dfba9ab779cca403aea1b5d743e05dd9e88b0155a215d634a57d11bd8c1f02bc
+- Oracle: tests/constructors/.work/run-pDvEKk/result.json, expected offsets
+  36 + [0, 7, 11, 12, 13, 14, 15, 16], matching Oracle.kt and SdkIndex.ets.

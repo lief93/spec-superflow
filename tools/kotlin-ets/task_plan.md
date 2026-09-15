@@ -126,8 +126,10 @@ non-generic inner classes. SourceTypes now returns invariant arguments unchanged
 matching the official identity case before its original-parent prerequisite.
 Real projections still use official capture/subtype queries. SDK
 constructors-sdk-r7kmWt checks all six current constructor modules and builds
-ABC/HAP; no native or whole-R2 acceptance is implied. Next is the frozen R2 gate
-and explicit accounting of existing gaps, not new generic scenario expansion.
+ABC/HAP. A separate native smoke run of that signed HAP matches eight existing
+constructor paths at seed 7 against the JVM oracle; this is not full native R2
+coverage. Commit d0a733c is pushed. Next is the frozen R2 gate and explicit
+accounting of existing gaps, not new generic scenario expansion.
 
 Protected constructor visibility is accepted for the documented source family.
 The target contract now uses EtsVisibility for methods, fields and constructors;
