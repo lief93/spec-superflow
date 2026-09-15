@@ -241,3 +241,18 @@ The executable example and rejection tests are in
 `tests/adapter-constructors/run.mjs`. This follows the official IR distinction
 between `IrCall` and `IrConstructorCall`; Kotlin/JS also redirects constructor
 symbols in `SecondaryCtorLowering`, while our adapter provides ETS semantics.
+
+## External singleton values
+
+`CallRule.lowerObject(IrGetObjectValue, Language, Scope)` adapts a resolved
+external singleton reference. Claim its fully qualified type in `sourceTypes`
+and return its mapped typed value, or `null` to decline. The same result checker
+rejects wrong/void values. An object reference is not a constructor or UI call;
+preserve singleton identity and do not introduce repeated initialization effects.
+The constructor test module also exercises singleton success and rejection.
+
+The built-in `EtsEmptyModifier` represents only Compose's empty identity value.
+It may cross source helper/builder parameters and act as the base of a supported
+inline modifier chain. It is not a representation of arbitrary nonempty chains;
+passing those as values still diagnoses unsupported conversion rather than
+silently dropping their layout or drawing behavior.

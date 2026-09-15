@@ -171,3 +171,13 @@ their transitive owned dependencies and imports use the shared typed linker.
 Validate value parity, selection and override behavior, unchanged SDK output and
 native text/font attributes; rerun Banking. MaterialTheme typography providers,
 advanced paragraph attributes and complete font synthesis are separate gaps.
+
+Sixteenth requirement: preserve external singleton values through the shared
+typed adapter contract. Initially represent only the empty Compose Modifier
+identity across ordinary helpers and source builder parameters/defaults. Keep
+one target identity and preserve argument effects. A bound empty identity is a
+no-op base for an otherwise supported inline modifier chain. Nonempty modifier
+values crossing methods remain explicit unsupported cases, never silently empty.
+Use a minimal source-component fixture and SDK output, then replay Banking.
+Correct default-argument source ownership when evaluating another declaration's
+default; no offsets from a callee may be attributed to the caller's file.

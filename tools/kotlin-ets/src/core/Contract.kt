@@ -70,6 +70,8 @@ fun interface CallRule {
     /** Object construction is value-producing, even when its result is discarded. */
     fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? = null
 
+    fun lowerObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? = null
+
     /** Only consulted when the source result is discarded. Empty means a handled no-op. */
     fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? = null
 
@@ -107,11 +109,15 @@ sealed interface CallResult {
     data class Ui(val statements: List<EtsStatement>) : CallResult
 }
 
-private fun checkedAdapterValue(call: IrFunctionAccessExpression, expression: EtsExpression,
+private fun checkedAdapterValue(call: IrExpression, expression: EtsExpression,
     language: Language): EtsExpression {
     val expected = language.type(call.type)
     if (!etsAssignable(expression.type, expected)) throw Unsupported(Diagnostic("UNSUPPORTED",
-        "Invalid call adapter result for ${symbolName(call.symbol.owner)}: expected $expected, got ${expression.type}",
+        "Invalid call adapter result for ${when (call) {
+            is IrFunctionAccessExpression -> symbolName(call.symbol.owner)
+            is IrGetObjectValue -> symbolName(call.symbol.owner)
+            else -> call.javaClass.simpleName
+        }}: expected $expected, got ${expression.type}",
         language.source(call)))
     return expression
 }
@@ -119,6 +125,13 @@ private fun checkedAdapterValue(call: IrFunctionAccessExpression, expression: Et
 fun adaptConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? {
     for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
         rule.lowerConstructor(call, language, scope)?.let { return checkedAdapterValue(call, it, language) }
+    }
+    return null
+}
+
+fun adaptObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? {
+    for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
+        rule.lowerObject(value, language, scope)?.let { return checkedAdapterValue(value, it, language) }
     }
     return null
 }

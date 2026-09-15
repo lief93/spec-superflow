@@ -49,5 +49,16 @@ for (const name of ['Wrong', 'Effect']) {
   assert.equal(resolve(report.source.file), join(here, name + '.kt'));
 }
 assert.match(compile('Unclaimed', 2).message, /Unsupported external constructor/);
+const objects = compile('Objects');
+const objectContext = vm.createContext({ exports: {} });
+vm.runInContext(ts.transpileModule(objects, { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS
+} }).outputText, objectContext);
+assert.equal(objectContext.exports.result(), 9);
+for (const name of ['WrongObject', 'EffectObject']) {
+  const report = compile(name, 2);
+  assert.match(report.message, /Invalid call adapter result/);
+  assert.equal(resolve(report.source.file), join(here, name + '.kt'));
+}
 writeFileSync(join(work, 'parity.json'), JSON.stringify({ expected, actual }, null, 2));
 console.log('PASS constructor SPI, typed result rejection, source constructor and JVM once-only parity');

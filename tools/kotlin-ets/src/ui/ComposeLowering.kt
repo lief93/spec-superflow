@@ -411,8 +411,12 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             val args = function.valueParameters.mapIndexed { index, parameter ->
                 val value = call.getValueArgument(index) ?: parameter.defaultValue?.expression
                     ?: diagnostics.unsupported(call, "Missing builder argument ${parameter.name}")
-                if (parameter.type.hasAnnotation(COMPOSABLE)) uiLambda(value, scope, "${function.name}_${parameter.name}")
-                else expression(value, scope)
+                val previousFile = diagnostics.currentFile
+                if (call.getValueArgument(index) == null) diagnostics.currentFile = sourceFile(parameter)?.fileEntry?.name
+                try {
+                    if (parameter.type.hasAnnotation(COMPOSABLE)) uiLambda(value, scope, "${function.name}_${parameter.name}")
+                    else expression(value, scope)
+                } finally { diagnostics.currentFile = previousFile }
             }
             return listOf(EtsUiElement(methodCall(builderSymbol(function), contextArguments(scope) + args, call)))
         }
@@ -602,6 +606,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 null -> return
                 is IrGetObjectValue -> if (symbolName(resolved.symbol.owner) !in setOf("androidx.compose.ui.Modifier.Companion", "androidx.compose.ui.Modifier"))
                     diagnostics.unsupported(resolved, "Expected Modifier companion")
+                is IrGetValue -> if (scope.bindings[resolved.symbol]?.type != emptyModifierType)
+                    diagnostics.unsupported(resolved, "Unsupported bound Modifier value")
                 is IrCall -> {
                     collect(resolved.extensionReceiver ?: resolved.dispatchReceiver)
                     operations += resolved

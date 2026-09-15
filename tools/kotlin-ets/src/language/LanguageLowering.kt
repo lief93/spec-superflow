@@ -211,7 +211,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                 EtsBinary("+", result, stringOperand(value, scope), EtsTypes.STRING, source(expression))
             }
         is IrReturn -> diagnostics.unsupported(expression, "Return requires a statement position")
-        is IrGetObjectValue -> {
+        is IrGetObjectValue -> adaptObject(expression, this, scope) ?: run {
             val owner = expression.symbol.owner
             when {
                 owner.fqNameWhenAvailable?.asString() == "kotlin.Unit" -> discard(EtsUndefined(source(expression)), expression)
