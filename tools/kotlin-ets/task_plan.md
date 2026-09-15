@@ -48,9 +48,14 @@ Proceed in this delivery order:
    line/column, unavailable positions kept null. `python3 -B
    tools/kotlin-ets/tests/integration/test_cli.py` passes all six tests (132.661s),
    including real CLI output and unchanged success/failure behavior.
-2. Reuse existing ordinary-language and Compose fixtures to verify the main
-   source -> official IR -> typed ETS path. Repair blockers on this path, not
-   speculative generic/constructor combinations.
+2. First fill common language-level blockers using ordinary-language fixtures:
+   numerical calculations/conversions, variables and initialization, nullable
+   values, ordinary data models and collection transformations. Check existing
+   support before adding implementations; do not expand speculative generic or
+   constructor combinations. Common numerical support is accepted below;
+   next check top-level values/variables and initialization, which the current
+   backend rejects even though local variables and class initializers exist.
+   Then reuse Compose fixtures to verify the same official IR -> typed ETS path.
 3. Generate a representative page with nested component calls, resources and
    ordinary UI state. Compile/install it and verify pager/button/indicator linkage.
    Preserve method/parameter names and source structure where the target allows.
@@ -63,6 +68,23 @@ its existing failed result is evidence, not a reason to broaden generic work.
 The latest run passed six suites and stopped on an obsolete covariance-negative
 expectation in methods/probe.mjs; that suite is not recorded as passed.
 Full R2-R7 acceptance remains unclaimed and distinct from POC acceptance.
+
+Language, platform/framework, project and page are responsibility layers, not
+four independent parsers. Language/runtime lowering serves them all; project
+adapters replace project dependencies; pages are consumers and acceptance inputs.
+
+Accepted numerical increment (2026-09-15): `FloatingPointRules` uses resolved
+official calls and the shared ETS tree for arithmetic/conversions/comparisons;
+finite Float literals retain JVM precision. Reference and limits are in
+`docs/numeric-lowering.md`. Final frozen evidence:
+- `tests/language/numbers/.work/run-I52uEz`: 67 flat + 67 multi-file JVM/host
+  results, source names/default arguments and evaluation order.
+- `tests/inheritance/overloads/.work/run-gLiJKj`: 30 flat + 30 module results,
+  five promoted floating overload results and official override/call assertions.
+- `tests/stdlib/int-double/.work/symbols-wR3IHN` and
+  `tests/stdlib/double-relations/.work/symbols-5rzVeH`: resolved-call checks,
+  newly supported paths and all 68 existing malformed-signature checks pass.
+No SDK/native or page visual acceptance is claimed for this increment.
 
 | Stage | Deliverable | Current state | Exit gate |
 | --- | --- | --- | --- |

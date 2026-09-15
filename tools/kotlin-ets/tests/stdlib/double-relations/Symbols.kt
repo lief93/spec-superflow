@@ -25,6 +25,7 @@ fun main(args: Array<String>) = withKotlinFrontend(args.toList()) { frontend ->
     val rules = StandardLibraryRules()
     var accepted = 0
     var declined = 0
+    var promoted = 0
     var mutations = 0
     for ((file, call) in calls) {
         val owner = call.symbol.owner
@@ -32,6 +33,15 @@ fun main(args: Array<String>) = withKotlinFrontend(args.toList()) { frontend ->
         val language = RelationLanguage(file)
         val result = rules.lower(call, language, Scope())
         if (file.endsWith("Rejected.kt")) {
+            if (symbolName(owner) == "kotlin.internal.ir.ieee754equals" ||
+                (symbolName(owner) in operators && call.getValueArgument(0)?.type?.isFloat() == true)) {
+                check(result is EtsBinary && result.type == EtsTypes.BOOLEAN)
+                check(result.operator == (operators[symbolName(owner)] ?: "==="))
+                check(language.inputs.size == 2 && language.inputs[0] === call.getValueArgument(0) &&
+                    language.inputs[1] === call.getValueArgument(1))
+                promoted++
+                continue
+            }
             check(result == null && language.inputs.isEmpty()) { "Accepted excluded relation ${owner.render()}" }
             declined++
             continue
@@ -77,8 +87,8 @@ fun main(args: Array<String>) = withKotlinFrontend(args.toList()) { frontend ->
         reject("declared nullable right", { owner.valueParameters[1].type = rightType.makeNullable() }, { owner.valueParameters[1].type = declaredRight })
         reject("source origin", { owner.origin = IrDeclarationOrigin.DEFINED }, { owner.origin = origin })
     }
-    check(accepted == 4 && declined == 6 && mutations == 56) { "$accepted/$declined/$mutations" }
-    println("PASS four actual Double relations, six excluded APIs, 56 malformed signatures before children; no runtime")
+    check(accepted == 4 && promoted == 2 && declined == 4 && mutations == 56) { "$accepted/$promoted/$declined/$mutations" }
+    println("PASS four Double relations, two promoted floating comparisons, four excluded APIs, 56 malformed signatures")
 }
 
 private class RelationLanguage(private val file: String) : Language {
@@ -92,7 +102,7 @@ private class RelationLanguage(private val file: String) : Language {
     }
     override fun expression(expression: IrExpression, scope: Scope): EtsExpression {
         inputs.add(expression)
-        check(expression.type.isDouble())
+        check(expression.type.isDouble() || expression.type.isFloat())
         val name = "operand${symbols.size}"
         val symbol = EtsSymbol(name, name, EtsTypes.NUMBER, source(expression))
         symbols.add(symbol)

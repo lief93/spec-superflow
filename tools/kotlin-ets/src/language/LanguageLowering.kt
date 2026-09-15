@@ -1245,7 +1245,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         is Boolean, is Byte, is Short, is Int -> constant
         is Long -> if (constant in -9007199254740991L..9007199254740991L) constant
             else diagnostics.unsupported(value, "Long constant cannot be represented exactly as a target number")
-        is Float -> if (constant.isFinite()) constant else diagnostics.unsupported(value, "Non-finite float constant")
+        is Float -> if (constant.isFinite()) constant.toDouble() else diagnostics.unsupported(value, "Non-finite float constant")
         is Double -> if (constant.isFinite()) constant else diagnostics.unsupported(value, "Non-finite double constant")
         else -> diagnostics.unsupported(value, "Unsupported constant type: ${constant.javaClass.simpleName}")
         }

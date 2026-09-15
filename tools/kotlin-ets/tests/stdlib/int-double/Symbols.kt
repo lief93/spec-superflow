@@ -21,6 +21,7 @@ fun main(args: Array<String>) = withKotlinFrontend(args.toList()) { frontend ->
     val rules = StandardLibraryRules()
     var accepted = 0
     var declined = 0
+    var promoted = 0
     var mutations = 0
     for ((file, call) in calls) {
         val owner = call.symbol.owner
@@ -28,6 +29,11 @@ fun main(args: Array<String>) = withKotlinFrontend(args.toList()) { frontend ->
         println("ACTUAL ${symbolName(owner)} ${owner.render()} origin=${owner.origin} fake=${owner.isFakeOverride} dispatch=${owner.dispatchReceiverParameter?.type?.render()}")
         val result = rules.lower(call, language, Scope())
         if (file.endsWith("Rejected.kt")) {
+            if (symbolName(owner) in setOf("kotlin.Float.toDouble", "kotlin.Double.toDouble")) {
+                check(result is EtsReference && language.inputs.single() === call.dispatchReceiver)
+                promoted++
+                continue
+            }
             check(result == null && language.inputs.isEmpty()) { "Accepted unapproved conversion ${symbolName(owner)}" }
             declined++
             continue
@@ -73,8 +79,8 @@ fun main(args: Array<String>) = withKotlinFrontend(args.toList()) { frontend ->
         reject("source origin", { owner.origin = IrDeclarationOrigin.DEFINED }, { owner.origin = origin })
         reject("declared nullable result", { owner.returnType = declaredResult.makeNullable() }, { owner.returnType = declaredResult })
     }
-    check(accepted == 2 && declined == 5 && mutations == 12) { "$accepted/$declined/$mutations" }
-    println("PASS two real Int.toDouble calls, five excluded conversion families, 12 malformed signatures; one child/no runtime")
+    check(accepted == 2 && promoted == 2 && declined == 3 && mutations == 12) { "$accepted/$promoted/$declined/$mutations" }
+    println("PASS two Int.toDouble and two promoted floating conversions, three excluded families, 12 malformed signatures")
 }
 
 private class ConversionLanguage(private val file: String) : Language {
@@ -84,7 +90,7 @@ private class ConversionLanguage(private val file: String) : Language {
     override fun type(type: IrType): EtsType = if (type.isInt() || type.isDouble()) EtsTypes.NUMBER else error(type.render())
     override fun expression(expression: IrExpression, scope: Scope): EtsExpression {
         inputs.add(expression)
-        check(expression.type.isInt())
+        check(expression.type.isInt() || expression.type.isFloat() || expression.type.isDouble())
         return EtsReference(symbol, source(expression))
     }
     override fun statements(body: IrBody, scope: Scope): List<EtsStatement> = error("Not a body probe")

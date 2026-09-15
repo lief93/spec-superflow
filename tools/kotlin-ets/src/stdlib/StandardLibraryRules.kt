@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.ir.util.isNullable
 class StandardLibraryRules : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
         IterationRules.lower(call, language, scope)?.let { return it }
+        FloatingPointRules.lower(call, language, scope)?.let { return it }
         val name = symbolName(call.symbol.owner)
         val receiver = call.dispatchReceiver ?: call.extensionReceiver
         val args = (0 until call.valueArgumentsCount).map { call.getValueArgument(it) }
@@ -59,20 +60,6 @@ class StandardLibraryRules : CallRule {
         }
         if (name == "kotlin.internal.ir.EQEQ" && nullEqualitySignature(call)) {
             return binary("===", arg(0), arg(1), EtsTypes.BOOLEAN)
-        }
-        if (name == "kotlin.Int.toDouble" && intToDoubleSignature(call)) {
-            // Official Kotlin/JS reinterprets this receiver; every Int is exact in an ETS number.
-            return receiverNode()
-        }
-        val doubleRelation = when (name) {
-            "kotlin.internal.ir.less" -> "<"
-            "kotlin.internal.ir.lessOrEqual" -> "<="
-            "kotlin.internal.ir.greater" -> ">"
-            "kotlin.internal.ir.greaterOrEqual" -> ">="
-            else -> null
-        }
-        if (doubleRelation != null && doubleRelationSignature(call)) {
-            return binary(doubleRelation, arg(0), arg(1), EtsTypes.BOOLEAN)
         }
 
         if (signature("kotlin.Int", "kotlin.Int", "kotlin.Int")) {
@@ -236,33 +223,6 @@ class StandardLibraryRules : CallRule {
     }
 
     fun supportLines(): List<String> = standardLibrarySupportLines()
-}
-
-private fun intToDoubleSignature(call: IrCall): Boolean {
-    val owner = call.symbol.owner
-    return owner.origin == IrDeclarationOrigin.IR_EXTERNAL_DECLARATION_STUB && sourceFile(owner) == null &&
-        !owner.isSuspend && !owner.isFakeOverride && owner.typeParameters.isEmpty() &&
-        owner.extensionReceiverParameter == null && owner.valueParameters.isEmpty() &&
-        call.extensionReceiver == null && call.superQualifierSymbol == null &&
-        call.typeArgumentsCount == 0 && call.valueArgumentsCount == 0 &&
-        owner.dispatchReceiverParameter?.type.invariantArguments("kotlin.Int") == emptyList<IrType>() &&
-        call.dispatchReceiver?.type.invariantArguments("kotlin.Int") == emptyList<IrType>() &&
-        owner.returnType.invariantArguments("kotlin.Double") == emptyList<IrType>() &&
-        call.type.invariantArguments("kotlin.Double") == emptyList<IrType>()
-}
-
-private fun doubleRelationSignature(call: IrCall): Boolean {
-    val owner = call.symbol.owner
-    return owner.origin == IrBuiltIns.BUILTIN_OPERATOR && sourceFile(owner) == null &&
-        !owner.isSuspend && !owner.isFakeOverride && owner.typeParameters.isEmpty() &&
-        owner.dispatchReceiverParameter == null && owner.extensionReceiverParameter == null &&
-        call.dispatchReceiver == null && call.extensionReceiver == null && call.superQualifierSymbol == null &&
-        call.typeArgumentsCount == 0 && call.valueArgumentsCount == 2 && owner.valueParameters.size == 2 &&
-        owner.returnType.invariantArguments("kotlin.Boolean") == emptyList<IrType>() &&
-        call.type.invariantArguments("kotlin.Boolean") == emptyList<IrType>() &&
-        owner.valueParameters.all { it.type.invariantArguments("kotlin.Double") == emptyList<IrType>() &&
-            it.varargElementType == null && it.defaultValue == null } &&
-        (0..1).all { call.getValueArgument(it)?.type.invariantArguments("kotlin.Double") == emptyList<IrType>() }
 }
 
 // Only the official literal-null fast path; this does not implement equals dispatch.

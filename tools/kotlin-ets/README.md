@@ -133,6 +133,9 @@ publishes a new target file.
 Detailed supported and rejected language/library cases are documented beside
 their tests. This slice does not establish compatibility for arbitrary business
 libraries, inherited classes, network calls, services or all Compose APIs.
+Common Float/Double arithmetic and conversions share the typed language path;
+see [docs/numeric-lowering.md](docs/numeric-lowering.md) for JVM precision rules,
+focused tests and explicit limits.
 The previous backend increment added bounded generics, explicit-source library
 inlining and multi-file output; see
 [docs/modules-generics-inline-batch.md](docs/modules-generics-inline-batch.md).

@@ -95,13 +95,16 @@ for (const [name, reason] of [['External', /external inherited declarations/], [
   assert.equal(existsSync(output), false); result.negatives.push(diagnostic);
 }
 const floatSource = join(here, 'UnsupportedFloatBody.kt'), floatOut = join(work, 'FloatBody.ets');
-run('float-jvm', 'bash', [compiler, floatSource, '-d', join(work, 'FloatBody.jar')]);
-result.floatBoundary = JSON.parse(run('float-boundary', 'bash', [cli, '--mode', 'language', '--out', floatOut, floatSource], 2));
-assert.equal(result.floatBoundary.code, 'UNSUPPORTED');
-assert.match(result.floatBoundary.message, /Unsupported external call: kotlin.Double.plus/);
-assert.equal(result.floatBoundary.source.file, floatSource);
-assert.ok(result.floatBoundary.source.start >= 0 && result.floatBoundary.source.end > result.floatBoundary.source.start);
-assert.equal(existsSync(floatOut), false);
+run('float-jvm', 'bash', [compiler, floatSource, join(here, 'FloatBodyOracle.kt'), '-d', join(work, 'FloatBody.jar')]);
+result.floatExpected = run('float-oracle', 'java', ['-cp', `${join(work, 'FloatBody.jar')}:${cp}`, 'FloatBodyOracleKt']).trim().split('\n').map(Number);
+run('float-body', 'bash', [cli, '--mode', 'language', '--out', floatOut, floatSource]);
+const floatCode = readFileSync(floatOut, 'utf8'), floatTs = join(work, 'FloatBody.ts');
+writeFileSync(floatTs, floatCode); check([floatTs]);
+const floatContext = vm.createContext({ exports: {} });
+vm.runInContext(ts.transpileModule(floatCode, { compilerOptions: options }).outputText, floatContext, { timeout: 1000 });
+result.floatActual = [0, -3, 7, -2147483648, 2147483647].map(seed =>
+  vm.runInContext(`exports.floatBody(${seed})`, floatContext, { timeout: 1000 }));
+assert.deepEqual(result.floatActual, result.floatExpected);
 for (const input of inputs) assert.equal(hash(input.path), input.sha256, input.path);
 result.output = { path: out, sha256: hash(out) }; result.passed = true; record();
 console.log(`PASS ${result.actual.length} flat + ${result.moduleActual.length} module JVM/ETS-host virtual overload results`);
