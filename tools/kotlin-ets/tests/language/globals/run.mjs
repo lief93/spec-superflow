@@ -14,7 +14,7 @@ console.log(`Evidence: ${work}`);
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const sources = ['State.kt', 'Application.kt'].map(p => join(here, p));
 const uiSources = ['UiState.kt', 'UiPage.kt'].map(p => join(here, p));
-const negatives = [['Initialized.kt', /file-initialization lowering/], ['Accessor.kt', /default accessors/]];
+const negatives = [['Initialized.kt', /file-initialization lowering/]];
 const inputs = [...readdirSync(join(root, 'src'), { recursive: true }).filter(p => p.endsWith('.kt')).map(p => join(root, 'src', p)),
   ...sources, ...uiSources, join(here, 'GlobalUiProbe.kt'), ...negatives.map(([name]) => join(here, name)), join(here, 'Oracle.kt'), fileURLToPath(import.meta.url)].map(path => ({ path, sha256: hash(path) }));
 const result = { inputs, commands: [], passed: false, level: 'JVM/ETS host; not SDK or native' };

@@ -283,6 +283,10 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             diagnostics.unsupported(call, "Data class ${owner.name} is outside the first language slice")
         }
         val property = owner.correspondingPropertySymbol?.owner
+        if (topLevelAccessorName(owner) != null) {
+            return EtsCall(EtsReference(functionSymbol(owner), source(call)), arguments(call, scope),
+                type(call.type), source(call))
+        }
         if (property?.parent is IrFile) {
             val storage = topLevelStorage(property, this)
             return if (property.setter?.symbol == owner.symbol)
@@ -535,7 +539,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         reserveNames(function)
         val property = function.correspondingPropertySymbol?.owner
         val originalName = property?.let { identifier(it) } ?: identifier(function)
-        val emittedName = if (property == null) overloadNaming.name(function) else originalName
+        val emittedName = topLevelAccessorName(function) ?:
+            if (property == null) overloadNaming.name(function) else originalName
         val sourceName = originalName.takeUnless { it == emittedName }
         if (function.isSuspend) {
             diagnostics.unsupported(function, "Suspend source methods are outside the first language slice")
@@ -561,6 +566,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             else (it.parent as? IrClass)?.kind != ClassKind.INTERFACE }
             .map { functionSymbol(it).id }.distinct()
         val kind = when {
+            property?.parent is IrFile -> EtsFunctionKind.FUNCTION
             property?.getter == function -> EtsFunctionKind.GETTER
             property?.setter == function -> EtsFunctionKind.SETTER
             function.parent is IrClass -> EtsFunctionKind.METHOD
@@ -937,13 +943,15 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
     private fun functionSymbol(function: IrSimpleFunction): EtsSymbol {
         val property = function.correspondingPropertySymbol?.owner
         val originalName = property?.let { identifier(it) } ?: identifier(function)
-        val emittedName = if (property == null) overloadNaming.name(function) else originalName
+        val emittedName = topLevelAccessorName(function) ?:
+            if (property == null) overloadNaming.name(function) else originalName
         return etsFunctionSymbol(emittedName,
             (listOfNotNull(function.extensionReceiverParameter) + function.valueParameters).map { type(it.type) },
             type(function.returnType), declarationSource(function), typeParameters(function), sourceName = originalName,
-            kind = when (function) {
-                property?.getter -> EtsFunctionKind.GETTER
-                property?.setter -> EtsFunctionKind.SETTER
+            kind = when {
+                property?.parent is IrFile -> EtsFunctionKind.FUNCTION
+                function == property?.getter -> EtsFunctionKind.GETTER
+                function == property?.setter -> EtsFunctionKind.SETTER
                 else -> EtsFunctionKind.FUNCTION
             })
     }

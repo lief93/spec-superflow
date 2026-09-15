@@ -23,7 +23,22 @@ a setter bridge; a different file's `currentPage = next` calls that bridge.
 The target validator also rejects malformed trees that write imported storage
 directly or assign immutable storage.
 
-Custom accessors, delegates, `lateinit`, external storage and nonconstant
+Computed top-level properties without backing storage emit source-linked ordinary
+functions `__etsGet_<property>` and `__etsSet_<property>`. Their original accessor
+bodies, setter parameter names and calls pass through the existing language
+lowerer. Every read invokes the getter; no backing field or cache is invented.
+Private accessors are not exported. These functions are necessary because ETS
+has no standalone top-level getter/setter declaration syntax; class accessors
+retain their original property syntax.
+
+Stored custom accessors use the same accessor functions plus private owner-file
+`__etsField_<property>` storage. Explicit IR field accesses bypass the functions;
+property calls invoke them, including default counterparts. A constant initializer
+writes the storage directly without running the setter. Private setters stay
+private even when the getter is visible. Computed, stored-custom and default
+stored properties all use the same resolved IR and expression/body lowering.
+
+Delegates, `lateinit`, external storage and nonconstant
 initializers remain unsupported with source-linked diagnostics. In particular,
 `val page = loadPage()` must not become eager module initialization without
 preserving Kotlin initialization timing. This increment does not implement
@@ -50,13 +65,15 @@ Run from the repository root:
 
 ```sh
 node tools/kotlin-ets/tests/language/globals/run.mjs
+node tools/kotlin-ets/tests/language/computed/run.mjs
 bash tools/kotlin-ets/tests/target/run.sh
 bash tools/kotlin-ets/tests/backend/run.sh
 ```
 
 The global-state runner compares 26 JVM results against flat and multi-file
 output, checks deterministic reversed-source imports and original names, and
-verifies custom accessors/call initializers fail without publishing ETS. Fixtures
+verifies call initializers fail without publishing ETS. The former custom-accessor
+boundary is promoted to the property runner's supported coverage. Fixtures
 include private storage/setters, nullable storage, repeated resets, default
 arguments and a global named `value` to catch generated-parameter shadowing.
 An additional two-file Compose fixture validates a relocated slot callback and
@@ -65,3 +82,18 @@ Inputs, outputs and process logs are recorded under the runner's `.work` folder.
 
 Target tests exercise the shared declaration, traversal, printer and validator.
 These are host semantic/type checks, not Harmony SDK, device or UI acceptance.
+
+Computed-property evidence: `tests/language/computed/.work/run-ZZulpa` compares
+54 flat and 54 multi-file results with Kotlin/JVM, with deterministic reversed
+input order, strict host type checking, original setter names and no invented
+storage. Delegated and extension properties remain source-linked refusals.
+RED `run-Wcc1qn` reproduced the old storage guard before the change.
+
+The expanded runner `tests/language/computed/.work/run-mclwVi` passes 73 flat
+and 73 multi-file JVM/host results across four source files. It also compiles and
+executes the original `globals/Accessor.kt` refusal as a supported input. Checks
+cover private backing storage/setters, default counterparts, class-method access,
+initialization without setter invocation and original setter parameters. Stored
+custom-accessor RED evidence is `computed/.work/run-J27awx`.
+Final stored-global regression `globals/.work/run-cviFMO` retains 26 flat/module
+results, deterministic imports and relocated Compose callback replay.

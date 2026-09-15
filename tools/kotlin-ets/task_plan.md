@@ -1,8 +1,13 @@
 # Kotlin to ETS implementation plan
 
-This is the sole active execution queue. Follow the overall compiler plan, not
-the most recently discovered page/property/API limitation. Historical evidence
-and superseded instructions are in docs/execution-history-20260914.md.
+The approved main-path scope and issue queue are now
+`../../.scratch/kotlin-ets-main-path/spec.md` and its `issues/` directory.
+The user approved implementation on 2026-09-15. Issue 01 (computed properties)
+and 01b (stored custom accessors) passed focused acceptance. File initialization
+is next, including the shared failure-handling prerequisite recorded in issue 02;
+the remaining language requirements stay queued. Full L1 is not yet complete.
+This document retains architecture, round inventory and historical evidence;
+older next-action instructions below do not override that queue.
 
 ## Objective and architecture
 
@@ -18,9 +23,9 @@ Unsupported semantics are diagnosed, not replaced with empty UI or default value
 
 ## Operating rules
 
-- Main assistant implements and tests one requirement at a time. Following the
-  latest project instructions, reuse the fixed read-only reviewer after freezing
-  each increment, then accept the evidence before proceeding. No scheduled wakeups.
+- Main assistant implements and tests one requirement at a time. Independent
+  review is temporarily deferred by the latest user instruction; preserve tests
+  and self-checks, never report review as passed. No scheduled wakeups.
 - Inspect pinned Kotlin common/JS implementations before designing new language
   machinery. Reuse compatible stages; do not transplant JS runtime conventions
   or write API-name string substitutions to approximate language semantics.
@@ -56,8 +61,9 @@ Proceed in this delivery order:
    constructor combinations. Common numerical support and constant-initialized
    top-level storage, nullable models and collection composition have focused
    evidence below. The Compose model-consumption fixture now also passes the
-   same typed target path and actual callback replay. Next proceed to the POC
-   integration milestone below; host replay does not prove native state redraw.
+   same typed target path and actual callback replay. Continue the scoped language
+   gaps in the active spec before the next integration milestone; host replay does
+   not prove native state redraw.
    General file initialization remains explicit unsupported work, not implicit
    eager execution in ETS.
 3. Generate a representative page with nested component calls, resources and
