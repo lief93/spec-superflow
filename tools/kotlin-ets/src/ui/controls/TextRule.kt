@@ -18,6 +18,7 @@ internal class ComposeTextRule(
         val text = argument(call, "text") ?: target.diagnostics.unsupported(call, "Text requires text")
         if (!text.type.isString()) target.diagnostics.unsupported(text, "AnnotatedString Text is not supported")
         val attrs = buildList {
+            add(target.attribute("align", listOf(target.enumValue("Alignment", "TopStart", call)), call))
             argument(call, "color")?.let { add(target.attribute("fontColor", listOf(color(it, scope)), call)) }
             val size = argument(call, "fontSize")?.let { dimension(it, scope, "sp") }
             if (api == "androidx.compose.material3.Text") {

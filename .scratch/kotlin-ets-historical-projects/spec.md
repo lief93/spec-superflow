@@ -67,3 +67,19 @@ Other color spaces and Unspecified remain rejected rather than guessed. Verify
 JVM parity, multi-branch values and actual SDK compilation of parameterized UI.
 Effectful Color temporaries must follow the existing one-evaluation bridge,
 including named argument reordering; they are not unconditional textual aliases.
+
+Seventh requirement: add a separately owned Material3 Surface CallRule for the
+non-interactive rectangular, zero-elevation/no-border form with explicit sRGB
+background and content colors. Preserve source modifiers, clipping, input
+blocking and propagation of incoming minimum constraints to content roots.
+Use the typed target tree and a fixed target layout runtime, not page templates.
+Default theme/contentColorFor, explicit shapes/elevations/borders and interactive
+overloads remain diagnosed until their real semantics are implemented. Verify
+the measurement algorithm, actual SDK output and native layout/color behavior
+before claiming this form supported. Real Banking remains incomplete until its
+theme-dependent form and subsequent dependencies also work.
+Use native scoped theme colors instead of relying on foreground inheritance
+across custom layout boundaries. Foundation BasicText keeps its independent
+default black color. Until ordered argument binding is generalized for scoped
+UI adapters, Surface accepts stable color values and diagnoses direct effectful
+calls/mutable reads; source val bindings use the existing once-only bridge.

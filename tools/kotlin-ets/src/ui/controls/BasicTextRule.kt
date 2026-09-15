@@ -13,7 +13,12 @@ internal class ComposeBasicTextRule(
         target.checkArguments(call, setOf("text", "modifier", "maxLines"))
         val text = argument(call, "text") ?: target.diagnostics.unsupported(call, "BasicText requires text")
         if (!text.type.isString()) target.diagnostics.unsupported(text, "AnnotatedString BasicText is not supported")
-        val attrs = listOfNotNull(argument(call, "maxLines")?.let {
+        // Foundation BasicText uses TextStyle.Default, not Material LocalContentColor.
+        val attrs = listOf(
+            target.attribute("fontColor", listOf(target.literal(0xFF000000L, call)), call),
+            target.attribute("fontSize", listOf(target.literal(14, call)), call),
+            target.attribute("align", listOf(target.enumValue("Alignment", "TopStart", call)), call)) +
+            listOfNotNull(argument(call, "maxLines")?.let {
             target.attribute("maxLines", listOf(language.expression(it, scope)), call)
         })
         return ComposeElement(target.native("Text", listOf(language.expression(text, scope)), call).copy(attributes = attrs))

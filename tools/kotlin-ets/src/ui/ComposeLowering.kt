@@ -126,6 +126,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeColumnRule(target, ::uiLambdaBody, ::modifiers),
             ComposeRowRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
             ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
+            ComposeSurfaceRule(target, { body, scope -> uiLambda(body, scope, "SurfaceContent") }, ::modifiers),
             ComposeSpacerRule(target, ::modifiers),
             ComposeTextRule(target, ::colorValue, ::dimension,
                 { usesMaterialTypography = true; textContext }, ::modifiers),
@@ -253,6 +254,10 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     return@forEachIndexed
                 }
                 val value = language.expression(initial, scope)
+                if (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE && value is EtsLiteral) {
+                    scope.aliases[statement.symbol] = initial
+                    return@forEachIndexed
+                }
                 val name = if (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE)
                     "uiTemporary${statement.startOffset}" else statement.name.asString()
                 val child = scope.fork()

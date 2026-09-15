@@ -26,8 +26,10 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
         val value = args.singleOrNull() ?: diagnostics.unsupported(owner, "Target attribute requires one argument: $name")
         val expected = when (name) {
             "id", "accessibilityText", "accessibilityLevel" -> EtsTypes.STRING
-            "enabled", "loop", "indicator", "select", "vertical" -> EtsTypes.BOOLEAN
+            "enabled", "loop", "indicator", "select", "vertical", "clip" -> EtsTypes.BOOLEAN
             "index", "fontSize", "fontColor", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity" -> EtsTypes.NUMBER
+            "hitTestBehavior" -> EtsNamedType("HitTestMode")
+            "align" -> EtsNamedType("Alignment")
             "objectFit" -> EtsNamedType("ImageFit")
             "colorFilter" -> EtsNamedType("ColorFilter")
             "onClick" -> EtsFunctionType(emptyList(), EtsTypes.VOID)
@@ -50,6 +52,9 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "Image" -> listOf(args.singleOrNull()?.type?.takeIf { it == ImageResources.RESOURCE || it == EtsTypes.STRING }
                 ?: diagnostics.unsupported(owner, "Image requires Resource or URL string"))
             "Stack" -> listOf(stackOptions(owner).type)
+            "WithTheme" -> listOf(EtsRecordType("SurfaceThemeOptions", mapOf("theme" to
+                EtsRecordType("SurfaceTheme", mapOf("colors" to
+                    EtsRecordType("SurfaceColors", mapOf("fontPrimary" to EtsTypes.NUMBER)))))))
             "Swiper" -> listOf(EtsNamedType("SwiperController"))
             "Column", "Row", "Button", "Divider", "Checkbox" -> emptyList()
             "Toggle" -> listOf(EtsRecordType("ToggleOptions", mapOf("type" to EtsNamedType("ToggleType"), "isOn" to EtsTypes.BOOLEAN)))

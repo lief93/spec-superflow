@@ -18,8 +18,8 @@ export function verifyEffects(path) {
   const executable = ordinary + '\nexport class EffectPage {\n' +
     members.map(node => node.getFullText(parsed)).join('\n') + '\n}';
   const texts = [];
-  const attributes = { fontColor() { return this; }, attributeModifier() { return this; } };
-  const context = vm.createContext({ exports: {}, Builder() {}, Text(text) { texts.push(text); return attributes; } });
+  const attributes = { align() { return this; }, fontColor() { return this; }, attributeModifier() { return this; } };
+  const context = vm.createContext({ exports: {}, Alignment: { TopStart: 0 }, Builder() {}, Text(text) { texts.push(text); return attributes; } });
   vm.runInContext(ts.transpileModule(executable, { compilerOptions: {
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS
   } }).outputText, context, { timeout: 2000 });
