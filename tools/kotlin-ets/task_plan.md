@@ -35,6 +35,35 @@ Unsupported semantics are diagnosed, not replaced with empty UI or default value
 
 ## Overall order
 
+### Current priority: main-path POC (2026-09-15)
+
+The user now prioritizes a working POC over exhaustive language-boundary closure.
+The stage inventory below remains a record of unfinished capabilities, not a gate
+requiring every R2 combination before any page integration. Do not mark those
+capabilities complete or silently turn unsupported operations into default values.
+
+Proceed in this delivery order:
+
+1. Readable source diagnostics implemented: file/offsets plus 1-based start/end
+   line/column, unavailable positions kept null. `python3 -B
+   tools/kotlin-ets/tests/integration/test_cli.py` passes all six tests (132.661s),
+   including real CLI output and unchanged success/failure behavior.
+2. Reuse existing ordinary-language and Compose fixtures to verify the main
+   source -> official IR -> typed ETS path. Repair blockers on this path, not
+   speculative generic/constructor combinations.
+3. Generate a representative page with nested component calls, resources and
+   ordinary UI state. Compile/install it and verify pager/button/indicator linkage.
+   Preserve method/parameter names and source structure where the target allows.
+4. Document the runnable POC commands, supported main path and explicit remaining
+   limitations, including offline dependency and project-adapter requirements.
+
+Use focused correctness checks per change. SDK/native/visual checks belong at the
+POC integration milestone. Pause expansion of the 28-suite R2 closure queue;
+its existing failed result is evidence, not a reason to broaden generic work.
+The latest run passed six suites and stopped on an obsolete covariance-negative
+expectation in methods/probe.mjs; that suite is not recorded as passed.
+Full R2-R7 acceptance remains unclaimed and distinct from POC acceptance.
+
 | Stage | Deliverable | Current state | Exit gate |
 | --- | --- | --- | --- |
 | R0 | Architecture, shared interfaces and acceptance contract | Complete for agreed baseline | One typed compiler pipeline and explicit evidence levels |
@@ -50,7 +79,7 @@ This is bounded Kotlin/Compose support, not a promise to decompile arbitrary JVM
 bytecode or translate every Android service. Unsupported format/runtime boundaries
 must be explicit. Do not quietly move an unfinished agreed item to a later round.
 
-## Current stage: R2
+## Full-stage backlog: R2
 
 Accepted evidence already covers generic source heritage/methods, nonvirtual
 overloads, cross-file names/visibility, named local/nested declarations, supported
@@ -62,7 +91,7 @@ bounded virtual/abstract class properties, and inherited default dispatch with
 generic/static-provider composition. See docs/declaration-call-contract.md and
 docs/inherited-defaults.md. These do not complete R2.
 
-Execute the following remaining work in order. Each row is an architectural
+Resume this remaining closure order after the main-path POC. Each row is an architectural
 deliverable, not permission to create an unbounded sequence of tiny API patches.
 
 | Order | Remaining work | Required evidence |
@@ -73,7 +102,7 @@ deliverable, not permission to create an unbounded sequence of tiny API patches.
 | R2.4 | Cross-file visibility, declaration ownership, imports/exports and diagnostics for the completed declaration/dependency families | Multi-file output, reversed-input determinism, exact source ownership, no unnecessary aliases, target checks |
 | R2 gate | Frozen combined language/library/module regression and SDK/native baseline | Separate evidence for host results, SDK legality and native behavior; whole R2 stays incomplete until accepted |
 
-## Next action
+## R2 closure history (paused during POC)
 
 Finite use-site property projections now reuse official captureFromArguments and
 isSubtypeOf through the borrowed frontend SourceTypes service. The typed ETS tree

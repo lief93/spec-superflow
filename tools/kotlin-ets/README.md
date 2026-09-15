@@ -107,7 +107,11 @@ internal interfaces are version-sensitive; changing the version requires replay.
 Each invocation compiles the small tool into a private temporary directory,
 emits the requested target, then removes that temporary tool build. Existing
 output paths are rejected. Exit 1 reports frontend/configuration failure; exit 2
-reports an unsupported source operation with file and offsets. Neither case
+reports an unsupported source operation or invalid target with file and offsets.
+Its `source` also includes `line`, `column`, `endLine` and `endColumn` (1-based;
+the end is exclusive). Columns use UTF-16 units, like Kotlin PSI offsets, after
+BOM removal and LF/CRLF/CR normalization. Invalid ranges or unreadable source
+files keep the original offsets and return `null` coordinates. Neither case
 publishes a new target file.
 
 ## First-slice boundaries
