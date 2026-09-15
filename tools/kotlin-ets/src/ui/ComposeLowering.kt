@@ -32,6 +32,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private var textContexts: Map<IrFunction, MaterialTextContext> = emptyMap()
     private var textContext = MaterialTextContext.BodyLarge
     private var usesMaterialTypography = false
+    private var usesMaterialContext = false
     private val touchBoxes = linkedMapOf<IrCall, TouchTargets>()
 
     fun lower(module: IrModuleFragment, entryName: String): EtsProgram {
@@ -41,6 +42,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         touchBoxes.clear()
         bindingSymbols.clear()
         builderSymbols.clear()
+        usesMaterialContext = requiresMaterialContext(module)
         val declarations = module.files.flatMap { it.declarations }
         val functions = declarations.filterIsInstance<IrSimpleFunction>()
         val entries = functions.filter { it.name.asString() == entryName || symbolName(it) == entryName }
@@ -50,6 +52,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         if (!isUiBuilder(root)) diagnostics.unsupported(root, "UI entry must be @Composable and return Unit")
         textContexts = materialTextContexts(root, diagnostics)
         val rootScope = scope()
+        if (usesMaterialContext) rootScope.ambientValues[MATERIAL_CONTEXT] = defaultMaterialContext(language.source(root))
         val defaults = root.valueParameters.map { parameter ->
             val value = parameter.defaultValue?.expression
                 ?: diagnostics.unsupported(parameter, "Entry parameter requires a source default")
@@ -95,7 +98,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         diagnostics.currentFile = sourceFile(root)?.fileEntry?.name
         val name = root.name.asString()
         val entryBody = native("Stack", listOf(stackOptions(root)), root,
-            listOf(EtsUiElement(methodCall(builderSymbol(root), defaults, root)))).copy(attributes = listOf(
+            listOf(EtsUiElement(methodCall(builderSymbol(root), contextArguments(rootScope) + defaults, root)))).copy(attributes = listOf(
                 attribute("width", listOf(literal("100%", root)), root),
                 attribute("height", listOf(literal("100%", root)), root)))
         val build = EtsFunction("build", emptyList(), EtsTypes.VOID, listOf(entryBody), language.source(root),
@@ -126,7 +129,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeColumnRule(target, ::uiLambdaBody, ::modifiers),
             ComposeRowRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
             ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
-            ComposeSurfaceRule(target, { body, scope -> uiLambda(body, scope, "SurfaceContent") }, ::modifiers),
+            ComposeMaterialThemeRule(target, ::provideMaterialContext),
+            ComposeSurfaceRule(target, ::surfaceContent, ::modifiers),
             ComposeSpacerRule(target, ::modifiers),
             ComposeTextRule(target, ::colorValue, ::dimension,
                 { usesMaterialTypography = true; textContext }, ::modifiers),
@@ -158,7 +162,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
 
     private fun builderSymbol(function: IrSimpleFunction): EtsSymbol = builderSymbols.getOrPut(function) {
         val source = SourceSpan(sourceFile(function)?.fileEntry?.name, function.startOffset, function.endOffset)
-        etsFunctionSymbol(function.name.asString(), function.valueParameters.map {
+        etsFunctionSymbol(function.name.asString(), (if (usesMaterialContext) listOf(materialContextType) else emptyList()) + function.valueParameters.map {
             if (it.type.hasAnnotation(COMPOSABLE)) bindingWrappedBuilder() else language.type(it.type)
         }, EtsTypes.VOID, source)
     }
@@ -186,7 +190,19 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         return EtsMember(receiver, name, type, source)
     }
 
-    private fun bindingWrappedBuilder() = EtsNamedType("WrappedBuilder", listOf(EtsTupleType(emptyList())))
+    private fun bindingWrappedBuilder() = EtsNamedType("WrappedBuilder", listOf(EtsTupleType(
+        if (usesMaterialContext) listOf(materialContextType) else emptyList())))
+
+    private fun contextArguments(scope: Scope): List<EtsExpression> =
+        if (usesMaterialContext) listOf(materialContext(scope, language.source(root))) else emptyList()
+
+    private fun contextParameters(scope: Scope, owner: IrElement): List<EtsParameter> {
+        if (!usesMaterialContext) return emptyList()
+        val at = language.source(owner)
+        val symbol = EtsSymbol("ui:materialContext:${at.file}:${at.start}", "__etsMaterialContext", materialContextType, at)
+        scope.ambientValues[MATERIAL_CONTEXT] = EtsReference(symbol)
+        return listOf(EtsParameter(symbol))
+    }
 
     private fun isUiBuilder(function: IrSimpleFunction): Boolean =
         function.hasAnnotation(COMPOSABLE) && function.returnType.isUnit()
@@ -200,7 +216,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         if (function.extensionReceiverParameter != null || function.dispatchReceiverParameter != null)
             diagnostics.unsupported(function, "Source builder receivers are not supported")
         val scope = scope()
-        val parameters = function.valueParameters.map { parameter ->
+        val parameters = contextParameters(scope, function) + function.valueParameters.map { parameter ->
             if (parameter.type.hasAnnotation(COMPOSABLE)) {
                 if (parameter.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Function0")
                     diagnostics.unsupported(parameter, "Content slots currently require () -> Unit")
@@ -266,12 +282,12 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 val remaining = statements.drop(index + 1)
                 val captures = capturedValues(remaining, child).filter { it != statement.symbol }
                 val methodName = "${name}_${statement.startOffset}"
-                val parameters = listOf(capturedParameter(statement.symbol, child)) + captures.map { capturedParameter(it, child) }
+                val parameters = contextParameters(child, statement) + listOf(capturedParameter(statement.symbol, child)) + captures.map { capturedParameter(it, child) }
                 val body = uiStatements(remaining, child, rootBody)
                 // A builder parameter evaluates a source val once; textual aliasing would duplicate calls.
                 val bridge = EtsFunction(methodName, parameters, EtsTypes.VOID, body, language.source(statement), kind = EtsFunctionKind.METHOD, builder = true)
                 slotMethods += bridge
-                lines += EtsUiElement(methodCall(bridge.symbol, listOf(value) + captures.map { scope.bindings.getValue(it) }, statement))
+                lines += EtsUiElement(methodCall(bridge.symbol, contextArguments(scope) + listOf(value) + captures.map { scope.bindings.getValue(it) }, statement))
                 return lines
             }
         }
@@ -389,7 +405,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val receiver = dereference(call.dispatchReceiver, scope) as? IrGetValue
         if (function.name.asString() == "invoke" && receiver?.symbol in slots) {
             checkArguments(call, emptySet())
-            return listOf(EtsUiElement(call("builder", emptyList(), call, receiver = expression(call.dispatchReceiver!!, scope))))
+            return listOf(EtsUiElement(call("builder", contextArguments(scope), call, receiver = expression(call.dispatchReceiver!!, scope))))
         }
         if (isUiBuilder(function) && sourceFile(function) != null && !function.isExternal) {
             builders += function
@@ -399,7 +415,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 if (parameter.type.hasAnnotation(COMPOSABLE)) uiLambda(value, scope, "${function.name}_${parameter.name}")
                 else expression(value, scope)
             }
-            return listOf(EtsUiElement(methodCall(builderSymbol(function), args, call)))
+            return listOf(EtsUiElement(methodCall(builderSymbol(function), contextArguments(scope) + args, call)))
         }
         return null
     }
@@ -439,11 +455,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val captures = capturedValues(listOf(fn.body ?: diagnostics.unsupported(fn, "Missing slot body")), scope)
         val name = "${sourceName}_${fn.startOffset}"
         val captured = captures.map { capturedParameter(it, scope) }
-        val body = uiLambdaBody(expression, scope.fork())
+        val child = scope.fork()
+        val context = contextParameters(child, fn)
+        val body = uiLambdaBody(expression, child)
         // ArkUI only transforms UI DSL in builders/native slots, not arbitrary function arguments.
-        val bridge = EtsFunction(name, captured, EtsTypes.VOID, body, language.source(fn), kind = EtsFunctionKind.METHOD, builder = true)
+        val bridge = EtsFunction(name, context + captured, EtsTypes.VOID, body, language.source(fn), kind = EtsFunctionKind.METHOD, builder = true)
         slotMethods += bridge
-        val callback = EtsLambda(emptyList(), listOf(EtsExpressionStatement(methodCall(bridge.symbol, captures.map { scope.bindings.getValue(it) }, fn))), EtsTypes.VOID, language.source(fn))
+        val callback = EtsLambda(context, listOf(EtsExpressionStatement(methodCall(bridge.symbol, context.map { EtsReference(it.symbol) } + captures.map { scope.bindings.getValue(it) }, fn))), EtsTypes.VOID, language.source(fn))
         return EtsNew(bindingWrappedBuilder(), listOf(callback), language.source(expression))
     }
 
@@ -468,10 +486,30 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private fun uiLambdaBody(expression: IrExpression, scope: Scope): List<EtsStatement> {
         val resolved = dereference(expression, scope)
         if (resolved is IrGetValue && resolved.symbol in slots)
-            return listOf(EtsUiElement(call("builder", emptyList(), expression, receiver = expression(resolved, scope))))
+            return listOf(EtsUiElement(call("builder", contextArguments(scope), expression, receiver = expression(resolved, scope))))
         val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected composable content lambda")
         if (fn.valueParameters.isNotEmpty()) diagnostics.unsupported(fn, "Unexpected content lambda parameters")
         return withTextContext(fn) { uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing content body"), scope.fork()) }
+    }
+
+    private fun provideMaterialContext(context: EtsExpression, content: IrExpression, scope: Scope): List<EtsStatement> {
+        val child = scope.fork()
+        val captures = capturedValues(listOf(content), scope)
+        val parameters = contextParameters(child, content) + captures.map { capturedParameter(it, scope) }
+        val at = language.source(content)
+        val bridge = EtsFunction("MaterialThemeContent_${at.start}", parameters, EtsTypes.VOID,
+            uiLambdaBody(content, child), at, kind = EtsFunctionKind.METHOD, builder = true)
+        slotMethods += bridge
+        return listOf(EtsUiElement(methodCall(bridge.symbol, listOf(context) + captures.map { scope.bindings.getValue(it) }, content)))
+    }
+
+    private fun surfaceContent(content: IrExpression, scope: Scope): EtsExpression {
+        val slot = uiLambda(content, scope, "SurfaceContent")
+        val at = language.source(content)
+        val args = contextArguments(scope)
+        val member = EtsMember(slot, "builder", EtsFunctionType(args.map { it.type }, EtsTypes.VOID), at)
+        return if (args.isEmpty()) member else EtsLambda(emptyList(),
+            listOf(EtsExpressionStatement(EtsCall(member, args, EtsTypes.VOID, at))), EtsTypes.VOID, at)
     }
 
     private fun callback(expression: IrExpression, scope: Scope): EtsExpression {

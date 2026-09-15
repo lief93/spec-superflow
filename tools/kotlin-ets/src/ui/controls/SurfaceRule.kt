@@ -14,13 +14,13 @@ internal class ComposeSurfaceRule(
     override fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? {
         if (symbolName(call.symbol.owner) != "androidx.compose.material3.Surface") return null
         target.checkArguments(call, setOf("modifier", "color", "contentColor", "content"))
-        val color = argument(call, "color") ?: target.diagnostics.unsupported(call,
-            "Surface default background requires MaterialTheme colorScheme support")
-        val contentColor = argument(call, "contentColor") ?: target.diagnostics.unsupported(call,
-            "Surface default contentColor requires theme-aware contentColorFor support")
+        val color = argument(call, "color")
+        val contentColor = argument(call, "contentColor")
+        val at = language.source(call)
+        val context = scope.ambientValues[MATERIAL_CONTEXT]
         fun stableColor(value: EtsExpression): Boolean = when (value) {
             is EtsLiteral -> true
-            is EtsReference -> scope.bindings.any { (source, binding) ->
+            is EtsReference -> value == context || scope.bindings.any { (source, binding) ->
                 (binding as? EtsReference)?.symbol == value.symbol && when (val owner = source.owner) {
                     is IrVariable -> !owner.isVar
                     is IrValueParameter -> true
@@ -28,16 +28,20 @@ internal class ComposeSurfaceRule(
                 }
             }
             is EtsBinary -> stableColor(value.left) && stableColor(value.right)
+            is EtsMember -> value.receiver.type in setOf(materialContextType, materialColorSchemeType) && stableColor(value.receiver)
             else -> false
         }
         fun colorValue(value: IrExpression): EtsExpression = language.expression(value, scope).also {
             if (!stableColor(it)) target.diagnostics.unsupported(value,
                 "Surface requires a stable color value; bind effectful calls or mutable reads to a source val first")
         }
-        val background = colorValue(color)
-        val foreground = colorValue(contentColor)
+        val background = color?.let(::colorValue) ?: EtsMember(materialScheme(materialContext(scope, at), at), "surface", EtsTypes.NUMBER, at)
+        val foreground = contentColor?.let(::colorValue) ?: materialContentColorFor(materialContext(scope, at), background, at)
         val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "Surface requires content")
-        val slot = EtsMember(content(body, scope), "builder", EtsFunctionType(emptyList(), EtsTypes.VOID), language.source(body))
+        val child = scope.fork()
+        if (context != null) child.ambientValues[MATERIAL_CONTEXT] = EtsNew(materialContextType,
+            listOf(materialScheme(context, at), foreground), at)
+        val slot = content(body, child)
         val options = target.record("__etsSurfaceOptions", linkedMapOf("content" to slot), call)
         val element = ComposeElement(EtsUiElement(target.call("EtsComposeSurface", listOf(options), call,
             identity = "compose:surface"), attributes = listOf(

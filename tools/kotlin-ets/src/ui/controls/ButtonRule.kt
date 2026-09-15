@@ -11,6 +11,8 @@ internal class ComposeButtonRule(
 ) : ComposeControlRule(decorate) {
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         if (symbolName(call.symbol.owner) !in setOf("androidx.compose.material3.Button", "androidx.compose.material.Button")) return null
+        if (MATERIAL_CONTEXT in scope.ambientValues) target.diagnostics.unsupported(call,
+            "Theme-aware Button colors and disabled state require a Material button adapter")
         target.checkArguments(call, setOf("onClick", "modifier", "enabled", "content"))
         val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "Button requires content")
         val click = argument(call, "onClick") ?: target.diagnostics.unsupported(call, "Button requires callback")

@@ -20,6 +20,9 @@ internal class ComposeTextRule(
         val attrs = buildList {
             add(target.attribute("align", listOf(target.enumValue("Alignment", "TopStart", call)), call))
             argument(call, "color")?.let { add(target.attribute("fontColor", listOf(color(it, scope)), call)) }
+                ?: scope.ambientValues[MATERIAL_CONTEXT]?.takeIf { api == "androidx.compose.material3.Text" }?.let {
+                    add(target.attribute("fontColor", listOf(materialContentColor(it, language.source(call))), call))
+                }
             val size = argument(call, "fontSize")?.let { dimension(it, scope, "sp") }
             if (api == "androidx.compose.material3.Text") {
                 val context = typography()

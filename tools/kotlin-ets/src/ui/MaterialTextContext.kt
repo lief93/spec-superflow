@@ -58,10 +58,10 @@ internal fun materialTextContexts(root: IrSimpleFunction, diagnostics: Diagnosti
                     scan(target, child, context)
                     return
                 }
-                if (api == "androidx.compose.material3.Button") {
+                if (api == "androidx.compose.material3.Button" || api == "androidx.compose.material3.MaterialTheme") {
                     val content = lambda(argument(expression, "content"), scope)
                         ?: diagnostics.unsupported(expression, "Button requires source content")
-                    scan(content, scope.fork(), MaterialTextContext.LabelLarge)
+                    scan(content, scope.fork(), if (api == "androidx.compose.material3.Button") MaterialTextContext.LabelLarge else MaterialTextContext.BodyLarge)
                     return
                 }
                 // External controls/adapters can receive an existing slot, not

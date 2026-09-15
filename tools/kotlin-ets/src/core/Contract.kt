@@ -36,8 +36,9 @@ class Scope(
     val aliases: MutableMap<IrValueSymbol, IrExpression> = linkedMapOf(),
     var callRule: CallRule? = null,
     val callRules: List<CallRule> = emptyList(),
+    val ambientValues: MutableMap<String, EtsExpression> = linkedMapOf(),
 ) {
-    fun fork() = Scope(LinkedHashMap(bindings), LinkedHashMap(aliases), callRule, callRules)
+    fun fork() = Scope(LinkedHashMap(bindings), LinkedHashMap(aliases), callRule, callRules, LinkedHashMap(ambientValues))
 }
 
 interface Language {

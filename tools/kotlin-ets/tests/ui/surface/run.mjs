@@ -56,9 +56,12 @@ assert.deepEqual(JSON.parse(JSON.stringify(context.layout.onMeasureSize({}, [], 
 const positions = [];
 context.layout.onPlaceChildren({}, [1, 2].map(() => ({ layout(value) { positions.push(value); } })), constraint);
 assert.deepEqual(JSON.parse(JSON.stringify(positions)), [{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+for (const entry of ['DefaultBackground', 'DefaultContentColor']) {
+  const defaults = compile(entry, 'Unsupported.kt');
+  assert.match(defaults, /EtsMaterialContext/);
+  assert.match(defaults, /\.fontColor\(__etsMaterialContext.contentColor\)/);
+}
 for (const [entry, message] of [
-  ['DefaultBackground', /default background requires MaterialTheme/],
-  ['DefaultContentColor', /default contentColor requires theme-aware contentColorFor/],
   ['Elevated', /tonalElevation/], ['Interactive', /onClick/], ['Effectful', /requires a stable color value/],
   ['MutableColor', /requires a stable color value/]
 ]) assert.match(compile(entry, 'Unsupported.kt', 2), message);

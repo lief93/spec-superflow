@@ -9,6 +9,8 @@ internal class ComposeCheckboxRule(
 ) : ComposeControlRule(decorate) {
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         if (symbolName(call.symbol.owner) !in setOf("androidx.compose.material3.Checkbox", "androidx.compose.material.Checkbox")) return null
+        if (MATERIAL_CONTEXT in scope.ambientValues) target.diagnostics.unsupported(call,
+            "Theme-aware Checkbox colors require a Material checkbox adapter")
         target.checkArguments(call, setOf("checked", "onCheckedChange", "enabled", "modifier"))
         val checked = argument(call, "checked") ?: target.diagnostics.unsupported(call, "Checkbox requires checked")
         val change = argument(call, "onCheckedChange") ?: target.diagnostics.unsupported(call, "Checkbox requires onCheckedChange")

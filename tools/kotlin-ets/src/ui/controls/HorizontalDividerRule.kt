@@ -13,6 +13,8 @@ internal class ComposeHorizontalDividerRule(
         if (symbolName(call.symbol.owner) !in setOf("androidx.compose.material3.HorizontalDivider",
                 "androidx.compose.material3.Divider", "androidx.compose.material.Divider")) return null
         target.checkArguments(call, setOf("modifier", "thickness", "color"))
+        if (MATERIAL_CONTEXT in scope.ambientValues && argument(call, "color") == null)
+            target.diagnostics.unsupported(call, "Theme-aware Divider default color requires Material divider tokens")
         val thickness = argument(call, "thickness")?.let { dimension(it, scope, "dp") } ?: target.literal(1, call)
         if (thickness !is EtsLiteral && thickness !is EtsReference)
             target.diagnostics.unsupported(call, "Divider needs a stable thickness value for both stroke and layout")

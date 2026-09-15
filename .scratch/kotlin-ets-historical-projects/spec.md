@@ -96,3 +96,13 @@ not a claim that a theme provider or the Banking page already works.
 The value class has one target-program owner. Multi-file factories and consumers
 must import that same declaration; independently printed structural copies are
 not acceptable in ArkTS. Verify actual SDK compilation across the file boundary.
+
+Ninth requirement: preserve invocation-scoped Material3 color schemes and content
+colors across source builders and forwarded UI slots. MaterialTheme color-only
+providers inherit omitted schemes; Surface defaults use the scheme and ordered
+contentColorFor role matching, falling back to the surrounding content color.
+Theme context is passed only when the page needs it; it is not a global mutable
+stack or a fixed preview value. Nested providers must restore the outer context.
+Keep unsupported typography/shapes, system dynamic palettes and out-of-context
+value helpers explicit, not silently skipped. Validate nested and forwarded slots
+with native SDK output, then replay the historical page to its next failure.
