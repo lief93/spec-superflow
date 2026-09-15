@@ -31,3 +31,9 @@ by 48dp so cross-group expanded target competition is outside that test.
 Generated hierarchy assertions are supplementary. Real ArkUI compilation, native
 slot rendering, pager/callback interaction, geometry, and touch bounds belong to
 the verification owner. No device or host operation runs from this test suite.
+
+`node tools/kotlin-ets/tests/ui/model-composition/run.mjs` is a separate focused
+suite for ordinary models consumed by Compose. It checks the typed target tree,
+public CLI output and actual lowered callback replay against a JVM oracle. This
+host-only projection is not native rendering or reactive-state acceptance; see
+`../../docs/model-composition.md` for scope and evidence.

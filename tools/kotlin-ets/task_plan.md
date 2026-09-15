@@ -55,8 +55,9 @@ Proceed in this delivery order:
    support before adding implementations; do not expand speculative generic or
    constructor combinations. Common numerical support and constant-initialized
    top-level storage, nullable models and collection composition have focused
-   evidence below. Next reuse Compose fixtures to check those language features
-   through the same typed target path, before the POC integration milestone.
+   evidence below. The Compose model-consumption fixture now also passes the
+   same typed target path and actual callback replay. Next proceed to the POC
+   integration milestone below; host replay does not prove native state redraw.
    General file initialization remains explicit unsupported work, not implicit
    eager execution in ETS.
 3. Generate a representative page with nested component calls, resources and
@@ -425,6 +426,13 @@ when its prerequisites are accepted. No claim that pending stages are implemente
 
 ## Latest evidence and publication
 
+- Compose model consumption: `tests/ui/model-composition/.work/run-r54CGE`
+  passes original-source compilation with the official Compose JVM plugin,
+  detached typed UI checks and byte-identical public CLI modules. The actual
+  lowered button callback replays in a host projection; all 70 results match the
+  JVM oracle. Text consumes typed method results and both conditional branches
+  remain. No production/compiler change was needed. See `docs/model-composition.md`;
+  reactive invalidation, SDK/native rendering and visual fidelity are not claimed.
 - Nullable-model/collection increment: `tests/language/models/.work/run-M0mFeS`
   passes 70 flat + 70 multi-file JVM/host results, original method/parameter names,
   deterministic reversed-source output and source-linked non-local-return refusal.

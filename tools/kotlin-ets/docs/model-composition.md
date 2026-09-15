@@ -62,3 +62,24 @@ line and no target output. Hashes and command logs are retained under `.work`.
 
 These checks are not Harmony SDK compilation, ArkVM execution or UI acceptance.
 Those remain integration-milestone gates.
+
+## Compose consumption check
+
+`node tools/kotlin-ets/tests/ui/model-composition/run.mjs` reuses the same model
+sources in a small Compose consumer. The original page compiles with the official
+2.1.20 Compose JVM plugin. A detached typed target check verifies the source
+`ModelPage(minimum, extra)` parameters, String-returning calls consumed by Text,
+both conditional branches and the actual button callback. Public CLI multi-file
+output must be byte-identical to this checked program's emitted modules.
+
+The runner exports the actual typed callback body into a host-only projection,
+alongside unchanged ordinary declarations. Thirty callback invocations across
+empty/populated and selected/unselected cases replace the equivalent ordinary
+JVM helper calls; all 70 resulting values match the original JVM oracle. The
+projection passes strict host type checking. Production/input/output hashes and
+logs are retained in `tests/ui/model-composition/.work/run-r54CGE`.
+
+This check adds no compiler implementation or page-specific rule. The projection
+is test-only, not delivered UI. It does not execute ArkUI builders, establish
+observable-state invalidation, or prove native redraw or visual fidelity. The
+ordinary mutable model storage in this fixture is not claimed as reactive state.
