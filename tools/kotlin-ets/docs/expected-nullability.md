@@ -12,6 +12,12 @@ condition/try results. The ETS-specific override adds an `IMPLICIT_CAST` only
 when the actual type is nullable, the expected type is non-null, and removing
 nullability makes the types exactly equal.
 
+For generic calls, the argument hook instantiates the declaration's parameter
+type using the official `IrTypeSubstitutor` and the call's type arguments before
+applying that same check. Unmapped enclosing type parameters are preserved.
+This handles `value?.let { ... }` and ordinary generic calls without treating an
+explicitly nullable type argument as non-null or weakening target validation.
+
 This pass runs after source inlining and common lowering, only after official
 frontend diagnostics have passed. It is not a validator for arbitrary untrusted
 IR and does not invent proof for invalid Kotlin. It does not alter conditions,
@@ -39,3 +45,7 @@ source-linked target rejection for those nodes.
   source, helper parity, conditional UI and multi-file page emission passed.
 - Additional `tests/nullability` suite and actual SDK/native acceptance are
   recorded separately in progress.md; a host oracle is not ArkVM evidence.
+- Generic-call composition: `tests/language/models/.work/run-M0mFeS` passes 70
+  flat and 70 multi-file JVM/host results, including guarded and explicitly nullable
+  generic arguments. `tests/nullability/.work/run-Ynymet` passes 57 results and
+  three original-source invalid-input checks with unchanged frontend refusal.

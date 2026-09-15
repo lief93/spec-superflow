@@ -54,11 +54,11 @@ Proceed in this delivery order:
    values, ordinary data models and collection transformations. Check existing
    support before adding implementations; do not expand speculative generic or
    constructor combinations. Common numerical support and constant-initialized
-   top-level storage have focused evidence below. Next check ordinary nullable
-   values, data models and collection transformations against existing support.
+   top-level storage, nullable models and collection composition have focused
+   evidence below. Next reuse Compose fixtures to check those language features
+   through the same typed target path, before the POC integration milestone.
    General file initialization remains explicit unsupported work, not implicit
    eager execution in ETS.
-   Then reuse Compose fixtures to verify the same official IR -> typed ETS path.
 3. Generate a representative page with nested component calls, resources and
    ordinary UI state. Compile/install it and verify pager/button/indicator linkage.
    Preserve method/parameter names and source structure where the target allows.
@@ -425,6 +425,15 @@ when its prerequisites are accepted. No claim that pending stages are implemente
 
 ## Latest evidence and publication
 
+- Nullable-model/collection increment: `tests/language/models/.work/run-M0mFeS`
+  passes 70 flat + 70 multi-file JVM/host results, original method/parameter names,
+  deterministic reversed-source output and source-linked non-local-return refusal.
+  Adds bounded ordinary `let` and array-backed collection empty predicates; reuses
+  the official expected-type visitor and type substitutor for generic nullable
+  arguments. Existing data/copy/filter/map/iteration machinery is reused.
+  `tests/nullability/.work/run-Ynymet` passes 57 results plus three original-source
+  invalid-input checks; backend regression `kotlin-ets-backend-tests.WN4CMM` passes.
+  See `docs/model-composition.md`. SDK/native and R2-R7 completion are not claimed.
 - 72e3379: inherited properties; 66 JVM/host results across inheritance suites;
   target type/name checks. Push succeeded, including preceding 44fb21a.
 - 153c5c4: interface properties; 40 JVM/host results, 11 source-linked boundaries,

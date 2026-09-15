@@ -12,6 +12,8 @@ class StandardLibraryRules : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
         IterationRules.lower(call, language, scope)?.let { return it }
         FloatingPointRules.lower(call, language, scope)?.let { return it }
+        CollectionEmptinessRules.lower(call, language, scope)?.let { return it }
+        LetRule.lower(call, language, scope)?.let { return it }
         val name = symbolName(call.symbol.owner)
         val receiver = call.dispatchReceiver ?: call.extensionReceiver
         val args = (0 until call.valueArgumentsCount).map { call.getValueArgument(it) }
