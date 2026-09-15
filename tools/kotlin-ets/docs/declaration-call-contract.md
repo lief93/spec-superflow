@@ -242,3 +242,53 @@ other R2 families, physical devices or UI fidelity.
 - Layout SHA-256: dfba9ab779cca403aea1b5d743e05dd9e88b0155a215d634a57d11bd8c1f02bc
 - Oracle: tests/constructors/.work/run-pDvEKk/result.json, expected offsets
   36 + [0, 7, 11, 12, 13, 14, 15, 16], matching Oracle.kt and SdkIndex.ets.
+
+## Joint declaration SDK and native evidence
+
+`tests/integration/r2-declarations-sdk.mjs` consumes the five frozen default,
+constructor, bridge, variance and serialized-member replay reports above. It
+rejects incomplete, failed, stale-implementation and mismatched JVM/host evidence
+before creating output. Five negative tests verify those entry guards. It pins
+source, fixture, report, generated-module and test-host hashes. Older default
+evidence without module hashes is regenerated with its recorded public CLI
+command and checked byte-for-byte against both recorded input orders.
+
+The script copies 27 unchanged ETS modules into one disposable SDK application.
+The five corpus directories and import aliases isolate test exports only; they
+do not change the compiler's flat product output. Existing module coverage checks
+require checker input hashes, clean semantic records and runtime build coverage,
+or the verifier's explicit referenced interface-only exception. The binary
+receiver classes are declared target test replacements, not translated classes.
+Only the test host selects existing exports and calls them; it contains no
+replacement implementations of the translated methods.
+
+GREEN `/private/tmp/kotlin-ets-r2-declarations-bmObZN/result.json` records SDK
+legality for all 27 modules and 388 exact JVM/native outcomes on the existing
+HarmonyKitPhone emulator (HDC 127.0.0.1:16555). It installs the recorded signed
+HAP and reads the actual `r2-native-results` node from the matching bundle and
+page through uitest. Defaults contribute 65, constructors 90, bridges 70,
+variance 160 and binary-inline replay three results. Source and copied module
+hashes are checked again after execution. No native case is dropped.
+
+Earlier attempts remain as failed evidence: `asqaMr` used the SDK runtime JDK
+without `jar` for Kotlin regeneration; `R2PX0H` failed SDK checks because the test
+host passed an argument to a zero-argument export and rethrew an untyped caught
+value. The host now reads actual export arity and throws a typed test failure for
+unexpected constructor exceptions. Generated ETS modules were not patched.
+
+- ABC SHA-256: c73742513c49ac476f2462485763cf8427343b63103c3fbf3f9608d20a25a420
+- HAP SHA-256: a4ac7bac0256e8ff81643e516601a50706b45faded8ba68a8e7c9710cafe98c0
+- Layout: /private/tmp/kotlin-ets-r2-declarations-bmObZN/layout-0.json
+- Layout SHA-256: 89bcaaec8831e9c9db113f5657af00d696e8c3da1495ef393d5a56bef6242c5e
+
+Reproduce from repository root after producing successful host reports:
+
+```sh
+node --test tools/kotlin-ets/tests/integration/r2-declarations-sdk.test.mjs
+node tools/kotlin-ets/tests/integration/r2-declarations-sdk.mjs <defaults-run> <constructors-run> <bridges-run> <variance-run> <binary-replay-run> --device <hdc-key>
+```
+
+Omitting `--device` proves SDK legality only. This joint corpus does not cover
+all earlier R2 dependency/language families, the remaining capture compositions,
+physical-device behavior or UI fidelity. It closes the separate-module/native
+evidence gap for these five families, not the entire R2 exit gate.

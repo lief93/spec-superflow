@@ -118,6 +118,15 @@ R2.4 closure checklist (do not expand into new declaration families):
 - [ ] Run the frozen combined R2 gate with separate host, SDK and native evidence;
   explicitly account for remaining R2.3 composition gaps before stage acceptance.
 
+Joint declaration gate milestone now passes: r2-declarations-bmObZN builds all
+27 unchanged default/constructor/bridge/variance/binary-replay modules in one SDK
+application and matches 388 JVM/native outcomes on HarmonyKitPhone. The new
+integration runner pins inputs, checks module coverage and refuses five kinds of
+invalid host evidence. See declaration-call-contract.md for commands and hashes.
+This closes the joint native gap for those existing families, not whole R2:
+remaining capture-bound/copied-inline compositions and broader regression
+coverage must still be accounted for before checking the stage gate above.
+
 Publication recovered: commits through 67bce63 were pushed successfully. The
 earlier HTTPS failures are no longer a publication blocker.
 
