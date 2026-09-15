@@ -103,7 +103,7 @@ fun <T> withKotlinModule(arguments: List<String>, emit: (IrModuleFragment) -> T)
     return withKotlinFrontend(arguments) { emit(it.module) }
 }
 
-fun <T> withKotlinFrontend(arguments: List<String>, emit: (KotlinFrontendSession) -> T): T {
+fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null, emit: (KotlinFrontendSession) -> T): T {
     val disposable = Disposer.newDisposable()
     var session: KotlinFrontendSession? = null
     val messages = GroupingMessageCollector(PrintingMessageCollector(System.err,
@@ -129,6 +129,7 @@ fun <T> withKotlinFrontend(arguments: List<String>, emit: (KotlinFrontendSession
         val frontend = KotlinFrontendSession(translated.result.irModuleFragment, BinaryBodies(translated),
             IrTypeSystemContextImpl(translated.result.irBuiltIns), CallCaptures(analyzed.result, translated.result))
         session = frontend
+        entry?.let { System.err.println(selectSourceDeclarations(frontend.module, it)) }
         val unavailableInlineBodies = lowerSourceInlineFunctions(translated, frontend.bodies)
         lowerLocalDeclarations(translated)
         lowerInheritedDefaults(translated)

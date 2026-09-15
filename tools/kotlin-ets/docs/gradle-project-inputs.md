@@ -78,8 +78,22 @@ executes with normal project permissions.
 
 This entry targets JVM/Android `KotlinCompile` tasks, not arbitrary KMP/Native/JS
 compilations. All source inputs of the selected task are passed to the frontend;
-`--entry` selects a page entry, not a new source-reachability pruning pass.
-Other declarations in that module may still expose unsupported backend features.
+after successful FIR/FIR2IR resolution, `--entry` selects the source declarations
+needed by that top-level function, before ETS lowerings. No additional switch is
+needed for page mode. Language mode can also use `--entry`; without it, language
+mode still translates the whole supplied source module.
+
+Selection follows resolved symbols, types, defaults, closures and all branches,
+not preview values or text matching. Referenced classes retain all members. Calls
+and property accesses also retain the activated file's stored non-const top-level
+properties and initializer dependencies. This is conservative top-level selection,
+not member-level DCE: an unsupported member of a retained class can still block
+translation. An unrelated source file must still pass Kotlin resolution, and
+required compiler plugins/classpath cannot be skipped before that resolution.
+
+The compiler's stderr includes a JSON `source-selection` event with retained and
+excluded declarations, source locations and first retention reasons. Project mode
+keeps this in its compiler log, including when a later backend stage fails.
 Dependencies on classpath are available for resolution, not automatically copied
 or fully rewritten into ETS. Source ownership, binary-body coverage and framework
 support remain the backend's existing bounded contracts.

@@ -26,6 +26,8 @@ fun main(arguments: Array<String>) {
         require(!Files.exists(output.toPath(), NOFOLLOW_LINKS)) { "Refusing to overwrite existing target: $output" }
         val mode = options["--mode"] ?: "page"
         require(mode in setOf("page", "language")) { "Mode must be page or language" }
+        val entry = options["--entry"]
+        require(mode != "page" || entry != null) { "--entry is required for page mode" }
         val classpath = options["--classpath"] ?: options["--classpath-file"]?.let { path ->
             File(path).readLines().filter { it.isNotBlank() }.joinToString(File.pathSeparator)
         } ?: requireNotNull(System.getenv("KOTLIN_ETS_STDLIB")) { "Kotlin stdlib path missing" }
@@ -36,7 +38,7 @@ fun main(arguments: Array<String>) {
             listOf("-no-stdlib", "-no-reflect", "-classpath", classpath) + sources
         val images = options["--image-resources"]?.let { ImageResources.read(File(it).absoluteFile) } ?: ImageResources()
         val adapters = AdapterModules.load()
-        val target = withKotlinFrontend(compilerArgs) { frontend ->
+        val target = withKotlinFrontend(compilerArgs, entry) { frontend ->
             val module = frontend.module
             val diagnostics = DiagnosticSink()
             val stdlib = StandardLibraryRules()
@@ -44,7 +46,7 @@ fun main(arguments: Array<String>) {
             if (mode == "page") {
                 backend.validateSource(module)
                 val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
-                    requireNotNull(options["--entry"]) { "--entry is required for page mode" })
+                    requireNotNull(entry))
                 val targetModule = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
                 if ("--out-dir" in options) emitEtsModules(targetModule, ComposeRuntime(StandardLibraryRuntime))
                 else mapOf(output.name to emitEtsProgram(targetModule, ComposeRuntime(StandardLibraryRuntime)))
