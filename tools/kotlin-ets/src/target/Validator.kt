@@ -21,6 +21,7 @@ fun etsAssignable(actual: EtsType, expected: EtsType): Boolean = when {
 class EtsValidator {
     private var genericScope = emptyMap<String, EtsTypeParameter>()
     private var classes = emptyMap<String, EtsClass>()
+    private var sourceClasses = emptyMap<String, EtsClass>()
     private var globalFunctions = emptyMap<String, EtsFunction>()
     private var globalVariables = emptyMap<String, EtsGlobal>()
     private var globalOwners = emptyMap<String, String>()
@@ -190,14 +191,14 @@ class EtsValidator {
         fun checkPath(declaration: EtsClass, path: Set<String>) {
             if (declaration.symbol.id in path) reject(declaration, "Cyclic target heritage")
             parents(declaration).forEach { parentType ->
-                val parent = parentType.symbolId?.takeUnless { parentType.external }?.let { classes[it] }
+                val parent = parentType.symbolId?.let { classes[it] }
                     ?: reject(declaration, "Unbound target heritage")
                 if (parent.name != parentType.name) reject(declaration, "Target heritage name differs from identity")
                 if (parent.component) reject(declaration, "A target component cannot be inherited")
                 checkPath(parent, path + declaration.symbol.id)
             }
         }
-        classes.values.forEach { declaration ->
+        sourceClasses.values.forEach { declaration ->
             if (declaration.constraint) {
                 val valid = when (declaration.kind) {
                     EtsClassKind.INTERFACE -> declaration.baseClass == null && declaration.interfaces.distinct().size >= 2 && declaration.members.isEmpty()
@@ -218,7 +219,7 @@ class EtsValidator {
                 if (classes.getValue(it.symbolId!!).kind != EtsClassKind.INTERFACE) reject(declaration, "Implemented or extended interface must be an interface")
             }
         }
-        classes.values.forEach { declaration -> withTypeParameters(declaration.typeParameters, declaration.source) {
+        sourceClasses.values.forEach { declaration -> withTypeParameters(declaration.typeParameters, declaration.source) {
             parents(declaration).forEach { type(it, declaration.source) }
             val inheritedTypes = ancestors(instance(declaration))
             if (inheritedTypes.groupBy { it.symbolId }.values.any { it.size > 1 }) {
@@ -411,7 +412,9 @@ class EtsValidator {
                 }
             }
         }
-        classes = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>().associateBy { it.symbol.id }
+        sourceClasses = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>().associateBy { it.symbol.id }
+        require(program.externalClasses.keys.none { it in sourceClasses })
+        classes = program.externalClasses + sourceClasses
         globalFunctions = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>().associateBy { it.symbol.id }
         globalVariables = program.files.flatMap { it.declarations }.filterIsInstance<EtsGlobal>().associateBy { it.symbol.id }
         globalOwners = program.files.flatMap { file -> file.declarations.filterIsInstance<EtsGlobal>()

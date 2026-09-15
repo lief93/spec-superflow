@@ -75,17 +75,17 @@ internal val collectionSupportFunctions = listOf(
             const version = this.version;
             let index = 0;
             const more = (): boolean => {
-              if (version !== this.version) { const failure = new Error('ConcurrentModificationException'); failure.name = 'ConcurrentModificationException'; throw failure; }
+              if (version !== this.version) { throw new __etsThrowable('ConcurrentModificationException', 'ConcurrentModificationException'); }
               while (index < this.ordered.length && !this.ordered[index].present) { index++; }
               return index < this.ordered.length;
             };
             return new __etsIterator<__etsMapEntry<K, V>>(more, () => {
-              if (!more()) { const failure = new Error('NoSuchElementException'); failure.name = 'NoSuchElementException'; throw failure; }
+              if (!more()) { throw new __etsThrowable('NoSuchElementException', 'NoSuchElementException'); }
               return this.ordered[index++];
             });
           }
         }
-    """.trimIndent(), listOf("stdlib:__etsPair", "stdlib:__etsMapEntry", "stdlib:__etsIterator")),
+    """.trimIndent(), listOf("stdlib:__etsThrowable", "stdlib:__etsPair", "stdlib:__etsMapEntry", "stdlib:__etsIterator")),
     SupportFunction("stdlib:__etsSet", """
         class __etsSet<T> {
           map: __etsMap<T, boolean>;

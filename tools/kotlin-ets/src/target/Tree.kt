@@ -121,7 +121,8 @@ data class EtsClass(val name: String, val members: List<EtsClassMember>, overrid
 }
 data class EtsImport(val module: String, val name: String, val alias: String? = null, val default: Boolean = false)
 data class EtsFile(val sourcePath: String, val declarations: List<EtsDeclaration>)
-data class EtsProgram(val files: List<EtsFile>, val imports: List<EtsImport> = emptyList())
+data class EtsProgram(val files: List<EtsFile>, val imports: List<EtsImport> = emptyList(),
+    val externalClasses: Map<String, EtsClass> = emptyMap())
 
 /** Pinned runtime declarations selected by typed symbol references, never by printed source. */
 fun interface EtsRuntimeSupport {

@@ -154,9 +154,11 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         is IrCall -> call(expression, scope)
         is IrConstructorCall -> {
             val owner = expression.symbol.owner.parent as IrClass
-            if (sourceFile(owner) == null) diagnostics.unsupported(expression, "Unsupported external constructor: ${symbolName(owner)}")
-            EtsNew(type(expression.type) as? EtsNamedType ?: unsupportedType(expression.type),
-                arguments(expression, scope), source(expression))
+            ExceptionRules.constructor(expression, this, scope) ?: run {
+                if (sourceFile(owner) == null) diagnostics.unsupported(expression, "Unsupported external constructor: ${symbolName(owner)}")
+                EtsNew(type(expression.type) as? EtsNamedType ?: unsupportedType(expression.type),
+                    arguments(expression, scope), source(expression))
+            }
         }
         is IrGetField -> {
             if (sourceFile(expression.symbol.owner) == null) diagnostics.unsupported(expression, "Unsupported external field")
@@ -195,6 +197,12 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         }
         is IrTypeOperatorCall -> typeOperator(expression, scope)
         is IrWhen -> whenExpression(expression, scope)
+        is IrTry -> {
+            expressionDepth++
+            try { iife(resultStatements(expression, scope) { listOf(EtsReturn(it, source(expression))) }, type(expression.type), expression) }
+            finally { expressionDepth-- }
+        }
+        is IrThrow -> iife(listOf(EtsThrow(expression(expression.value, scope), source(expression))), EtsTypes.NEVER, expression)
         is IrContainerExpression -> blockExpression(expression, scope)
         is IrFunctionExpression -> functionExpression(expression.function, scope)
         is IrStringConcatenation -> expression.arguments.fold<IrExpression, EtsExpression>(
@@ -347,10 +355,17 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
     private fun statement(value: IrStatement, scope: Scope): List<EtsStatement> = withElement(value) { when (value) {
         is IrDelegatingConstructorCall, is IrInstanceInitializerCall -> constructorStatement(value, scope)
         is IrVariable -> {
-            val initializer = value.initializer?.let { expression(it, scope) }
-            val name = bind(value, scope)
-            value.initializer?.let { scope.aliases[value.symbol] = it }
-            listOf(EtsVariable(name, initializer, value.isVar || initializer == null))
+            if (value.initializer?.let(::hasTry) == true) {
+                val name = bind(value, scope)
+                listOf(EtsVariable(name, null, true)) + resultStatements(value.initializer!!, scope) {
+                    listOf(EtsExpressionStatement(EtsAssignment(EtsReference(name), it, source(value))))
+                }
+            } else {
+                val initializer = value.initializer?.let { expression(it, scope) }
+                val name = bind(value, scope)
+                value.initializer?.let { scope.aliases[value.symbol] = it }
+                listOf(EtsVariable(name, initializer, value.isVar || initializer == null))
+            }
         }
         is IrReturn -> {
             if (expressionDepth > 0) diagnostics.unsupported(value, "Return crosses an expression boundary")
@@ -358,6 +373,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                 diagnostics.unsupported(value, "Non-local return is outside the first language slice")
             }
             if (value.value.type.isUnit()) statement(value.value, scope) + EtsReturn(null, source(value))
+            else if (hasTry(value.value)) resultStatements(value.value, scope) { listOf(EtsReturn(it, source(value))) }
             else listOf(EtsReturn(expression(value.value, scope), source(value)))
         }
         is IrWhileLoop -> loop(value, scope, false)
@@ -365,6 +381,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         is IrBreak -> jump(value.loop, value, "break")
         is IrContinue -> jump(value.loop, value, "continue")
         is IrWhen -> whenStatement(value, scope)
+        is IrTry -> resultStatements(value, scope) { listOf(expressionStatement(it)) }
         is IrComposite -> value.statements.flatMap { statement(it, scope) }
         is IrContainerExpression -> {
             val nested = scope.fork()
@@ -381,6 +398,50 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         is IrExpression -> listOf(expressionStatement(expression(value, scope)))
         else -> diagnostics.unsupported(value, "Unsupported language statement: ${value.javaClass.simpleName}")
     } }
+
+    private fun hasTry(value: IrExpression): Boolean {
+        var found = false
+        value.acceptVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) { if (element is IrTry) found = true else element.acceptChildrenVoid(this) }
+            override fun visitFunction(declaration: IrFunction) = Unit
+        })
+        return found
+    }
+
+    private fun resultStatements(value: IrExpression, scope: Scope, consume: (EtsExpression) -> List<EtsStatement>): List<EtsStatement> = when (value) {
+        is IrTry -> {
+            val caught = synthetic(freshName("__etsCaught", scope), EtsTypes.OBJECT, value)
+            val branches = value.catches.map { clause ->
+                val nested = scope.fork()
+                val parameter = bind(clause.catchParameter, nested)
+                val check = exceptionCategory(clause.catchParameter.type.classOrNull?.owner)?.let {
+                    exceptionCheck(EtsCast(EtsReference(caught), EtsTypes.OBJECT, source(clause)), it, source(clause))
+                } ?: EtsBinary("instanceof", EtsReference(caught),
+                    classReference(clause.catchParameter.type.classOrNull?.owner
+                        ?: diagnostics.unsupported(clause, "Catch requires a resolved exception class"), clause),
+                    EtsTypes.BOOLEAN, source(clause))
+                EtsBranch(check, listOf(EtsVariable(parameter, EtsCast(EtsReference(caught), parameter.type, source(clause)), false)) +
+                    resultStatements(clause.result, nested, consume))
+            }
+            val handler = if (branches.isEmpty()) null else EtsCatch(caught,
+                listOf(EtsIf(branches + EtsBranch(null, listOf(EtsThrow(
+                    EtsCast(EtsReference(caught), targetErrorType, source(value)), source(value)))), source(value))))
+            listOf(EtsTry(resultStatements(value.tryResult, scope.fork(), consume), handler,
+                value.finallyExpression?.let { statement(it, scope.fork()) }, source(value)))
+        }
+        is IrReturn, is IrThrow, is IrBreak, is IrContinue -> statement(value, scope)
+        is IrWhen -> listOf(EtsIf(value.branches.map { branch -> EtsBranch(
+            if (branch is IrElseBranch) null else expression(branch.condition, scope),
+            resultStatements(branch.result, scope.fork(), consume)) }, source(value)))
+        is IrContainerExpression -> {
+            val nested = scope.fork()
+            val last = value.statements.lastOrNull() as? IrExpression
+            val prefix = (if (last == null) value.statements else value.statements.dropLast(1)).flatMap { statement(it, nested) }
+            listOf(EtsBlock(prefix + (last?.let { resultStatements(it, nested, consume) } ?: emptyList()), source(value)))
+        }
+        is IrGetObjectValue -> if (value.type.isUnit()) emptyList() else consume(expression(value, scope))
+        else -> consume(expression(value, scope))
+    }
 
     private tailrec fun expressionStatement(value: EtsExpression): EtsExpressionStatement {
         val lambda = (value as? EtsCall)?.callee as? EtsLambda
@@ -509,7 +570,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
                     diagnostics.unsupported(value, "Runtime interface discrimination is not supported")
                 }
                 val targetName = target?.fqNameWhenAvailable?.asString()
-                val check = when (targetName) {
+                val check = exceptionCategory(target)?.let { exceptionCheck(reference, it, source(value)) } ?: when (targetName) {
                     "kotlin.String" -> scalar("string")
                     "kotlin.Boolean" -> scalar("boolean")
                     "kotlin.Int", "kotlin.Short", "kotlin.Byte", "kotlin.Char", "kotlin.Float", "kotlin.Double" ->
@@ -649,7 +710,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             (if (isEnum) setOf("kotlin.Any", "kotlin.Enum") else setOf("kotlin.Any")) }
         val parentClasses = parents.map { parent ->
             val klass = parent.classOrNull?.owner ?: unsupportedType(parent)
-            if (sourceFile(klass) == null) {
+            if (sourceFile(klass) == null && exceptionCategory(klass) == null) {
                 diagnostics.unsupported(declaration, "Only source class and interface heritage is supported")
             }
             type(parent)
@@ -883,10 +944,14 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         if (value is IrDelegatingConstructorCall) {
             val target = value.symbol.owner.parent as? IrClass
             if (context.base != null) {
-                if (target?.symbol != context.base.symbol || !isEtsNativeConstructor(value.symbol.owner))
+                if (target?.symbol != context.base.symbol ||
+                    (!isEtsNativeConstructor(value.symbol.owner) && exceptionCategory(target) == null))
                     diagnostics.unsupported(value, "Unsupported constructor delegation")
                 rejectInitializationThis(value, declaration)
-                return listOf(EtsSuperConstructorCall(checkNotNull(context.baseType), arguments(value, scope), source(value))) + context.captures
+                val args = exceptionCategory(target)?.let {
+                    ExceptionRules.constructorArguments(value, it, this, scope)
+                } ?: arguments(value, scope)
+                return listOf(EtsSuperConstructorCall(checkNotNull(context.baseType), args, source(value))) + context.captures
             }
             if (target?.fqNameWhenAvailable?.asString() != "kotlin.Any") diagnostics.unsupported(value, "Unsupported constructor delegation")
             return emptyList()

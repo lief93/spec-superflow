@@ -3,7 +3,7 @@ package dev.ets
 internal data class SupportFunction(val symbol: String, val source: String, val dependencies: List<String> = emptyList())
 
 // Pinned target runtime, in stable dependency-before-consumer order. Bodies do not depend on input IR.
-private val supportFunctions = collectionSupportFunctions + listOf(
+private val supportFunctions = exceptionSupportFunctions + collectionSupportFunctions + listOf(
     SupportFunction("stdlib:__etsIntArrayHash", """
         function __etsIntArrayHash(values: Array<number> | null): number {
           if (values === null) { return 0; }
@@ -55,22 +55,22 @@ private val supportFunctions = collectionSupportFunctions + listOf(
     """.trimIndent()),
     SupportFunction("stdlib:__etsIntDiv", """
         function __etsIntDiv(a: number, b: number): number {
-          if (b === 0) { throw new Error('ArithmeticException: / by zero'); }
+          if (b === 0) { throw new __etsThrowable('ArithmeticException', 'ArithmeticException: / by zero'); }
           return Math.trunc(a / b) | 0;
         }
-    """.trimIndent()),
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsIntRem", """
         function __etsIntRem(a: number, b: number): number {
-          if (b === 0) { throw new Error('ArithmeticException: / by zero'); }
+          if (b === 0) { throw new __etsThrowable('ArithmeticException', 'ArithmeticException: / by zero'); }
           return (a % b) | 0;
         }
-    """.trimIndent()),
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsListGet", """
         function __etsListGet<T>(values: Array<T>, index: number): T {
-          if (index < 0 || index >= values.length) { throw new Error('IndexOutOfBoundsException'); }
+          if (index < 0 || index >= values.length) { throw new __etsThrowable('IndexOutOfBoundsException', 'IndexOutOfBoundsException'); }
           return values[index];
         }
-    """.trimIndent()),
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsListAdd", """
         function __etsListAdd<T>(values: Array<T>, value: T): boolean {
           values.push(value);
@@ -83,11 +83,11 @@ private val supportFunctions = collectionSupportFunctions + listOf(
           const result: Array<R> = [];
           for (let index = 0; index < size; index++) {
             result.push(transform(values[index]));
-            if (values.length !== size) { throw new Error('ConcurrentModificationException'); }
+            if (values.length !== size) { throw new __etsThrowable('ConcurrentModificationException', 'ConcurrentModificationException'); }
           }
           return result;
         }
-    """.trimIndent()),
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsListFilter", """
         function __etsListFilter<T>(values: Array<T>, predicate: (value: T) => boolean, keep: boolean): Array<T> {
           const size = values.length;
@@ -95,16 +95,16 @@ private val supportFunctions = collectionSupportFunctions + listOf(
           for (let index = 0; index < size; index++) {
             const element = values[index];
             if (predicate(element) === keep) { result.push(element); }
-            if (values.length !== size) { throw new Error('ConcurrentModificationException'); }
+            if (values.length !== size) { throw new __etsThrowable('ConcurrentModificationException', 'ConcurrentModificationException'); }
           }
           return result;
         }
-    """.trimIndent()),
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsIllegalArgumentException", """
         function __etsIllegalArgumentException(message: string): never {
-          throw new Error('IllegalArgumentException: ' + message);
+          throw new __etsThrowable('IllegalArgumentException', 'IllegalArgumentException: ' + message);
         }
-    """.trimIndent()),
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsProgressionLastElement", """
         function __etsProgressionLastElement(start: number, end: number, step: number): number {
           const mod = (value: number, divisor: number): number => {
@@ -121,10 +121,10 @@ private val supportFunctions = collectionSupportFunctions + listOf(
     """.trimIndent(), listOf("stdlib:__etsIllegalArgumentException")),
     SupportFunction("stdlib:__etsSubstring", """
         function __etsSubstring(value: string, start: number, end: number): string {
-          if (start < 0 || end > value.length || start > end) { throw new Error('IndexOutOfBoundsException'); }
+          if (start < 0 || end > value.length || start > end) { throw new __etsThrowable('IndexOutOfBoundsException', 'IndexOutOfBoundsException'); }
           return value.substring(start, end);
         }
-    """.trimIndent()),
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsSubstringFrom", """
         function __etsSubstringFrom(value: string, start: number): string {
           return __etsSubstring(value, start, value.length);
@@ -144,12 +144,12 @@ private val supportFunctions = collectionSupportFunctions + listOf(
           const expectedSize = values.length;
           let index = 0;
           return new __etsIterator<T>(() => index !== values.length, () => {
-            if (failFast && values.length !== expectedSize) { throw new Error('ConcurrentModificationException'); }
-            if (index >= values.length) { throw new Error('NoSuchElementException'); }
+            if (failFast && values.length !== expectedSize) { throw new __etsThrowable('ConcurrentModificationException', 'ConcurrentModificationException'); }
+            if (index >= values.length) { throw new __etsThrowable('NoSuchElementException', 'NoSuchElementException'); }
             return values[index++];
           });
         }
-    """.trimIndent(), listOf("stdlib:__etsIterator")),
+    """.trimIndent(), listOf("stdlib:__etsThrowable", "stdlib:__etsIterator")),
     SupportFunction("stdlib:__etsListAny", """
         function __etsListAny<T>(values: Array<T>, predicate: (value: T) => boolean, match: boolean): boolean {
           const iterator = __etsArrayIterator(values, true);
@@ -166,24 +166,24 @@ private val supportFunctions = collectionSupportFunctions + listOf(
           while (iterator.hasNext()) {
             if (predicate(iterator.next())) {
               count++;
-              if (count > 2147483647) { throw new Error('ArithmeticException: Count overflow has happened.'); }
+              if (count > 2147483647) { throw new __etsThrowable('ArithmeticException', 'ArithmeticException: Count overflow has happened.'); }
             }
           }
           return count;
         }
-    """.trimIndent(), listOf("stdlib:__etsArrayIterator")),
+    """.trimIndent(), listOf("stdlib:__etsThrowable", "stdlib:__etsArrayIterator")),
     SupportFunction("stdlib:__etsArrayGet", """
         function __etsArrayGet<T>(values: Array<T>, index: number): T {
-          if (index < 0 || index >= values.length) { throw new Error('ArrayIndexOutOfBoundsException'); }
+          if (index < 0 || index >= values.length) { throw new __etsThrowable('ArrayIndexOutOfBoundsException', 'ArrayIndexOutOfBoundsException'); }
           return values[index];
         }
-    """.trimIndent()),
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsArraySet", """
         function __etsArraySet<T>(values: Array<T>, index: number, value: T): void {
-          if (index < 0 || index >= values.length) { throw new Error('ArrayIndexOutOfBoundsException'); }
+          if (index < 0 || index >= values.length) { throw new __etsThrowable('ArrayIndexOutOfBoundsException', 'ArrayIndexOutOfBoundsException'); }
           values[index] = value;
         }
-    """.trimIndent()),
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsIntProgression", """
         class __etsIntProgression {
           readonly first: number;
@@ -226,13 +226,13 @@ private val supportFunctions = collectionSupportFunctions + listOf(
           return new __etsIterator<number>(() => more, () => {
             const value = next;
             if (value === values.last) {
-              if (!more) { throw new Error('NoSuchElementException'); }
+              if (!more) { throw new __etsThrowable('NoSuchElementException', 'NoSuchElementException'); }
               more = false;
             } else { next = (next + values.step) | 0; }
             return value;
           });
         }
-    """.trimIndent(), listOf("stdlib:__etsIntProgression", "stdlib:__etsIterator")),
+    """.trimIndent(), listOf("stdlib:__etsThrowable", "stdlib:__etsIntProgression", "stdlib:__etsIterator")),
 )
 
 // Compatibility for the UI text emitter, which does not expose its complete typed tree yet.

@@ -51,7 +51,7 @@ private class StandardLibraryDependencies {
                     val arity = when (id) {
                         "stdlib:__etsIterator", "stdlib:__etsSet" -> 1
                         "stdlib:__etsMap", "stdlib:__etsMapEntry", "stdlib:__etsPair" -> 2
-                        "stdlib:__etsIntProgression" -> 0
+                        "stdlib:__etsIntProgression", "stdlib:__etsThrowable" -> 0
                         else -> error("Unknown standard library runtime type: $id")
                     }
                     require(value.external && value.name == id.removePrefix("stdlib:") && value.arguments.size == arity) {

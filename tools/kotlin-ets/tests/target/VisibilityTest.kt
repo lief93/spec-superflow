@@ -78,5 +78,16 @@ fun checkVisibilityContract() {
     printer.program(program(listOf(useStatic), listOf(protectedConstructor, static)))
     reject("external protected static method", program(baseMembers = listOf(protectedConstructor, static),
         globals = listOf(useStatic.copy(kind = EtsFunctionKind.FUNCTION))), "member access")
+    val runtimeType = EtsNamedType("RuntimeBase", symbolId = "runtime:RuntimeBase", external = true)
+    val runtime = base.copy(name = "RuntimeBase", members = listOf(protectedConstructor.copy(
+        parameters = listOf(parameter), visibility = EtsVisibility.PUBLIC)))
+    fun externalProgram(argument: EtsExpression) = EtsProgram(listOf(EtsFile("Visibility.kt", listOf(
+        child.copy(baseClass = runtimeType, members = listOf(childConstructor.copy(body = listOf(
+            EtsSuperConstructorCall(runtimeType, listOf(argument), at)))))))),
+        externalClasses = mapOf("runtime:RuntimeBase" to runtime))
+    printer.program(externalProgram(EtsLiteral(1, EtsTypes.NUMBER, at)))
+    reject("external constructor contract", externalProgram(EtsLiteral("wrong", EtsTypes.STRING, at)), "type mismatch")
+    reject("undeclared external heritage", externalProgram(EtsLiteral(1, EtsTypes.NUMBER, at)).copy(externalClasses = emptyMap()),
+        "Unbound target heritage")
     println("PASS typed member visibility: protected super, fields, methods, accessors and $refused source-linked refusals")
 }

@@ -39,7 +39,7 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceT
                 is IrProperty -> lowerTopLevelProperty(declaration, language)
                 else -> diagnostics.unsupported(declaration, "Unsupported top-level declaration")
             } } + lowerFileInitialization(file, language))
-        })
+        }, externalClasses = exceptionTargetContracts())
         EtsValidator().validate(program, perFileNames = true)
         return program
     }

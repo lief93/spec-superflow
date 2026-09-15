@@ -44,11 +44,13 @@ const typed = files.map(path => { const target = path.replace(/\.ets$/, '.ts'); 
 assert.deepEqual(ts.getPreEmitDiagnostics(ts.createProgram(typed, options)).map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')), []);
 function evaluate(entry, scenario) {
   const cache = new Map();
+  const context = vm.createContext({});
   function load(path) {
     if (cache.has(path)) return cache.get(path);
     const exports = {}; cache.set(path, exports);
     const code = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: options }).outputText;
-    vm.runInNewContext(code, { exports, require: name => load(resolve(dirname(path), name + '.ets')) }, { timeout: 1000 });
+    vm.runInContext(`(function(exports, require) {\n${code}\n})`, context, { timeout: 1000 })(
+      exports, name => load(resolve(dirname(path), name + '.ets')));
     return exports;
   }
   const e = load(entry), values = [e.before()];

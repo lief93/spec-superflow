@@ -28,9 +28,7 @@ internal fun lowerFileInitialization(file: IrFile, language: Language): List<Ets
     fun setState(value: Int) = EtsExpressionStatement(EtsAssignment(EtsReference(state), number(value), at))
     val caught = EtsSymbol("file-init-error:${at.file}", "__etsCaught", EtsTypes.OBJECT, at)
     val error = EtsCast(EtsReference(caught), targetErrorType, at)
-    val category = EtsMember(error, "name", EtsTypes.STRING, at)
-    fun hasCategory(value: String) = EtsBinary("===", category, EtsLiteral(value, EtsTypes.STRING, at), EtsTypes.BOOLEAN, at)
-    val alreadyWrapped = EtsBinary("||", hasCategory("ExceptionInInitializerError"), hasCategory("NoClassDefFoundError"), EtsTypes.BOOLEAN, at)
+    val alreadyWrapped = exceptionCheck(error, "Error", at)
     val assignments = file.declarations.filterIsInstance<IrProperty>().filter { lazyTopLevelProperty(it) && it.backingField != null }.map { property ->
         val storage = topLevelStorage(property, language)
         EtsExpressionStatement(EtsAssignment(EtsReference(storage),
