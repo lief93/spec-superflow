@@ -115,9 +115,10 @@ class EtsPrinter {
         is EtsUiElement -> {
             val call = expression(value.call)
             val attrs = value.attributes.joinToString("") { ".${expression(it)}" }
-            if (value.children == null) listOf(call + attrs)
-            else if (value.children.isEmpty()) listOf("$call {}$attrs")
-            else listOf("$call {") + indent(statements(value.children)) + "}$attrs"
+            val children = value.children
+            if (children == null) listOf(call + attrs)
+            else if (children.isEmpty()) listOf("$call {}$attrs")
+            else listOf("$call {") + indent(statements(children)) + "}$attrs"
         }
         is EtsUiForEach -> listOf("ForEach(${expression(value.items)}, (${parameters(listOf(value.item))}) => {") +
             indent(statements(value.body)) + "})"

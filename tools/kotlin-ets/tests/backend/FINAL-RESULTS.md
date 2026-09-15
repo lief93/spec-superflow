@@ -70,3 +70,19 @@ documented in RESULTS.md; no failure was hidden or threshold relaxed. Verificati
 is limited to the declared first module subset, not full language compatibility,
 page parity or device acceptance. All work has ended; no further writes or runs
 are planned before the manager creates the whole-module review manifest.
+
+## R2 Separate-Module Regression (2026-09-15)
+
+The fixed R2 host queue exposed a later regression in the printer: smart-casting
+`EtsUiElement.children` is invalid when the target tree is a separately compiled
+module. The failed run is `kotlin-ets-backend-tests.5x6ABM` in the system temporary
+directory. A local immutable binding fixes this without merging the modules or
+changing the emitted UI structure. PrintContract now checks absent, empty and
+nonempty children and verifies that the input node remains unchanged.
+
+`bash tools/kotlin-ets/tests/backend/run.sh` passed in
+`/var/folders/fj/rrz0bjhx6cq04j7yghy2qkxh0000gn/T/kotlin-ets-backend-tests.zoU7xF`.
+The separate lowering/printer compilation, immutable repeated printing, and
+original/renamed JVM-to-host differential all passed; input-sha256.txt was
+rechecked against the worktree before publication. This is host/module evidence,
+not SDK, native or whole-R2 acceptance.
