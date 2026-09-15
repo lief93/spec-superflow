@@ -190,3 +190,13 @@ fill=false, repeated weights or unstable ordering rather than guessing sizes.
 Preserve the actual parent Row/Column axis, pass allocated constraints through
 generated modifier layers, and verify fixed-plus-weighted native bounds before
 replaying the unchanged Banking page.
+
+Eighteenth requirement: preserve Coil 2 ImageRequest construction through the
+shared typed value adapter, with owned builder/request/decoder declarations.
+Support direct LocalContext.current as the native image consumer's context,
+string/null data, default SvgDecoder.Factory, Boolean/Int crossfade and build.
+Preserve receiver/argument evaluation, builder identity, mutation and immutable
+build snapshots across ordinary methods. Do not infer arbitrary Context values,
+drop unknown request options, or claim that a request descriptor alone implements
+loading. AsyncImage consumption is the next explicit requirement. Validate
+generated values against the official Coil contract, SDK output, and replay.
