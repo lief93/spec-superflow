@@ -117,3 +117,14 @@ native child positions, then replay Banking without editing source or output.
 Until UI argument sequencing is generalized, reject combinations of an unknown
 alignment read/call and unstable modifier expressions. Do not reorder their
 effects silently; immutable source bindings and constant modifiers remain valid.
+
+Eleventh requirement: adapt resolved Compose stringResource calls as string-valued
+expressions, not UI builders or integer resource IDs. A separate resource input
+materializer reads XML from an explicitly selected resource directory/namespace;
+the compiler emits only referenced strings as a fresh sibling resource bundle.
+Preserve default and supported language variants for native resource lookup.
+Plain text is the initial supported form; formatting, styled/escaped text and
+unsupported qualifiers must diagnose the referenced resource, not become blank.
+Verify unchanged generated ETS plus emitted resources with the SDK/native host,
+then replay Banking with its compiled module resource inputs. This increment
+does not infer Gradle overlays by scanning arbitrary source directories.

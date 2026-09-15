@@ -17,6 +17,7 @@ bash tools/kotlin-ets/kotlin-ets --project /path/to/android --module :app \\
 --work-dir /path/to/new/run    Fresh directory for input lists and command logs
 --offline                     Ask Gradle to use cached dependencies only
 --image-resources /path/image-resources.properties  Use materialized image resources
+--string-resources /path/string-inputs  Use materialized string inputs; emit sibling .resources bundle
 
 Uses the project's Gradle wrapper and compile prerequisites. It does not edit
 build scripts, compile the selected Kotlin task, install an app or upload files.
@@ -26,7 +27,7 @@ Node.js 18+ and the backend's cached compiler dependencies are required.
 export function parseOptions(args) {
   const values = new Map();
   const flags = new Set(['--offline', '--collect-only']);
-  const options = new Set(['--project', '--module', '--variant', '--compile-task', '--mode', '--entry', '--out', '--out-dir', '--work-dir', '--image-resources']);
+  const options = new Set(['--project', '--module', '--variant', '--compile-task', '--mode', '--entry', '--out', '--out-dir', '--work-dir', '--image-resources', '--string-resources']);
   for (let i = 0; i < args.length; i++) {
     const key = args[i];
     if (!flags.has(key) && !options.has(key)) throw new Error(`Unknown project option: ${key}`);
@@ -54,6 +55,7 @@ export function parseOptions(args) {
     entry: get('entry'), output: get('out') || get('out-dir') ? resolve(get('out') || get('out-dir')) : undefined,
     outputFlag: get('out-dir') ? '--out-dir' : '--out', workDir: get('work-dir') ? resolve(get('work-dir')) : undefined,
     imageResources: get('image-resources') ? resolve(get('image-resources')) : undefined,
+    stringResources: get('string-resources') ? resolve(get('string-resources')) : undefined,
     offline: !!get('offline'), collectOnly: !!get('collect-only') };
 }
 
@@ -130,7 +132,8 @@ export function main(args) {
     const compilerArgs = [join(root, 'kotlin-ets'), '--mode', options.mode, options.outputFlag, options.output,
       '--classpath-file', classpath, '--sources-file', sources, '--frontend-arguments-file', frontendArguments,
       ...(options.entry ? ['--entry', options.entry] : []),
-      ...(options.imageResources ? ['--image-resources', options.imageResources] : [])];
+      ...(options.imageResources ? ['--image-resources', options.imageResources] : []),
+      ...(options.stringResources ? ['--string-resources', options.stringResources] : [])];
     const result = runLogged('bash', compilerArgs, options.project, workDir, stage);
     process.stdout.write(readFileSync(join(workDir, 'compiler.stdout.log')));
     if (result !== 0) process.stderr.write(`Kotlin/ETS backend failed (exit ${result}); see ${join(workDir, 'compiler.stderr.log')}\n`);

@@ -35,6 +35,12 @@ test('project entry retains the materialized image registry path', () => {
   assert.equal(options.imageResources, '/tmp/image assets/image-resources.properties');
 });
 
+test('project entry retains the separate string resource input directory', () => {
+  const options = parseOptions(['--project', '/tmp/p', '--module', ':app', '--variant', 'debug',
+    '--entry', 'sample.Page', '--out', '/tmp/Page.ets', '--string-resources', '/tmp/string inputs']);
+  assert.equal(options.stringResources, '/tmp/string inputs');
+});
+
 test('invalid or ambiguous project input is rejected before invoking Gradle', () => {
   const base = ['--project', '/tmp/p', '--module', ':app', '--variant', 'debug', '--entry', 'sample.Page', '--out', '/tmp/Page.ets'];
   for (const extra of [['--variant', 'release'], ['--classpath', 'other.jar'], ['--compile-task', 'compileKotlin'], ['--out-dir', '/tmp/modules']]) {

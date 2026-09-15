@@ -14,7 +14,7 @@ fun main(arguments: Array<String>) {
         while (index < arguments.size) {
             val item = arguments[index++]
             if (item.startsWith("--")) {
-                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--frontend-arguments-file")) { "Unknown option $item" }
+                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--string-resources", "--frontend-arguments-file")) { "Unknown option $item" }
                 require(index < arguments.size) { "Missing value for $item" }
                 options[item] = arguments[index++]
             } else sources.add(item)
@@ -37,12 +37,17 @@ fun main(arguments: Array<String>) {
         val compilerArgs = defaultJvmTarget + frontendArgs +
             listOf("-no-stdlib", "-no-reflect", "-classpath", classpath) + sources
         val images = options["--image-resources"]?.let { ImageResources.read(File(it).absoluteFile) } ?: ImageResources()
+        val strings = options["--string-resources"]?.let { StringResources.read(File(it).absoluteFile) } ?: StringResources()
+        val resourceOutput = File(output.absolutePath + ".resources")
+        if ("--string-resources" in options) require(!Files.exists(resourceOutput.toPath(), NOFOLLOW_LINKS)) {
+            "Refusing to overwrite existing resource output: $resourceOutput"
+        }
         val adapters = AdapterModules.load()
         val target = withKotlinFrontend(compilerArgs, entry) { frontend ->
             val module = frontend.module
             val diagnostics = DiagnosticSink()
             val stdlib = StandardLibraryRules()
-            val backend = EtsBackend(diagnostics, listOf(stdlib, images, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeAlignmentRule()) + adapters.rules(), frontend.types)
+            val backend = EtsBackend(diagnostics, listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeAlignmentRule()) + adapters.rules(), frontend.types)
             if (mode == "page") {
                 backend.validateSource(module)
                 val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
@@ -58,11 +63,21 @@ fun main(arguments: Array<String>) {
             }
         }
         Files.createDirectories(output.absoluteFile.parentFile.toPath())
+        val resources = strings.artifacts()
+        if (resources.isNotEmpty()) {
+            Files.createDirectory(resourceOutput.toPath())
+            resources.forEach { (name, content) ->
+                val file = resourceOutput.resolve(name)
+                Files.createDirectories(file.parentFile.toPath())
+                Files.writeString(file.toPath(), content, CREATE_NEW)
+            }
+        }
         if ("--out-dir" in options) {
             Files.createDirectory(output.toPath())
             target.forEach { (name, code) -> Files.writeString(output.resolve(name).toPath(), code, CREATE_NEW) }
         } else Files.writeString(output.toPath(), target.getValue(output.name), CREATE_NEW)
-        println("{\"ok\":true,\"frontend\":\"Kotlin-2.1.20-K2-FIR2IR\",\"output\":" + quote(output.path) + "}")
+        println("{\"ok\":true,\"frontend\":\"Kotlin-2.1.20-K2-FIR2IR\",\"output\":" + quote(output.path) +
+            ",\"resources\":" + (if (resources.isEmpty()) "null" else quote(resourceOutput.path)) + "}")
     } catch (failure: InvalidTarget) {
         println("{\"ok\":false,\"code\":\"INVALID_TARGET\",\"message\":" + quote(failure.message) +
             ",\"source\":" + diagnosticSourceJson(failure.source) + "}")
