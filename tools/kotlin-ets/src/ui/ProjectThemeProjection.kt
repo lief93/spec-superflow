@@ -32,16 +32,6 @@ internal fun projectAndroidTheme(declaration: IrDeclaration, diagnostics: Diagno
 }
 
 private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
-    fun reads(): Map<IrValueSymbol, Int> {
-        val counts = mutableMapOf<IrValueSymbol, Int>()
-        body.acceptVoid(object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) {
-                if (element is IrGetValue) counts.merge(element.symbol, 1, Int::plus)
-                element.acceptChildrenVoid(this)
-            }
-        })
-        return counts
-    }
     fun dependsOnAndroidVersion(element: IrElement, visited: MutableSet<IrValueSymbol> = mutableSetOf()): Boolean {
         var found = false
         element.acceptVoid(object : IrElementVisitorVoid {
@@ -57,7 +47,7 @@ private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
         })
         return found
     }
-    val originalReads = reads()
+    val originalReads = projectionLocalReads(body)
     var projected = false
     body.acceptVoid(object : IrElementVisitorVoid {
         override fun visitElement(element: IrElement) {
@@ -119,24 +109,5 @@ private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
     })
     // Only prune locals that became unused because of this projection, not arbitrary
     // unused declarations or file initializers (which may have observable effects).
-    do {
-        var changed = false
-        val liveReads = reads()
-        body.acceptVoid(object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) {
-                val statements = when (element) {
-                    is IrBlockBody -> element.statements
-                    is IrContainerExpression -> element.statements
-                    else -> null
-                }
-                statements?.removeAll { statement ->
-                    val discard = statement is IrVariable && !statement.isVar &&
-                        originalReads.getOrDefault(statement.symbol, 0) > 0 && liveReads.getOrDefault(statement.symbol, 0) == 0
-                    if (discard) { diagnostics.omittedUiElements.add(statement); changed = true }
-                    discard
-                }
-                element.acceptChildrenVoid(this)
-            }
-        })
-    } while (changed)
+    pruneProjectedLocals(body, originalReads, diagnostics)
 }

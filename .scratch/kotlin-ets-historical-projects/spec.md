@@ -348,3 +348,14 @@ Do not fabricate an SDK version, pick an Android branch or change strict mode.
 Reuse the project ColorScheme runtime and typed target pipeline. Test public CLI
 generation, strict/shared-value negatives, content and state preservation, native
 SDK/resource consumption, and replay the unchanged historical Banking entry.
+
+Thirty-third requirement: user explicitly excludes animation effects from the POC.
+In report-mode UI, preserve static geometry/content using the explicit initial
+Float value of Animatable, without implementing an animation engine. Report loss
+of motion and remember caching. Skip animation-launch-only statement trees and
+unsupported graphicsLayer blocks, including their private immutable dependencies;
+retain supported modifier chains and static collection cardinality. Do not skip
+ordinary UI state, clicks, paging or mixed loops containing UI. Unsupported animation
+operations whose results remain required still block; strict/language mode is
+unchanged. Verify public CLI, static initial values, sibling content, required-value
+and strict negatives, native SDK/device, and replay the unchanged Banking project.

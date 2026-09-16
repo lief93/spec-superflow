@@ -81,6 +81,9 @@ configuration with the current native project palette, without removing its
 content. Configure the consumed `kotlin_ets_material_*` resources before running
 the generated app; this is a reported theme replacement, not equivalent Android
 version emulation. See [theme projection](tests/ui/theme-projection/README.md).
+For the animation-excluded POC, Float Animatable values can use their explicit
+initial value while animation-only effects are reported and skipped. This does
+not disable ordinary page state or interactions. See [static animation projection](tests/ui/static-animation/README.md).
 
 From the repository root, with a fresh output path:
 

@@ -146,6 +146,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     if (symbolName(call.symbol.owner) == "kotlin.repeat") repeatUi(call, scope) else null
             },
             ComposeColumnRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "height") }, ::modifiers),
+            ComposeForEachRule(target, { binding(it) }, { body, scope -> uiBody(body, scope) }),
             ComposeRowRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "width") }, touchBoxes, ::modifiers),
             ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
             ComposeMaterialThemeRule(target, ::provideMaterialContext),
@@ -828,7 +829,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     "androidx.compose.foundation.layout.height", "androidx.compose.foundation.layout.fillMaxHeight" -> setOf("height")
                     "androidx.compose.foundation.layout.fillMaxSize", "androidx.compose.foundation.layout.size" -> setOf("width", "height")
                     "androidx.compose.foundation.layout.padding" -> setOf("padding")
-                    "androidx.compose.foundation.background" -> setOf("backgroundColor")
+                    "androidx.compose.foundation.background" -> if (argument(call, "shape") == null) setOf("backgroundColor")
+                        else setOf("backgroundColor", "borderRadius")
                     "androidx.compose.ui.draw.clip" -> setOf("borderRadius", "clip")
                     "androidx.compose.ui.platform.testTag" -> setOf("id")
                     "androidx.compose.foundation.clickable" -> setOf("onClick", "enabled")
@@ -906,8 +908,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         else record("Padding", linkedMapOf("left" to edge("start"), "right" to edge("end"), "top" to edge("top"), "bottom" to edge("bottom")), call)
                     }
                     "androidx.compose.foundation.background" -> {
-                        checkArguments(call, setOf("color"))
+                        checkArguments(call, setOf("color", "shape"))
                         attributes["backgroundColor"] = colorValue(argument(call, "color") ?: diagnostics.unsupported(call, "Missing background color"), scope)
+                        argument(call, "shape")?.let { attributes["borderRadius"] = language.expression(it, scope) }
                     }
                     "androidx.compose.ui.draw.clip" -> {
                         checkArguments(call, setOf("shape"))
