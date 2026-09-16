@@ -10,7 +10,7 @@ import org.jetbrains.kotlin.ir.visitors.*
 
 /** Source-level counterpart of Kotlin/JS's symbol worklist, without JS DCE context. */
 internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
-    prepareDeclaration: (IrDeclaration) -> Unit = {}): String {
+    prepareDeclaration: (IrDeclaration) -> Unit = {}, ignored: Set<IrElement> = emptySet()): String {
     val declarations = module.files.flatMap { it.declarations }
     val source = declarations.toSet()
     val roots = declarations.filterIsInstance<IrSimpleFunction>().filter {
@@ -20,21 +20,24 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
     val kept = linkedMapOf<IrDeclaration, String>()
     val pending = ArrayDeque<IrDeclaration>()
     val activeFiles = mutableSetOf<IrFile>()
-    val generated = linkedSetOf<IrSimpleFunction>()
-    val visitedGenerated = mutableSetOf<IrSimpleFunction>()
+    val members = linkedSetOf<IrSimpleFunction>()
+    val visitedMembers = mutableSetOf<IrSimpleFunction>()
     val requiredMembers = mutableSetOf<Pair<IrClass, String>>()
     val virtualMembers = mutableSetOf<String>()
+    val referencedFunctions = mutableSetOf<IrSimpleFunction>()
+    fun candidate(function: IrSimpleFunction) = function.parent is IrClass && function.correspondingPropertySymbol == null
     fun inherits(owner: IrClass, base: IrClass, visited: MutableSet<IrClass> = mutableSetOf()): Boolean =
         owner == base || visited.add(owner) && owner.superTypes.any {
             it.classOrNull?.owner?.let { parent -> inherits(parent, base, visited) } == true
         }
-    fun required(function: IrSimpleFunction) = function.name.asString() in virtualMembers ||
+    fun required(function: IrSimpleFunction): Boolean = function in referencedFunctions ||
+        function.overriddenSymbols.any { required(it.owner) } || function.name.asString() in virtualMembers ||
         requiredMembers.any { (owner, member) -> function.name.asString() == member &&
             (function.parent as? IrClass)?.let { inherits(it, owner) } == true }
     fun requireMember(owner: IrClass?, member: String) {
         val changed = if (owner != null) requiredMembers.add(owner to member)
             else virtualMembers.add(member)
-        if (changed) generated.filter { required(it) && it !in visitedGenerated }.forEach { pending.addLast(it) }
+        if (changed) members.filter { required(it) && it !in visitedMembers }.forEach { pending.addLast(it) }
     }
     fun requireValueMember(type: IrType, member: String) {
         if (type.isPrimitiveType() || type.isString() || type.isNothing()) return
@@ -70,11 +73,11 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
         file.declarations.filterIsInstance<IrProperty>().filter { !it.isConst && it.backingField != null }
             .forEach { enqueue(it, "file initialization: ${file.fileEntry.name}") }
     }
-    fun reference(symbol: IrSymbol?, from: IrDeclaration) {
+    fun reference(symbol: IrSymbol?, from: IrDeclaration, invoked: Boolean = true) {
         if (symbol == null || !symbol.isBound) return
         val function = symbol.owner as? IrSimpleFunction
-        if (function?.origin == IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER)
-            requireMember(function.parent as? IrClass, function.name.asString())
+        if (invoked && function != null && candidate(function) && referencedFunctions.add(function))
+            members.filter { required(it) && it !in visitedMembers }.forEach { pending.addLast(it) }
         val target = topLevel(symbol.owner as? IrDeclaration ?: return) ?: return
         enqueue(target, "reference from ${name(from)}")
         if (target is IrSimpleFunction || target is IrProperty && !target.isConst || target is IrField)
@@ -88,13 +91,21 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
         fun type(type: IrType) {
             val simple = type as? IrSimpleType ?: return
             reference(simple.classifier, declaration)
+            // Collection adapters use key equality/hash without explicit source calls.
+            val owner = simple.classOrNull?.owner
+            if (owner?.let(::symbolName) in setOf("kotlin.collections.Map", "kotlin.collections.MutableMap",
+                "kotlin.collections.Set", "kotlin.collections.MutableSet"))
+                (simple.arguments.firstOrNull() as? IrTypeProjection)?.type?.let {
+                    requireValueMember(it, "equals"); requireValueMember(it, "hashCode")
+                }
             simple.arguments.forEach { (it as? IrTypeProjection)?.type?.let(::type) }
         }
         declaration.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) {
-                if (element is IrSimpleFunction && element.origin == IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER) {
-                    generated.add(element)
-                    if (!required(element) || !visitedGenerated.add(element)) return
+                if (element in ignored) return
+                if (element is IrSimpleFunction && candidate(element)) {
+                    members.add(element)
+                    if (!required(element) || !visitedMembers.add(element)) return
                 }
                 // These intrinsics dispatch to members without an explicit source call.
                 if (element is IrStringConcatenation)
@@ -114,7 +125,8 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
                 when (element) {
                     is IrSimpleFunction -> {
                         type(element.returnType)
-                        element.overriddenSymbols.forEach { reference(it, declaration) }
+                        // An override relationship is not a virtual call on the base.
+                        element.overriddenSymbols.forEach { reference(it, declaration, invoked = false) }
                     }
                     is IrFunction -> type(element.returnType)
                     is IrValueDeclaration -> type(element.type)
@@ -145,7 +157,7 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
     module.acceptVoid(object : IrElementVisitorVoid {
         override fun visitElement(element: IrElement) {
             if (element is IrClass) element.declarations.removeAll {
-                it is IrSimpleFunction && it.origin == IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER && !required(it)
+                it is IrSimpleFunction && candidate(it) && !required(it)
             }
             element.acceptChildrenVoid(this)
         }

@@ -55,3 +55,14 @@ fun AppAppearance(dark: Boolean, content: @Composable () -> Unit) {
 }
 
 @Composable fun Clean() { MaterialTheme { Text("Clean") } }
+
+fun updateBusinessState(): Unit = Unit
+@Composable fun BusinessEffect() {
+    val colors = if (Build.VERSION.SDK_INT >= 31) dynamicLightColorScheme(LocalContext.current) else lightColorScheme()
+    val view = LocalView.current
+    SideEffect {
+        (view.context as Activity).window.statusBarColor = 0
+        updateBusinessState()
+    }
+    MaterialTheme(colorScheme = colors) { Text("Keep business state") }
+}

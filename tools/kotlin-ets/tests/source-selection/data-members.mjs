@@ -9,7 +9,7 @@ import ts from '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony
 const launcher = fileURLToPath(new URL('../../kotlin-ets', import.meta.url));
 const source = fileURLToPath(new URL('./DataMembers.kt', import.meta.url));
 const root = mkdtempSync(join(tmpdir(), 'kotlin-ets-data-members-'));
-for (const [entry, expected] of [['readOnly', 7], ['rendered', 'Label(value=kept)'], ['interpolated', 'label=Label(value=kept)'], ['compared', true], ['mixed', 'READY:7:Label(value=kept)'], ['unsupportedGeneric', null]]) {
+for (const [entry, expected, failure = /Unsupported string concatenation operand/] of [['readOnly', 7], ['rendered', 'Label(value=kept)'], ['interpolated', 'label=Label(value=kept)'], ['compared', true], ['mixed', 'READY:7:Label(value=kept)'], ['unsupportedGeneric', null], ['memberReachability', 'visible:7'], ['requiredUnsupported', null, /getProperty/]]) {
   const output = join(root, entry + '.ets');
   const result = spawnSync('bash', [launcher, '--mode', 'language', '--entry', 'datamembers.' + entry,
     '--out', output, source], {encoding: 'utf8', maxBuffer: 20 * 1024 * 1024,
@@ -17,7 +17,7 @@ for (const [entry, expected] of [['readOnly', 7], ['rendered', 'Label(value=kept
   writeFileSync(output + '.log', result.stdout + result.stderr);
   assert.equal(result.status, expected === null ? 2 : 0, result.stdout + result.stderr);
   if (expected === null) {
-    assert.match(result.stdout, /Unsupported string concatenation operand/);
+    assert.match(result.stdout, failure);
   } else {
     const code = readFileSync(output, 'utf8');
     const context = vm.createContext({exports: {}});

@@ -75,9 +75,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             methods += builder(next)
         }
         methods += modifierSpecializations.values.map { it.second }
+        // Explicit projections can make source value helpers unreachable. Reuse the
+        // symbol worklist before lowering remaining classes, not a second UI parser.
+        if (diagnostics.omittedUiElements.isNotEmpty())
+            selectSourceDeclarations(module, entryName, ignored = diagnostics.omittedUiElements)
+        val retained = module.files.flatMap { it.declarations }.toSet()
         val ownership = BuilderOwnership(methods, rootMethod.symbol.id, pageReceiver.id)
         val files = linkedMapOf<String, MutableList<EtsDeclaration>>()
-        for (declaration in declarations) {
+        for (declaration in declarations.filter { it in retained }) {
             diagnostics.currentFile = sourceFile(declaration)?.fileEntry?.name
             val file = files.getOrPut(diagnostics.currentFile!!) { mutableListOf() }
             when (declaration) {
@@ -98,7 +103,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 else -> diagnostics.unsupported(declaration, "Unsupported top-level UI module declaration")
             }
         }
-        for (source in declarations.mapNotNull(::sourceFile).distinct()) {
+        for (source in declarations.filter { it in retained }.mapNotNull(::sourceFile).distinct()) {
             diagnostics.currentFile = source.fileEntry.name
             files.getOrPut(source.fileEntry.name) { mutableListOf() } += lowerFileInitialization(source, language)
             initializedBuilderFiles[source]?.let { files.getValue(source.fileEntry.name).add(it) }

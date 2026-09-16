@@ -29,3 +29,6 @@ import androidx.compose.ui.unit.dp
 @Composable fun Clean() { Text("Clean") }
 
 @Composable fun ClaimedFailure() { Text("Before", onTextLayout = {}) }
+
+@Composable fun UnsupportedModifier() { Text("Keep", modifier = Modifier.blur(2.dp)) }
+@Composable fun UnsupportedControl() { CircularProgressIndicator() }

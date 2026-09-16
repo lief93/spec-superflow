@@ -55,4 +55,8 @@ const clean = run('clean', 'Clean');
 assert.equal(clean.result.status, 0, clean.result.stdout + clean.result.stderr);
 assert.equal(clean.report.degradationCount, 0);
 assert.doesNotMatch(readFileSync(clean.output, 'utf8'), /__etsCurrentProjectColorScheme/);
+const business = run('business', 'BusinessEffect');
+assert.equal(business.result.status, 2);
+assert.equal(existsSync(business.output), false);
+assert.ok(!business.report.degradations.some(d => d.action === 'omitted_theme_effect'));
 console.log(JSON.stringify({ok: true, root, page: page.output}));

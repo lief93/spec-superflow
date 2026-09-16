@@ -5,12 +5,16 @@ Animation is explicitly out of scope for the POC. In report-mode pages:
 - `remember { Animatable(initialFloat) }` becomes a typed readonly holder of the
   source initial value. Its `value` remains usable by static UI and collections.
   Motion and remember caching are not implemented; the diagnosis says so.
-- In a Compose body containing this animation construction, LaunchedEffect-only
-  statements/guards and standard forEach/forEachIndexed/repeat wrappers are
+- In a Compose body containing this animation construction, LaunchedEffect bodies
+  consisting only of recognized Animatable operations/delay, and their standard
+  forEach/forEachIndexed/repeat wrappers, are
   discarded before dependency selection. Their keys, guards, iterables and
-  callbacks are not evaluated. Mixed loops containing UI are not discarded.
-- Unsupported graphicsLayer blocks in that body are omitted while retaining the
-  Modifier receiver/chain. Private immutable locals consumed only by discarded
+  callbacks are not evaluated. Mixed loops containing UI and effects containing
+  business calls are not discarded. Unknown required effects remain diagnostic.
+- graphicsLayer blocks consisting only of property assignments dependent on
+  animation readings are omitted while retaining the Modifier receiver/chain.
+  Unrelated static transforms, including those in the same function, require a
+  real target mapping. Private immutable locals consumed only by discarded
   work are pruned through the same dependency logic as theme projection.
 - List UI forEach uses the existing typed ForEach target node. Supported uniform
   background shapes use native borderRadius without clipping child content.

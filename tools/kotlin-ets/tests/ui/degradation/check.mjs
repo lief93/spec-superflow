@@ -25,29 +25,21 @@ function run(name, entry, extra = []) {
     ? JSON.parse(readFileSync(output + '.diagnosis.json', 'utf8')) : null};
 }
 const page = run('page', 'Page');
-assert.equal(page.result.status, 0, page.result.stdout + page.result.stderr);
-assert.equal(page.event.status, 'generated_with_degradations');
-assert.equal(page.event.diagnosis, page.output + '.diagnosis.json');
-assert.equal(page.event.degradationCount, 4);
+assert.equal(page.result.status, 2, page.result.stdout + page.result.stderr);
+assert.equal(page.report.status, 'blocked');
+assert.equal(existsSync(page.output), false);
 assert.equal(page.report.equivalenceVerified, false);
-assert.equal(page.report.blockingFailure, null);
-assert.equal(page.report.degradationCount, 4);
-assert.deepEqual(page.report.degradations.map(d => d.action), [
-  'omitted_display_argument', 'omitted_modifier', 'omitted_ui_call', 'omitted_ui_call',
-]);
-assert.deepEqual(page.report.degradations.map(d => d.source.line), [17, 17, 18, 19]);
-for (const diagnostic of page.report.degradations) {
-  assert.equal(diagnostic.source.file, source);
-  assert.ok(diagnostic.source.column > 0);
-  assert.ok(diagnostic.source.end > diagnostic.source.start);
-  assert.match(diagnostic.capability, /^androidx\.compose\./);
-  assert.ok(diagnostic.impact.length > 0);
+assert.equal(page.report.degradationCount, 0);
+assert.match(page.report.blockingFailure.message, /softWrap/);
+assert.equal(page.report.blockingFailure.source.line, 17);
+
+for (const [entry, message] of [['UnsupportedModifier', /blur/], ['UnsupportedControl', /CircularProgressIndicator/]]) {
+  const rejected = run(entry, entry);
+  assert.equal(rejected.result.status, 2);
+  assert.equal(existsSync(rejected.output), false);
+  assert.equal(rejected.report.degradationCount, 0);
+  assert.match(rejected.report.blockingFailure.message, message);
 }
-const code = readFileSync(page.output, 'utf8');
-assert.match(code, /Text\("Before"\)/);
-assert.match(code, /Text\("After"\)/);
-assert.match(code, /\.width\(160\.0\)\.padding\(8\.0\)/);
-assert.doesNotMatch(code, /CircularProgressIndicator|SideEffect|System|getProperty|\.blur\(/);
 
 const strict = run('strict', 'Page', ['--unsupported-policy', 'error']);
 assert.equal(strict.result.status, 2);
@@ -60,9 +52,9 @@ const required = run('required', 'RequiredValue');
 assert.equal(required.result.status, 2);
 assert.equal(existsSync(required.output), false);
 assert.equal(required.report.status, 'blocked');
-assert.equal(required.report.degradationCount, 1);
-assert.match(required.report.blockingFailure.message, /SDK_INT/);
-assert.equal(required.report.blockingFailure.source.line, 26);
+assert.equal(required.report.degradationCount, 0);
+assert.match(required.report.blockingFailure.message, /blur/);
+assert.equal(required.report.blockingFailure.source.line, 25);
 
 const claimed = run('claimed', 'ClaimedFailure');
 assert.equal(claimed.result.status, 2);

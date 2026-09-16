@@ -69,9 +69,37 @@ private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
     })
     if (!projected) return
 
+    fun systemBarEffect(call: IrCall): Boolean {
+        val action = argument(call, "effect") as? IrFunctionExpression ?: return false
+        var supported = true
+        var writesSystemBar = false
+        action.function.body?.acceptVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) {
+                if (element is IrCall) {
+                    val function = element.symbol.owner
+                    val name = symbolName(function)
+                    val setter = name in setOf("android.view.Window.setStatusBarColor", "android.view.Window.setNavigationBarColor",
+                        "androidx.core.view.WindowInsetsControllerCompat.setAppearanceLightStatusBars",
+                        "androidx.core.view.WindowInsetsControllerCompat.setAppearanceLightNavigationBars")
+                    writesSystemBar = writesSystemBar || setter
+                    val property = function.correspondingPropertySymbol?.owner
+                    val paletteRead = property != null && property.getter?.symbol == function.symbol &&
+                        (property.parent as? IrClass)?.let(::symbolName) == "androidx.compose.material3.ColorScheme"
+                    if (sourceFile(function) != null || !setter && !paletteRead && name !in setOf(
+                            "android.app.Activity.getWindow", "android.view.View.getContext",
+                            "androidx.core.view.WindowCompat.getInsetsController", "androidx.compose.ui.graphics.toArgb",
+                            "kotlin.Boolean.not")) supported = false
+                }
+                if (element is IrSetValue || element is IrSetField) supported = false
+                element.acceptChildrenVoid(this)
+            }
+        }) ?: return false
+        return supported && writesSystemBar
+    }
+
     // A guard with no remaining UI can be discarded together with the omitted effect.
     fun onlyEffects(element: IrElement): Boolean = when (element) {
-        is IrCall -> sourceFile(element.symbol.owner) == null && symbolName(element.symbol.owner) == "androidx.compose.runtime.SideEffect"
+        is IrCall -> sourceFile(element.symbol.owner) == null && symbolName(element.symbol.owner) == "androidx.compose.runtime.SideEffect" && systemBarEffect(element)
         is IrWhen -> element.branches.all { onlyEffects(it.result) }
         is IrContainerExpression -> element.statements.all { onlyEffects(it) }
         is IrGetObjectValue -> element.type.isUnit()

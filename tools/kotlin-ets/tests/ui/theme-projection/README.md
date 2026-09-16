@@ -9,8 +9,9 @@ invent an Android version number. An IR attribute carries the replacement throug
 lowering into the existing typed MaterialTheme consumer.
 
 Content, typography and ordinary UI conditions remain. In a projected function,
-standalone SideEffect-only statement trees, including guards, are omitted and
-reported. Private immutable locals used exclusively by discarded configuration
+standalone SideEffect trees containing only recognized Android system-bar setters
+and their supporting reads, including guards, are omitted and reported. Business
+calls inside a SideEffect prevent that omission. Private immutable locals used exclusively by discarded configuration
 are removed transitively; shared values, mutable locals, unused source declarations
 and file-initialization semantics are not silently discarded. A still-required
 SDK value remains blocking. Strict mode does not project anything. This is a

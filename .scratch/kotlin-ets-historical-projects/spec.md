@@ -404,3 +404,21 @@ mutable aliasing, append chaining and nullable text behavior using native string
 array storage; retain UTF-16 Char iteration via checked String.get. Unsupported
 overloads remain explicit failures. Compare JVM and generated ETS execution for
 grouping, empty text, null text and aliasing; continue the Banking replay.
+
+Fortieth requirement: supersede requirement 31's generic UI omission policy.
+Unknown Compose controls, modifiers, display arguments, business calls and
+third-party dependencies must be implemented or remain explicit blocking
+diagnostics, not silently removed in report mode. Only approved static animation
+and Android platform projections may omit evaluation. Android UI resources,
+measurement and Insets still require target equivalents. Preserve callbacks with
+business operations even when they also contain animation calls. Continue fixing
+the real page rather than claiming equivalence for a reduced UI.
+An unrelated static graphicsLayer in an animation-owning function is still UI,
+not an animation omission; retain it until a target mapping is available.
+
+Source reachability may exclude unused overloads and member bodies, but must retain
+exact referenced symbols, virtual overrides, initialization and implicit collection
+key equals/hashCode methods. Recompute dependencies after approved projections;
+do not prune arbitrary UI conditions or required model fields. Test public CLI
+rejection of unknown UI, positive approved projections and executable member
+reachability before replaying the unchanged historical Banking page.

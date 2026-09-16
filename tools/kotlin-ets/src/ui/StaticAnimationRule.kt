@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.irAttribute
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.visitors.*
@@ -91,9 +92,65 @@ internal class ComposeStaticAnimationRule(private val diagnostics: DiagnosticSin
         })
         if (!hasAnimation) return
         val originalReads = projectionLocalReads(body)
+        val animatedItems = mutableSetOf<IrValueSymbol>()
+        fun readsAnimation(element: IrElement, visited: MutableSet<IrValueSymbol> = mutableSetOf()): Boolean {
+            var found = false
+            element.acceptVoid(object : IrElementVisitorVoid {
+                override fun visitElement(element: IrElement) {
+                    if (element is IrCall && element.symbol.owner.correspondingPropertySymbol?.owner?.name?.asString() == "value" &&
+                        element.dispatchReceiver?.type?.let(::floatAnimation) == true) found = true
+                    if (element is IrGetValue) {
+                        if (element.symbol in animatedItems) found = true
+                        val variable = element.symbol.owner as? IrVariable
+                        if (variable != null && !variable.isVar && visited.add(element.symbol) &&
+                            variable.initializer?.let { readsAnimation(it, visited) } == true) found = true
+                    }
+                    element.acceptChildrenVoid(this)
+                }
+            })
+            return found
+        }
+        // Keep the value provenance when a collection of animation readings is
+        // consumed by the UI loop; an unrelated static layer must not disappear.
+        body.acceptVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) {
+                if (element is IrCall && sourceFile(element.symbol.owner) == null &&
+                    symbolName(element.symbol.owner) in setOf("kotlin.collections.forEach", "kotlin.collections.forEachIndexed") &&
+                    element.extensionReceiver?.let { readsAnimation(it) } == true)
+                    (argument(element, "action") as? IrFunctionExpression)?.function?.valueParameters?.lastOrNull()?.let {
+                        animatedItems += it.symbol
+                    }
+                element.acceptChildrenVoid(this)
+            }
+        })
+        fun animatedLayer(node: IrElement): Boolean = when (node) {
+            is IrCall -> sourceFile(node.symbol.owner) == null &&
+                (node.symbol.owner.parent as? IrClass)?.let(::symbolName) == "androidx.compose.ui.graphics.GraphicsLayerScope" &&
+                node.symbol.owner.correspondingPropertySymbol?.owner?.setter?.symbol == node.symbol &&
+                node.getValueArgument(0)?.let { readsAnimation(it) } == true
+            is IrReturn -> animatedLayer(node.value)
+            is IrContainerExpression -> node.statements.all(::animatedLayer)
+            is IrGetObjectValue -> node.type.isUnit()
+            else -> false
+        }
+        fun animationEffect(node: IrElement): Boolean = when (node) {
+            is IrCall -> sourceFile(node.symbol.owner) == null &&
+                (symbolName(node.symbol.owner) == "kotlinx.coroutines.delay" ||
+                    floatAnimation(node.dispatchReceiver?.type ?: node.type) &&
+                    node.symbol.owner.name.asString() in setOf("animateTo", "animateDecay", "snapTo", "stop"))
+            is IrReturn -> animationEffect(node.value)
+            is IrTypeOperatorCall -> node.operator == IrTypeOperator.IMPLICIT_COERCION_TO_UNIT && animationEffect(node.argument)
+            is IrContainerExpression -> node.statements.all(::animationEffect)
+            is IrGetObjectValue -> node.type.isUnit()
+            else -> false
+        }
         fun effectsOnly(node: IrElement): Boolean = when (node) {
             is IrCall -> if (sourceFile(node.symbol.owner) != null) false else when (symbolName(node.symbol.owner)) {
-                "androidx.compose.runtime.LaunchedEffect" -> true
+                "androidx.compose.runtime.LaunchedEffect" -> {
+                    val action = argument(node, "block") as? IrFunctionExpression
+                    val statements = (action?.function?.body as? IrBlockBody)?.statements
+                    statements != null && statements.isNotEmpty() && statements.all(::animationEffect)
+                }
                 "kotlin.collections.forEach", "kotlin.collections.forEachIndexed", "kotlin.repeat" -> {
                     val action = argument(node, "action") as? IrFunctionExpression
                     val statements = (action?.function?.body as? IrBlockBody)?.statements
@@ -128,11 +185,13 @@ internal class ComposeStaticAnimationRule(private val diagnostics: DiagnosticSin
             override fun visitCall(expression: IrCall): IrExpression {
                 val external = sourceFile(expression.symbol.owner) == null
                 val api = symbolName(expression.symbol.owner)
-                if (external && api == "androidx.compose.ui.graphics.graphicsLayer" && argument(expression, "block") != null) {
+                val layerBody = (argument(expression, "block") as? IrFunctionExpression)?.function?.body as? IrBlockBody
+                if (external && api == "androidx.compose.ui.graphics.graphicsLayer" &&
+                    layerBody != null && layerBody.statements.isNotEmpty() && layerBody.statements.all(::animatedLayer)) {
                     val receiver = expression.extensionReceiver
                     if (receiver != null) {
                         diagnostics.omitUi(expression, "graphicsLayer block omitted in static animation projection", api,
-                            "omitted_modifier", "Layer transformations and their private local dependencies are not evaluated; other modifiers remain.",
+                            "omitted_animation_modifier", "Layer transformations and their private local dependencies are not evaluated; other modifiers remain.",
                             expression.symbol.owner.valueParameters.indices.mapNotNull { expression.getValueArgument(it) })
                         return receiver.transform(this, null)
                     }

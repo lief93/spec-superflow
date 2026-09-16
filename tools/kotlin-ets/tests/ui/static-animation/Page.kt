@@ -57,3 +57,19 @@ import androidx.compose.ui.unit.dp
         Text("Retained")
     }
 }
+
+fun businessAction(): Unit = Unit
+@Composable fun BusinessEffect() {
+    val animation = remember { Animatable(0f) }
+    LaunchedEffect(animation) {
+        animation.animateTo(1f)
+        businessAction()
+    }
+    Text("Keep business effect")
+}
+
+@Composable fun StaticLayer() {
+    val animation = remember { Animatable(0f) }
+    Text(if (animation.value == 0f) "Initial" else "Changed")
+    Box(Modifier.size(24.dp).graphicsLayer { rotationZ = 30f })
+}

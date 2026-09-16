@@ -12,7 +12,7 @@ bash tools/kotlin-ets/kotlin-ets --project /path/to/android --module :app \\
 
 --compile-task compileKotlin   Use an exact local task instead of --variant
 --mode language               Translate ordinary Kotlin instead of a page
---unsupported-policy error    Strict page conversion; default report mode records bounded UI omissions
+--unsupported-policy error    Strict conversion; default report allows only explicit animation/system projections, never unknown UI omissions
 --out-dir /path/to/new/modules Output separate ETS source modules instead of --out
 --collect-only                Collect inputs without running the ETS backend
 --work-dir /path/to/new/run    Fresh directory for input lists and command logs
