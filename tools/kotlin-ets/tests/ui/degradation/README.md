@@ -33,6 +33,10 @@ translation or proven specialization. It is not replaced with an invented number
 Compiler temporaries used exclusively by omitted arguments are removed along with
 their evaluation, including Kotlin's named-argument reordering temporaries.
 Explicit source locals are retained even when a later UI argument is omitted.
+The bounded [native project-theme projection](../theme-projection/README.md) is
+an explicit exception: Android-version-dependent MaterialTheme color setup and
+SideEffect-only guards in that projected function can discard their private
+immutable local dependencies. Shared UI values and conditions still block.
 An unsupported temporary type is kept as source IR until consumer analysis;
 it is not replaced with a made-up ETS type. Any surviving consumer still fails.
 

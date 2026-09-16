@@ -6,6 +6,7 @@ import {spawnSync} from 'node:child_process';
 
 const here = dirname(fileURLToPath(import.meta.url));
 assert.ok(process.argv[2], 'Pass generated project-theme ETS');
+const resources = process.argv[3] ? resolve(process.argv[3]) : join(here, 'resources');
 const seed = mkdtempSync('/private/tmp/kotlin-ets-project-theme-seed-');
 const excluded = new Set(['build', '.hvigor', 'oh_modules', '.idea', '.migration', '.git']);
 cpSync(process.env.KOTLIN_ETS_SDK_SEED ?? '/private/tmp/kotlin-ets-native-20260914-06/harmony', seed,
@@ -13,7 +14,7 @@ cpSync(process.env.KOTLIN_ETS_SDK_SEED ?? '/private/tmp/kotlin-ets-native-202609
 for (const mode of ['base', 'dark']) {
   const file = join(seed, 'entry/src/main/resources', mode, 'element/color.json');
   const previous = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {color: []};
-  const fixture = JSON.parse(readFileSync(join(here, 'resources', mode, 'element/color.json'), 'utf8'));
+  const fixture = JSON.parse(readFileSync(join(resources, mode, 'element/color.json'), 'utf8'));
   const names = new Set(fixture.color.map(c => c.name));
   previous.color = [...previous.color.filter(c => !names.has(c.name)), ...fixture.color];
   mkdirSync(dirname(file), {recursive: true});

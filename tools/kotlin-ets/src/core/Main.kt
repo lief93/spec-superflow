@@ -64,10 +64,13 @@ fun main(arguments: Array<String>) {
             "Refusing to overwrite existing resource output: $resourceOutput"
         }
         val adapters = AdapterModules.load()
-        val target = withKotlinFrontend(compilerArgs, entry) { frontend ->
+        val stdlib = StandardLibraryRules()
+        val rules = listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeProjectColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeDimensionRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), ComposeLocalContextRule(), ComposeShapeRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule()) + adapters.rules()
+        val target = withKotlinFrontend(compilerArgs, entry, prepareDeclaration = { declaration ->
+            if (mode == "page") rules.forEach { it.prepareSource(declaration, diagnostics) }
+        }) { frontend ->
             val module = frontend.module
-            val stdlib = StandardLibraryRules()
-            val backend = EtsBackend(diagnostics, listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeProjectColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeDimensionRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), ComposeLocalContextRule(), ComposeShapeRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule()) + adapters.rules(), frontend.types)
+            val backend = EtsBackend(diagnostics, rules, frontend.types)
             if (mode == "page") {
                 backend.validateSource(module)
                 val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,

@@ -2,6 +2,13 @@
 package dev.ets
 
 import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.declarations.IrDeclaration
+
+private val currentProjectPalette = etsFunctionSymbol("__etsCurrentProjectColorScheme",
+    emptyList(), materialColorSchemeType, SourceSpan("EtsProjectColorScheme.kt", 0, 0))
+
+internal fun currentProjectColorScheme(at: SourceSpan): EtsExpression =
+    EtsCall(EtsReference(currentProjectPalette), emptyList(), materialColorSchemeType, at)
 
 /** Project resource palettes intentionally replace Android wallpaper-derived colors. */
 internal class ComposeProjectColorSchemeRule : CallRule {
@@ -11,6 +18,8 @@ internal class ComposeProjectColorSchemeRule : CallRule {
     private val paletteType = etsClassSymbol("EtsProjectColorScheme", at).type as EtsNamedType
     private val reader = colorReader()
     private val factory = colorFactory()
+
+    override fun prepareSource(declaration: IrDeclaration, diagnostics: DiagnosticSink) = projectAndroidTheme(declaration, diagnostics)
 
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
         val owner = call.symbol.owner
@@ -31,9 +40,9 @@ internal class ComposeProjectColorSchemeRule : CallRule {
     override fun targetFiles(program: EtsProgram): List<EtsFile> {
         var used = false
         program.files.forEach { file -> file.declarations.forEach { declaration -> walkEts(declaration) {
-            if (it is EtsReference && it.symbol.id == factory.symbol.id) used = true
+            if (it is EtsReference && it.symbol.id in setOf(factory.symbol.id, currentProjectPalette.id)) used = true
         } } }
-        return if (used) listOf(EtsFile(at.file!!, listOf(reader, paletteClass(), factory))) else emptyList()
+        return if (used) listOf(EtsFile(at.file!!, listOf(reader, paletteClass(), factory, currentFactory()))) else emptyList()
     }
 
     override fun targetImports(program: EtsProgram): List<EtsImport> =
@@ -52,6 +61,15 @@ internal class ComposeProjectColorSchemeRule : CallRule {
                 EtsMember(EtsCast(EtsReference(caught), errorType, at), "message", EtsTypes.STRING, at), EtsTypes.STRING, at), EtsTypes.STRING, at)
         return EtsFunction("__etsProjectThemeColor", listOf(manager, name), EtsTypes.NUMBER, listOf(
             EtsTry(listOf(EtsReturn(read, at)), EtsCatch(caught, listOf(EtsThrow(EtsNew(errorType, listOf(message), at), at))), source = at)), at)
+    }
+
+    private fun currentFactory(): EtsFunction {
+        val context = EtsCall(EtsReference(EtsSymbol("arkui:getContext", "getContext",
+            EtsFunctionType(emptyList(), nativeHostContextType), at, external = true)), emptyList(), nativeHostContextType, at)
+        val resources = EtsMember(context, "resourceManager", managerType, at)
+        return EtsFunction(currentProjectPalette.name, emptyList(), materialColorSchemeType,
+            listOf(EtsReturn(EtsNew(paletteType, listOf(resources), at), at)), at,
+            exported = true)
     }
 
     private fun colorFactory(): EtsFunction {

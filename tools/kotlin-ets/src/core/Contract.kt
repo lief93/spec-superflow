@@ -64,6 +64,9 @@ interface Language {
 }
 
 fun interface CallRule {
+    /** Framework source projections run before the shared dependency worklist and language lowerings. */
+    fun prepareSource(declaration: IrDeclaration, diagnostics: DiagnosticSink) {}
+
     /** Owned target declarations participate in the same validation and module linking as source declarations. */
     fun targetFiles(program: EtsProgram): List<EtsFile> = emptyList()
 

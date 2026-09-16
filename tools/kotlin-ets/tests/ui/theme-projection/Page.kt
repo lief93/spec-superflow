@@ -1,0 +1,57 @@
+package themeprojection
+
+import android.app.Activity
+import android.os.Build
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.material3.Button
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+
+fun androidPalette(): ColorScheme = error("Android-only fallback must not be linked")
+
+@Composable
+fun AppAppearance(dark: Boolean, content: @Composable () -> Unit) {
+    val colors = if (Build.VERSION.SDK_INT >= 31) {
+        val context = LocalContext.current
+        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else androidPalette()
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect { (view.context as Activity).window.statusBarColor = 0 }
+    }
+    MaterialTheme(colorScheme = colors, content = content)
+}
+
+@Composable fun Page() {
+    val page = remember { mutableStateOf(0) }
+    AppAppearance(false) {
+        Column {
+            Text("Preserved content", color = MaterialTheme.colorScheme.primary)
+            if (page.value == 0) Text("First") else Text("Next")
+            Button(onClick = { page.value = page.value + 1 }) { Text("Advance") }
+        }
+    }
+}
+
+@Composable fun SharedValue() {
+    val sdk = Build.VERSION.SDK_INT
+    val colors = if (sdk >= 31) dynamicLightColorScheme(LocalContext.current) else lightColorScheme()
+    MaterialTheme(colorScheme = colors) { Text("Content") }
+    Text(sdk.toString())
+}
+
+@Composable fun RequiredCondition() {
+    if (Build.VERSION.SDK_INT >= 31) Text("A") else Text("B")
+}
+
+@Composable fun Clean() { MaterialTheme { Text("Clean") } }

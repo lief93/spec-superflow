@@ -76,6 +76,11 @@ calls, modifier operations and explicitly optional display arguments. It writes
 unknown conditions and claimed-adapter failures remain blocking. Use
 `--unsupported-policy error` for strict page generation; language mode is always
 strict. See [recovery boundaries and tests](tests/ui/degradation/README.md).
+An explicit exception replaces Android-version-dependent MaterialTheme color
+configuration with the current native project palette, without removing its
+content. Configure the consumed `kotlin_ets_material_*` resources before running
+the generated app; this is a reported theme replacement, not equivalent Android
+version emulation. See [theme projection](tests/ui/theme-projection/README.md).
 
 From the repository root, with a fresh output path:
 

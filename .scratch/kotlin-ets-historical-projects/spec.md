@@ -334,3 +334,17 @@ impact, status and any blocking failure. Nonempty degradation is not equivalence
 success. Test public direct/project CLI forwarding, strict mode, preserved UI,
 nonrecoverable values and no report overwrites; compile an unedited degraded page
 with the actual SDK. Banking may still block on value/condition dependencies.
+
+Thirty-second requirement: in report-mode pages, replace MaterialTheme colorScheme
+configuration that depends on the resolved Android Build.VERSION.SDK_INT field
+with the current native project resource palette. Perform this framework-owned
+source projection before dependency selection and official language lowerings;
+preserve content, typography, source methods and ordinary UI conditions. Record
+the replacement and skipped evaluation. In a projected theme function, omit only
+statement trees consisting of external Compose SideEffect calls and their guards;
+remove immutable locals only when all of their previous reads were discarded.
+Retain shared locals and fail honestly if their required values remain unsupported.
+Do not fabricate an SDK version, pick an Android branch or change strict mode.
+Reuse the project ColorScheme runtime and typed target pipeline. Test public CLI
+generation, strict/shared-value negatives, content and state preservation, native
+SDK/resource consumption, and replay the unchanged historical Banking entry.

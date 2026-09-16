@@ -9,7 +9,8 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.visitors.*
 
 /** Source-level counterpart of Kotlin/JS's symbol worklist, without JS DCE context. */
-internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String): String {
+internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
+    prepareDeclaration: (IrDeclaration) -> Unit = {}): String {
     val declarations = module.files.flatMap { it.declarations }
     val source = declarations.toSet()
     val roots = declarations.filterIsInstance<IrSimpleFunction>().filter {
@@ -60,6 +61,7 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String): 
     activate(roots.single().parent as IrFile)
     while (pending.isNotEmpty()) {
         val declaration = pending.removeFirst()
+        prepareDeclaration(declaration)
         fun type(type: IrType) {
             val simple = type as? IrSimpleType ?: return
             reference(simple.classifier, declaration)
