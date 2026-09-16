@@ -25,6 +25,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val slots = mutableSetOf<IrValueSymbol>()
     private val builders = linkedSetOf<IrSimpleFunction>()
     private val builderSymbols = linkedMapOf<IrSimpleFunction, EtsSymbol>()
+    private val modifierSpecializations = linkedMapOf<String, Pair<IrSimpleFunction, EtsFunction>>()
+    private val activeSpecializations = mutableSetOf<IrSimpleFunction>()
     private val slotMethods = mutableListOf<EtsFunction>()
     private val fieldNames = mutableSetOf<String>()
     private lateinit var root: IrSimpleFunction
@@ -42,6 +44,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         touchBoxes.clear()
         bindingSymbols.clear()
         builderSymbols.clear()
+        modifierSpecializations.clear(); activeSpecializations.clear()
         usesMaterialContext = requiresMaterialContext(module)
         val declarations = module.files.flatMap { it.declarations }
         val functions = declarations.filterIsInstance<IrSimpleFunction>()
@@ -68,6 +71,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             emitted += next
             methods += builder(next)
         }
+        methods += modifierSpecializations.values.map { it.second }
         val ownership = BuilderOwnership(methods, rootMethod.symbol.id, pageReceiver.id)
         val files = linkedMapOf<String, MutableList<EtsDeclaration>>()
         for (declaration in declarations) {
@@ -94,6 +98,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         for (source in declarations.mapNotNull(::sourceFile).distinct()) {
             diagnostics.currentFile = source.fileEntry.name
             files.getOrPut(source.fileEntry.name) { mutableListOf() } += lowerFileInitialization(source, language)
+        }
+        modifierSpecializations.values.forEach { (source, method) ->
+            if (method.symbol.id in ownership.globalIds) files.getOrPut(sourceFile(source)!!.fileEntry.name) { mutableListOf() }
+                .add(ownership.rewrite(method).copy(kind = EtsFunctionKind.FUNCTION,
+                    exported = source.visibility != org.jetbrains.kotlin.descriptors.DescriptorVisibilities.PRIVATE))
         }
         diagnostics.currentFile = sourceFile(root)?.fileEntry?.name
         val name = root.name.asString()
@@ -207,16 +216,19 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private fun isUiBuilder(function: IrSimpleFunction): Boolean =
         function.hasAnnotation(COMPOSABLE) && function.returnType.isUnit()
 
-    private fun builder(function: IrSimpleFunction): EtsFunction = withTextContext(function) {
+    private fun builder(function: IrSimpleFunction, modifiers: Map<IrValueSymbol, IrExpression> = emptyMap(),
+        aliases: Map<IrValueSymbol, IrExpression> = emptyMap(), name: String = function.name.asString()): EtsFunction = withTextContext(function) {
         if ((function.parent as? IrFile)?.let(::requiresFileInitialization) == true) {
             diagnostics.unsupported(function, "Compose builder in a lazily initialized file requires a lifecycle entry bridge")
         }
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
-        builderSymbol(function)
+        if (modifiers.isEmpty()) builderSymbol(function)
         if (function.extensionReceiverParameter != null || function.dispatchReceiverParameter != null)
             diagnostics.unsupported(function, "Source builder receivers are not supported")
         val scope = scope()
-        val parameters = contextParameters(scope, function) + function.valueParameters.map { parameter ->
+        scope.aliases.putAll(aliases)
+        scope.aliases.putAll(modifiers)
+        val parameters = contextParameters(scope, function) + function.valueParameters.filter { it.symbol !in modifiers }.map { parameter ->
             if (parameter.type.hasAnnotation(COMPOSABLE)) {
                 if (parameter.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() != "kotlin.Function0")
                     diagnostics.unsupported(parameter, "Content slots currently require () -> Unit")
@@ -232,7 +244,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         }
         val body = function.body ?: diagnostics.unsupported(function, "Builder has no source body")
         val lines = uiBody(body, scope, function == root)
-        EtsFunction(function.name.asString(), parameters, EtsTypes.VOID, lines, language.source(function),
+        EtsFunction(name, parameters, EtsTypes.VOID, lines, language.source(function),
             kind = EtsFunctionKind.METHOD, builder = true)
     }
 
@@ -407,6 +419,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             return listOf(EtsUiElement(call("builder", contextArguments(scope), call, receiver = expression(call.dispatchReceiver!!, scope))))
         }
         if (isUiBuilder(function) && sourceFile(function) != null && !function.isExternal) {
+            specializeModifierCall(call, scope)?.let { return it }
             builders += function
             val args = function.valueParameters.mapIndexed { index, parameter ->
                 val value = call.getValueArgument(index) ?: parameter.defaultValue?.expression
@@ -421,6 +434,68 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             return listOf(EtsUiElement(methodCall(builderSymbol(function), contextArguments(scope) + args, call)))
         }
         return null
+    }
+
+    private fun specializeModifierCall(call: IrCall, scope: Scope): List<EtsStatement>? {
+        val function = call.symbol.owner
+        val inputs = function.valueParameters.mapIndexedNotNull { index, parameter ->
+            if (parameter.type.classOrNull?.owner?.let(::symbolName) != "androidx.compose.ui.Modifier") null
+            else parameter to (call.getValueArgument(index) ?: parameter.defaultValue?.expression
+                ?: diagnostics.unsupported(call, "Missing Modifier argument ${parameter.name}"))
+        }
+        if (inputs.none { (_, value) ->
+            val resolved = dereference(value, scope) as? IrCall
+            resolved != null && sourceFile(resolved.symbol.owner) == null
+        }) return null
+        fun key(value: IrExpression): String {
+            val resolved = dereference(value, scope) ?: diagnostics.unsupported(value, "Missing Modifier value")
+            if (resolved is IrGetObjectValue && symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.Companion") return "identity"
+            if (resolved is IrConst) return "${resolved.kind}:${resolved.value}"
+            if (resolved is IrCall && resolved.type.classOrNull?.owner?.let(::symbolName) == "androidx.compose.ui.Modifier") {
+                val owner = resolved.symbol.owner
+                if (sourceFile(owner) != null) diagnostics.unsupported(resolved, "Source Modifier factories require a first-class target layout program")
+                val signature = owner.valueParameters.joinToString(",") { "${it.name}:${it.type.render()}" }
+                val receivers = listOf(resolved.extensionReceiver, resolved.dispatchReceiver)
+                    .joinToString(",") { it?.let(::key) ?: "<absent>" }
+                val arguments = (0 until resolved.valueArgumentsCount).joinToString(",") { index ->
+                    "$index=" + (resolved.getValueArgument(index)?.let(::key) ?: "<default>")
+                }
+                return "${symbolName(owner)}[$signature]($receivers;$arguments)"
+            }
+            if (resolved is IrGetValue) diagnostics.unsupported(resolved, "Dynamic Modifier operands require a first-class target layout program")
+            val literal = language.expression(resolved, scope) as? EtsLiteral
+                ?: diagnostics.unsupported(resolved, "Effectful Modifier operands require an evaluation-preserving layout program")
+            return "${literal.type}:${literal.value}"
+        }
+        val identity = "${sourceFile(function)?.fileEntry?.name}:${function.startOffset}:${symbolName(function)}:" +
+            inputs.joinToString(";") { "${it.first.index}=${key(it.second)}" }
+        val method = modifierSpecializations[identity]?.second ?: run {
+            if (!activeSpecializations.add(function)) diagnostics.unsupported(call, "Recursive Modifier specialization is unsupported")
+            val ordinal = modifierSpecializations.values.count { it.first == function }
+            val name = function.name.asString() + "_Modifier${ordinal + 1}"
+            val previousFile = diagnostics.currentFile
+            try {
+                builder(function, inputs.associate { it.first.symbol to it.second }, scope.aliases, name).also {
+                    modifierSpecializations[identity] = function to it
+                }
+            } finally {
+                activeSpecializations.remove(function)
+                diagnostics.currentFile = previousFile
+            }
+        }
+        val args = function.valueParameters.mapIndexedNotNull { index, parameter ->
+            if (inputs.any { it.first == parameter }) null else {
+                val value = call.getValueArgument(index) ?: parameter.defaultValue?.expression
+                    ?: diagnostics.unsupported(call, "Missing builder argument ${parameter.name}")
+                val previousFile = diagnostics.currentFile
+                if (call.getValueArgument(index) == null) diagnostics.currentFile = sourceFile(parameter)?.fileEntry?.name
+                try {
+                    if (parameter.type.hasAnnotation(COMPOSABLE)) uiLambda(value, scope, "${function.name}_${parameter.name}")
+                    else expression(value, scope)
+                } finally { diagnostics.currentFile = previousFile }
+            }
+        }
+        return listOf(EtsUiElement(methodCall(method.symbol, contextArguments(scope) + args, call)))
     }
 
     private fun repeatUi(call: IrCall, scope: Scope): List<EtsStatement> {
@@ -617,7 +692,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     diagnostics.unsupported(resolved, "Unsupported bound Modifier value")
                 is IrCall -> {
                     collect(resolved.extensionReceiver ?: resolved.dispatchReceiver)
-                    operations += resolved
+                    if (symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.then")
+                        collect(argument(resolved, "other"))
+                    else operations += resolved
                 }
                 else -> diagnostics.unsupported(resolved, "Unsupported Modifier receiver")
             }

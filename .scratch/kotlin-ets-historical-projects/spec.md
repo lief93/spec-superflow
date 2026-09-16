@@ -247,3 +247,12 @@ background-before-clip outside the clipping layer, and preserve padding order.
 Reject other shape implementations rather than erase them. Verify square and
 non-square clipping, source shape parameters, ordering, SDK output and native
 pixels, then replay the unchanged Banking entry to the next real failure.
+
+Twenty-third requirement: preserve closed, statically known Modifier chains
+across source UI method boundaries by compile-time specialization, not erasure
+to the identity modifier or expansion into the caller. Retain ordinary parameters
+and source method/file ownership; deduplicate equal modifier programs. Distinct
+modifier programs may require named variants. Reject captured dynamic modifier
+operands until a first-class target layout program can preserve them. Handle
+Modifier.then as ordered composition, not a renderable operation. Validate
+forwarding, repeated reuse, two distinct programs and rejected dynamic operands.
