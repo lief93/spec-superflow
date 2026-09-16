@@ -32,7 +32,11 @@ This is deliberately not general Kotlin error recovery. In particular, skipping
 translation or proven specialization. It is not replaced with an invented number.
 Compiler temporaries used exclusively by omitted arguments are removed along with
 their evaluation, including Kotlin's named-argument reordering temporaries.
-Explicit source locals are retained even when a later UI argument is omitted.
+Explicit source locals are retained even when a later UI argument is omitted,
+except a private immutable Modifier whose consumers are all explicitly omitted:
+its construction and argument evaluation are separately reported and discarded.
+A Modifier shared with retained UI still propagates its original failure; it is
+never substituted with an empty value.
 The bounded [native project-theme projection](../theme-projection/README.md) is
 an explicit exception: Android-version-dependent MaterialTheme color setup and
 SideEffect-only guards in that projected function can discard their private
@@ -45,6 +49,7 @@ Run the public CLI regression with a real Android/Compose classpath:
 ```sh
 node tools/kotlin-ets/tests/ui/degradation/check.mjs /absolute/path/classpath.txt
 node tools/kotlin-ets/tests/ui/degradation/named-arguments.mjs /absolute/path/classpath.txt
+node tools/kotlin-ets/tests/ui/degradation/modifier-local.mjs /absolute/path/classpath.txt
 ```
 
 It prints an evidence directory and generated `page.ets`. Compile that file

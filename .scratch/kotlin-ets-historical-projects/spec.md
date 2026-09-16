@@ -306,6 +306,13 @@ values; effectful argument reordering remains an explicit failure until it can b
 represented without changing evaluation order. Do not parse source text or alter
 the source project. Verify an isolated named-argument fixture and Banking replay.
 
+Thirty-sixth requirement: in report-mode UI, a private immutable Modifier local
+used only by explicitly omitted UI must not block generation. Report the omitted
+construction/evaluation. If any retained consumer still reads it, propagate the
+original failure rather than supplying an empty Modifier. Strict mode and other
+explicit source local values keep their existing rules. Verify private/shared
+consumer cases and strict mode through the public CLI, then replay Banking.
+
 Twenty-ninth requirement: map direct Compose LocalContext.current to the native
 ArkUI host Context during composition. Preserve typed Context parameters and
 returns without inventing an Android context object. Other Android Context APIs

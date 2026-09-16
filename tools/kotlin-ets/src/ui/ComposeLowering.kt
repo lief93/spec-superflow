@@ -304,7 +304,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 // Keep constant folding, but a compiler temporary's unsupported value
                 // is only fatal if a consumer survives the explicit UI omissions.
                 val deferred = diagnostics.reportUiDegradation &&
-                    statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE && initial !is IrConst
+                    (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE || platformValue) && initial !is IrConst
                 var deferredFailure: Unsupported? = null
                 val value = try { language.expression(initial, scope) } catch (failure: Unsupported) {
                     if (!deferred) throw failure
@@ -331,7 +331,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 val context = contextParameters(child, statement)
                 val body = uiStatements(remaining, child, rootBody)
                 if (deferred && uses(statement, remaining, includeOmitted = true) > 0 && uses(statement, remaining) == 0) {
-                    diagnostics.omittedUiElements += statement
+                    if (platformValue && statement.origin != IrDeclarationOrigin.IR_TEMPORARY_VARIABLE)
+                        diagnostics.omitUi(statement, "Private Modifier belongs only to explicitly omitted UI",
+                            "androidx.compose.ui.Modifier", "omitted_private_modifier",
+                            "Modifier construction and its argument evaluation are omitted because no retained UI consumes it.")
+                    else diagnostics.omittedUiElements += statement
                     return lines + body
                 }
                 deferredFailure?.let { throw it }
