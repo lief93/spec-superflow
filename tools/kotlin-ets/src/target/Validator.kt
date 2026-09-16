@@ -373,7 +373,8 @@ class EtsValidator {
                 if (!assignable(type.writeType, type.readType)) throw InvalidTarget(source, "Invalid captured type interval")
             }
             is EtsNamedType -> {
-                name(type.name, source)
+                if (type.external && '.' in type.name) type.name.split('.').forEach { bindingName(it, source) }
+                else name(type.name, source)
                 type.arguments.forEach { type(it, source, argument = true) }
                 type.symbolId?.takeUnless { type.external }?.let { id ->
                     val declaration = classes[id] ?: throw InvalidTarget(source, "Unbound target class type: $id")

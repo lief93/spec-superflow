@@ -7,6 +7,7 @@ import org.jetbrains.kotlin.ir.types.*
 
 private val materialColorSchemeSource = SourceSpan("EtsMaterialColorScheme.kt", -1, -1)
 internal val materialColorSchemeType = etsClassSymbol("EtsMaterialColorScheme", materialColorSchemeSource).type as EtsNamedType
+internal val materialColorValuesType = etsClassSymbol("EtsMaterialColorValues", materialColorSchemeSource).type as EtsNamedType
 
 // AndroidX Material3 1.3.2 ColorLightTokens/ColorDarkTokens, palette v0_210.
 // Order is the factory signature, not alphabetical or ColorScheme constructor order.
@@ -78,7 +79,7 @@ internal class ComposeColorSchemeRule : CallRule {
                     ?: if (name == "surfaceTint") EtsLiteral(null, EtsTypes.NULL, at)
                     else EtsLiteral(if (dark) defaults.second else defaults.first, EtsTypes.NUMBER, at)
             }
-            return EtsNew(materialColorSchemeType, values, at)
+            return EtsCast(EtsNew(materialColorValuesType, values, at), materialColorSchemeType, at)
         }
         val property = owner.correspondingPropertySymbol?.owner ?: return null
         val parent = property.parent as? IrClass ?: return null
@@ -94,7 +95,7 @@ private fun materialColorSchemeFile(): EtsFile {
     val parameters = materialColorSchemeDefaults.keys.zip(materialColorSchemeParameters).map { (name, type) ->
         EtsParameter(EtsSymbol("material:colorScheme:parameter:$name", name, type, at))
     }
-    val receiver = EtsReference(EtsSymbol("material:colorScheme:this", "this", materialColorSchemeType, at, external = true))
+    val receiver = EtsReference(EtsSymbol("material:colorScheme:this", "this", materialColorValuesType, at, external = true))
     val fields = materialColorSchemeDefaults.keys.map { name ->
         EtsField(EtsSymbol("material:colorScheme:field:$name", name, EtsTypes.NUMBER, at), readonly = true)
     }
@@ -106,7 +107,9 @@ private fun materialColorSchemeFile(): EtsFile {
             field.symbol.id), value, at))
     }
     val constructor = EtsFunction("constructor", parameters, EtsTypes.VOID, body, at, kind = EtsFunctionKind.CONSTRUCTOR)
-    return EtsFile(at.file!!, listOf(EtsClass(materialColorSchemeType.name, fields + constructor, at, exported = true)))
+    return EtsFile(at.file!!, listOf(
+        EtsClass(materialColorSchemeType.name, fields, at, exported = true, kind = EtsClassKind.INTERFACE),
+        EtsClass(materialColorValuesType.name, fields + constructor, at, exported = true, interfaces = listOf(materialColorSchemeType))))
 }
 
 /** Include the value type even in files that only receive/return it. */
@@ -115,8 +118,8 @@ internal fun materialColorSchemeUsed(program: EtsProgram): Boolean {
     fun type(value: EtsType) {
         when (value) {
             is EtsNamedType -> {
-                if (value.symbolId == materialColorSchemeType.symbolId) {
-                    require(value == materialColorSchemeType) { "Malformed Material ColorScheme type" }
+                if (value.symbolId in setOf(materialColorSchemeType.symbolId, materialColorValuesType.symbolId)) {
+                    require(value == materialColorSchemeType || value == materialColorValuesType) { "Malformed Material ColorScheme type" }
                     used = true
                 }
                 value.arguments.forEach(::type)

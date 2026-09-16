@@ -29,16 +29,16 @@ const code = readFileSync(output, 'utf8');
 assert.match(code, /WrappedBuilder<\[EtsMaterialContext\]>/);
 assert.match(code, /content.builder\(__etsMaterialContext\)/);
 assert.match(code, /Text\("Direct"\).*__etsTextStyleModifier\(__etsMaterialContext.contentColorFor\(__etsMaterialContext.colorScheme.primary\)/);
-const classes = code.slice(code.indexOf('export class EtsMaterialColorScheme'));
+const classes = code.slice(code.indexOf('export class EtsMaterialColorValues'));
 assert.ok(classes.startsWith('export class '));
 const context = vm.createContext({ exports: {} });
 vm.runInContext(ts.transpileModule(classes, { compilerOptions: { target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.CommonJS } }).outputText, context);
 // Obtain default constructor arguments from the emitted root call, not a duplicate palette.
-const rootArgs = code.match(/this.Page\(new EtsMaterialContext\(new EtsMaterialColorScheme\(([^)]*)\)/)?.[1];
+const rootArgs = code.match(/this.Page\(new EtsMaterialContext\(new EtsMaterialColorValues\(([^)]*)\)/)?.[1];
 assert.ok(rootArgs);
 const args = JSON.parse(`[${rootArgs}]`);
-const scheme = new context.exports.EtsMaterialColorScheme(...args);
+const scheme = new context.exports.EtsMaterialColorValues(...args);
 const roles = ['primary','secondary','tertiary','background','error','primaryContainer','secondaryContainer',
   'tertiaryContainer','errorContainer','inverseSurface','surface','surfaceVariant','surfaceBright',
   'surfaceContainer','surfaceContainerHigh','surfaceContainerHighest','surfaceContainerLow','surfaceContainerLowest'];
@@ -47,7 +47,7 @@ const actual = [...roles.map(role => ambient.contentColorFor(scheme[role]) | 0),
 const collisionArgs = [...args];
 collisionArgs[0] = collisionArgs[15] = 0xffff0000;
 collisionArgs[1] = 0xff00ff00; collisionArgs[16] = 0xff0000ff;
-const collision = new context.exports.EtsMaterialColorScheme(...collisionArgs);
+const collision = new context.exports.EtsMaterialColorValues(...collisionArgs);
 actual.push(new context.exports.EtsMaterialContext(collision, 0xff00ffff).contentColorFor(0xffff0000) | 0);
 const jar = join(work, 'oracle.jar');
 run('jvm-build', 'bash', [join(root, 'tests/stdlib/compiler.sh'), '-classpath', cp.join(':'), join(here, 'Oracle.kt'), '-d', jar]);

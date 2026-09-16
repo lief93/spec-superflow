@@ -1,0 +1,6 @@
+{
+  "color": [
+    { "name": "kotlin_ets_material_primary", "value": "$color:brand_primary" },
+    { "name": "brand_primary", "value": "#FF1256AB" }
+  ]
+}

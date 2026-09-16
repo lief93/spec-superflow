@@ -48,5 +48,5 @@ for (const name of ['Models', 'Consumer']) {
   assert.match(code, /import \{ EtsMaterialColorScheme \} from ['"]\.\/EtsMaterialColorScheme['"]/);
   assert.doesNotMatch(code, /class EtsMaterialColorScheme/);
 }
-assert.match(readFileSync(join(work, 'modules/EtsMaterialColorScheme.ets'), 'utf8'), /export class EtsMaterialColorScheme/);
+assert.match(readFileSync(join(work, 'modules/EtsMaterialColorScheme.ets'), 'utf8'), /export interface EtsMaterialColorScheme/);
 console.log('PASS 36 light/dark roles, dependent defaults, ordered effects, parameter/property flow and type-only module support');

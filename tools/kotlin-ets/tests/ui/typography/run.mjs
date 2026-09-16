@@ -53,7 +53,7 @@ assert.match(code, /typography: EtsTypography/);
 assert.match(code, /__etsMaterialTheme/);
 assert.doesNotMatch(code, /theme\.typography|theme\.colorScheme/);
 const rendering = vm.createContext({ exports: {}, TextAlign: { Start: 0 }, TextDecorationType: { None: 0 } });
-vm.runInContext(ts.transpileModule(code.slice(code.indexOf('export class EtsMaterialColorScheme')), {
+vm.runInContext(ts.transpileModule(code.slice(code.indexOf('export class EtsMaterialColorValues')), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
 }).outputText, rendering);
 const api = rendering.exports;

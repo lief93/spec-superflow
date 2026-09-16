@@ -27,4 +27,16 @@ fun checkStrictBindingContract() {
         validate(owner.copy(members = listOf(constructor.copy(parameters = emptyList()), method)))
     }
     println("PASS strict value bindings rejected while legal field and method names are preserved")
+    fun externalType(name: String, external: Boolean = true): String {
+        val type = EtsNamedType(name, external = external)
+        val parameter = EtsSymbol("native:parameter", "value", type, source)
+        return validate(EtsFunction("identity", listOf(EtsParameter(parameter)), type,
+            listOf(EtsReturn(EtsReference(parameter), source)), source))
+    }
+    check("resources.Configuration" in externalType("resources.Configuration"))
+    for (invalid in listOf("resources..Configuration", "resources.Configuration;", ".Configuration", "resources.class")) {
+        check(runCatching { externalType(invalid) }.exceptionOrNull() is InvalidTarget)
+    }
+    check(runCatching { externalType("Local.Class", external = false) }.exceptionOrNull() is InvalidTarget)
+    println("PASS qualified native types without relaxing local declaration identifiers")
 }

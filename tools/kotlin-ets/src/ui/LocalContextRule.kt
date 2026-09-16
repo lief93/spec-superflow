@@ -5,12 +5,12 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
 
+internal val nativeHostContextType = EtsNamedType("Context", external = true)
+
 /** Read the native host during composition; do not fabricate an Android Context. */
 internal class ComposeLocalContextRule : CallRule {
-    private val contextType = EtsNamedType("Context", external = true)
-
     override fun mapType(type: IrType, language: Language): EtsType? = type.classOrNull?.owner?.let {
-        if (sourceFile(it) == null && symbolName(it) == "android.content.Context") contextType else null
+        if (sourceFile(it) == null && symbolName(it) == "android.content.Context") nativeHostContextType else null
     }
 
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
@@ -23,7 +23,7 @@ internal class ComposeLocalContextRule : CallRule {
         if (sourceFile(receiver.symbol.owner) != null ||
             receiver.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName) != "androidx.compose.ui.platform.LocalContext") return null
         val at = language.source(call)
-        val native = EtsSymbol("arkui:getContext", "getContext", EtsFunctionType(emptyList(), contextType), at, external = true)
-        return EtsCall(EtsReference(native), emptyList(), contextType, at)
+        val native = EtsSymbol("arkui:getContext", "getContext", EtsFunctionType(emptyList(), nativeHostContextType), at, external = true)
+        return EtsCall(EtsReference(native), emptyList(), nativeHostContextType, at)
     }
 }

@@ -17,7 +17,7 @@ internal fun materialContext(scope: Scope, at: SourceSpan): EtsExpression = scop
 internal fun materialScheme(context: EtsExpression, at: SourceSpan) = EtsMember(context, "colorScheme", materialColorSchemeType, at)
 internal fun materialContentColor(context: EtsExpression, at: SourceSpan) = EtsMember(context, "contentColor", EtsTypes.NUMBER, at)
 internal fun defaultMaterialContext(at: SourceSpan): EtsExpression = EtsNew(materialContextType, listOf(
-    EtsNew(materialColorSchemeType, materialColorSchemeDefaults.map { (name, defaults) ->
+    EtsNew(materialColorValuesType, materialColorSchemeDefaults.map { (name, defaults) ->
         if (name == "surfaceTint") EtsLiteral(null, EtsTypes.NULL, at) else EtsLiteral(defaults.first, EtsTypes.NUMBER, at)
     }, at), EtsLiteral(0xFF000000L, EtsTypes.NUMBER, at), defaultTypography(at)), at)
 

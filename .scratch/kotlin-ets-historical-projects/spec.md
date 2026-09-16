@@ -306,3 +306,17 @@ still require explicit adapters. Use the SDK's synchronous getContext API for
 this POC; it is deprecated since API 18 and must not be moved into asynchronous
 callbacks or treated as a process-wide context. Test actual value identity,
 SDK compilation and explicit rejection of unadapted Context operations.
+
+Thirtieth requirement: by explicit user agreement, dynamicLightColorScheme and
+dynamicDarkColorScheme use configurable Harmony project colors, not Android
+wallpaper-derived palettes. Read consumed ColorScheme roles lazily through the supplied
+native Context.resourceManager using kotlin_ets_material_<snake_case_role> in
+the official base/element/color.json and dark/element/color.json directories.
+Select explicit light/dark using a native override ResourceManager (API 12+),
+without changing host/application configuration. Resource names are adapter
+conventions, not official Harmony theme role names. Do not embed fallback colors or
+cache resource values; report the failing resource name on read failure. Unused
+roles must not require configuration or block the POC. Preserve
+source Context evaluation and the existing typed ColorScheme consumer. Validate
+both palettes, changed configuration, missing resources, actual SDK/native UI,
+and replay the unchanged Banking entry. No Android source or generated ETS edits.
