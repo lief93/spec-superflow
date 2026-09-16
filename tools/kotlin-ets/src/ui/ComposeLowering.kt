@@ -748,8 +748,22 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         return language.expression(expression, scope)
     }
 
-    private fun modifiers(expression: IrExpression?, scope: Scope, node: ComposeElement): List<EtsStatement> {
+    private fun modifiers(expression: IrExpression?, initialScope: Scope, node: ComposeElement): List<EtsStatement> {
+        val scope = initialScope.fork()
         val operations = mutableListOf<IrCall>()
+        fun stableNamedValue(value: IrExpression): Boolean {
+            val resolved = dereference(value, scope) ?: return false
+            if (stableRead(resolved, scope)) return true
+            if (resolved is IrGetObjectValue && symbolName(resolved.symbol.owner) in
+                setOf("androidx.compose.ui.Modifier.Companion", "androidx.compose.ui.Modifier")) return true
+            if (resolved is IrCall && sourceFile(resolved.symbol.owner) == null &&
+                resolved.type.classOrNull?.owner?.let(::symbolName) == "androidx.compose.ui.Modifier") {
+                val receiver = resolved.extensionReceiver ?: resolved.dispatchReceiver ?: return false
+                return stableNamedValue(receiver) && resolved.symbol.owner.valueParameters.indices
+                    .mapNotNull { resolved.getValueArgument(it) }.all(::stableNamedValue)
+            }
+            return try { language.expression(resolved, scope) is EtsLiteral } catch (_: Unsupported) { false }
+        }
         fun collect(value: IrExpression?) {
             when (val resolved = dereference(value, scope)) {
                 null -> return
@@ -762,6 +776,22 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     if (symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.then")
                         collect(argument(resolved, "other"))
                     else operations += resolved
+                }
+                is IrBlock -> {
+                    // Kotlin wraps reordered named arguments in a block of temporaries.
+                    // Alias only stable reads/constants; never duplicate or reorder effects.
+                    resolved.statements.dropLast(1).forEach { statement ->
+                        val variable = statement as? IrVariable
+                        val initial = variable?.initializer
+                        if (variable == null || variable.isVar || initial == null ||
+                            variable.origin != IrDeclarationOrigin.IR_TEMPORARY_VARIABLE)
+                            diagnostics.unsupported(statement, "Unsupported statement in Modifier argument block")
+                        if (!stableNamedValue(initial)) diagnostics.unsupported(initial,
+                            "Named Modifier arguments require stable values to preserve evaluation order")
+                        scope.aliases[variable.symbol] = initial
+                    }
+                    collect(resolved.statements.lastOrNull() as? IrExpression
+                        ?: diagnostics.unsupported(resolved, "Modifier argument block requires a result"))
                 }
                 else -> diagnostics.unsupported(resolved, "Unsupported Modifier receiver")
             }

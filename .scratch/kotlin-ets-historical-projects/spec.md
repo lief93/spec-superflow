@@ -299,6 +299,13 @@ Preserve once-only execution, unselected-file laziness, failure propagation and
 initialization before default-argument evaluation. Test actual generated code and
 SDK compilation, then replay the unchanged historical Banking entry.
 
+Thirty-fifth requirement: consume official named-argument temporaries within
+Modifier chains rather than rejecting their IR block wrapper. Preserve supported
+size/background/shape operations and source values. Only inline stable temporary
+values; effectful argument reordering remains an explicit failure until it can be
+represented without changing evaluation order. Do not parse source text or alter
+the source project. Verify an isolated named-argument fixture and Banking replay.
+
 Twenty-ninth requirement: map direct Compose LocalContext.current to the native
 ArkUI host Context during composition. Preserve typed Context parameters and
 returns without inventing an Android context object. Other Android Context APIs
