@@ -26,9 +26,20 @@ fun sourceFile(declaration: IrDeclaration): IrFile? {
 fun symbolName(declaration: IrDeclarationWithName): String =
     declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
 
-class DiagnosticSink(var currentFile: String? = null) {
+data class UiDegradation(val diagnostic: Diagnostic, val capability: String, val action: String, val impact: String)
+
+class DiagnosticSink(var currentFile: String? = null, var reportUiDegradation: Boolean = false) {
+    val degradations = linkedSetOf<UiDegradation>()
+    internal val omittedUiElements = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<IrElement, Boolean>())
     fun unsupported(element: IrElement, message: String): Nothing = throw Unsupported(
         Diagnostic("UNSUPPORTED", message, sourceSpan(element, this)))
+
+    fun omitUi(element: IrElement, message: String, capability: String, action: String, impact: String,
+        discarded: List<IrElement> = listOf(element)) {
+        if (!reportUiDegradation) unsupported(element, message)
+        omittedUiElements.addAll(discarded)
+        degradations += UiDegradation(Diagnostic("UNSUPPORTED", message, sourceSpan(element, this)), capability, action, impact)
+    }
 }
 
 class Scope(

@@ -12,6 +12,7 @@ bash tools/kotlin-ets/kotlin-ets --project /path/to/android --module :app \\
 
 --compile-task compileKotlin   Use an exact local task instead of --variant
 --mode language               Translate ordinary Kotlin instead of a page
+--unsupported-policy error    Strict page conversion; default report mode records bounded UI omissions
 --out-dir /path/to/new/modules Output separate ETS source modules instead of --out
 --collect-only                Collect inputs without running the ETS backend
 --work-dir /path/to/new/run    Fresh directory for input lists and command logs
@@ -28,7 +29,7 @@ Node.js 18+ and the backend's cached compiler dependencies are required.
 export function parseOptions(args) {
   const values = new Map();
   const flags = new Set(['--offline', '--collect-only']);
-  const options = new Set(['--project', '--module', '--variant', '--compile-task', '--mode', '--entry', '--out', '--out-dir', '--work-dir', '--image-resources', '--string-resources', '--font-resources']);
+  const options = new Set(['--project', '--module', '--variant', '--compile-task', '--mode', '--entry', '--out', '--out-dir', '--work-dir', '--image-resources', '--string-resources', '--font-resources', '--unsupported-policy']);
   for (let i = 0; i < args.length; i++) {
     const key = args[i];
     if (!flags.has(key) && !options.has(key)) throw new Error(`Unknown project option: ${key}`);
@@ -47,12 +48,15 @@ export function parseOptions(args) {
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(compileTask)) throw new Error('Use a local Kotlin compile task name without a module prefix');
   const mode = get('mode') || 'page';
   if (!['page', 'language'].includes(mode)) throw new Error('Mode must be page or language');
+  const unsupportedPolicy = get('unsupported-policy') || (mode === 'page' ? 'report' : 'error');
+  if (!['report', 'error'].includes(unsupportedPolicy) || mode === 'language' && unsupportedPolicy !== 'error')
+    throw new Error('Unsupported policy must be report or error; language mode requires error');
   if (get('out') && get('out-dir')) throw new Error('Specify only one of --out or --out-dir');
   if (!get('collect-only')) {
     if (!get('out') && !get('out-dir')) throw new Error('--out or --out-dir is required');
     if (mode === 'page' && !get('entry')) throw new Error('--entry is required for page mode');
   }
-  return { project: resolve(get('project')), module: get('module'), compileTask, mode,
+  return { project: resolve(get('project')), module: get('module'), compileTask, mode, unsupportedPolicy,
     entry: get('entry'), output: get('out') || get('out-dir') ? resolve(get('out') || get('out-dir')) : undefined,
     outputFlag: get('out-dir') ? '--out-dir' : '--out', workDir: get('work-dir') ? resolve(get('work-dir')) : undefined,
     imageResources: get('image-resources') ? resolve(get('image-resources')) : undefined,
@@ -132,6 +136,7 @@ export function main(args) {
     writeFileSync(join(workDir, 'compiler-environment.json'), JSON.stringify(environment, null, 2), { flag: 'wx' });
     stage = 'compiler';
     const compilerArgs = [join(root, 'kotlin-ets'), '--mode', options.mode, options.outputFlag, options.output,
+      '--unsupported-policy', options.unsupportedPolicy,
       '--classpath-file', classpath, '--sources-file', sources, '--frontend-arguments-file', frontendArguments,
       ...(options.entry ? ['--entry', options.entry] : []),
       ...(options.imageResources ? ['--image-resources', options.imageResources] : []),

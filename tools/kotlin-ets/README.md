@@ -69,6 +69,14 @@ generation. See [Gradle project inputs](docs/gradle-project-inputs.md) for offli
 use, prerequisite tasks, retained logs and scope limitations. This entry requires
 Node.js 18+ in addition to the compiler prerequisites below.
 
+Page mode defaults to bounded report-and-continue recovery for unsupported UI
+calls, modifier operations and explicitly optional display arguments. It writes
+`<output>.diagnosis.json` with omissions and any blocking failure. A
+`generated_with_degradations` result is not equivalence success. Required values,
+unknown conditions and claimed-adapter failures remain blocking. Use
+`--unsupported-policy error` for strict page generation; language mode is always
+strict. See [recovery boundaries and tests](tests/ui/degradation/README.md).
+
 From the repository root, with a fresh output path:
 
 ```sh

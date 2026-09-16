@@ -9,6 +9,16 @@ import { parseOptions, readInputs, gradleArguments } from '../../project.mjs';
 
 const launcher = fileURLToPath(new URL('../../kotlin-ets', import.meta.url));
 
+test('page policy defaults to report, language stays strict and explicit strict is retained', () => {
+  const base = ['--project', '/tmp/p', '--module', ':app', '--variant', 'debug',
+    '--entry', 'sample.Page', '--out', '/tmp/Page.ets'];
+  assert.equal(parseOptions(base).unsupportedPolicy, 'report');
+  assert.equal(parseOptions([...base, '--unsupported-policy', 'error']).unsupportedPolicy, 'error');
+  assert.equal(parseOptions([...base, '--mode', 'language']).unsupportedPolicy, 'error');
+  assert.throws(() => parseOptions([...base, '--unsupported-policy', 'ignore']));
+  assert.throws(() => parseOptions([...base, '--mode', 'language', '--unsupported-policy', 'report']));
+});
+
 test('project entry selects one module/variant and keeps paths with spaces intact', () => {
   const options = parseOptions(['--project', '/tmp/Android project', '--module', ':feature:onboarding',
     '--variant', 'demoDebug', '--entry', 'sample.OnBoardingScreen', '--out', '/tmp/ETS output/Page.ets', '--offline']);

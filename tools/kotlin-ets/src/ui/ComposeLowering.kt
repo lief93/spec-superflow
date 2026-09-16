@@ -300,7 +300,16 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     scope.aliases[statement.symbol] = initial
                     return@forEachIndexed
                 }
-                val value = language.expression(initial, scope)
+                // Keep constant folding, but a compiler temporary's unsupported value
+                // is only fatal if a consumer survives the explicit UI omissions.
+                val deferred = diagnostics.reportUiDegradation &&
+                    statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE && initial !is IrConst
+                var deferredFailure: Unsupported? = null
+                val value = try { language.expression(initial, scope) } catch (failure: Unsupported) {
+                    if (!deferred) throw failure
+                    deferredFailure = failure
+                    null
+                }
                 if (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE && value is EtsLiteral) {
                     scope.aliases[statement.symbol] = initial
                     return@forEachIndexed
@@ -308,29 +317,44 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 val name = if (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE)
                     "uiTemporary${statement.startOffset}" else statement.name.asString()
                 val child = scope.fork()
-                child.bindings[statement.symbol] = binding(statement, name)
-                child.aliases.remove(statement.symbol)
+                try {
+                    child.bindings[statement.symbol] = binding(statement, name)
+                    child.aliases.remove(statement.symbol)
+                } catch (failure: Unsupported) {
+                    if (!deferred) throw failure
+                    deferredFailure = deferredFailure ?: failure
+                    // Preserve source IR until a consumer needs it, never invent an ETS type.
+                    child.aliases[statement.symbol] = initial
+                }
                 val remaining = statements.drop(index + 1)
+                val context = contextParameters(child, statement)
+                val body = uiStatements(remaining, child, rootBody)
+                if (deferred && uses(statement, remaining, includeOmitted = true) > 0 && uses(statement, remaining) == 0) {
+                    diagnostics.omittedUiElements += statement
+                    return lines + body
+                }
+                deferredFailure?.let { throw it }
                 val captures = capturedValues(remaining, child).filter { it != statement.symbol }
                 val methodName = slotMethodName("${name}_${statement.startOffset}")
-                val parameters = contextParameters(child, statement) + listOf(capturedParameter(statement.symbol, child)) + captures.map { capturedParameter(it, child) }
-                val body = uiStatements(remaining, child, rootBody)
+                val parameters = context + listOf(capturedParameter(statement.symbol, child)) + captures.map { capturedParameter(it, child) }
                 // A builder parameter evaluates a source val once; textual aliasing would duplicate calls.
                 val bridge = EtsFunction(methodName, parameters, EtsTypes.VOID, body, language.source(statement), kind = EtsFunctionKind.METHOD, builder = true)
                 slotMethods += bridge
-                lines += EtsUiElement(methodCall(bridge.symbol, contextArguments(scope) + listOf(value) + captures.map { scope.bindings.getValue(it) }, statement))
+                lines += EtsUiElement(methodCall(bridge.symbol, contextArguments(scope) + listOf(requireNotNull(value)) + captures.map { scope.bindings.getValue(it) }, statement))
                 return lines
             }
         }
         return lines
     }
 
-    private fun uses(variable: IrVariable, elements: List<IrElement>): Int {
+    private fun uses(variable: IrVariable, elements: List<IrElement>, includeOmitted: Boolean = false): Int {
         var count = 0
         val visitor = object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) { element.acceptChildrenVoid(this) }
+            override fun visitElement(element: IrElement) {
+                if (includeOmitted || element !in diagnostics.omittedUiElements) element.acceptChildrenVoid(this)
+            }
             override fun visitGetValue(expression: IrGetValue) {
-                if (expression.symbol == variable.symbol) count++
+                if (expression.symbol == variable.symbol && (includeOmitted || expression !in diagnostics.omittedUiElements)) count++
             }
         }
         elements.forEach { it.acceptVoid(visitor) }
@@ -361,8 +385,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
 
     private fun uiStatement(node: IrStatement, scope: Scope, rootBody: Boolean = false): List<EtsStatement> = when (node) {
         is IrVariable -> uiStatements(listOf(node), scope, rootBody)
-        is IrCall -> (adaptCall(node, language, scope, CallContext.UI) as? CallResult.Ui)?.statements
-            ?: diagnostics.unsupported(node, "Unsupported resolved UI API: ${symbolName(node.symbol.owner)}")
+        is IrCall -> (adaptCall(node, language, scope, CallContext.UI) as? CallResult.Ui)?.statements ?: run {
+            val api = symbolName(node.symbol.owner)
+            if (sourceFile(node.symbol.owner) != null || !node.type.isUnit())
+                diagnostics.unsupported(node, "Unsupported resolved UI API: $api")
+            diagnostics.omitUi(node, "Unsupported resolved UI API: $api", api,
+                "omitted_ui_call", "Call, arguments, callbacks and any nested UI are omitted; supported siblings remain.")
+            emptyList()
+        }
         is IrReturn -> uiStatement(node.value, scope, rootBody)
         is IrBlock -> uiStatements(node.statements, scope.fork(), rootBody)
         is IrComposite -> uiStatements(node.statements, scope, rootBody)
@@ -576,8 +606,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val captures = linkedSetOf<IrValueSymbol>()
         val expanded = mutableSetOf<IrValueSymbol>()
         val visitor = object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) { element.acceptChildrenVoid(this) }
+            override fun visitElement(element: IrElement) {
+                if (element !in diagnostics.omittedUiElements) element.acceptChildrenVoid(this)
+            }
             override fun visitGetValue(expression: IrGetValue) {
+                if (expression in diagnostics.omittedUiElements) return
                 val symbol = expression.symbol
                 if (symbol in scope.aliases && expanded.add(symbol)) scope.aliases[symbol]!!.acceptVoid(this)
                 else if (symbol in scope.bindings) captures += symbol
@@ -799,7 +832,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     "androidx.compose.ui.draw.clip" -> setOf("borderRadius", "clip")
                     "androidx.compose.ui.platform.testTag" -> setOf("id")
                     "androidx.compose.foundation.clickable" -> setOf("onClick", "enabled")
-                    else -> diagnostics.unsupported(call, "Unsupported resolved Modifier API: $api")
+                    else -> {
+                        diagnostics.omitUi(call, "Unsupported resolved Modifier API: $api", api,
+                            "omitted_modifier", "Modifier arguments and behavior are omitted; other modifier operations remain.",
+                            (0 until call.valueArgumentsCount).mapNotNull(call::getValueArgument))
+                        cursor++
+                        continue
+                    }
                 }
                 // Padding changes the next operation's coordinate space. Repeated attributes
                 // must also keep their own layer instead of overwriting an earlier operation.

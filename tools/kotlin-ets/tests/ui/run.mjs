@@ -34,7 +34,7 @@ function run(label, command, args) {
 function generate(label, source, entry, accepted = true) {
   sourceInputs.set(source, hash(source));
   const output = join(work, `${label}.ets`);
-  const result = run(label, 'bash', [cli, '--mode', 'page', '--entry', entry, '--classpath-file', classpathFile, '--out', output, source]);
+  const result = run(label, 'bash', [cli, '--mode', 'page', '--unsupported-policy', 'error', '--entry', entry, '--classpath-file', classpathFile, '--out', output, source]);
   assert.equal(result.status, accepted ? 0 : 2, `${label}: ${result.stdout}\n${result.stderr}`);
   const report = JSON.parse(result.stdout.trim().split('\n').at(-1));
   assert.equal(report.ok, accepted);

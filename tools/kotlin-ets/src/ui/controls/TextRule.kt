@@ -14,7 +14,7 @@ internal class ComposeTextRule(
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         val api = symbolName(call.symbol.owner)
         if (api !in setOf("androidx.compose.material3.Text", "androidx.compose.material.Text")) return null
-        target.checkArguments(call, setOf("text", "modifier") + textStyleArgumentOrder)
+        target.checkArguments(call, setOf("text", "modifier") + textStyleArgumentOrder, setOf("softWrap", "minLines"))
         val text = argument(call, "text") ?: target.diagnostics.unsupported(call, "Text requires text")
         if (!text.type.isString()) target.diagnostics.unsupported(text, "AnnotatedString Text is not supported")
         val ambient = scope.ambientValues[MATERIAL_CONTEXT]?.takeIf { api == "androidx.compose.material3.Text" }

@@ -7,6 +7,17 @@ import java.nio.file.StandardOpenOption.CREATE_NEW
 import kotlin.system.exitProcess
 
 fun main(arguments: Array<String>) {
+    val diagnostics = DiagnosticSink()
+    var diagnosisOutput: File? = null
+    var diagnosisAttempted = false
+    fun saveDiagnosis(status: String, failure: Diagnostic? = null) {
+        diagnosisOutput?.let { file ->
+            if (diagnosisAttempted) return
+            diagnosisAttempted = true
+            Files.createDirectories(file.parentFile.toPath())
+            Files.writeString(file.toPath(), degradationReportJson(status, diagnostics, failure), CREATE_NEW)
+        }
+    }
     try {
         val options = linkedMapOf<String, String>()
         val sources = mutableListOf<String>()
@@ -14,7 +25,7 @@ fun main(arguments: Array<String>) {
         while (index < arguments.size) {
             val item = arguments[index++]
             if (item.startsWith("--")) {
-                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--string-resources", "--font-resources", "--frontend-arguments-file")) { "Unknown option $item" }
+                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--string-resources", "--font-resources", "--frontend-arguments-file", "--unsupported-policy")) { "Unknown option $item" }
                 require(index < arguments.size) { "Missing value for $item" }
                 options[item] = arguments[index++]
             } else sources.add(item)
@@ -26,8 +37,17 @@ fun main(arguments: Array<String>) {
         require(!Files.exists(output.toPath(), NOFOLLOW_LINKS)) { "Refusing to overwrite existing target: $output" }
         val mode = options["--mode"] ?: "page"
         require(mode in setOf("page", "language")) { "Mode must be page or language" }
+        val policy = options["--unsupported-policy"] ?: if (mode == "page") "report" else "error"
+        require(policy in setOf("report", "error")) { "Unsupported policy must be report or error" }
+        require(mode == "page" || policy == "error") { "Language mode requires unsupported-policy error" }
+        diagnostics.reportUiDegradation = policy == "report"
         val entry = options["--entry"]
         require(mode != "page" || entry != null) { "--entry is required for page mode" }
+        if (mode == "page") {
+            val report = File(output.absolutePath + ".diagnosis.json")
+            require(!Files.exists(report.toPath(), NOFOLLOW_LINKS)) { "Refusing to overwrite existing diagnosis: $report" }
+            diagnosisOutput = report
+        }
         val classpath = options["--classpath"] ?: options["--classpath-file"]?.let { path ->
             File(path).readLines().filter { it.isNotBlank() }.joinToString(File.pathSeparator)
         } ?: requireNotNull(System.getenv("KOTLIN_ETS_STDLIB")) { "Kotlin stdlib path missing" }
@@ -46,7 +66,6 @@ fun main(arguments: Array<String>) {
         val adapters = AdapterModules.load()
         val target = withKotlinFrontend(compilerArgs, entry) { frontend ->
             val module = frontend.module
-            val diagnostics = DiagnosticSink()
             val stdlib = StandardLibraryRules()
             val backend = EtsBackend(diagnostics, listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeProjectColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeDimensionRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), ComposeLocalContextRule(), ComposeShapeRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule()) + adapters.rules(), frontend.types)
             if (mode == "page") {
@@ -83,18 +102,24 @@ fun main(arguments: Array<String>) {
             Files.createDirectory(output.toPath())
             target.forEach { (name, code) -> Files.writeString(output.resolve(name).toPath(), code, CREATE_NEW) }
         } else Files.writeString(output.toPath(), target.getValue(output.name), CREATE_NEW)
-        println("{\"ok\":true,\"frontend\":\"Kotlin-2.1.20-K2-FIR2IR\",\"output\":" + quote(output.path) +
+        val status = if (diagnostics.degradations.isEmpty()) "generated" else "generated_with_degradations"
+        saveDiagnosis(status)
+        println("{\"ok\":true,\"status\":" + quote(status) + ",\"diagnosis\":" + quote(diagnosisOutput?.path) +
+            ",\"degradationCount\":" + diagnostics.degradations.size + ",\"frontend\":\"Kotlin-2.1.20-K2-FIR2IR\",\"output\":" + quote(output.path) +
             ",\"resources\":" + (if (resources.isEmpty() && resourceFiles.isEmpty()) "null" else quote(resourceOutput.path)) + "}")
     } catch (failure: InvalidTarget) {
+        saveDiagnosis("blocked", Diagnostic("INVALID_TARGET", failure.message ?: "Invalid target", failure.source))
         println("{\"ok\":false,\"code\":\"INVALID_TARGET\",\"message\":" + quote(failure.message) +
             ",\"source\":" + diagnosticSourceJson(failure.source) + "}")
         exitProcess(2)
     } catch (failure: Unsupported) {
         val d = failure.diagnostic
+        saveDiagnosis("blocked", d)
         println("{\"ok\":false,\"code\":" + quote(d.code) + ",\"message\":" + quote(d.message) +
             ",\"source\":" + diagnosticSourceJson(d.source) + "}")
         exitProcess(2)
     } catch (failure: Exception) {
+        saveDiagnosis("blocked", Diagnostic("COMPILATION_REJECTED", failure.message ?: "Compilation rejected", SourceSpan(null, -1, -1)))
         System.err.println(failure.message)
         println("{\"ok\":false,\"code\":\"COMPILATION_REJECTED\",\"message\":" + quote(failure.message) + "}")
         exitProcess(1)

@@ -320,3 +320,17 @@ roles must not require configuration or block the POC. Preserve
 source Context evaluation and the existing typed ColorScheme consumer. Validate
 both palettes, changed configuration, missing resources, actual SDK/native UI,
 and replay the unchanged Banking entry. No Android source or generated ETS edits.
+
+Thirty-first requirement: add diagnostic local UI degradation for POC page
+generation. Page mode defaults to report-and-continue at explicit recovery
+boundaries: optional Text display arguments, unresolved Modifier operations and
+unclaimed external UI calls (including effects in UI position). Preserve supported
+siblings and modifier operations, and record skipped argument evaluation/subtrees.
+Do not fabricate required values, select unknown branches, suppress compiler/target
+validation errors or catch arbitrary adapter failures. Language mode remains
+strict; --unsupported-policy error selects strict page generation. Write one
+sibling .diagnosis.json report containing source locations, capability, action,
+impact, status and any blocking failure. Nonempty degradation is not equivalence
+success. Test public direct/project CLI forwarding, strict mode, preserved UI,
+nonrecoverable values and no report overwrites; compile an unedited degraded page
+with the actual SDK. Banking may still block on value/condition dependencies.

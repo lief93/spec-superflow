@@ -10,7 +10,7 @@ internal class ComposeBasicTextRule(
 ) : ComposeControlRule(decorate) {
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         if (symbolName(call.symbol.owner) != "androidx.compose.foundation.text.BasicText") return null
-        target.checkArguments(call, setOf("text", "modifier", "maxLines"))
+        target.checkArguments(call, setOf("text", "modifier", "maxLines"), setOf("softWrap", "minLines"))
         val text = argument(call, "text") ?: target.diagnostics.unsupported(call, "BasicText requires text")
         if (!text.type.isString()) target.diagnostics.unsupported(text, "AnnotatedString BasicText is not supported")
         // Foundation BasicText uses TextStyle.Default, not Material LocalContentColor.

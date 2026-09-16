@@ -87,10 +87,15 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
         return call("onChange", listOf(callback), expression, listOf(expected))
     }
 
-    fun checkArguments(call: IrCall, supported: Set<String>) {
+    fun checkArguments(call: IrCall, supported: Set<String>, omittable: Set<String> = emptySet()) {
         call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
-            if (call.getValueArgument(index) != null && parameter.name.asString() !in supported)
-                diagnostics.unsupported(call.getValueArgument(index)!!, "Unsupported ${symbolName(call.symbol.owner)} argument: ${parameter.name}")
+            val argument = call.getValueArgument(index)
+            if (argument != null && parameter.name.asString() !in supported) {
+                val message = "Unsupported ${symbolName(call.symbol.owner)} argument: ${parameter.name}"
+                if (parameter.name.asString() !in omittable) diagnostics.unsupported(argument, message)
+                diagnostics.omitUi(argument, message, "${symbolName(call.symbol.owner)}.${parameter.name}",
+                    "omitted_display_argument", "Argument evaluation and its display behavior are omitted; target default applies.")
+            }
         }
     }
 }
