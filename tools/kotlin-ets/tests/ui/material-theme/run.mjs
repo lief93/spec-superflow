@@ -54,8 +54,12 @@ run('jvm-build', 'bash', [join(root, 'tests/stdlib/compiler.sh'), '-classpath', 
 const expected = run('jvm', 'java', ['-cp', [jar, ...cp].join(':'), 'materialtheme.OracleKt']).trim().split('\n').map(Number);
 assert.deepEqual(actual, expected);
 writeFileSync(join(work, 'parity.json'), JSON.stringify({ actual, expected }, null, 2));
+const buttonOutput = join(work, 'ThemedButton.ets');
+run('ThemedButton', 'bash', [join(root, 'kotlin-ets'), '--entry', 'materialtheme.ThemedButton', '--classpath-file', cpFile,
+  '--out', buttonOutput, join(here, 'Unsupported.kt')]);
+assert.match(readFileSync(buttonOutput, 'utf8'), /\.disabledContentColor/);
 for (const [entry, message] of [['Styled', /typography/], ['ValueHelper', /composition invocation context/],
-  ['ThemedButton', /Theme-aware Button/], ['ThemedCheckbox', /Theme-aware Checkbox/],
+  ['ThemedCheckbox', /Theme-aware Checkbox/],
   ['ThemedSwitch', /Theme-aware Switch/], ['ThemedDivider', /Theme-aware Divider/],
   ['ThemedVerticalDivider', /Theme-aware Divider/], ['ExplicitSchemeLookup', /explicit receiver and Unspecified result semantics/]]) {
   const failedOutput = join(work, entry + '.ets');

@@ -16,6 +16,13 @@ internal class ComposeShapeRule : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
         val function = call.symbol.owner
         if (sourceFile(function) != null) return null
+        if (symbolName(function) == "androidx.compose.foundation.shape.RoundedCornerShape" &&
+            function.valueParameters.size == 1 &&
+            function.valueParameters.single().type.classOrNull?.owner?.let(::symbolName) == "androidx.compose.ui.unit.Dp") {
+            val size = call.getValueArgument(0) ?: return null
+            return EtsBinary("+", language.expression(size, scope), EtsLiteral("vp", EtsTypes.STRING, language.source(call)),
+                EtsTypes.STRING, language.source(call))
+        }
         val property = function.correspondingPropertySymbol?.owner ?: return null
         if (property.getter?.symbol != function.symbol) return null
         val radius = when (symbolName(property)) {

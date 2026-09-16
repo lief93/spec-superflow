@@ -28,6 +28,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val modifierSpecializations = linkedMapOf<String, Pair<IrSimpleFunction, EtsFunction>>()
     private val activeSpecializations = mutableSetOf<IrSimpleFunction>()
     private val slotMethods = mutableListOf<EtsFunction>()
+    private val slotMethodNames = linkedSetOf<String>()
     private val fieldNames = mutableSetOf<String>()
     private lateinit var root: IrSimpleFunction
     private lateinit var pageReceiver: EtsSymbol
@@ -39,7 +40,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
 
     fun lower(module: IrModuleFragment, entryName: String): EtsProgram {
         fields.clear(); states.clear(); pagers.clear(); coroutineScopes.clear()
-        slots.clear(); builders.clear(); fieldNames.clear(); slotMethods.clear()
+        slots.clear(); builders.clear(); fieldNames.clear(); slotMethods.clear(); slotMethodNames.clear()
         usesMaterialTypography = false
         touchBoxes.clear()
         bindingSymbols.clear()
@@ -292,7 +293,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 child.aliases.remove(statement.symbol)
                 val remaining = statements.drop(index + 1)
                 val captures = capturedValues(remaining, child).filter { it != statement.symbol }
-                val methodName = "${name}_${statement.startOffset}"
+                val methodName = slotMethodName("${name}_${statement.startOffset}")
                 val parameters = contextParameters(child, statement) + listOf(capturedParameter(statement.symbol, child)) + captures.map { capturedParameter(it, child) }
                 val body = uiStatements(remaining, child, rootBody)
                 // A builder parameter evaluates a source val once; textual aliasing would duplicate calls.
@@ -427,8 +428,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 val previousFile = diagnostics.currentFile
                 if (call.getValueArgument(index) == null) diagnostics.currentFile = sourceFile(parameter)?.fileEntry?.name
                 try {
-                    if (parameter.type.hasAnnotation(COMPOSABLE)) uiLambda(value, scope, "${function.name}_${parameter.name}")
-                    else expression(value, scope)
+                    builderArgument(parameter, value, scope, "${function.name}_${parameter.name}")
                 } finally { diagnostics.currentFile = previousFile }
             }
             return listOf(EtsUiElement(methodCall(builderSymbol(function), contextArguments(scope) + args, call)))
@@ -490,12 +490,19 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 val previousFile = diagnostics.currentFile
                 if (call.getValueArgument(index) == null) diagnostics.currentFile = sourceFile(parameter)?.fileEntry?.name
                 try {
-                    if (parameter.type.hasAnnotation(COMPOSABLE)) uiLambda(value, scope, "${function.name}_${parameter.name}")
-                    else expression(value, scope)
+                    builderArgument(parameter, value, scope, "${function.name}_${parameter.name}")
                 } finally { diagnostics.currentFile = previousFile }
             }
         }
         return listOf(EtsUiElement(methodCall(method.symbol, contextArguments(scope) + args, call)))
+    }
+
+    private fun builderArgument(parameter: IrValueParameter, value: IrExpression, scope: Scope, name: String): EtsExpression {
+        if (parameter.type.hasAnnotation(COMPOSABLE)) return uiLambda(value, scope, name)
+        val fn = lambda(value, scope)
+        if (fn != null && !fn.isSuspend && fn.valueParameters.isEmpty() && fn.returnType.isUnit())
+            return callback(value, scope)
+        return expression(value, scope)
     }
 
     private fun repeatUi(call: IrCall, scope: Scope): List<EtsStatement> {
@@ -531,7 +538,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         if (resolved is IrGetValue && resolved.symbol in slots) return expression(resolved, scope)
         val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected source content lambda")
         val captures = capturedValues(listOf(fn.body ?: diagnostics.unsupported(fn, "Missing slot body")), scope)
-        val name = "${sourceName}_${fn.startOffset}"
+        val name = slotMethodName("${sourceName}_${fn.startOffset}")
         val captured = captures.map { capturedParameter(it, scope) }
         val child = scope.fork()
         val context = contextParameters(child, fn)
@@ -582,10 +589,17 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val captures = capturedValues(listOf(content), scope)
         val parameters = contextParameters(child, content) + captures.map { capturedParameter(it, scope) }
         val at = language.source(content)
-        val bridge = EtsFunction("MaterialThemeContent_${at.start}", parameters, EtsTypes.VOID,
+        val bridge = EtsFunction(slotMethodName("MaterialThemeContent_${at.start}"), parameters, EtsTypes.VOID,
             uiLambdaBody(content, child), at, kind = EtsFunctionKind.METHOD, builder = true)
         slotMethods += bridge
         return listOf(EtsUiElement(methodCall(bridge.symbol, listOf(context) + captures.map { scope.bindings.getValue(it) }, content)))
+    }
+
+    private fun slotMethodName(stem: String): String {
+        var name = stem
+        var index = 2
+        while (!slotMethodNames.add(name)) name = "${stem}_${index++}"
+        return name
     }
 
     private fun surfaceContent(content: IrExpression, scope: Scope): EtsExpression {

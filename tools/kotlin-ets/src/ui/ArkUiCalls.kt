@@ -26,9 +26,12 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
         val value = args.singleOrNull() ?: diagnostics.unsupported(owner, "Target attribute requires one argument: $name")
         val expected = when (name) {
             "id", "accessibilityText", "accessibilityLevel" -> EtsTypes.STRING
-            "enabled", "loop", "indicator", "select", "vertical", "clip" -> EtsTypes.BOOLEAN
+            "enabled", "loop", "indicator", "select", "vertical", "clip", "focusable" -> EtsTypes.BOOLEAN
             "index", "fontSize", "fontColor", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight" -> EtsTypes.NUMBER
             "hitTestBehavior" -> EtsNamedType("HitTestMode")
+            "type" -> EtsNamedType("ButtonType")
+            "constraintSize" -> value.type.takeIf { it is EtsRecordType && it.name == "ConstraintSizeOptions" &&
+                it.fields.all { (name, type) -> name in setOf("minWidth", "minHeight", "maxWidth", "maxHeight") && type == EtsTypes.NUMBER } }
             "align" -> EtsNamedType("Alignment")
             "objectFit" -> EtsNamedType("ImageFit")
             "colorFilter" -> EtsNamedType("ColorFilter")

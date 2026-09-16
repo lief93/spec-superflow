@@ -256,3 +256,19 @@ modifier programs may require named variants. Reject captured dynamic modifier
 operands until a first-class target layout program can preserve them. Handle
 Modifier.then as ordered composition, not a renderable operation. Validate
 forwarding, repeated reuse, two distinct programs and rejected dynamic operands.
+
+Twenty-fourth requirement: support the Material3 filled/text button value and
+consumer contract through typed CallRules. Preserve ButtonDefaults identity,
+ButtonColors across source parameters, explicit/default enabled and disabled
+colors, uniform Dp rounded shapes, and PaddingValues. Consume those values in
+native Button with content-color inheritance, source callbacks, minimum size
+and content padding. Use AndroidX 1.3.2 defaults and native interaction feedback;
+do not claim pixel-identical hover elevation/ripple. Reject custom elevation,
+interaction sources, unsupported shapes and brushes rather than drop them.
+Test value evaluation and native enabled/disabled rendering, SDK compilation,
+then replay the unchanged historical entry. Typography and unconstrained wrap
+measurement remain separately diagnosed if encountered.
+Native disabled color verification requires gating input on a plain parent,
+because Button multiplies disabled opacity. Preserve pointer/focus suppression
+and guard callback execution. Record the remaining inner accessibility enabled
+flag difference as a POC limitation, not full accessibility equivalence.

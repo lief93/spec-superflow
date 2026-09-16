@@ -26,6 +26,8 @@ internal fun requiresMaterialContext(element: IrElement): Boolean {
             val owner = expression.symbol.owner
             val api = symbolName(owner)
             if (sourceFile(owner) == null && (api == "androidx.compose.material3.MaterialTheme" ||
+                api in setOf("androidx.compose.material3.Button", "androidx.compose.material3.TextButton",
+                    "androidx.compose.material3.ButtonDefaults.buttonColors", "androidx.compose.material3.ButtonDefaults.textButtonColors") ||
                 owner.correspondingPropertySymbol?.owner?.let(::symbolName) == "androidx.compose.material3.MaterialTheme.colorScheme" ||
                 api == "androidx.compose.material3.contentColorFor" ||
                 api == "androidx.compose.material3.Surface" &&

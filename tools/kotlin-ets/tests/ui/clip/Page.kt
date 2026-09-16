@@ -25,4 +25,4 @@ import androidx.compose.ui.unit.dp
         Tile(RectangleShape)
     }
 }
-@Composable fun UnsupportedShape() { Box(Modifier.size(20.dp).clip(RoundedCornerShape(4.dp))) }
+@Composable fun UnsupportedShape() { Box(Modifier.size(20.dp).clip(RoundedCornerShape(topStart = 4.dp, topEnd = 8.dp))) }
