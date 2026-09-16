@@ -280,3 +280,9 @@ slots. Text consumes the selected style, with explicit properties taking
 precedence. Validate default role values against Kotlin/JVM and custom/nested
 theme propagation through SDK compilation; replay the unchanged Banking entry.
 Do not infer typography from token names or substitute page-specific styles.
+
+Twenty-sixth requirement: lower bounded wrapContentWidth/Height/Size using native
+Stack sizing/alignment, preserving modifier order and the untouched axis. Clear
+only the wrapped axis's propagated minimum/fill constraint. Verify inner and
+outer geometry and alignment under explicit outer sizes on the native SDK/device.
+Reject unbounded=true until unconstrained child measurement is supported.

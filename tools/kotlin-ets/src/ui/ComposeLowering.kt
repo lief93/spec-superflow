@@ -760,8 +760,16 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             var nextHeight = height
             val seen = mutableSetOf<String>()
             var cursor = index
+            var wrap: WrapContent? = null
             while (cursor < operations.size) {
                 val call = operations[cursor]
+                wrap = wrapContent(call, language, scope, target)
+                if (wrap != null) {
+                    if (wrap.width) nextWidth = false
+                    if (wrap.height) nextHeight = false
+                    cursor++
+                    break
+                }
                 val api = symbolName(call.symbol.owner)
                 val keys = when (api) {
                     "androidx.compose.foundation.layout.width", "androidx.compose.foundation.layout.fillMaxWidth" -> setOf("width")
@@ -885,11 +893,12 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 attrs += attribute("mouseResponseRegion", listOf(record("Rectangle", linkedMapOf("x" to literal(0, touch.box), "y" to literal(0, touch.box),
                     "width" to literal("100%", touch.box), "height" to literal("100%", touch.box)), touch.box)), touch.box)
             }
-            if (cursor == operations.size && node.requiresBoundedSize && (!nextWidth || !nextHeight))
+            if (wrap == null && cursor == operations.size && node.requiresBoundedSize && (!nextWidth || !nextHeight))
                 diagnostics.unsupported(owner, "Asynchronous image loading requires bounded width and height; intrinsic-size negotiation is not yet supported")
-            if (cursor == operations.size && seen.none { it in node.modifierBoundaries })
+            if (wrap == null && cursor == operations.size && seen.none { it in node.modifierBoundaries })
                 return node.element.copy(attributes = node.element.attributes + attrs)
-            return native("Stack", listOf(stackOptions(owner)), owner, listOf(layer(cursor, nextWidth, nextHeight))).copy(attributes = attrs)
+            val options = wrap?.let { record("StackOptions", linkedMapOf("alignContent" to it.alignment), owner) } ?: stackOptions(owner)
+            return native("Stack", listOf(options), owner, listOf(layer(cursor, nextWidth, nextHeight))).copy(attributes = attrs)
         }
         val result = layer(0, weightAxis == "width", weightAxis == "height")
         return listOf(if (weight == null) result else result.copy(attributes = result.attributes +
