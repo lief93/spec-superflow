@@ -60,7 +60,9 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
                 EtsRecordType("SurfaceTheme", mapOf("colors" to
                     EtsRecordType("SurfaceColors", mapOf("fontPrimary" to EtsTypes.NUMBER)))))))
             "Swiper" -> listOf(EtsNamedType("SwiperController"))
-            "Column", "Row", "Button", "Divider", "Checkbox" -> emptyList()
+            "Column", "Row" -> if (args.isEmpty()) emptyList() else listOf(
+                EtsRecordType("${name}Options", mapOf("space" to EtsTypes.NUMBER)))
+            "Button", "Divider", "Checkbox" -> emptyList()
             "Toggle" -> listOf(EtsRecordType("ToggleOptions", mapOf("type" to EtsNamedType("ToggleType"), "isOn" to EtsTypes.BOOLEAN)))
             else -> diagnostics.unsupported(owner, "Unknown target control: $name")
         }

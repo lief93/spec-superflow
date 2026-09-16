@@ -65,7 +65,7 @@ fun main(arguments: Array<String>) {
         }
         val adapters = AdapterModules.load()
         val stdlib = StandardLibraryRules()
-        val rules = listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeProjectColorSchemeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeDimensionRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), ComposeLocalContextRule(), ComposeShapeRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule()) + adapters.rules()
+        val rules = listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorSchemeRule(), ComposeProjectColorSchemeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeArrangementRule(), ComposeDimensionRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), ComposeLocalContextRule(), ComposeShapeRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule()) + adapters.rules()
         val target = withKotlinFrontend(compilerArgs, entry, prepareDeclaration = { declaration ->
             if (mode == "page") rules.forEach { it.prepareSource(declaration, diagnostics) }
         }) { frontend ->

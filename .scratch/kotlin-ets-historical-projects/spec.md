@@ -359,3 +359,11 @@ ordinary UI state, clicks, paging or mixed loops containing UI. Unsupported anim
 operations whose results remain required still block; strict/language mode is
 unchanged. Verify public CLI, static initial values, sibling content, required-value
 and strict negatives, native SDK/device, and replay the unchanged Banking project.
+
+Thirty-fourth requirement: preserve fixed main-axis spacing for Row and Column.
+Resolve the official single-space Arrangement.spacedBy overload through CallRule,
+including Dp expressions, helper return values and arrangement parameters. Consume
+its typed value once as native Row/Column constructor space; do not implement a
+layout engine. Alignment overloads and unsupported arrangements remain explicit
+diagnostics, not guessed defaults. Verify the public CLI, actual native gaps and
+SDK compilation, then replay the unchanged historical Banking entry.
