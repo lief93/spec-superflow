@@ -291,3 +291,10 @@ Twenty-seventh requirement: map TextDecoration None/Underline/LineThrough to
 native Text.decoration through the shared typed TextStyle consumer. Preserve
 explicit Text property precedence over style and use the resolved text color.
 Do not draw custom lines; reject unsupported combined decorations.
+
+Twenty-eighth requirement: invoke the existing lazy file-initialization contract
+when entering source Compose builders. Use a typed ordinary guard exposed as an
+ArkUI condition, not eager lifecycle initialization or duplicated initializers.
+Preserve once-only execution, unselected-file laziness, failure propagation and
+initialization before default-argument evaluation. Test actual generated code and
+SDK compilation, then replay the unchanged historical Banking entry.

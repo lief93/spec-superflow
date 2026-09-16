@@ -30,6 +30,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val slotMethods = mutableListOf<EtsFunction>()
     private val slotMethodNames = linkedSetOf<String>()
     private val fieldNames = mutableSetOf<String>()
+    private val initializedBuilderFiles = linkedMapOf<IrFile, EtsFunction>()
     private lateinit var root: IrSimpleFunction
     private lateinit var pageReceiver: EtsSymbol
     private var textContexts: Map<IrFunction, MaterialTextContext> = emptyMap()
@@ -46,6 +47,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         bindingSymbols.clear()
         builderSymbols.clear()
         modifierSpecializations.clear(); activeSpecializations.clear()
+        initializedBuilderFiles.clear()
         usesMaterialContext = requiresMaterialContext(module)
         val declarations = module.files.flatMap { it.declarations }
         val functions = declarations.filterIsInstance<IrSimpleFunction>()
@@ -99,6 +101,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         for (source in declarations.mapNotNull(::sourceFile).distinct()) {
             diagnostics.currentFile = source.fileEntry.name
             files.getOrPut(source.fileEntry.name) { mutableListOf() } += lowerFileInitialization(source, language)
+            initializedBuilderFiles[source]?.let { files.getValue(source.fileEntry.name).add(it) }
         }
         modifierSpecializations.values.forEach { (source, method) ->
             if (method.symbol.id in ownership.globalIds) files.getOrPut(sourceFile(source)!!.fileEntry.name) { mutableListOf() }
@@ -114,6 +117,12 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val build = EtsFunction("build", emptyList(), EtsTypes.VOID, listOf(entryBody), language.source(root),
             kind = EtsFunctionKind.METHOD, build = true)
         val pageMethods = (methods.filter { it.symbol.id !in ownership.globalIds } + slotMethods).map(ownership::rewrite)
+        if (fields.isNotEmpty()) initializedBuilderFiles[root.parent as? IrFile]?.let { guard ->
+            val at = language.source(root)
+            val name = fieldName("__etsFileReady", root)
+            fields.add(0, EtsField(EtsSymbol("ui:file-ready", name, EtsTypes.BOOLEAN, at),
+                EtsCall(EtsReference(guard.symbol), emptyList(), EtsTypes.BOOLEAN, at), visibility = EtsVisibility.PRIVATE))
+        }
         val component = EtsClass(name, fields + pageMethods + build, language.source(root), exported = true, component = true, entry = true)
         files.getOrPut(language.source(root).file!!) { mutableListOf() }.add(component)
         return linkAdapterDeclarations(bindReactiveBuilderArguments(EtsProgram(files.filterValues { it.isNotEmpty() }.map { (path, declarations) -> EtsFile(path, declarations) },
@@ -219,9 +228,6 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
 
     private fun builder(function: IrSimpleFunction, modifiers: Map<IrValueSymbol, IrExpression> = emptyMap(),
         aliases: Map<IrValueSymbol, IrExpression> = emptyMap(), name: String = function.name.asString()): EtsFunction = withTextContext(function) {
-        if ((function.parent as? IrFile)?.let(::requiresFileInitialization) == true) {
-            diagnostics.unsupported(function, "Compose builder in a lazily initialized file requires a lifecycle entry bridge")
-        }
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
         if (modifiers.isEmpty()) builderSymbol(function)
         if (function.extensionReceiverParameter != null || function.dispatchReceiverParameter != null)
@@ -244,7 +250,20 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             }
         }
         val body = function.body ?: diagnostics.unsupported(function, "Builder has no source body")
-        val lines = uiBody(body, scope, function == root)
+        val content = uiBody(body, scope, function == root)
+        val file = function.parent as? IrFile
+        val lines = if (file != null && requiresFileInitialization(file)) {
+            val guard = initializedBuilderFiles.getOrPut(file) {
+                val initialization = fileInitializationCall(file)
+                val at = initialization.source
+                val name = ((initialization.expression as EtsCall).callee as EtsReference).symbol.name + "_ui"
+                // ArkUI builders accept conditions, not standalone effect statements.
+                EtsFunction(name, emptyList(), EtsTypes.BOOLEAN, listOf(initialization,
+                    EtsReturn(EtsLiteral(true, EtsTypes.BOOLEAN, at), at)), at, exported = true)
+            }
+            val ready = EtsCall(EtsReference(guard.symbol), emptyList(), EtsTypes.BOOLEAN, language.source(function))
+            listOf(EtsIf(listOf(EtsBranch(ready, content)), language.source(function)))
+        } else content
         EtsFunction(name, parameters, EtsTypes.VOID, lines, language.source(function),
             kind = EtsFunctionKind.METHOD, builder = true)
     }
