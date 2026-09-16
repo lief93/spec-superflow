@@ -10,7 +10,9 @@ import org.jetbrains.kotlin.ir.util.collectRealOverrides
 import org.jetbrains.kotlin.ir.util.isNullable
 
 class StandardLibraryRules : CallRule {
-    override fun mapType(type: IrType, language: Language): EtsType? = ExceptionRules.mapType(type, language) ?: MapSetRules.mapType(type, language)
+    override fun mapType(type: IrType, language: Language): EtsType? = ExceptionRules.mapType(type, language) ?: MapSetRules.mapType(type, language) ?: StringBuilderRule.mapType(type, language)
+    override fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? = StringBuilderRule.lowerConstructor(call, language, scope)
+    override fun targetFiles(program: EtsProgram): List<EtsFile> = StringBuilderRule.targetFiles(program)
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
         ExceptionRules.lower(call, language, scope)?.let { return it }
         MapSetRules.lower(call, language, scope)?.let { return it }
@@ -19,6 +21,7 @@ class StandardLibraryRules : CallRule {
         IterationRules.lower(call, language, scope)?.let { return it }
         FloatingPointRules.lower(call, language, scope)?.let { return it }
         LongValueRule.lower(call, language, scope)?.let { return it }
+        StringBuilderRule.lower(call, language, scope)?.let { return it }
         CollectionEmptinessRules.lower(call, language, scope)?.let { return it }
         LetRule.lower(call, language, scope)?.let { return it }
         val owner = call.symbol.owner
@@ -155,6 +158,8 @@ class StandardLibraryRules : CallRule {
         if (name == "kotlin.String.<get-length>" && signature("kotlin.String", "kotlin.Int")) {
             return EtsMember(receiverNode(), "length", EtsTypes.NUMBER, source)
         }
+        if (name == "kotlin.String.get" && signature("kotlin.String", "kotlin.Char", "kotlin.Int"))
+            return external("__etsStringGet", listOf(EtsTypes.STRING, EtsTypes.NUMBER), EtsTypes.STRING, listOf(receiverNode(), arg(0)))
         if (name == "kotlin.text.substring" &&
             (signature("kotlin.String", "kotlin.String", "kotlin.Int") ||
                 signature("kotlin.String", "kotlin.String", "kotlin.Int", "kotlin.Int"))) {

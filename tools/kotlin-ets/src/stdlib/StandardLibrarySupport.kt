@@ -119,6 +119,12 @@ private val supportFunctions = exceptionSupportFunctions + collectionSupportFunc
           return __etsIllegalArgumentException('Step is zero.');
         }
     """.trimIndent(), listOf("stdlib:__etsIllegalArgumentException")),
+    SupportFunction("stdlib:__etsStringGet", """
+        function __etsStringGet(value: string, index: number): string {
+          if (index < 0 || index >= value.length) { throw new __etsThrowable('IndexOutOfBoundsException', 'IndexOutOfBoundsException'); }
+          return value.charAt(index);
+        }
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsSubstring", """
         function __etsSubstring(value: string, start: number, end: number): string {
           if (start < 0 || end > value.length || start > end) { throw new __etsThrowable('IndexOutOfBoundsException', 'IndexOutOfBoundsException'); }

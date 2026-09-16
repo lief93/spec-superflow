@@ -397,3 +397,10 @@ parameter/return/field passing and string interpolation to native bigint. Keep
 unimplemented Long operations diagnostic rather than inheriting number arithmetic.
 Verify JVM/ETS results above 2^53 and at both signed 64-bit limits, compile a
 generated UI consumer with the SDK, and replay the historical Banking entry.
+
+Thirty-ninth requirement: support the StringBuilder operations required by ordinary
+UI formatting helpers through the shared standard-library rule interface. Preserve
+mutable aliasing, append chaining and nullable text behavior using native string
+array storage; retain UTF-16 Char iteration via checked String.get. Unsupported
+overloads remain explicit failures. Compare JVM and generated ETS execution for
+grouping, empty text, null text and aliasing; continue the Banking replay.
