@@ -381,3 +381,12 @@ its typed value once as native Row/Column constructor space; do not implement a
 layout engine. Alignment overloads and unsupported arrangements remain explicit
 diagnostics, not guessed defaults. Verify the public CLI, actual native gaps and
 SDK compilation, then replay the unchanged historical Banking entry.
+
+Thirty-seventh requirement: selecting an entry must not force conversion of
+unused compiler-generated data-class members merely because their class is used.
+Extend the symbol worklist to retain generated members required by explicit calls,
+references, equality and string interpolation; conservatively retain possible
+overrides for unknown receiver types. Keep source-authored members and file
+initialization behavior unchanged. Verify executable positive cases and a negative
+case where unsupported generic string conversion is actually requested; replay
+the historical Banking page without changing its source.
