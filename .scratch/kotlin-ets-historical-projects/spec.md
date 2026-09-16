@@ -390,3 +390,10 @@ overrides for unknown receiver types. Keep source-authored members and file
 initialization behavior unchanged. Verify executable positive cases and a negative
 case where unsupported generic string conversion is actually requested; replay
 the historical Banking page without changing its source.
+
+Thirty-eighth requirement: preserve Long-valued UI model identifiers without
+rounding them to floating-point numbers. Lower Long declarations, constants,
+parameter/return/field passing and string interpolation to native bigint. Keep
+unimplemented Long operations diagnostic rather than inheriting number arithmetic.
+Verify JVM/ETS results above 2^53 and at both signed 64-bit limits, compile a
+generated UI consumer with the SDK, and replay the historical Banking entry.

@@ -744,6 +744,11 @@ class EtsValidator {
             is EtsLiteral -> when (value.value) {
                 null -> if (value.type != EtsTypes.NULL && value.type !is EtsNullableType) reject(value, "Null target literal has non-null type")
                 is String, is Char -> expect(value, EtsTypes.STRING)
+                is Long -> if (value.type != EtsTypes.BIGINT) {
+                    expect(value, EtsTypes.NUMBER)
+                    if (value.value !in -9007199254740991L..9007199254740991L)
+                        reject(value, "Target number literal loses integer precision")
+                }
                 is Number -> {
                     expect(value, EtsTypes.NUMBER)
                     if (!value.value.toDouble().isFinite()) reject(value, "Non-finite target numeric literal")
@@ -843,7 +848,10 @@ class EtsValidator {
                 visit(value.operand)
                 if (value.operator !in setOf("!", "+", "-", "~", "typeof")) reject(value, "Unknown target unary operator")
                 if (value.operator == "!") { expect(value.operand, EtsTypes.BOOLEAN); expect(value, EtsTypes.BOOLEAN) }
-                if (value.operator in setOf("+", "-", "~")) { expect(value.operand, EtsTypes.NUMBER); expect(value, EtsTypes.NUMBER) }
+                if (value.operator in setOf("+", "-", "~")) {
+                    val numeric = if (value.operator != "+" && value.operand.type == EtsTypes.BIGINT) EtsTypes.BIGINT else EtsTypes.NUMBER
+                    expect(value.operand, numeric); expect(value, numeric)
+                }
                 if (value.operator == "typeof") expect(value, EtsTypes.STRING)
             }
             is EtsConditional -> {

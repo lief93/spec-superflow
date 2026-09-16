@@ -18,6 +18,7 @@ class StandardLibraryRules : CallRule {
         EqualityRules.lower(call, language, scope)?.let { return it }
         IterationRules.lower(call, language, scope)?.let { return it }
         FloatingPointRules.lower(call, language, scope)?.let { return it }
+        LongValueRule.lower(call, language, scope)?.let { return it }
         CollectionEmptinessRules.lower(call, language, scope)?.let { return it }
         LetRule.lower(call, language, scope)?.let { return it }
         val owner = call.symbol.owner

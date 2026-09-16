@@ -109,6 +109,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             "kotlin.Boolean" -> EtsTypes.BOOLEAN
             "kotlin.String", "kotlin.Char" -> EtsTypes.STRING
             "kotlin.Byte", "kotlin.Short", "kotlin.Int", "kotlin.Float", "kotlin.Double" -> EtsTypes.NUMBER
+            "kotlin.Long" -> EtsTypes.BIGINT
             "kotlin.Any" -> EtsTypes.OBJECT
             "kotlin.collections.Iterator", "kotlin.collections.MutableIterator" ->
                 EtsNamedType("__etsIterator", listOf(type(arguments.singleOrNull() ?: unsupportedType(type))),
@@ -232,7 +233,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
     private fun stringOperand(value: IrExpression, scope: Scope): EtsExpression {
         val owner = value.type.classOrNull?.owner
         val name = owner?.fqNameWhenAvailable?.asString()
-        if (name in setOf("kotlin.String", "kotlin.Char", "kotlin.Boolean", "kotlin.Byte", "kotlin.Short", "kotlin.Int") ||
+        if (name in setOf("kotlin.String", "kotlin.Char", "kotlin.Boolean", "kotlin.Byte", "kotlin.Short", "kotlin.Int", "kotlin.Long") ||
             (value is IrConst && value.value == null)) return expression(value, scope)
         val override = owner?.declarations?.filterIsInstance<IrSimpleFunction>()?.singleOrNull {
             it.name.asString() == "toString" && !it.isFakeOverride && !it.isExternal &&
@@ -1475,8 +1476,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         is String -> constant
         is Char -> constant.toString()
         is Boolean, is Byte, is Short, is Int -> constant
-        is Long -> if (constant in -9007199254740991L..9007199254740991L) constant
-            else diagnostics.unsupported(value, "Long constant cannot be represented exactly as a target number")
+        is Long -> constant
         is Float -> if (constant.isFinite()) constant.toDouble() else diagnostics.unsupported(value, "Non-finite float constant")
         is Double -> if (constant.isFinite()) constant else diagnostics.unsupported(value, "Non-finite double constant")
         else -> diagnostics.unsupported(value, "Unsupported constant type: ${constant.javaClass.simpleName}")
@@ -1485,6 +1485,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             null -> EtsTypes.NULL
             is String -> EtsTypes.STRING
             is Boolean -> EtsTypes.BOOLEAN
+            is Long -> EtsTypes.BIGINT
             else -> EtsTypes.NUMBER
         }
         return EtsLiteral(constant, targetType, source(value))

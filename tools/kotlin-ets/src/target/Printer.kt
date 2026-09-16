@@ -60,6 +60,7 @@ class EtsPrinter {
             null -> "null"
             is String -> quote(literal)
             is Char -> quote(literal.toString())
+            is Long -> literal.toString() + if (value.type == EtsTypes.BIGINT) "n" else ""
             is Number, is Boolean -> literal.toString()
             else -> error("Unsupported target literal: ${literal.javaClass.simpleName}")
         }

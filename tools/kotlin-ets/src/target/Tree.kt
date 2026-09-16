@@ -18,6 +18,7 @@ data class EtsTupleType(val elements: List<EtsType>) : EtsType
 
 object EtsTypes {
     val NUMBER = EtsNamedType("number")
+    val BIGINT = EtsNamedType("bigint")
     val STRING = EtsNamedType("string")
     val BOOLEAN = EtsNamedType("boolean")
     val VOID = EtsNamedType("void")
