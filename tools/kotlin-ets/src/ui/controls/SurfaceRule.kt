@@ -40,7 +40,7 @@ internal class ComposeSurfaceRule(
         val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "Surface requires content")
         val child = scope.fork()
         if (context != null) child.ambientValues[MATERIAL_CONTEXT] = EtsNew(materialContextType,
-            listOf(materialScheme(context, at), foreground), at)
+            listOf(materialScheme(context, at), foreground, materialTypography(context, at)), at)
         val slot = content(body, child)
         val options = target.record("__etsSurfaceOptions", linkedMapOf("content" to slot), call)
         val element = ComposeElement(EtsUiElement(target.call("EtsComposeSurface", listOf(options), call,

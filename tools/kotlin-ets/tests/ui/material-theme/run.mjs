@@ -28,7 +28,7 @@ run('page', 'bash', [join(root, 'kotlin-ets'), '--entry', 'materialtheme.Page', 
 const code = readFileSync(output, 'utf8');
 assert.match(code, /WrappedBuilder<\[EtsMaterialContext\]>/);
 assert.match(code, /content.builder\(__etsMaterialContext\)/);
-assert.match(code, /Text\("Direct"\).*\.fontColor\(__etsMaterialContext.contentColorFor\(__etsMaterialContext.colorScheme.primary\)\)/);
+assert.match(code, /Text\("Direct"\).*__etsTextStyleModifier\(__etsMaterialContext.contentColorFor\(__etsMaterialContext.colorScheme.primary\)/);
 const classes = code.slice(code.indexOf('export class EtsMaterialColorScheme'));
 assert.ok(classes.startsWith('export class '));
 const context = vm.createContext({ exports: {} });
@@ -58,7 +58,11 @@ const buttonOutput = join(work, 'ThemedButton.ets');
 run('ThemedButton', 'bash', [join(root, 'kotlin-ets'), '--entry', 'materialtheme.ThemedButton', '--classpath-file', cpFile,
   '--out', buttonOutput, join(here, 'Unsupported.kt')]);
 assert.match(readFileSync(buttonOutput, 'utf8'), /\.disabledContentColor/);
-for (const [entry, message] of [['Styled', /typography/], ['ValueHelper', /composition invocation context/],
+const styledOutput = join(work, 'Styled.ets');
+run('Styled', 'bash', [join(root, 'kotlin-ets'), '--entry', 'materialtheme.Styled', '--classpath-file', cpFile,
+  '--out', styledOutput, join(here, 'Unsupported.kt')]);
+assert.match(readFileSync(styledOutput, 'utf8'), /\.typography\.bodyLarge/);
+for (const [entry, message] of [['ValueHelper', /composition invocation context/],
   ['ThemedCheckbox', /Theme-aware Checkbox/],
   ['ThemedSwitch', /Theme-aware Switch/], ['ThemedDivider', /Theme-aware Divider/],
   ['ThemedVerticalDivider', /Theme-aware Divider/], ['ExplicitSchemeLookup', /explicit receiver and Unspecified result semantics/]]) {

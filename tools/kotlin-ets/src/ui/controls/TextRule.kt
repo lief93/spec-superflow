@@ -17,7 +17,8 @@ internal class ComposeTextRule(
         target.checkArguments(call, setOf("text", "modifier") + textStyleArgumentOrder)
         val text = argument(call, "text") ?: target.diagnostics.unsupported(call, "Text requires text")
         if (!text.type.isString()) target.diagnostics.unsupported(text, "AnnotatedString Text is not supported")
-        if ((textStyleArgumentOrder - setOf("color", "fontSize")).any { argument(call, it) != null }) {
+        val ambient = scope.ambientValues[MATERIAL_CONTEXT]?.takeIf { api == "androidx.compose.material3.Text" }
+        if (ambient != null || (textStyleArgumentOrder - setOf("color", "fontSize")).any { argument(call, it) != null }) {
             if (api == "androidx.compose.material.Text" && argument(call, "style") == null)
                 target.diagnostics.unsupported(call, "Material 2 LocalTextStyle requires an explicit style")
             val at = language.source(call)
@@ -26,7 +27,7 @@ internal class ComposeTextRule(
                 "fontWeight" to context.weight, "lineHeight" to context.lineHeight, "letterSpacing" to context.tracking) else emptyMap()
             val values = textStyleArgumentOrder.map { name -> argument(call, name)?.let { language.expression(it, scope) }
                 ?: when (name) {
-                    "style" -> EtsNew(textStyleType, textStyleFields.keys.map { field ->
+                    "style" -> ambient?.let { materialTextStyle(it, context, at) } ?: EtsNew(textStyleType, textStyleFields.keys.map { field ->
                         defaultFields[field]?.let { EtsLiteral(it, EtsTypes.NUMBER, at) } ?: EtsLiteral(null, EtsTypes.NULL, at)
                     }, at)
                     "overflow" -> target.enumValue("TextOverflow", "Clip", call)

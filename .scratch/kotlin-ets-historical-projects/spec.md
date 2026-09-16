@@ -272,3 +272,11 @@ Native disabled color verification requires gating input on a plain parent,
 because Button multiplies disabled opacity. Preserve pointer/focus suppression
 and guard callback execution. Record the remaining inner accessibility enabled
 flag difference as a POC limitation, not full accessibility equivalence.
+
+Twenty-fifth requirement: carry Material3 Typography as a typed value with its
+15 TextStyle roles, constructor overrides and AndroidX 1.3.2 defaults. Preserve
+the typography field through MaterialTheme, Surface, Button and source content
+slots. Text consumes the selected style, with explicit properties taking
+precedence. Validate default role values against Kotlin/JVM and custom/nested
+theme propagation through SDK compilation; replay the unchanged Banking entry.
+Do not infer typography from token names or substitute page-specific styles.
