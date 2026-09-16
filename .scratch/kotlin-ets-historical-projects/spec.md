@@ -298,3 +298,11 @@ ArkUI condition, not eager lifecycle initialization or duplicated initializers.
 Preserve once-only execution, unselected-file laziness, failure propagation and
 initialization before default-argument evaluation. Test actual generated code and
 SDK compilation, then replay the unchanged historical Banking entry.
+
+Twenty-ninth requirement: map direct Compose LocalContext.current to the native
+ArkUI host Context during composition. Preserve typed Context parameters and
+returns without inventing an Android context object. Other Android Context APIs
+still require explicit adapters. Use the SDK's synchronous getContext API for
+this POC; it is deprecated since API 18 and must not be moved into asynchronous
+callbacks or treated as a process-wide context. Test actual value identity,
+SDK compilation and explicit rejection of unadapted Context operations.
