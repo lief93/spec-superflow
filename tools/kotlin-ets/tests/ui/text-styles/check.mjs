@@ -27,7 +27,7 @@ const ordinary = parsed.statements.filter(node => !ts.isImportDeclaration(node) 
   !(ts.isClassDeclaration(node) && node.name?.text === 'Page')).map(node => node.getFullText(parsed)).join('\n');
 const registrations = [];
 const context = vm.createContext({ exports: {}, TextAlign: { Start: 0, Center: 1 }, TextOverflow: { Clip: 0 },
-  FontStyle: { Normal: 0, Italic: 1 }, $rawfile: name => ({ name }),
+  FontStyle: { Normal: 0, Italic: 1 }, TextDecorationType: { None: 0 }, $rawfile: name => ({ name }),
   __etsFontApi: { registerFont: value => registrations.push(value) } });
 vm.runInContext(ts.transpileModule(ordinary, { compilerOptions: { target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.CommonJS } }).outputText, context);
@@ -44,7 +44,7 @@ for (const italic of [0, 1]) for (const weight of [100, 300, 350, 400, 450, 500,
 assert.deepEqual(actual, oracle.slice(1), 'font selection must match AndroidX FontMatcher');
 const attrs = {};
 const instance = new Proxy({}, { get: (_, name) => value => { attrs[name] = value; return instance; } });
-const args = [null, null, null, null, null, null, null, null, 0, 2147483647, style, 0xff000000];
+const args = [null, null, null, null, null, null, null, null, null, 0, 2147483647, style, 0xff000000];
 e.__etsTextStyleModifier(...args).applyNormalAttribute(instance);
 assert.equal(attrs.fontSize, 18);
 assert.equal(attrs.fontWeight, 500);
@@ -59,8 +59,8 @@ assert.equal(attrs.fontWeight, 400);
 assert.equal(attrs.fontColor, 0xffff0000);
 assert.equal(attrs.fontFamily, style.fontFamily.fonts[0].resource);
 assert.equal(attrs.lineHeight, 28);
-const empty = new e.EtsTextStyle(...Array(8).fill(null));
-e.__etsTextStyleModifier(...args.map((v, i) => i === 10 ? empty : v)).applyNormalAttribute(instance);
+const empty = new e.EtsTextStyle(...Array(9).fill(null));
+e.__etsTextStyleModifier(...args.map((v, i) => i === 11 ? empty : v)).applyNormalAttribute(instance);
 assert.equal(attrs.lineHeight, 0, 'reset stale explicit line height');
 assert.equal(attrs.fontFamily, 'HarmonyOS Sans', 'reset stale custom family');
 assert.equal(attrs.fontSize, 14, 'explicit empty style is not omitted Material bodyLarge');

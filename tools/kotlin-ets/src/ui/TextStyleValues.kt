@@ -4,7 +4,8 @@ internal val textStyleSource = SourceSpan("EtsTextStyle.kt", 0, 0)
 internal val textStyleType = etsClassSymbol("EtsTextStyle", textStyleSource).type as EtsNamedType
 internal val textStyleFields = linkedMapOf("color" to EtsTypes.NUMBER, "fontSize" to EtsTypes.NUMBER,
     "fontWeight" to EtsTypes.NUMBER, "fontStyle" to EtsTypes.NUMBER, "fontFamily" to fontFamilyType,
-    "letterSpacing" to EtsTypes.NUMBER, "textAlign" to EtsNamedType("TextAlign"), "lineHeight" to EtsTypes.NUMBER)
+    "letterSpacing" to EtsTypes.NUMBER, "textDecoration" to textDecorationType,
+    "textAlign" to EtsNamedType("TextAlign"), "lineHeight" to EtsTypes.NUMBER)
 
 internal fun textStyleFile(): EtsFile {
     val at = textStyleSource

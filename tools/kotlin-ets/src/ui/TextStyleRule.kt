@@ -50,7 +50,7 @@ internal class ComposeTextStyleRule : CallRule {
             val type = EtsNamedType(enums.first)
             return EtsMember(EtsReference(EtsSymbol("arkui:${enums.first}", enums.first, type, at, true)), target, type, at)
         }
-        if (symbolName(parent) == "androidx.compose.ui.text.TextStyle" && name in setOf("fontFamily", "fontWeight", "fontStyle")) {
+        if (symbolName(parent) == "androidx.compose.ui.text.TextStyle" && name in setOf("fontFamily", "fontWeight", "fontStyle", "textDecoration")) {
             return EtsMember(language.expression(call.dispatchReceiver ?: return null, scope), name,
                 EtsNullableType(textStyleFields.getValue(name)), at)
         }

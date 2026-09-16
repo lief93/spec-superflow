@@ -6,7 +6,7 @@ private val modifierContract = attributeModifierContract()
 internal val textAttributeModifierType = (modifierContract.symbol.type as EtsNamedType).copy(arguments = listOf(textAttributeType), external = true)
 internal val textStyleModifierType = etsClassSymbol("EtsTextStyleModifier", renderStyleSource).type as EtsNamedType
 internal val textStyleArgumentOrder = listOf("color", "fontSize", "fontStyle", "fontWeight", "fontFamily",
-    "letterSpacing", "textAlign", "lineHeight", "overflow", "maxLines", "style")
+    "letterSpacing", "textDecoration", "textAlign", "lineHeight", "overflow", "maxLines", "style")
 private val styleFactory = textStyleFactory()
 
 internal fun textStyleModifier(arguments: List<EtsExpression>, at: SourceSpan): EtsExpression =
@@ -64,7 +64,8 @@ private fun styleModifierClass(): EtsClass {
         EtsParameter(EtsSymbol("renderStyle:maxLines", "maxLines", EtsTypes.NUMBER, at)))
     val receiver = EtsReference(EtsSymbol("renderStyle:this", "this", textStyleModifierType, at, true))
     val defaults = mapOf("color" to EtsReference(parameters[2].symbol), "fontSize" to number(14),
-        "fontWeight" to number(400), "fontStyle" to number(0), "letterSpacing" to number(0), "textAlign" to nativeEnum("TextAlign", "Start"))
+        "fontWeight" to number(400), "fontStyle" to number(0), "letterSpacing" to number(0), "textAlign" to nativeEnum("TextAlign", "Start"),
+        "textDecoration" to nativeEnum("TextDecorationType", "None"))
     val fields = textStyleFields.map { (name, type) -> EtsField(EtsSymbol("renderStyle:field:$name", name,
         if (name in defaults) type else EtsNullableType(type), at), readonly = true) } + listOf(
         EtsField(EtsSymbol("renderStyle:field:overflow", "overflow", EtsNamedType("TextOverflow"), at), readonly = true),
@@ -88,6 +89,8 @@ private fun styleModifierClass(): EtsClass {
         nativeEnum("FontStyle", "Normal"), nativeEnum("FontStyle", "Italic"), EtsNamedType("FontStyle"), at)
     val overflowType = EtsRecordType("TextOverflowOptions", mapOf("overflow" to EtsNamedType("TextOverflow")))
     val applyBody = listOf(apply("fontColor", field("color")), apply("fontSize", field("fontSize")),
+        apply("decoration", EtsObject(linkedMapOf("type" to field("textDecoration"), "color" to field("color")),
+            EtsRecordType("DecorationStyleInterface", linkedMapOf("type" to textDecorationType, "color" to EtsTypes.NUMBER)), at)),
         apply("fontWeight", field("fontWeight")), apply("fontStyle", nativeStyle), apply("letterSpacing", field("letterSpacing")),
         apply("textAlign", field("textAlign")), apply("halfLeading", EtsLiteral(true, EtsTypes.BOOLEAN, at)),
         apply("maxLines", field("maxLines")), apply("textOverflow", EtsObject(mapOf("overflow" to field("overflow")), overflowType, at)),

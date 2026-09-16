@@ -52,16 +52,16 @@ assert.match(code, /\.typography\.titleSmall/);
 assert.match(code, /typography: EtsTypography/);
 assert.match(code, /__etsMaterialTheme/);
 assert.doesNotMatch(code, /theme\.typography|theme\.colorScheme/);
-const rendering = vm.createContext({ exports: {}, TextAlign: { Start: 0 } });
+const rendering = vm.createContext({ exports: {}, TextAlign: { Start: 0 }, TextDecorationType: { None: 0 } });
 vm.runInContext(ts.transpileModule(code.slice(code.indexOf('export class EtsMaterialColorScheme')), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
 }).outputText, rendering);
 const api = rendering.exports;
 const selected = context.exports.selected(context.exports.customized());
-const modifier = api.__etsTextStyleModifier(null, 19, null, null, null, null, null, null, 0, 100, selected, 0xff000000);
+const modifier = api.__etsTextStyleModifier(null, 19, null, null, null, null, null, null, null, 0, 100, selected, 0xff000000);
 assert.equal(modifier.fontSize, 19);
 assert.equal(modifier.fontWeight, 700);
-const inherited = api.__etsTextStyleModifier(null, null, null, null, null, null, null, null, 0, 100, t.bodyLarge, 0xff123456);
+const inherited = api.__etsTextStyleModifier(null, null, null, null, null, null, null, null, null, 0, 100, t.bodyLarge, 0xff123456);
 assert.equal(inherited.fontSize, 16);
 assert.equal(inherited.lineHeight, 24);
 assert.equal(inherited.color, 0xff123456);

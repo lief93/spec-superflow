@@ -286,3 +286,8 @@ Stack sizing/alignment, preserving modifier order and the untouched axis. Clear
 only the wrapped axis's propagated minimum/fill constraint. Verify inner and
 outer geometry and alignment under explicit outer sizes on the native SDK/device.
 Reject unbounded=true until unconstrained child measurement is supported.
+
+Twenty-seventh requirement: map TextDecoration None/Underline/LineThrough to
+native Text.decoration through the shared typed TextStyle consumer. Preserve
+explicit Text property precedence over style and use the resolved text color.
+Do not draw custom lines; reject unsupported combined decorations.
