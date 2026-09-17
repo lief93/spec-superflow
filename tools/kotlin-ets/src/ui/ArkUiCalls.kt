@@ -32,6 +32,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "index", "fontSize", "fontColor", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight" -> EtsTypes.NUMBER
             "hitTestBehavior" -> EtsNamedType("HitTestMode")
             "type" -> EtsNamedType("ButtonType")
+            "buttonStyle" -> EtsNamedType("ButtonStyleMode")
             "constraintSize" -> value.type.takeIf { it is EtsRecordType && it.name == "ConstraintSizeOptions" &&
                 it.fields.all { (name, type) -> name in setOf("minWidth", "minHeight", "maxWidth", "maxHeight") && type == EtsTypes.NUMBER } }
             "align" -> EtsNamedType("Alignment")

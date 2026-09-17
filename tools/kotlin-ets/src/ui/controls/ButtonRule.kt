@@ -79,16 +79,22 @@ internal class ComposeButtonRule(
             "Button callback factory requires a source val to preserve registration-time evaluation")
         val guardedClick = EtsLambda(emptyList(), listOf(EtsIf(listOf(EtsBranch(enabled,
             listOf(EtsExpressionStatement(EtsCall(clickValue, emptyList(), EtsTypes.VOID, at))))), at)), EtsTypes.VOID, at)
-        val attrs = listOf(
-            target.attribute("type", listOf(target.enumValue("ButtonType", "Normal", call)), call),
-            target.attribute("onClick", listOf(guardedClick), call),
-            target.attribute("focusable", listOf(enabled), call),
-            target.attribute("backgroundColor", listOf(selected("containerColor")), call),
-            target.attribute("borderRadius", listOf(shape), call),
-            target.attribute("padding", listOf(padding), call),
-            target.attribute("height", listOf(target.literal("auto", call)), call),
-            target.attribute("constraintSize", listOf(target.record("ConstraintSizeOptions", linkedMapOf(
+        val explicitColors = argument(call, "colors") != null
+        val attrs = buildList {
+            add(target.attribute("type", listOf(target.enumValue("ButtonType", "Normal", call)), call))
+            add(target.attribute("onClick", listOf(guardedClick), call))
+            add(target.attribute("focusable", listOf(enabled), call))
+            if (text && !explicitColors) {
+                add(target.attribute("buttonStyle", listOf(target.enumValue("ButtonStyleMode", "TEXTUAL", call)), call))
+            } else {
+                add(target.attribute("backgroundColor", listOf(selected("containerColor")), call))
+            }
+            add(target.attribute("borderRadius", listOf(shape), call))
+            add(target.attribute("padding", listOf(padding), call))
+            add(target.attribute("height", listOf(target.literal("auto", call)), call))
+            add(target.attribute("constraintSize", listOf(target.record("ConstraintSizeOptions", linkedMapOf(
                 "minWidth" to target.literal(58, call), "minHeight" to target.literal(40, call)), call)), call))
+        }
         return ComposeElement(target.native("Button", emptyList(), call, listOf(row)).copy(attributes = attrs),
             setOf("padding", "backgroundColor", "onClick", "enabled"), orderedArguments = listOf(padding, shape))
     }
