@@ -26,7 +26,9 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
         val value = args.singleOrNull() ?: diagnostics.unsupported(owner, "Target attribute requires one argument: $name")
         val expected = when (name) {
             "id", "accessibilityText", "accessibilityLevel" -> EtsTypes.STRING
-            "enabled", "loop", "indicator", "select", "vertical", "clip", "focusable" -> EtsTypes.BOOLEAN
+            "enabled", "loop", "indicator", "select", "vertical", "clip", "focusable", "enableScrollInteraction" -> EtsTypes.BOOLEAN
+            "scrollable" -> EtsNamedType("ScrollDirection")
+            "scrollBar" -> EtsNamedType("BarState")
             "index", "fontSize", "fontColor", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight" -> EtsTypes.NUMBER
             "hitTestBehavior" -> EtsNamedType("HitTestMode")
             "type" -> EtsNamedType("ButtonType")
@@ -62,7 +64,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "Swiper" -> listOf(EtsNamedType("SwiperController"))
             "Column", "Row" -> if (args.isEmpty()) emptyList() else listOf(
                 EtsRecordType("${name}Options", mapOf("space" to EtsTypes.NUMBER)))
-            "Button", "Divider", "Checkbox" -> emptyList()
+            "Button", "Divider", "Checkbox", "Scroll" -> emptyList()
             "Toggle" -> listOf(EtsRecordType("ToggleOptions", mapOf("type" to EtsNamedType("ToggleType"), "isOn" to EtsTypes.BOOLEAN)))
             else -> diagnostics.unsupported(owner, "Unknown target control: $name")
         }

@@ -14,4 +14,12 @@ fun decorate(label: String): String = "[" + label + "]"
 }
 @Composable fun Missing() { BasicText(stringResource(R.string.missing)) }
 @Composable fun Styled() { BasicText(stringResource(R.string.styled)) }
-@Composable fun Formatted() { BasicText(stringResource(R.string.title, "argument")) }
+class Label(val id: Int, vararg val args: Any) {
+    @Composable fun text(): String = stringResource(id, *args)
+}
+@Composable fun Formatted() {
+    Column {
+        BasicText(Label(R.string.greeting, "Ada", 3).text())
+        BasicText(Label(R.string.title).text())
+    }
+}

@@ -181,3 +181,18 @@ Do not report collection or generation as successful application installation.
 
 These focused checks do not claim that a private Onboarding page is supported.
 No installation, screenshot comparison, review, commit or push was performed.
+
+## Explicit Dependency Sources
+
+When a dependency's implementation is needed and its binary has no usable IR body,
+provide the matching upstream Kotlin/Java source using
+`--dependency-sources-file /absolute/path/sources.txt`. Each nonempty line is an
+absolute source-file path. This is an offline, explicit input, not an automatic
+download or a replacement for classpath collection. Use the dependency's exact
+version and retain its license/provenance.
+
+The launcher preserves `inputs.json` as Gradle collected it, records the explicit
+list in `dependency-sources.json`, and passes the deduplicated union in `sources.txt`
+to the same official frontend and ETS backend. It does not edit the Android
+project or stub missing implementations. Unsupported dependency code remains a
+diagnostic; source availability alone does not guarantee successful translation.

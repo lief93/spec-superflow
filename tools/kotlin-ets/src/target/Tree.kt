@@ -69,7 +69,8 @@ data class EtsArray(val elements: List<EtsExpression>, val elementType: EtsType,
     override val source: SourceSpan) : EtsExpression { override val type = EtsNamedType("Array", listOf(elementType)) }
 data class EtsObject(val fields: Map<String, EtsExpression>, override val type: EtsRecordType,
     override val source: SourceSpan) : EtsExpression
-data class EtsParameter(val symbol: EtsSymbol, val defaultValue: EtsExpression? = null)
+data class EtsParameter(val symbol: EtsSymbol, val defaultValue: EtsExpression? = null,
+    val reactiveInput: Boolean = false)
 data class EtsLambda(val parameters: List<EtsParameter>, val body: List<EtsStatement>, val returnType: EtsType,
     override val source: SourceSpan) : EtsExpression {
     override val type = EtsFunctionType(parameters.map { it.symbol.type }, returnType)
@@ -120,7 +121,8 @@ data class EtsClass(val name: String, val members: List<EtsClassMember>, overrid
     val component: Boolean = false, val entry: Boolean = false,
     val kind: EtsClassKind = EtsClassKind.CLASS, val baseClass: EtsNamedType? = null,
     val interfaces: List<EtsNamedType> = emptyList(), val abstract: Boolean = false,
-    val sourceName: String? = null, val constraint: Boolean = false) : EtsDeclaration {
+    val sourceName: String? = null, val constraint: Boolean = false,
+    val valueSnapshot: Boolean = false) : EtsDeclaration {
     val symbol get() = etsClassSymbol(name, source, sourceName ?: name)
 }
 data class EtsImport(val module: String, val name: String, val alias: String? = null, val default: Boolean = false)

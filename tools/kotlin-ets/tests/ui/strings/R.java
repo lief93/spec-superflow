@@ -5,5 +5,6 @@ public class R {
         public static int subtitle = 2;
         public static int missing = 3;
         public static int styled = 4;
+        public static int greeting = 5;
     }
 }

@@ -13,7 +13,13 @@ fun etsAssignable(actual: EtsType, expected: EtsType): Boolean = when {
     actual is EtsNamedType && expected is EtsNamedType -> actual.name == expected.name && actual.symbolId == expected.symbolId && actual.external == expected.external &&
         actual.arguments.size == expected.arguments.size &&
         (if (actual.symbolId != null) actual.arguments == expected.arguments
-        else actual.arguments.zip(expected.arguments).all { (a, b) -> etsAssignable(a, b) })
+        else actual.arguments.zip(expected.arguments).all { (a, b) ->
+            if (a is EtsCapturedType || b is EtsCapturedType) {
+                val from = a as? EtsCapturedType ?: EtsCapturedType(a, a)
+                val to = b as? EtsCapturedType ?: EtsCapturedType(b, b)
+                etsAssignable(from.readType, to.readType) && etsAssignable(to.writeType, from.writeType)
+            } else etsAssignable(a, b)
+        })
     else -> false
 }
 

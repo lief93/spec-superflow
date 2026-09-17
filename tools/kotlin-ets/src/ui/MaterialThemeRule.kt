@@ -127,7 +127,7 @@ internal class ComposeMaterialThemeValueRule : CallRule {
                 EtsMember(scheme, onRole, EtsTypes.NUMBER, at), fallback, EtsTypes.NUMBER, at)
         }
         val method = EtsFunction("contentColorFor", listOf(background), EtsTypes.NUMBER, listOf(EtsReturn(match, at)), at, kind = EtsFunctionKind.METHOD)
-        return listOf(EtsFile(at.file!!, marker + EtsClass(materialContextType.name, fields + constructor + method, at, exported = true)))
+        return listOf(EtsFile(at.file!!, marker + EtsClass(materialContextType.name, fields + constructor + method, at, exported = true, valueSnapshot = true)))
     }
 }
 

@@ -28,6 +28,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val modifierSpecializations = linkedMapOf<String, Pair<IrSimpleFunction, EtsFunction>>()
     private val activeSpecializations = mutableSetOf<IrSimpleFunction>()
     private val slotMethods = mutableListOf<EtsFunction>()
+    private val constraintBuilders = mutableListOf<EtsFunction>()
+    private val constraintDataClasses = mutableListOf<EtsClass>()
     private val slotMethodNames = linkedSetOf<String>()
     private val fieldNames = mutableSetOf<String>()
     private val initializedBuilderFiles = linkedMapOf<IrFile, EtsFunction>()
@@ -41,7 +43,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
 
     fun lower(module: IrModuleFragment, entryName: String): EtsProgram {
         fields.clear(); states.clear(); pagers.clear(); coroutineScopes.clear()
-        slots.clear(); builders.clear(); fieldNames.clear(); slotMethods.clear(); slotMethodNames.clear()
+        slots.clear(); builders.clear(); fieldNames.clear(); slotMethods.clear(); constraintBuilders.clear(); constraintDataClasses.clear(); slotMethodNames.clear()
         usesMaterialTypography = false
         touchBoxes.clear()
         bindingSymbols.clear()
@@ -80,7 +82,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         if (diagnostics.omittedUiElements.isNotEmpty())
             selectSourceDeclarations(module, entryName, ignored = diagnostics.omittedUiElements)
         val retained = module.files.flatMap { it.declarations }.toSet()
-        val ownership = BuilderOwnership(methods, rootMethod.symbol.id, pageReceiver.id)
+        val ownership = BuilderOwnership(methods + slotMethods + constraintBuilders, rootMethod.symbol.id, pageReceiver.id)
         val files = linkedMapOf<String, MutableList<EtsDeclaration>>()
         for (declaration in declarations.filter { it in retained }) {
             diagnostics.currentFile = sourceFile(declaration)?.fileEntry?.name
@@ -113,6 +115,19 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 .add(ownership.rewrite(method).copy(kind = EtsFunctionKind.FUNCTION,
                     exported = source.visibility != org.jetbrains.kotlin.descriptors.DescriptorVisibilities.PRIVATE))
         }
+        constraintBuilders.forEach { method ->
+            if (method.symbol.id !in ownership.globalIds) throw Unsupported(Diagnostic("UNSUPPORTED",
+                "BoxWithConstraints content must pass state through explicit parameters", method.source))
+            files.getOrPut(method.source.file!!) { mutableListOf() }
+                .add(ownership.rewrite(method).copy(kind = EtsFunctionKind.FUNCTION))
+        }
+        slotMethods.filter { it.symbol.id in ownership.globalIds }.forEach { method ->
+            files.getOrPut(method.source.file!!) { mutableListOf() }
+                .add(ownership.rewrite(method).copy(kind = EtsFunctionKind.FUNCTION))
+        }
+        constraintDataClasses.forEach { declaration ->
+            files.getOrPut(declaration.source.file!!) { mutableListOf() }.add(declaration)
+        }
         diagnostics.currentFile = sourceFile(root)?.fileEntry?.name
         val name = root.name.asString()
         val entryBody = native("Stack", listOf(stackOptions(root)), root,
@@ -121,7 +136,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 attribute("height", listOf(literal("100%", root)), root)))
         val build = EtsFunction("build", emptyList(), EtsTypes.VOID, listOf(entryBody), language.source(root),
             kind = EtsFunctionKind.METHOD, build = true)
-        val pageMethods = (methods.filter { it.symbol.id !in ownership.globalIds } + slotMethods).map(ownership::rewrite)
+        val pageMethods = (methods + slotMethods).filter { it.symbol.id !in ownership.globalIds }.map(ownership::rewrite)
         if (fields.isNotEmpty()) initializedBuilderFiles[root.parent as? IrFile]?.let { guard ->
             val at = language.source(root)
             val name = fieldName("__etsFileReady", root)
@@ -130,8 +145,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         }
         val component = EtsClass(name, fields + pageMethods + build, language.source(root), exported = true, component = true, entry = true)
         files.getOrPut(language.source(root).file!!) { mutableListOf() }.add(component)
-        return linkAdapterDeclarations(bindReactiveBuilderArguments(EtsProgram(files.filterValues { it.isNotEmpty() }.map { (path, declarations) -> EtsFile(path, declarations) },
-            if (usesMaterialTypography) listOf(EtsImport("@ohos.graphics.drawing", "__etsDrawing", default = true)) else emptyList())), language.callRules)
+        return bindReactiveBuilderArguments(linkAdapterDeclarations(EtsProgram(files.filterValues { it.isNotEmpty() }.map { (path, declarations) -> EtsFile(path, declarations) },
+            if (usesMaterialTypography) listOf(EtsImport("@ohos.graphics.drawing", "__etsDrawing", default = true)) else emptyList()), language.callRules))
     }
 
     private val target = ArkUiCalls(language, diagnostics)
@@ -154,6 +169,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeForEachRule(target, { binding(it) }, { body, scope -> uiBody(body, scope) }),
             ComposeRowRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "width") }, touchBoxes, ::modifiers),
             ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
+            ComposeBoxWithConstraintsRule(target, ::constraintsContent, ::modifiers),
             ComposeMaterialThemeRule(target, ::provideMaterialContext),
             ComposeSurfaceRule(target, ::surfaceContent, ::modifiers),
             ComposeSpacerRule(target, ::modifiers),
@@ -295,14 +311,25 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 if (statement.isVar) diagnostics.unsupported(statement, "Mutable builder local requires remembered state")
                 val initial = statement.initializer ?: diagnostics.unsupported(statement, "Uninitialized builder variable")
                 if (remember(statement, initial, scope, rootBody)) return@forEachIndexed
+                if (isConstraintDimensionRead(initial, scope)) {
+                    scope.aliases[statement.symbol] = initial
+                    return@forEachIndexed
+                }
                 if (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE &&
                     uses(statement, statements.drop(index + 1)) == 1 && stableRead(initial, scope)) {
                     scope.aliases[statement.symbol] = initial
                     return@forEachIndexed
                 }
                 val platformValue = initial.type.classOrNull?.owner?.fqNameWhenAvailable?.asString() == "androidx.compose.ui.Modifier"
+                if (initial is IrCall && symbolName(initial.symbol.owner) == "androidx.compose.foundation.rememberScrollState") {
+                    ScrollModifier(target, language).validateState(initial, scope)
+                    if (uses(statement, statements.drop(index + 1), includeOmitted = true) > 1)
+                        diagnostics.unsupported(statement, "Shared or observed ScrollState requires explicit target state binding")
+                    scope.aliases[statement.symbol] = initial
+                    return@forEachIndexed
+                }
                 if (initial is IrFunctionExpression ||
-                    (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE && platformValue)) {
+                    (platformValue && (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE || stableModifier(initial, scope)))) {
                     scope.aliases[statement.symbol] = initial
                     return@forEachIndexed
                 }
@@ -333,6 +360,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     child.aliases[statement.symbol] = initial
                 }
                 val remaining = statements.drop(index + 1)
+                child.bindings.keys.toList().forEach { symbol ->
+                    child.bindings[symbol] = EtsReference(capturedParameter(symbol, child).symbol)
+                }
                 val context = contextParameters(child, statement)
                 val body = uiStatements(remaining, child, rootBody)
                 if (deferred && uses(statement, remaining, includeOmitted = true) > 0 && uses(statement, remaining) == 0) {
@@ -600,6 +630,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val name = slotMethodName("${sourceName}_${fn.startOffset}")
         val captured = captures.map { capturedParameter(it, scope) }
         val child = scope.fork()
+        captures.zip(captured).forEach { (symbol, parameter) -> child.bindings[symbol] = EtsReference(parameter.symbol) }
         val context = contextParameters(child, fn)
         val body = uiLambdaBody(expression, child)
         // ArkUI only transforms UI DSL in builders/native slots, not arbitrary function arguments.
@@ -609,8 +640,10 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         return EtsNew(bindingWrappedBuilder(), listOf(callback), language.source(expression))
     }
 
-    private fun capturedParameter(symbol: IrValueSymbol, scope: Scope): EtsParameter =
-        EtsParameter((scope.bindings.getValue(symbol) as EtsReference).symbol)
+    private fun capturedParameter(symbol: IrValueSymbol, scope: Scope): EtsParameter {
+        val value = scope.bindings.getValue(symbol)
+        return EtsParameter((value as? EtsReference)?.symbol ?: binding(symbol.owner, targetType = value.type).symbol)
+    }
 
     private fun capturedValues(elements: List<IrElement>, scope: Scope): Set<IrValueSymbol> {
         val captures = linkedSetOf<IrValueSymbol>()
@@ -649,7 +682,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private fun provideMaterialContext(context: EtsExpression, content: IrExpression, scope: Scope): List<EtsStatement> {
         val child = scope.fork()
         val captures = capturedValues(listOf(content), scope)
-        val parameters = contextParameters(child, content) + captures.map { capturedParameter(it, scope) }
+        val captured = captures.map { capturedParameter(it, scope) }
+        captures.zip(captured).forEach { (symbol, parameter) -> child.bindings[symbol] = EtsReference(parameter.symbol) }
+        val parameters = contextParameters(child, content) + captured
         val at = language.source(content)
         val bridge = EtsFunction(slotMethodName("MaterialThemeContent_${at.start}"), parameters, EtsTypes.VOID,
             uiLambdaBody(content, child), at, kind = EtsFunctionKind.METHOD, builder = true)
@@ -671,6 +706,48 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val member = EtsMember(slot, "builder", EtsFunctionType(args.map { it.type }, EtsTypes.VOID), at)
         return if (args.isEmpty()) member else EtsLambda(emptyList(),
             listOf(EtsExpressionStatement(EtsCall(member, args, EtsTypes.VOID, at))), EtsTypes.VOID, at)
+    }
+
+    private fun constraintsContent(content: IrExpression, scope: Scope): ConstraintContent {
+        val fn = lambda(content, scope) ?: diagnostics.unsupported(content, "Expected BoxWithConstraints content lambda")
+        val receiver = fn.extensionReceiverParameter ?: fn.valueParameters.singleOrNull()
+            ?: diagnostics.unsupported(fn, "BoxWithConstraints content requires its constraint receiver")
+        val at = language.source(content)
+        val child = scope.fork()
+        child.ambientValues.remove(LAYOUT_AXIS)
+        val captures = capturedValues(listOf(fn.body!!), scope).filter { it != receiver.symbol }
+        val context = contextParameters(child, fn)
+        val values = (context.map { it.symbol } + captures.map { capturedParameter(it, scope).symbol })
+            .zip(contextArguments(scope) + captures.map { scope.bindings.getValue(it) })
+        val bindings = values.mapIndexed { index, (_, value) -> "value$index" to value }.toMap()
+        val dataName = slotMethodName("ConstraintData_${at.start}")
+        val dataType = etsClassSymbol(dataName, at).type as EtsNamedType
+        val dataParameters = bindings.map { (name, value) -> EtsParameter(EtsSymbol("ui:constraintData:${at.start}:$name", name, value.type, at)) }
+        val dataThis = EtsReference(EtsSymbol("ui:constraintData:${at.start}:this", "this", dataType, at, external = true))
+        val constructor = EtsFunction("constructor", dataParameters, EtsTypes.VOID, dataParameters.map {
+            EtsExpressionStatement(EtsAssignment(EtsMember(dataThis, it.symbol.name, it.symbol.type, at), EtsReference(it.symbol), at))
+        }, at, kind = EtsFunctionKind.CONSTRUCTOR)
+        constraintDataClasses += EtsClass(dataName, dataParameters.map { EtsField(it.symbol, readonly = true) } + constructor, at)
+        val data = EtsNew(dataType, bindings.values.toList(), at)
+        val argsType = boxConstraintsArgsType
+        val args = EtsReference(EtsSymbol("ui:constraintArgs:${at.start}", "args", argsType, at))
+        child.bindings[receiver.symbol] = EtsMember(args, "bounds", boxConstraintsBindingType, at)
+        // ArkUI structs cannot be generic. This paired builder/data envelope erases
+        // only the native component boundary, then restores its generated class.
+        val dataRead = EtsCast(EtsMember(args, "data", EtsTypes.OBJECT, at), dataType, at)
+        values.forEachIndexed { index, (symbol, _) ->
+            val value = EtsMember(dataRead, "value$index", symbol.type, at)
+            if (index < context.size) child.ambientValues.entries.firstOrNull { it.value == EtsReference(symbol) }?.setValue(value)
+            else child.bindings[captures[index - context.size]] = value
+        }
+        val body = withTextContext(fn) { uiBody(fn.body!!, child) }
+        val alignment = EtsMember(args, "alignment", EtsNamedType("Alignment"), at)
+        val bridge = EtsFunction(slotMethodName("BoxWithConstraintsContent_${at.start}"), listOf(EtsParameter(args.symbol, reactiveInput = true)), EtsTypes.VOID,
+            listOf(native("Stack", listOf(record("StackOptions", linkedMapOf("alignContent" to alignment), fn)), fn, body)), at,
+            kind = EtsFunctionKind.FUNCTION, builder = true)
+        constraintBuilders += bridge
+        val builderType = EtsNamedType("WrappedBuilder", listOf(EtsTupleType(listOf(argsType))))
+        return ConstraintContent(EtsNew(builderType, listOf(EtsReference(bridge.symbol)), at), data)
     }
 
     private fun callback(expression: IrExpression, scope: Scope): EtsExpression {
@@ -749,6 +826,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         if (emitted is EtsLiteral || stableRead(value, scope)) return true
         val getter = dereference(value, scope) as? IrCall ?: return false
         val property = getter.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+        if (property in setOf("minWidth", "minHeight", "maxWidth", "maxHeight").map {
+                "androidx.compose.foundation.layout.BoxWithConstraintsScope.$it" })
+            return getter.dispatchReceiver?.let { stableRead(it, scope) } == true
         return property in setOf("androidx.compose.ui.unit.dp", "androidx.compose.ui.unit.sp") &&
             getter.extensionReceiver?.let { stableRead(it, scope) } == true
     }
@@ -757,12 +837,37 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         return language.expression(expression, scope)
     }
 
-    private fun modifiers(expression: IrExpression?, initialScope: Scope, node: ComposeElement): List<EtsStatement> {
+    // Structural aliases are safe only when their construction has no user effects.
+    private fun stableModifier(value: IrExpression, scope: Scope): Boolean {
+        val resolved = dereference(value, scope) ?: return false
+        if (resolved is IrBlock) return (resolved.statements.singleOrNull() as? IrExpression)?.let { stableModifier(it, scope) } == true
+        if (resolved is IrGetObjectValue) return symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.Companion"
+        if (resolved is IrWhen) return resolved.branches.all {
+            (it is IrElseBranch || stableRead(it.condition, scope)) && stableModifier(it.result, scope)
+        }
+        if (resolved !is IrCall || sourceFile(resolved.symbol.owner) != null) return false
+        if (symbolName(resolved.symbol.owner) !in setOf("androidx.compose.foundation.verticalScroll",
+                "androidx.compose.foundation.horizontalScroll", "androidx.compose.ui.Modifier.then")) return false
+        if (!stableModifier(resolved.extensionReceiver ?: resolved.dispatchReceiver ?: return false, scope)) return false
+        return resolved.symbol.owner.valueParameters.indices.mapNotNull(resolved::getValueArgument).all {
+            val arg = dereference(it, scope)
+            stableRead(it, scope) || arg is IrCall && symbolName(arg.symbol.owner) == "androidx.compose.foundation.rememberScrollState" &&
+                arg.symbol.owner.valueParameters.indices.mapNotNull(arg::getValueArgument).all { input -> stableRead(input, scope) } ||
+                arg != null && stableModifier(arg, scope)
+        }
+    }
+
+    private fun modifiers(expression: IrExpression?, initialScope: Scope, node: ComposeElement): List<EtsStatement> =
+        modifiers(expression, initialScope, node, emptyMap())
+
+    private fun modifiers(expression: IrExpression?, initialScope: Scope, node: ComposeElement,
+        choices: Map<IrWhen, IrExpression>): List<EtsStatement> {
         val scope = initialScope.fork()
         val operations = mutableListOf<IrCall>()
+        var choice: IrWhen? = null
         fun stableNamedValue(value: IrExpression): Boolean {
             val resolved = dereference(value, scope) ?: return false
-            if (stableRead(resolved, scope)) return true
+            if (stableRead(resolved, scope) || isConstraintDimensionRead(resolved, scope) || stableModifier(resolved, scope)) return true
             if (resolved is IrGetObjectValue && symbolName(resolved.symbol.owner) in
                 setOf("androidx.compose.ui.Modifier.Companion", "androidx.compose.ui.Modifier")) return true
             if (resolved is IrCall && sourceFile(resolved.symbol.owner) == null &&
@@ -780,6 +885,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     diagnostics.unsupported(resolved, "Expected Modifier companion")
                 is IrGetValue -> if (scope.bindings[resolved.symbol]?.type != emptyModifierType)
                     diagnostics.unsupported(resolved, "Unsupported bound Modifier value")
+                is IrWhen -> {
+                    val selected = choices[resolved]
+                    if (selected != null) collect(selected)
+                    else if (choice == null) choice = resolved
+                }
                 is IrCall -> {
                     collect(resolved.extensionReceiver ?: resolved.dispatchReceiver)
                     if (symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.then")
@@ -806,6 +916,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             }
         }
         collect(expression)
+        choice?.let { conditional ->
+            if (!stableModifier(conditional, scope)) diagnostics.unsupported(conditional,
+                "Conditional Modifier requires stable conditions and effect-free construction")
+            return listOf(EtsIf(conditional.branches.map { branch -> EtsBranch(
+                if (branch is IrElseBranch) null else language.expression(branch.condition, scope),
+                modifiers(expression, scope, node, choices + (conditional to branch.result))) }, language.source(conditional)))
+        }
+        val scrolling = ScrollModifier(target, language)
         val weights = operations.filter(::isWeightModifier)
         if (weights.size > 1) diagnostics.unsupported(weights[1], "Repeated weight modifiers require parent-data ordering support")
         val weight = weights.singleOrNull()?.let { call ->
@@ -853,8 +971,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             val seen = mutableSetOf<String>()
             var cursor = index
             var wrap: WrapContent? = null
+            var scroll: IrCall? = null
             while (cursor < operations.size) {
                 val call = operations[cursor]
+                if (scrolling.axis(call) != null) {
+                    scroll = call
+                    cursor++
+                    break
+                }
                 wrap = wrapContent(call, language, scope, target)
                 if (wrap != null) {
                     if (wrap.width) nextWidth = false
@@ -873,6 +997,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     "androidx.compose.ui.draw.clip" -> setOf("borderRadius", "clip")
                     "androidx.compose.ui.platform.testTag" -> setOf("id")
                     "androidx.compose.foundation.clickable" -> setOf("onClick", "enabled")
+                    "androidx.compose.ui.input.pointer.pointerInput" -> setOf("hitTestBehavior")
                     else -> {
                         diagnostics.omitUi(call, "Unsupported resolved Modifier API: $api", api,
                             "omitted_modifier", "Modifier arguments and behavior are omitted; other modifier operations remain.",
@@ -968,6 +1093,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         attributes["onClick"] = callback(argument(call, "onClick")!!, scope)
                         argument(call, "enabled")?.let { attributes["enabled"] = expression(it, scope) }
                     }
+                    "androidx.compose.ui.input.pointer.pointerInput" -> {
+                        attributes["hitTestBehavior"] = PointerInputModifier(target).value(call) { stableRead(it, scope) }
+                    }
                 }
                 seen += keys
                 cursor++
@@ -992,6 +1120,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 attrs += attribute("responseRegion", listOf(touch.region(origin, language.source(touch.box))), touch.box)
                 attrs += attribute("mouseResponseRegion", listOf(record("Rectangle", linkedMapOf("x" to literal(0, touch.box), "y" to literal(0, touch.box),
                     "width" to literal("100%", touch.box), "height" to literal("100%", touch.box)), touch.box)), touch.box)
+            }
+            if (scroll != null) {
+                val axis = scrolling.axis(scroll)
+                val child = layer(cursor, if (axis == "width") false else nextWidth,
+                    if (axis == "height") false else nextHeight)
+                return native("Scroll", emptyList(), scroll, listOf(child)).copy(
+                    attributes = scrolling.attributes(scroll, scope) + attrs)
             }
             if (wrap == null && cursor == operations.size && node.requiresBoundedSize && (!nextWidth || !nextHeight))
                 diagnostics.unsupported(owner, "Asynchronous image loading requires bounded width and height; intrinsic-size negotiation is not yet supported")

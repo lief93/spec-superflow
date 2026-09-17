@@ -15,7 +15,7 @@ const inputs = readdirSync(join(root, 'src'), { recursive: true }).filter(p => p
 function rejectsBeforeOutput(mutate, message) {
   const work = mkdtempSync(join(tmpdir(), 'r2-evidence-refusal-'));
   try {
-    const reports = [65, 90, 70, 160, 3].map(count => ({ passed: true,
+    const reports = [65, 90, 70, 160, 30, 3].map(count => ({ passed: true,
       expected: Array(count).fill('oracle'), actual: Array(count).fill('oracle'), moduleActual: Array(count).fill('oracle'),
       inputs: inputs.map(input => ({ ...input })) }));
     mutate(reports);

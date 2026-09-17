@@ -8,14 +8,14 @@ import ts from '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony
 import { verifyModuleCoverage } from '../modules/ui-sdk-evidence.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '../..');
-assert.ok([7, 9].includes(process.argv.length), 'Pass defaults, constructors, bridges, variance and binary replay evidence; optionally --device <HDC key>');
-if (process.argv.length === 9) assert.equal(process.argv[7], '--device');
-const device = process.argv[8];
+assert.ok([8, 10].includes(process.argv.length), 'Pass defaults, constructors, bridges, variance, composition and binary replay evidence; optionally --device <HDC key>');
+if (process.argv.length === 10) assert.equal(process.argv[8], '--device');
+const device = process.argv[9];
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const read = path => JSON.parse(readFileSync(path, 'utf8'));
-const groups = ['defaults', 'constructors', 'bridges', 'variance', 'binary'];
-const counts = [65, 90, 70, 160, 3];
-const reports = process.argv.slice(2, 7).map((path, i) => ({ name: groups[i], path: resolve(path), result: read(join(path, 'result.json')) }));
+const groups = ['defaults', 'constructors', 'bridges', 'variance', 'composition', 'binary'];
+const counts = [65, 90, 70, 160, 30, 3];
+const reports = process.argv.slice(2, 8).map((path, i) => ({ name: groups[i], path: resolve(path), result: read(join(path, 'result.json')) }));
 const inputs = new Map();
 function pin(input) {
   assert.equal(hash(input.path), input.sha256, `Changed evidence input: ${input.path}`);
@@ -110,6 +110,7 @@ const cases = {
     'independent', 'independentGeneric', 'independentClass', 'independentSelf', 'independentChain', 'independentDiamond', 'originalMultiple',
     'classInterface', 'interfaceClass', 'classInterfaceReturn', 'classInterfaceHolder', 'classInterfaceMutation', 'projectedRead', 'projectedWrite',
     'projectedStar', 'projectedBound', 'projectedNested', 'projectedGeneric', 'projectedVisit', 'projectedReplace', 'projectedLater'],
+  composition: ['inlineCapture', 'localCapture', 'substitutedCapture', 'nestedCapture', 'inputCapture', 'boundCapture'],
 };
 const body = ['const values: string[] = [];'];
 for (const [group, names] of Object.entries(cases)) {

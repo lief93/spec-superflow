@@ -10,6 +10,24 @@ spec.loader.exec_module(strings)
 
 
 class StringsTest(unittest.TestCase):
+    def test_native_formats_and_build_ids(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "res"
+            (source / "values").mkdir(parents=True)
+            (source / "values" / "strings.xml").write_text(
+                '<resources><string name="label">%1$s: %2$d</string>'
+                '<string name="precision">%.2f</string></resources>')
+            symbols = root / "R.txt"
+            symbols.write_text('int string label 0x7f010001\nint string precision 0x7f010002\n')
+            output = root / "output"
+            result = strings.materialize(source, "example", output, symbols)
+            self.assertEqual(result["defaultCount"], 1)
+            self.assertEqual(result["unsupportedCount"], 1)
+            self.assertIn('%1$s', (output / "base.properties").read_text())
+            self.assertEqual((output / "source-resource-ids.properties").read_text(),
+                             'example.R.string.label=2130771969\n')
+
     def test_plain_xml_entities_names_and_qualified_rejection(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

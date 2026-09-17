@@ -13,6 +13,11 @@ internal class BuilderOwnership(functions: List<EtsFunction>, rootId: String, pr
             var pageOccurrences = 0
             val calls = mutableSetOf<String>()
             walkEts(function) { node ->
+                // An ordinary callback retains its lexical page receiver. It is
+                // not a native BuilderNode parameterized entry point.
+                if (node is EtsLambda) walkEts(node) { nested ->
+                    if (nested is EtsMember && nested.symbolId in symbols && isPage(nested.receiver)) page += nested.symbolId!!
+                }
                 if (node is EtsMember && node.symbolId in symbols && isPage(node.receiver)) {
                     sourceReceiverOccurrences++
                     calls += node.symbolId!!

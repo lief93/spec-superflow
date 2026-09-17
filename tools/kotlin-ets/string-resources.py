@@ -14,7 +14,7 @@ def properties(values):
     return "".join(f"{escape(key)}={escape(value)}\n" for key, value in sorted(values.items()))
 
 
-def materialize(source, namespace, output):
+def materialize(source, namespace, output, symbols=None):
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*", namespace):
         raise ValueError("namespace must be a Java package name")
     if not source.is_dir() or source.is_symlink():
@@ -51,8 +51,10 @@ def materialize(source, namespace, output):
                 reason = None
                 if qualifier is None:
                     reason = f"unsupported qualifier {directory.name}"
-                elif len(item) or any(char in value for char in "\\\"'%") or value.startswith(("@", "?")):
+                elif len(item) or any(char in value for char in "\\\"'") or value.startswith(("@", "?")):
                     reason = "requires styled, escaped, formatted or referenced string semantics"
+                elif "%" in re.sub(r"%(?:[1-9][0-9]*\$)?[sd]", "", value):
+                    reason = "unsupported string format; native mapping supports %s, %d and indexed variants"
                 elif value != value.strip() or re.search(r"\s{2,}|[\n\r\t]", value):
                     reason = "requires Android whitespace normalization"
                 if reason:
@@ -61,11 +63,26 @@ def materialize(source, namespace, output):
                     packs.setdefault(qualifier, {})[symbol] = value
     if not packs.get("base"):
         raise ValueError("No plain default strings in selected resource directory")
+    ids = {}
+    if symbols is not None:
+        for line in symbols.read_text().splitlines():
+            parts = line.split()
+            if len(parts) != 4 or parts[:2] != ["int", "string"]:
+                continue
+            symbol = f"{namespace}.R.string.{parts[2]}"
+            if symbol not in packs["base"] or symbol in errors:
+                continue
+            value = int(parts[3], 0)
+            if symbol in ids or value in ids.values() or not 0 < value <= 0x7fffffff:
+                raise ValueError(f"Invalid or duplicate string resource ID: {line}")
+            ids[symbol] = str(value)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.mkdir()
     for qualifier, values in packs.items():
         (output / f"{qualifier}.properties").write_text(properties(values), encoding="utf-8")
     (output / "unsupported.properties").write_text(properties(errors), encoding="utf-8")
+    if symbols is not None:
+        (output / "source-resource-ids.properties").write_text(properties(ids), encoding="utf-8")
     return {"output": str(output), "defaultCount": len(packs["base"]), "unsupportedCount": len(errors)}
 
 
@@ -74,5 +91,6 @@ if __name__ == "__main__":
     parser.add_argument("--res-dir", required=True, type=Path)
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--symbols", type=Path, help="Selected Android build R.txt for resource IDs passed through values")
     args = parser.parse_args()
-    print(json.dumps(materialize(args.res_dir.absolute(), args.namespace, args.out.absolute())))
+    print(json.dumps(materialize(args.res_dir.absolute(), args.namespace, args.out.absolute(), args.symbols)))

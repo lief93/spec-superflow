@@ -12,6 +12,13 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
             }
             if (id?.startsWith("compose:") == true) {
                 val valid = when (id) {
+                    "compose:formatString" -> node is EtsReference && node.symbol.name == "__etsFormatString" && node.type == stringFormatType
+                    "compose:boxConstraints" -> {
+                        val options = ((node as? EtsReference)?.type as? EtsFunctionType)?.parameters?.singleOrNull() as? EtsRecordType
+                        val data = options?.fields?.get("data")
+                        node is EtsReference && node.symbol.name == "EtsComposeBoxWithConstraints" && data != null &&
+                            node.type == EtsFunctionType(listOf(boxConstraintsOptions(data)), EtsTypes.VOID)
+                    }
                     "compose:surface" -> node is EtsReference && node.symbol.name == "EtsComposeSurface" &&
                         node.type == EtsFunctionType(listOf(EtsRecordType("SurfaceOptions",
                             mapOf("content" to EtsFunctionType(emptyList(), EtsTypes.VOID),
@@ -30,6 +37,8 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
             }
         } } }
         return languageRuntime.declarations(program) +
+            (if ("compose:formatString" in required) stringFormatSupport else emptyList()) +
+            (if ("compose:boxConstraints" in required) constraintsLayoutSupport else emptyList()) +
             (if ("compose:surface" in required) surfaceLayoutSupport else emptyList()) +
             (if ("compose:imageTint" in required) imageTintSupport else emptyList()) +
             (if ("compose:materialTypography" in required) materialTypographySupport else emptyList()) +

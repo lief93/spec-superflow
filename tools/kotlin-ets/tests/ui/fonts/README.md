@@ -18,5 +18,10 @@ explicit vararg families are supported. Missing resources, already-folded
 numeric IDs, qualified resource directories, remote/variable font settings,
 list/spread families and unsupported font APIs remain diagnosed.
 
+`Default.kt` checks `FontFamily.Default` returned through an ordinary method and
+consumed by a Material TextStyle. It maps to the target's existing default family
+(`HarmonyOS Sans`) without registering a local font. `default-check.mjs` executes
+the emitted ordinary selection code; native compilation remains a separate check.
+
 Reference: AndroidX ui-text `Font.kt`, `FontFamily.kt`, `FontWeight.kt` and
 `FontStyle.kt`; resolved IR calls/constructors use the shared typed contract.

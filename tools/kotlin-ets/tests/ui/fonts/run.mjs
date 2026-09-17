@@ -29,14 +29,16 @@ mkdirSync(join(res, 'font'), { recursive: true });
 for (const name of ['normal', 'medium', 'unused']) cpSync(font, join(res, 'font', name + '.ttf'));
 const pack = join(work, 'pack');
 run('resources', 'python3', [join(root, 'font-resources.py'), '--res-dir', res, '--namespace', 'fontfixtures', '--out', pack]);
-function compile(name, mode = 'language', status = 0, input = name + '.kt') {
+function compile(name, mode = 'language', status = 0, input = name + '.kt', entry = 'Page', expectResources = true) {
   const out = join(work, name + '.ets');
   const stdout = run(name, 'bash', [join(root, 'kotlin-ets'), '--mode', mode,
-    ...(mode === 'page' ? ['--entry', 'fontfixtures.Page'] : []), '--classpath-file', join(work, 'classpath.txt'),
+    ...(mode === 'page' ? ['--entry', 'fontfixtures.' + entry] : []), '--classpath-file', join(work, 'classpath.txt'),
     '--font-resources', join(pack, 'fonts.properties'), '--out', out, join(here, input),
     ...(mode === 'page' ? [join(here, 'Values.kt')] : [])], status);
   assert.equal(existsSync(out), status === 0);
-  assert.equal(existsSync(out + '.resources'), status === 0);
+  // A fixture that references no materialized font legitimately has no sibling
+  // resource bundle; FontFamily.Default maps to the target default family.
+  assert.equal(existsSync(out + '.resources'), status === 0 && expectResources);
   return status === 0 ? readFileSync(out, 'utf8') : JSON.parse(stdout.trim().split('\n').at(-1));
 }
 const values = compile('Values');
@@ -56,6 +58,8 @@ const artifacts = readdirSync(join(work, 'Values.ets.resources/rawfile'));
 assert.equal(artifacts.length, 2, 'unused font must not be emitted');
 for (const artifact of artifacts) assert.deepEqual(readFileSync(join(work, 'Values.ets.resources/rawfile', artifact)), readFileSync(font));
 compile('Page', 'page');
+compile('Default', 'page', 0, 'Default.kt', 'DefaultPage', false);
+run('default-consumption', 'node', [join(here, 'default-check.mjs'), join(work, 'Default.ets')]);
 assert.match(compile('Missing', 'language', 2).message, /Unmapped font resource/);
 assert.match(compile('Empty', 'language', 2).message, /requires nonempty/);
 writeFileSync(join(work, 'parity.json'), JSON.stringify({ expected, actual }, null, 2));

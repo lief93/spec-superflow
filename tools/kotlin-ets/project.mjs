@@ -17,6 +17,7 @@ bash tools/kotlin-ets/kotlin-ets --project /path/to/android --module :app \\
 --collect-only                Collect inputs without running the ETS backend
 --work-dir /path/to/new/run    Fresh directory for input lists and command logs
 --offline                     Ask Gradle to use cached dependencies only
+--dependency-sources-file /path/sources.txt  Explicit dependency Kotlin/Java sources, one absolute path per line
 --image-resources /path/image-resources.properties  Use materialized image resources
 --string-resources /path/string-inputs  Use materialized string inputs; emit sibling .resources bundle
 --font-resources /path/font-inputs/fonts.properties  Use materialized local font files
@@ -29,7 +30,7 @@ Node.js 18+ and the backend's cached compiler dependencies are required.
 export function parseOptions(args) {
   const values = new Map();
   const flags = new Set(['--offline', '--collect-only']);
-  const options = new Set(['--project', '--module', '--variant', '--compile-task', '--mode', '--entry', '--out', '--out-dir', '--work-dir', '--image-resources', '--string-resources', '--font-resources', '--unsupported-policy']);
+  const options = new Set(['--project', '--module', '--variant', '--compile-task', '--mode', '--entry', '--out', '--out-dir', '--work-dir', '--image-resources', '--string-resources', '--font-resources', '--unsupported-policy', '--dependency-sources-file']);
   for (let i = 0; i < args.length; i++) {
     const key = args[i];
     if (!flags.has(key) && !options.has(key)) throw new Error(`Unknown project option: ${key}`);
@@ -62,6 +63,7 @@ export function parseOptions(args) {
     imageResources: get('image-resources') ? resolve(get('image-resources')) : undefined,
     stringResources: get('string-resources') ? resolve(get('string-resources')) : undefined,
     fontResources: get('font-resources') ? resolve(get('font-resources')) : undefined,
+    dependencySourcesFile: get('dependency-sources-file') ? resolve(get('dependency-sources-file')) : undefined,
     offline: !!get('offline'), collectOnly: !!get('collect-only') };
 }
 
@@ -107,6 +109,12 @@ export function main(args) {
   let stage = 'configuration';
   try {
     const options = parseOptions(args);
+    const dependencySources = options.dependencySourcesFile ?
+      [...new Set(readFileSync(options.dependencySourcesFile, 'utf8').split(/\r?\n/).filter(path => path.length))] : [];
+    for (const path of dependencySources) {
+      if (!isAbsolute(path) || /[\r\n]/.test(path) || !/\.(kt|java)$/.test(path) || !existsSync(path) || !statSync(path).isFile())
+        throw new Error(`Invalid dependency source path: ${path}`);
+    }
     if (!existsSync(join(options.project, 'gradlew'))) throw new Error(`Gradle wrapper missing: ${join(options.project, 'gradlew')}`);
     if (options.output) {
       try { lstatSync(options.output); throw new Error(`Refusing to overwrite existing target: ${options.output}`); }
@@ -124,9 +132,12 @@ export function main(args) {
     const classpath = join(workDir, 'classpath.txt');
     const sources = join(workDir, 'sources.txt');
     writeFileSync(classpath, inputs.classpath.join('\n') + '\n', { flag: 'wx' });
-    writeFileSync(sources, inputs.sources.join('\n') + '\n', { flag: 'wx' });
+    const combinedSources = [...new Set([...inputs.sources, ...dependencySources])];
+    writeFileSync(sources, combinedSources.join('\n') + '\n', { flag: 'wx' });
+    if (options.dependencySourcesFile) writeFileSync(join(workDir, 'dependency-sources.json'),
+      JSON.stringify({ input: options.dependencySourcesFile, sources: dependencySources }, null, 2), { flag: 'wx' });
     if (options.collectOnly) {
-      process.stdout.write(JSON.stringify({ ok: true, collectedOnly: true, inputs: manifest, sourceCount: inputs.sources.length, classpathCount: inputs.classpath.length }) + '\n');
+      process.stdout.write(JSON.stringify({ ok: true, collectedOnly: true, inputs: manifest, sourceCount: combinedSources.length, classpathCount: inputs.classpath.length }) + '\n');
       return 0;
     }
     stage = 'compiler-environment';

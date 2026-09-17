@@ -60,5 +60,58 @@ fun main() {
     val page = program().files.last().declarations.single() as EtsClass
     val build = page.members.filterIsInstance<EtsFunction>().single()
     rejectsEffects(EtsProgram(listOf(EtsFile("Reverse.kt", listOf(reverse, page.copy(members = listOf(field, build.copy(body = listOf(reverseCall)))))))))
+    val descriptor = etsClassSymbol("Descriptor", at).type as EtsNamedType
+    val input = EtsParameter(EtsSymbol("Descriptor:input", "value", string, at))
+    val stored = EtsField(EtsSymbol("Descriptor:value", "value", string, at), readonly = true)
+    val receiver = EtsReference(EtsSymbol("Descriptor:this", "this", descriptor, at, true))
+    val constructor = EtsFunction("constructor", listOf(input), EtsTypes.VOID, listOf(EtsExpressionStatement(
+        EtsAssignment(EtsMember(receiver, "value", string, at, stored.symbol.id), EtsReference(input.symbol), at))), at,
+        kind = EtsFunctionKind.CONSTRUCTOR)
+    val valueClass = EtsClass("Descriptor", listOf(stored, constructor), at, valueSnapshot = true)
+    val descriptorParameter = EtsParameter(EtsSymbol("Show:descriptor", "descriptor", descriptor, at))
+    val show = EtsFunction("Show", listOf(descriptorParameter), EtsTypes.VOID, listOf(ui("Text", listOf(
+        EtsMember(EtsReference(descriptorParameter.symbol), "value", string, at, stored.symbol.id)))), at, builder = true)
+    fun descriptorProgram(klass: EtsClass) = EtsProgram(listOf(EtsFile("Descriptor.kt", listOf(klass, show,
+        page.copy(members = listOf(field, build.copy(body = listOf(invoke(show, EtsNew(descriptor, listOf(state), at))))))))))
+    EtsValidator().validate(bindReactiveBuilderArguments(descriptorProgram(valueClass)))
+    rejectsEffects(descriptorProgram(valueClass.copy(valueSnapshot = false)))
+    rejectsEffects(descriptorProgram(valueClass.copy(members = listOf(stored.copy(readonly = false), constructor))))
+    rejectsEffects(descriptorProgram(valueClass.copy(members = listOf(stored, constructor.copy(body = constructor.body + EtsExpressionStatement(effect))))))
+    val pure = ordinary.copy(body = listOf(EtsReturn(EtsReference(ordinary.parameters.single().symbol), at)))
+    val pureInput = program(EtsCall(EtsReference(pure.symbol), listOf(state), string, at))
+    val pureProgram = pureInput.copy(files = pureInput.files.map { file -> file.copy(declarations = file.declarations.map {
+        if (it == ordinary) pure else it
+    }) })
+    EtsValidator().validate(bindReactiveBuilderArguments(pureProgram))
+    val effectful = pure.copy(body = listOf(EtsExpressionStatement(effect)) + pure.body)
+    rejectsEffects(pureProgram.copy(files = pureProgram.files.map { file -> file.copy(declarations = file.declarations.map {
+        if (it == pure) effectful else it
+    }) }))
+    val resourceType = EtsNamedType("Resource")
+    val resource = EtsCall(EtsReference(EtsSymbol("arkui:resource", "\$r",
+        EtsFunctionType(listOf(string), resourceType), at, true)), listOf(state), resourceType, at)
+    val resourceId = EtsMember(resource, "id", EtsTypes.NUMBER, at, "arkui:Resource.id")
+    val contextType = EtsNamedType("Context")
+    val context = EtsCall(EtsReference(EtsSymbol("arkui:getContext", "getContext", EtsFunctionType(emptyList(), contextType), at, true)),
+        emptyList(), contextType, at)
+    val manager = EtsMember(context, "resourceManager", EtsNamedType("ResourceManager"), at)
+    val readString = EtsCall(EtsMember(manager, "getStringSync", EtsFunctionType(listOf(EtsTypes.NUMBER), string), at,
+        "arkui:ResourceManager.getStringSync"), listOf(resourceId), string, at)
+    EtsValidator().validate(bindReactiveBuilderArguments(program(readString)))
+    rejectsEffects(program(readString.copy(callee = (readString.callee as EtsMember).copy(symbolId = null))))
+    val constantValue = EtsGlobal(EtsSymbol("constant", "constant", string, at), text("fixed"), false)
+    val mixed = EtsUiElement(EtsCall(EtsReference(reverse.symbol), listOf(state, EtsReference(constantValue.symbol)), EtsTypes.VOID, at))
+    fun constantProgram(global: EtsGlobal) = EtsProgram(listOf(EtsFile("Constants.kt", listOf(global, reverse,
+        page.copy(members = listOf(field, build.copy(body = listOf(mixed))))))))
+    EtsValidator().validate(bindReactiveBuilderArguments(constantProgram(constantValue)))
+    rejectsEffects(constantProgram(constantValue.copy(mutable = true)))
+    val fitType = EtsNamedType("ImageFit")
+    val fitParameter = other.copy(symbol = other.symbol.copy(type = fitType))
+    val fitBuilder = reverse.copy(parameters = listOf(parameter, fitParameter), body = listOf(
+        ui("Text", listOf(EtsReference(parameter.symbol))), ui("Image", listOf(EtsReference(fitParameter.symbol)))))
+    val fit = EtsMember(EtsReference(EtsSymbol("arkui:ImageFit", "ImageFit", fitType, at, true)), "Contain", fitType, at)
+    val fitCall = EtsUiElement(EtsCall(EtsReference(fitBuilder.symbol), listOf(state, fit), EtsTypes.VOID, at))
+    EtsValidator().validate(bindReactiveBuilderArguments(EtsProgram(listOf(EtsFile("Fit.kt", listOf(fitBuilder,
+        page.copy(members = listOf(field, build.copy(body = listOf(fitCall))))))))))
     println("PASS reactive builder forwarding, constant and ordinary-function stability, repeated/deferred rejection")
 }

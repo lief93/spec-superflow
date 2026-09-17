@@ -13,7 +13,7 @@ writeFileSync(join(work, 'classpath.txt'), cp.join('\n'));
 console.log(`Evidence: ${work}`);
 const pack = join(work, 'inputs');
 const materialize = spawnSync('python3', [join(root, 'string-resources.py'), '--res-dir', join(here, 'res'),
-  '--namespace', 'strings', '--out', pack], { encoding: 'utf8' });
+  '--namespace', 'strings', '--out', pack, '--symbols', join(here, 'R.txt')], { encoding: 'utf8' });
 assert.equal(materialize.status, 0, materialize.stderr);
 function compile(entry, expected) {
   const output = join(work, entry + '.ets');
@@ -38,5 +38,5 @@ assert.deepEqual(french.map(x => x.value).sort(), ['Sous-titre', 'Titre']);
 assert.deepEqual(base.map(x => x.name).sort(), french.map(x => x.name).sort());
 assert.match(compile('Missing', 2), /Unmapped string resource: strings.R.string.missing/);
 assert.match(compile('Styled', 2), /Unsupported string resource.*styled/);
-assert.match(compile('Formatted', 2), /Formatted stringResource/);
+assert.match(compile('Formatted', 0), /__etsFormatString/);
 console.log('PASS string-valued resource calls, referenced-only resource artifacts, variants and explicit unsupported cases');

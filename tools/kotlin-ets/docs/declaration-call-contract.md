@@ -285,10 +285,15 @@ Reproduce from repository root after producing successful host reports:
 
 ```sh
 node --test tools/kotlin-ets/tests/integration/r2-declarations-sdk.test.mjs
-node tools/kotlin-ets/tests/integration/r2-declarations-sdk.mjs <defaults-run> <constructors-run> <bridges-run> <variance-run> <binary-replay-run> --device <hdc-key>
+node tools/kotlin-ets/tests/integration/r2-declarations-sdk.mjs <defaults-run> <constructors-run> <bridges-run> <variance-run> <composition-run> <binary-replay-run> --device <hdc-key>
 ```
 
 Omitting `--device` proves SDK legality only. This joint corpus does not cover
 all earlier R2 dependency/language families, the remaining capture compositions,
 physical-device behavior or UI fidelity. It closes the separate-module/native
 evidence gap for these five families, not the entire R2 exit gate.
+
+The current runner also requires the six-scenario composition report introduced
+by 5005016, adding its unchanged module and 30 JVM results. Its required corpus
+is now 28 modules and 418 results. The earlier bmObZN evidence above remains a
+27-module/388-result historical result, not a claim that this enlarged gate ran.

@@ -1,6 +1,11 @@
 package dev.ets
 
 fun checkDeclarationVariance() {
+    val concreteArray = EtsNamedType("Array", listOf(EtsTypes.STRING))
+    val outputArray = EtsNamedType("Array", listOf(EtsCapturedType(EtsTypes.OBJECT, EtsTypes.NEVER)))
+    check(etsAssignable(concreteArray, outputArray))
+    check(!etsAssignable(outputArray, concreteArray))
+    check(!etsAssignable(concreteArray, EtsNamedType("Array", listOf(EtsCapturedType(EtsTypes.NUMBER, EtsTypes.NEVER)))))
     val at = SourceSpan("Variance.kt", 1, 2)
     val animal = EtsClass("Animal", emptyList(), at, kind = EtsClassKind.INTERFACE)
     val a = animal.symbol.type as EtsNamedType

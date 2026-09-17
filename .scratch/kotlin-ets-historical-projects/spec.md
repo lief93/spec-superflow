@@ -422,3 +422,42 @@ key equals/hashCode methods. Recompute dependencies after approved projections;
 do not prune arbitrary UI conditions or required model fields. Test public CLI
 rejection of unknown UI, positive approved projections and executable member
 reachability before replaying the unchanged historical Banking page.
+
+Forty-first requirement: translate verticalScroll/horizontalScroll into native
+ArkUI Scroll at the same ordered Modifier boundary. Preserve stable conditional
+Modifier branches instead of specializing them to the preview state. Support
+zero-initialized rememberScrollState used exclusively by a scroll modifier and
+the enabled argument; unsupported state reads, nonzero initial offsets, reverse
+scrolling and custom fling behavior must remain explicit diagnostics. Verify
+generated code, SDK compilation and native scrolling. Separately implement
+BoxWithConstraints using real parent constraints and reactive content updates;
+do not substitute display bounds, zero values or a plain Box to unblock a page.
+
+Forty-second requirement: preserve an empty pointerInput handler's sibling hit
+testing using native HitTestMode.Default. Keep descendants interactive; do not
+disable the entire overlay or discard the modifier. Nonempty handlers and keys
+with unsupported evaluation effects remain explicit diagnostics. Verify through
+the public CLI, SDK compilation and native interaction with overlapping controls.
+
+Forty-third requirement: preserve Int string resource IDs through ordinary
+objects and methods using the selected Android build's R.txt mapping. Support
+stringResource formatting with string/number arguments via the native resource
+manager, including spread arrays and empty arrays. Materialize simple %s/%d and
+indexed variants; unsupported resource syntax stays diagnostic. Verify native
+formatted text and unformatted fallback, without modifying generated ETS.
+
+Forty-fourth requirement: permit explicit offline dependency source inputs in
+project mode, preserving the Gradle manifest and recording the merged source list.
+Translate reusable pure Kotlin library models through the language backend rather
+than deleting their fields or fabricating platform adapters. Support named object
+implementations of source interfaces with existing singleton identity and generic
+variance semantics. Verify JVM/ETS dispatch and identity, then replay Banking with
+the unchanged upstream compose-state-events 2.1.0 model source.
+
+Forty-fifth requirement: preserve framework value descriptors across reactive
+Builder boundaries. Permit explicitly identity-independent, readonly adapter
+snapshots only after checking their constructors; prove simple value helper
+bodies rather than accepting arbitrary calls. Preserve known native enum and
+string-resource reads; continue rejecting unknown calls, side effects and ordinary
+object allocations. Map FontFamily.Default through ordinary methods and text
+styles to the existing target system default without requiring a font file.

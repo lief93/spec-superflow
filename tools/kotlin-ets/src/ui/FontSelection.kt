@@ -77,7 +77,11 @@ private fun fontRegistrationFunction(): EtsFunction {
     val options = EtsObject(linkedMapOf("familyName" to name, "familySrc" to resource), optionsType, at)
     val api = EtsReference(EtsSymbol("arkui:font-api", "__etsFontApi", EtsNamedType("FontApi", external = true), at, true))
     val register = EtsCall(EtsMember(api, "registerFont", EtsFunctionType(listOf(optionsType), EtsTypes.VOID), at), listOf(options), EtsTypes.VOID, at)
+    val fonts = EtsMember(EtsReference(parameters[0].symbol), "fonts", fontFacesType, at)
+    val isDefault = EtsBinary("===", EtsMember(fonts, "length", EtsTypes.NUMBER, at),
+        EtsLiteral(0, EtsTypes.NUMBER, at), EtsTypes.BOOLEAN, at)
     return EtsFunction("__etsFontFamilyName", parameters, EtsTypes.STRING, listOf(
+        EtsIf(listOf(EtsBranch(isDefault, listOf(EtsReturn(EtsLiteral("HarmonyOS Sans", EtsTypes.STRING, at), at)))), at),
         EtsVariable(font, EtsCall(EtsReference(selectFont.symbol), parameters.map { EtsReference(it.symbol) }, fontFaceType, at), false),
         EtsExpressionStatement(register), EtsReturn(name, at)), at, exported = true)
 }

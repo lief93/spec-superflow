@@ -14,7 +14,7 @@ internal class ComposeFontRule(private val resources: FontResources) : CallRule 
         if (sourceFile(owner) != null) return null
         return when (symbolName(owner)) {
             prefix + "Font", prefix + "ResourceFont" -> fontFaceType
-            prefix + "FontFamily", prefix + "FontListFontFamily" -> fontFamilyType
+            prefix + "FontFamily", prefix + "FontListFontFamily", prefix + "SystemFontFamily" -> fontFamilyType
             prefix + "FontWeight", prefix + "FontStyle" -> EtsTypes.NUMBER
             else -> null
         }
@@ -56,6 +56,9 @@ internal class ComposeFontRule(private val resources: FontResources) : CallRule 
         val parent = property.parent as? IrClass ?: return null
         val parentName = symbolName(parent)
         val propertyName = property.name.asString()
+        if (parentName == prefix + "FontFamily.Companion" && propertyName == "Default") {
+            return EtsNew(fontFamilyType, listOf(EtsArray(emptyList(), fontFaceType, at)), at)
+        }
         if (parentName == prefix + "FontWeight.Companion") {
             val weight = mapOf("Thin" to 100, "ExtraLight" to 200, "Light" to 300, "Normal" to 400,
                 "Medium" to 500, "SemiBold" to 600, "Bold" to 700, "ExtraBold" to 800, "Black" to 900)[propertyName]

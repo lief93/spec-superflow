@@ -39,12 +39,15 @@ run('compile', 'bash', [join(root, 'kotlin-ets'), '--mode', 'page', '--entry', '
 const source = readFileSync(out, 'utf8');
 assert.match(source, /retained\(2131230721\)/);
 assert.match(source, /function icon\(id: number\)/);
+assert.match(source, /function selectedScale\(crop: boolean\): ImageFit/);
 const parsed = ts.createSourceFile('page.ts', source.replace('export struct Page', 'export class Page'), ts.ScriptTarget.ES2022, true);
 const ordinary = parsed.statements.filter(node => !ts.isImportDeclaration(node) && !(ts.isClassDeclaration(node) && node.name?.text === 'Page'))
   .map(node => node.getFullText(parsed)).join('\n');
-const context = vm.createContext({ exports: {}, $r: key => ({ key }) });
+const context = vm.createContext({ exports: {}, $r: key => ({ key }), ImageFit: { Contain: 1, Cover: 2 } });
 vm.runInContext(ts.transpileModule(ordinary, { compilerOptions: { target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.CommonJS } }).outputText, context);
+assert.equal(context.exports.selectedScale(true), 2);
+assert.equal(context.exports.selectedScale(false), 1);
 for (const id of [0x7f080001, 0x7f080002]) {
   assert.equal(context.exports.retained(id), id);
   assert.match(context.exports.icon(id).key, /^app.media.img_[0-9a-f]{64}$/);

@@ -9,6 +9,38 @@ import { parseOptions, readInputs, gradleArguments } from '../../project.mjs';
 
 const launcher = fileURLToPath(new URL('../../kotlin-ets', import.meta.url));
 
+test('project collection merges explicitly supplied dependency sources without changing Gradle inputs', () => {
+  const project = mkdtempSync(join(tmpdir(), 'kotlin-ets-dependency-sources-'));
+  const source = join(project, 'App.kt');
+  const library = join(project, 'Library.kt');
+  const jar = join(project, 'library.jar');
+  for (const path of [source, library, jar]) writeFileSync(path, 'fixture');
+  const manifest = { schemaVersion: 1, sources: [source], classpath: [jar] };
+  writeFileSync(join(project, 'gradlew'), `#!/usr/bin/env bash\nfor arg in "$@"; do\n  case "$arg" in\n    -PkotlinEtsInputsOutput=*) printf '%s' '${JSON.stringify(manifest)}' > "\${arg#*=}" ;;\n  esac\ndone\n`);
+  const list = join(project, 'dependency sources.txt');
+  writeFileSync(list, `${library}\n${source}\n${library}\n`);
+  const result = spawnSync('bash', [launcher, '--project', project, '--module', ':', '--compile-task', 'compileKotlin',
+    '--collect-only', '--dependency-sources-file', list], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.sourceCount, 2);
+  assert.deepEqual(JSON.parse(readFileSync(output.inputs)), manifest);
+  assert.equal(readFileSync(join(output.inputs, '..', 'sources.txt'), 'utf8'), `${source}\n${library}\n`);
+});
+
+test('dependency sources reject missing or non-source entries before Gradle executes', () => {
+  const project = mkdtempSync(join(tmpdir(), 'kotlin-ets-invalid-dependency-'));
+  writeFileSync(join(project, 'gradlew'), '#!/usr/bin/env bash\nexit 99\n');
+  const list = join(project, 'sources.txt');
+  writeFileSync(list, `${join(project, 'missing.kt')}\n`);
+  const result = spawnSync('bash', [launcher, '--project', project, '--module', ':', '--compile-task', 'compileKotlin',
+    '--collect-only', '--dependency-sources-file', list], { encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  const diagnostic = JSON.parse(result.stdout);
+  assert.equal(diagnostic.stage, 'configuration');
+  assert.match(diagnostic.message, /missing\.kt/);
+});
+
 test('page policy defaults to report, language stays strict and explicit strict is retained', () => {
   const base = ['--project', '/tmp/p', '--module', ':app', '--variant', 'debug',
     '--entry', 'sample.Page', '--out', '/tmp/Page.ets'];

@@ -101,10 +101,20 @@ HTTP server, native SVG decoding, placeholder pixel checks and a button-triggere
 request change. Lifecycle arithmetic is separately tested from emitted methods.
 The reactive Builder lowering uses ArkUI API 20 `Binding`/`UIUtils.makeBinding`
 for state-dependent single-immediate-consumer argument chains of repeatable
-values. Source calls, allocations and mutable non-observed reads in these
-arguments reject rather than moving their evaluation into a getter. Repeated or
+values. Calls not proven repeatable, ordinary allocations and mutable non-observed
+reads reject rather than moving their evaluation into a getter. Repeated or
 deferred consumption is also explicitly rejected until a composition boundary can
 preserve evaluation semantics; it is not silently copied into multiple getters.
+
+An adapter may mark an immutable target descriptor class `valueSnapshot = true`
+when allocation identity is not part of its mapped semantics. Binding conversion
+also checks that its constructor only assigns parameters to readonly instance
+fields, with no base constructor or other effects. Only such descriptor
+allocations with repeatable arguments may be reconstructed. This does not make
+source business objects, arbitrary constructors or callback factories repeatable.
+Single-return ordinary helpers are checked recursively using their typed bodies
+and parameter bindings. Arithmetic, readonly projections and value records can be
+accepted; calls with statement effects, recursion or unknown implementations cannot.
 
 Latest evidence (2026-09-14):
 

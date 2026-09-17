@@ -1,0 +1,5 @@
+int string title 0x00000001
+int string subtitle 0x00000002
+int string missing 0x00000003
+int string styled 0x00000004
+int string greeting 0x00000005

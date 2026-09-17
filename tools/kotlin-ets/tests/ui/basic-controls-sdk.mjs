@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cpSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'node:fs';
+import { cpSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -26,6 +26,9 @@ const output = join(ets, 'pages/Index.ets');
 copyFileSync(input, output);
 copyFileSync(join(here, '../language/SdkEntryAbility.ets'), join(ets, 'entryability/EntryAbility.ets'));
 writeFileSync(join(host, 'entry/src/main/resources/base/profile/main_pages.json'), JSON.stringify({ src: ['pages/Index'] }));
+if (existsSync(input + '.resources')) {
+  cpSync(input + '.resources', join(host, 'entry/src/main/resources'), { recursive: true });
+}
 if (process.argv[3]) {
   const media = resolve(process.argv[3]);
   const destination = join(host, 'entry/src/main/resources/base/media');

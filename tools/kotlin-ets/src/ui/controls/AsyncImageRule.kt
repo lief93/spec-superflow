@@ -20,10 +20,10 @@ internal class ComposeAsyncImageRule(
                 target.diagnostics.unsupported(model, "AsyncImage requires an HTTP(S) URL without embedded credentials")
         }
         val attrs = imageDescription(call, language, scope, target).toMutableList()
-        val scale = argument(call, "contentScale")?.let { imageScale(it, scope, target) } ?: "Contain"
+        val scale = argument(call, "contentScale")?.let { language.expression(it, scope) } ?: target.enumValue("ImageFit", "Contain", call)
         argument(call, "alpha")?.let { attrs += target.attribute("opacity", listOf(language.expression(it, scope)), call) }
         if (address != null && argument(call, "placeholder") == null) {
-            attrs += target.attribute("objectFit", listOf(target.enumValue("ImageFit", scale, call)), call)
+            attrs += target.attribute("objectFit", listOf(scale), call)
             return ComposeElement(target.native("Image", listOf(target.literal(address, model)), call).copy(attributes = attrs))
         }
         val at = language.source(call)
@@ -37,7 +37,7 @@ internal class ComposeAsyncImageRule(
         if (!etsAssignable(placeholder.type, EtsNullableType(ImageResources.RESOURCE)))
             target.diagnostics.unsupported(call, "AsyncImage placeholder requires a supported resource Painter or null")
         val child = EtsUiComponent(EtsReference(asyncImageSymbol, at), linkedMapOf(
-            "request" to request, "placeholder" to placeholder, "fit" to target.enumValue("ImageFit", scale, call)), at)
+            "request" to request, "placeholder" to placeholder, "fit" to scale), at)
         return ComposeElement(target.native("Stack", listOf(target.stackOptions(call)), call, listOf(child)).copy(attributes = attrs),
             orderedArguments = listOf(request, placeholder), requiresBoundedSize = true)
     }

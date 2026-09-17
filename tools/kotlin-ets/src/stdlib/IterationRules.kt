@@ -118,7 +118,7 @@ private fun IrType.element(): IrType? = when (className()) {
             .firstOrNull { it.name.asString() == if (className() == "kotlin.IntArray") "get" else "nextInt" }?.returnType
     }
     in arrayTypes + listTypes + iteratorTypes -> ((this as IrSimpleType).arguments.singleOrNull() as? IrTypeProjection)
-        ?.takeIf { it.variance == Variance.INVARIANT }?.type
+        ?.takeIf { it.variance != Variance.IN_VARIANCE }?.type
     else -> null
 }
 
@@ -133,9 +133,13 @@ private fun resolvedSignature(call: IrCall): Boolean {
         owner.valueParameters.any { it.defaultValue != null } ||
         (0 until call.typeArgumentsCount).any { call.getTypeArgument(it) == null }) return false
     val receiver = call.dispatchReceiver
+    val projectedArrayRead = symbolName(owner) in arrayGets + arraySizes &&
+        receiver?.type.className() == "kotlin.Array" &&
+        ((receiver?.type as? IrSimpleType)?.arguments?.singleOrNull() as? IrTypeProjection)?.variance == Variance.OUT_VARIANCE
     if (receiver != null) {
         val type = receiver.type as? IrSimpleType ?: return false
-        if (type.isNullable() || type.arguments.any { it !is IrTypeProjection || it.variance != Variance.INVARIANT }) return false
+        if (type.isNullable() || type.arguments.any { it !is IrTypeProjection ||
+                it.variance != Variance.INVARIANT && !projectedArrayRead }) return false
         val parent = owner.parent as? IrClass ?: return false
         if (type.arguments.size != parent.typeParameters.size) return false
         val parentName = parent.fqNameWhenAvailable?.asString()
@@ -148,7 +152,8 @@ private fun resolvedSignature(call: IrCall): Boolean {
     if (substitutor.substitute(owner.returnType) != call.type) return false
     if (receiver != null) {
         val declared = substitutor.substitute(owner.dispatchReceiverParameter!!.type)
-        if (receiver.type != declared && !inheritedReceiver(receiver.type, declared, owner.isFakeOverride)) return false
+        if (receiver.type != declared && !inheritedReceiver(receiver.type, declared, owner.isFakeOverride) &&
+            !(projectedArrayRead && declared.className() == "kotlin.Array" && receiver.type.element() == declared.element())) return false
     }
     val extension = call.extensionReceiver
     if (extension != null) {

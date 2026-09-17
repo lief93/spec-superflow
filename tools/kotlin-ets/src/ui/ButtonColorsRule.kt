@@ -96,7 +96,7 @@ internal class ComposeButtonColorsRule : CallRule {
             val body = fields.zip(params).map { (f, p) -> EtsExpressionStatement(EtsAssignment(
                 EtsMember(self, f.symbol.name, f.symbol.type, at, f.symbol.id), EtsReference(p.symbol), at)) }
             declarations += EtsClass(buttonColorsType.name, fields + EtsFunction("constructor", params, EtsTypes.VOID,
-                body, at, kind = EtsFunctionKind.CONSTRUCTOR), at, exported = true)
+                body, at, kind = EtsFunctionKind.CONSTRUCTOR), at, exported = true, valueSnapshot = true)
         }
         if (defaults) {
             declarations += EtsClass(defaultsType.name, listOf(EtsFunction("constructor", emptyList(), EtsTypes.VOID,

@@ -143,6 +143,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
     }
 
     override fun expression(expression: IrExpression, scope: Scope): EtsExpression = withElement(expression) { when (expression) {
+        is IrVararg -> lowerVararg(expression, this, scope)
         is IrConst -> constant(expression)
         is IrGetEnumValue -> enumEntryReference(expression.symbol.owner, this, source(expression))
         is IrGetValue -> scope.bindings[expression.symbol]
@@ -754,7 +755,7 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         }
         val base = parentClasses.filter { it.kind != ClassKind.INTERFACE }.singleOrNull()
         if (parentClasses.count { it.kind != ClassKind.INTERFACE } > 1 ||
-            (isInterface && base != null) || (singleton && parents.isNotEmpty())) {
+            (isInterface && base != null) || (singleton && base != null)) {
             diagnostics.unsupported(declaration, "Unsupported class inheritance shape")
         }
         val baseType = parents.singleOrNull { it.classOrNull?.owner == base }?.let { type(it) as EtsNamedType }

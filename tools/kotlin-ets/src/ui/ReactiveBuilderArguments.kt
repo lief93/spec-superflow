@@ -17,51 +17,112 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
         else -> null
     }
     val bound = linkedMapOf<String, EtsParameter>()
+    val reactiveInputs = builders.values.flatMap { it.parameters }.filter { it.reactiveInput }.map { it.symbol.id }.toSet()
+    val nativeBound = mutableSetOf<String>()
+    fun nativeDependent(value: EtsExpression): Boolean {
+        var result = false
+        walkEts(value) { if (it is EtsReference && (it.symbol.id in reactiveInputs || it.symbol.id in nativeBound)) result = true }
+        return result
+    }
     fun dependent(value: EtsExpression): Boolean {
         var result = false
         walkEts(value) {
-            if (it is EtsReference && it.symbol.id in bound) result = true
+            if (it is EtsReference && (it.symbol.id in bound || it.symbol.id in reactiveInputs)) result = true
             if (it is EtsMember && (it.receiver.type as? EtsNamedType)?.symbolId to it.name in states) result = true
         }
         return result
     }
     do {
-        val count = bound.size
+        val count = bound.size + nativeBound.size
         program.files.forEach { file -> file.declarations.forEach { declaration -> walkEts(declaration) { node ->
-            if (node is EtsUiElement) builders[id(node.call)]?.parameters?.zip(node.call.arguments)?.forEach { (parameter, argument) ->
+            if (node is EtsCall) builders[id(node)]?.parameters?.zip(node.arguments)?.forEach { (parameter, argument) ->
                 if (parameter.symbol.type !is EtsFunctionType && dependent(argument)) bound[parameter.symbol.id] = parameter
+                if (parameter.symbol.type !is EtsFunctionType && nativeDependent(argument)) nativeBound += parameter.symbol.id
             }
         } } }
-    } while (count != bound.size)
+    } while (count != bound.size + nativeBound.size)
     if (bound.isEmpty()) return program
     val parameters = builders.values.flatMap { it.parameters }.map { it.symbol.id }.toSet()
     val fields = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>().flatMap { owner ->
         owner.members.filterIsInstance<EtsField>().map { (owner.symbol.id to it.symbol.name) to it }
     }.toMap()
+    val snapshots = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>()
+        .filter { it.valueSnapshot && snapshotConstructor(it) }.map { it.symbol.id }.toSet()
+    val valueFunctions = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>()
+        .filter { !it.builder && it.body.singleOrNull() is EtsReturn }.associateBy { it.symbol.id }
+    val valueParameters = mutableSetOf<String>()
+    val checkingFunctions = mutableSetOf<String>()
+    val constants = program.files.flatMap { it.declarations }.filterIsInstance<EtsGlobal>()
+        .filter { !it.mutable }.map { it.symbol.id }.toSet()
     // Binding getters may run zero or many times. A single source reference does
     // not make calls or allocations safe to defer across a composition boundary.
     fun repeatable(value: EtsExpression): Boolean = when (value) {
         is EtsLiteral, is EtsUndefined, is EtsLambda -> true
-        is EtsReference -> value.symbol.id in parameters
+        is EtsReference -> value.symbol.id in parameters || value.symbol.id in valueParameters || value.symbol.id in constants
         is EtsMember -> {
             val field = fields[(value.receiver.type as? EtsNamedType)?.symbolId to value.name]
-            field != null && (field.state || field.prop || field.readonly) &&
+            val native = (value.receiver as? EtsReference)?.symbol
+            val enum = (value.type as? EtsNamedType)?.name
+            val constant = enum in setOf("ImageFit", "Alignment", "HorizontalAlign", "VerticalAlign", "FlexAlign",
+                "TextAlign", "TextOverflow", "TextDecorationType", "FontStyle", "ButtonType", "HitTestMode", "ScrollDirection") &&
+                native?.external == true && native.id == "arkui:$enum" && native.type == value.type
+            if (constant) true
+            else if (value.symbolId == "arkui:Resource.id") repeatable(value.receiver)
+            else if ((value.receiver.type as? EtsNamedType)?.name == "Binding" && value.name == "value") repeatable(value.receiver)
+            else field != null && (field.state || field.prop || field.readonly) &&
                 ((value.receiver as? EtsReference)?.symbol?.name == "this" || repeatable(value.receiver))
         }
         is EtsBinary -> repeatable(value.left) && repeatable(value.right)
         is EtsUnary -> repeatable(value.operand)
         is EtsConditional -> repeatable(value.condition) && repeatable(value.whenTrue) && repeatable(value.whenFalse)
         is EtsCast -> repeatable(value.value)
-        is EtsCall -> (value.callee as? EtsReference)?.symbol?.id == "arkui:resource" && value.arguments.all(::repeatable)
+        is EtsNew -> value.classType.symbolId in snapshots && value.arguments.all(::repeatable)
+        is EtsObject -> value.fields.values.all(::repeatable)
+        is EtsCall -> {
+            val member = value.callee as? EtsMember
+            val math = (member?.receiver as? EtsReference)?.symbol?.id == "stdlib:Math" &&
+                member?.name in setOf("trunc", "min", "max", "fround")
+            val functionId = (value.callee as? EtsReference)?.symbol?.id
+            val function = valueFunctions[functionId]
+            val manager = member?.receiver as? EtsMember
+            val context = manager?.receiver as? EtsCall
+            val resourceRead = member?.symbolId == "arkui:ResourceManager.getStringSync" &&
+                manager?.name == "resourceManager" && (context?.callee as? EtsReference)?.symbol?.id == "arkui:getContext" &&
+                context.arguments.isEmpty()
+            if (functionId == "arkui:resource" || math || resourceRead) value.arguments.all(::repeatable)
+            else if (function != null && function.parameters.size == value.arguments.size &&
+                value.arguments.all(::repeatable) && checkingFunctions.add(function.symbol.id)) {
+                val ids = function.parameters.map { it.symbol.id }
+                valueParameters.addAll(ids)
+                try {
+                    (function.body.single() as EtsReturn).value?.let(::repeatable) == true
+                } finally {
+                    valueParameters.removeAll(ids.toSet())
+                    checkingFunctions.remove(function.symbol.id)
+                }
+            } else false
+        }
         else -> false
     }
     program.files.forEach { file -> file.declarations.forEach { declaration -> walkEts(declaration) { node ->
-        if (node is EtsUiElement) {
-            val parameters = builders[id(node.call)]?.parameters.orEmpty()
-            if (parameters.any { it.symbol.id in bound }) node.call.arguments.forEach { argument ->
+        if (node is EtsCall) {
+            val parameters = builders[id(node)]?.parameters.orEmpty()
+            if (parameters.any { it.symbol.id in bound }) node.arguments.forEachIndexed { index, argument ->
                 if (!repeatable(argument)) throw Unsupported(Diagnostic("UNSUPPORTED",
-                    "Reactive builder arguments require repeatable values; calls, allocations and mutable reads need an evaluation-preserving composition boundary", argument.source))
+                    "Reactive builder arguments require repeatable values; calls, allocations and mutable reads need an evaluation-preserving composition boundary: " +
+                        "${parameters[index].symbol.name} (${argument::class.simpleName}, reactive=${parameters[index].symbol.id in bound})", argument.source))
             }
+        }
+    } } }
+    // A WrappedBuilder bridge forwards a Binding; it does not execute its getter.
+    // Ordinary callbacks/loops still cannot defer a source argument this way.
+    val forwardingSlots = mutableSetOf<EtsLambda>()
+    program.files.forEach { file -> file.declarations.forEach { declaration -> walkEts(declaration) { node ->
+        if (node is EtsNew && node.classType.name == "WrappedBuilder") {
+            val lambda = node.arguments.singleOrNull() as? EtsLambda
+            val statement = lambda?.body?.singleOrNull() as? EtsExpressionStatement
+            val call = statement?.expression as? EtsCall
+            if (lambda != null && call != null && id(call) in builders && call.arguments.all(::repeatable)) forwardingSlots += lambda
         }
     } } }
     // Do not turn a once-evaluated source argument into multiple lazy executions.
@@ -73,17 +134,39 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
             val delayed = when (node) {
                 is EtsUiForEach -> node.body
                 is EtsLoop -> node.body
-                is EtsLambda -> node.body
+                is EtsLambda -> if (node in forwardingSlots) emptyList() else node.body
                 else -> emptyList()
             }
             delayed.forEach { body -> walkEts(body) { if (it is EtsReference && it.symbol.id == parameter.symbol.id) repeated = true } }
         } }
-        if (reads != 1 || repeated) throw Unsupported(Diagnostic("UNSUPPORTED",
+        // Native builder inputs are immutable snapshots for one update. Their
+        // repeatable projections may feed several immediate UI attributes.
+        if ((reads != 1 && parameter.symbol.id !in nativeBound) || repeated) throw Unsupported(Diagnostic("UNSUPPORTED",
             "Reactive builder parameter requires a single immediate consumer; shared/repeated evaluation needs a composition boundary: ${parameter.symbol.name}", parameter.symbol.source))
     } }
     val rewrite = ReactiveBuilderRewriter(builders, bound)
     return program.copy(files = program.files.map { it.copy(declarations = it.declarations.map(rewrite::declaration)) },
         imports = (program.imports + listOf(EtsImport("@kit.ArkUI", "Binding"), EtsImport("@kit.ArkUI", "UIUtils"))).distinct())
+}
+
+/** Only adapter-declared value descriptors may lose allocation identity. Verify
+ * that construction merely stores arguments in readonly instance fields. */
+private fun snapshotConstructor(owner: EtsClass): Boolean {
+    if (owner.baseClass != null || owner.component) return false
+    val fields = owner.members.filterIsInstance<EtsField>()
+    if (fields.any { !it.readonly || it.static || it.initializer != null }) return false
+    val constructor = owner.members.filterIsInstance<EtsFunction>().singleOrNull { it.kind == EtsFunctionKind.CONSTRUCTOR } ?: return false
+    if (constructor.parameters.any { it.defaultValue != null } || constructor.body.size != fields.size) return false
+    val assigned = mutableSetOf<String>()
+    return constructor.body.all { statement ->
+        val write = (statement as? EtsExpressionStatement)?.expression as? EtsAssignment ?: return@all false
+        val field = write.target as? EtsMember ?: return@all false
+        val receiver = field.receiver as? EtsReference ?: return@all false
+        val value = write.value as? EtsReference ?: return@all false
+        receiver.symbol.name == "this" && receiver.type == owner.symbol.type &&
+            field.name in fields.map { it.symbol.name } && assigned.add(field.name) &&
+            value.symbol.id in constructor.parameters.map { it.symbol.id }
+    }
 }
 
 private class ReactiveBuilderRewriter(private val builders: Map<String, EtsFunction>, private val bound: Map<String, EtsParameter>) {
