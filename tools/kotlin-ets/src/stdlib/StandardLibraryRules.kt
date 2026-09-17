@@ -196,6 +196,23 @@ class StandardLibraryRules : CallRule {
             }
             return EtsArray(elements.map { lower(it) }, language.type(elementType), source)
         }
+        if (name in setOf("kotlin.collections.List", "kotlin.collections.MutableList") && receiver == null) {
+            // Standard-library inline factories List(size, init) / MutableList(size, init).
+            // Their binary metadata carries no serialized IR, so they must be lowered here
+            // instead of inlined; semantics are a fixed-size array filled by init(index).
+            val resultClass = name
+            if (!call.type.isExactly(resultClass) || call.typeArgumentsCount != 1) return null
+            val elementType = call.getTypeArgument(0) ?: return null
+            if (call.type.listElement() != elementType) return null
+            if (args.size != 2 || args[0]?.type.isExactly("kotlin.Int") != true) return null
+            val initType = (args[1] ?: return null).type.invariantArguments("kotlin.Function1") ?: return null
+            if (initType.size != 2 || !initType[0].isExactly("kotlin.Int") || initType[1] != elementType) return null
+            val targetElement = language.type(elementType)
+            val result = EtsNamedType("Array", listOf(targetElement))
+            return external("__etsListFactory",
+                listOf(EtsTypes.NUMBER, EtsFunctionType(listOf(EtsTypes.NUMBER), targetElement)),
+                result, listOf(arg(0), arg(1)), listOf(targetElement))
+        }
         if (name in setOf("kotlin.collections.filter", "kotlin.collections.filterNot")) {
             val element = predicateElement(call, "kotlin.collections.List") ?: return null
             val targetElement = language.type(element)
