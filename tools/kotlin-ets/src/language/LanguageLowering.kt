@@ -587,7 +587,8 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
         }
         val operand = expression(value.argument, scope)
         return when (value.operator) {
-            IrTypeOperator.IMPLICIT_CAST, IrTypeOperator.IMPLICIT_NOTNULL -> EtsCast(operand, type(value.typeOperand), source(value))
+            IrTypeOperator.IMPLICIT_CAST -> implicitCast(operand, value)
+            IrTypeOperator.IMPLICIT_NOTNULL -> EtsCast(operand, type(value.typeOperand), source(value))
             IrTypeOperator.IMPLICIT_COERCION_TO_UNIT -> discard(operand, value)
             IrTypeOperator.INSTANCEOF, IrTypeOperator.NOT_INSTANCEOF, IrTypeOperator.SAFE_CAST, IrTypeOperator.CAST -> {
                 val temporary = synthetic(freshName("__etsCast", scope), operand.type, value)
@@ -631,6 +632,22 @@ class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, p
             }
             else -> diagnostics.unsupported(value, "Unsupported type operator: ${value.operator}")
         }
+    }
+
+    /**
+     * ArkTS (10505001) rejects a direct assertion between two named types, so the
+     * `this as Derived` assertion Kotlin emits for a smart-cast subject does not
+     * compile even though the types are related. The checked-cast path below
+     * already asserts through `Object` for the same reason; an implicit cast needs
+     * the same bridge. Assertions are erased at run time, so this neither adds nor
+     * reorders any evaluation and keeps the promoted subject's single evaluation.
+     */
+    private fun implicitCast(operand: EtsExpression, value: IrTypeOperatorCall): EtsCast {
+        val target = type(value.typeOperand)
+        val declaredSource = operand.type as? EtsNamedType
+        return if (declaredSource?.symbolId != null && target is EtsNamedType)
+            EtsCast(EtsCast(operand, EtsTypes.OBJECT, source(value)), target, source(value))
+        else EtsCast(operand, target, source(value))
     }
 
     override fun function(function: IrSimpleFunction, scope: Scope): EtsFunction = withFile(function) {
