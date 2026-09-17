@@ -42,6 +42,14 @@ internal object MapSetRules : CallRule {
         val resultName = name(call.type)
         if (symbol == "kotlin.to" && resultName == "kotlin.Pair" && receiver != null && call.valueArgumentsCount == 1)
             return EtsNew(language.type(call.type) as EtsNamedType, listOf(lower(receiver)) + (args() ?: return null), at)
+        if (symbol == "kotlin.collections.toSet" && receiver != null && call.valueArgumentsCount == 0 && resultName in sets) {
+            val receiverName = name(receiver.type)
+            if (receiverName !in setOf("kotlin.collections.List", "kotlin.collections.MutableList",
+                    "kotlin.collections.Iterable", "kotlin.collections.Collection")) return null
+            val elementType = ((receiver.type as IrSimpleType).arguments.singleOrNull() as? IrTypeProjection)?.type ?: return null
+            val strategy = keyStrategy(elementType, language, scope, at)
+            return EtsNew(language.type(call.type) as EtsNamedType, strategy + listOf(lower(receiver)), at)
+        }
         val factories = setOf("kotlin.collections.mapOf", "kotlin.collections.mutableMapOf", "kotlin.collections.emptyMap",
             "kotlin.collections.setOf", "kotlin.collections.mutableSetOf", "kotlin.collections.emptySet")
         if (symbol in factories && receiver == null && resultName in maps + sets) {

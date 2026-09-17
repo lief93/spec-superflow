@@ -35,6 +35,7 @@ fun observations(): List<String> {
     val nulls = setOf<Int?>(null, 1, null)
     val factory = List(3) { it * 2 }
     val factoryMutable = MutableList(2) { "x" + it.toString() }
+    val toSetResult = setOrder(listOf(1, 2, 2, 3).toSet())
     return listOf(before, "$previous:$present", traversal, "$removed:${order(data)}:$starts",
         "$collisionBefore:${collisions[Collision(2)]}:${collisions.size}",
         "${keys.size}:$duplicate:$keyRemoved:${keys.contains(Key(1, "a"))}",
@@ -44,5 +45,6 @@ fun observations(): List<String> {
         "$sequence:${empty.isEmpty()}:${mapOf<Int, String>().isEmpty()}",
         "${pairs["pair"]}:$starts:${pairs.containsValue(4)}:${pairs.containsValue(null)}",
         "${members.size}:${members.contains(Collision(2))}:${scalars.size}:${scalars.contains(-0.0)}:${chars.size}:${nulls.size}",
-        "${factory.size}:${factory[0]}:${factory[1]}:${factory[2]}:${factoryMutable[0]}:${factoryMutable[1]}")
+        "${factory.size}:${factory[0]}:${factory[1]}:${factory[2]}:${factoryMutable[0]}:${factoryMutable[1]}",
+        "$toSetResult")
 }
