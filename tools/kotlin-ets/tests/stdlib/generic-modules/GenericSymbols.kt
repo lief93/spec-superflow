@@ -123,9 +123,9 @@ fun main(args: Array<String>) {
                 { owner.extensionReceiverParameter!!.type = declaredReceiver })
             reject("source origin", { owner.origin = IrDeclarationOrigin.DEFINED }, { owner.origin = origin })
         }
-        check(accepted == 7 && rejected == 7 && mutations == 17) { "$accepted accepted, $rejected rejected, $mutations mutations" }
+        check(accepted == 8 && rejected == 6 && mutations == 34) { "$accepted accepted, $rejected rejected, $mutations mutations" }
         check(leaked.isEmpty()) { "Malformed actual map signatures accepted: $leaked" }
-        println("PASS 7 generic actual APIs, 7 unsupported boundaries, 17 map signature mutations; exact generic runtime identity/closure")
+        println("PASS 8 generic actual APIs, 6 unsupported boundaries, 34 map signature mutations; exact generic runtime identity/closure")
     } finally { messages.flush(); Disposer.dispose(disposable) }
 }
 

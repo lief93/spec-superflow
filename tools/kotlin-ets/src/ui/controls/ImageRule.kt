@@ -9,12 +9,13 @@ internal class ComposeImageRule(
 ) : ComposeControlRule(decorate) {
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         if (symbolName(call.symbol.owner) != "androidx.compose.foundation.Image") return null
-        target.checkArguments(call, setOf("painter", "contentDescription", "modifier", "contentScale", "alpha"))
+        target.checkArguments(call, setOf("painter", "contentDescription", "modifier", "contentScale", "alpha", "colorFilter"))
         val painter = argument(call, "painter") ?: target.diagnostics.unsupported(call, "Image requires supported Painter overload")
         val attrs = imageDescription(call, language, scope, target).toMutableList()
         val scale = argument(call, "contentScale")?.let { language.expression(it, scope) } ?: target.enumValue("ImageFit", "Contain", call)
         attrs += target.attribute("objectFit", listOf(scale), call)
         argument(call, "alpha")?.let { attrs += target.attribute("opacity", listOf(language.expression(it, scope)), call) }
+        argument(call, "colorFilter")?.let { attrs += target.attribute("colorFilter", listOf(language.expression(it, scope)), call) }
         return ComposeElement(target.native("Image", listOf(language.expression(painter, scope)), call).copy(attributes = attrs))
     }
 }

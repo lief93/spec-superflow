@@ -199,3 +199,43 @@ fun lambda(expression: IrExpression?, scope: Scope): IrFunction? = when (express
     is IrBlock -> lambda(expression.statements.lastOrNull() as? IrExpression, scope)
     else -> null
 }
+
+tailrec fun resolveExpression(expression: IrExpression?, scope: Scope): IrExpression? = when (expression) {
+    is IrGetValue -> resolveExpression(scope.aliases[expression.symbol]
+        ?: (expression.symbol.owner as? IrVariable)?.takeUnless { it.isVar }?.initializer, scope)
+    is IrTypeOperatorCall -> resolveExpression(expression.argument, scope)
+    is IrBlock -> resolveExpression(expression.statements.lastOrNull() as? IrExpression, scope)
+    else -> expression
+}
+
+fun resolvedCall(expression: IrExpression?, scope: Scope): IrCall? =
+    resolveExpression(expression, scope) as? IrCall
+
+fun compositionLocalName(expression: IrExpression?, scope: Scope): String? =
+    when (val resolved = resolveExpression(expression, scope)) {
+        is IrCall -> resolved.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+            ?: getterPropertyName(symbolName(resolved.symbol.owner))
+        is IrGetField -> resolved.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+            ?: symbolName(resolved.symbol.owner)
+        else -> null
+    }
+
+fun isCompositionLocalCurrent(owner: IrDeclarationWithName): Boolean {
+    val api = symbolName(owner)
+    val property = (owner as? IrSimpleFunction)?.correspondingPropertySymbol?.owner?.let(::symbolName)
+        ?: (owner as? IrProperty)?.let(::symbolName)
+    return property in COMPOSITION_LOCAL_CURRENT || api in COMPOSITION_LOCAL_CURRENT ||
+        getterPropertyName(api) in COMPOSITION_LOCAL_CURRENT
+}
+
+private val COMPOSITION_LOCAL_CURRENT = setOf(
+    "androidx.compose.runtime.CompositionLocal.current",
+    "androidx.compose.runtime.ProvidableCompositionLocal.current",
+    "androidx.compose.runtime.CompositionLocal.<get-current>",
+    "androidx.compose.runtime.ProvidableCompositionLocal.<get-current>",
+)
+
+private fun getterPropertyName(api: String): String? = when {
+    api.endsWith(".<get-current>") -> api.removeSuffix(".<get-current>") + ".current"
+    else -> null
+}

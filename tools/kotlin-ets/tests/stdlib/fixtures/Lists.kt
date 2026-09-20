@@ -21,3 +21,19 @@ fun invalidMap(): List<Int> {
         value
     }
 }
+
+fun mappedIterable(value: Int): Int = mappedIterableValues(listOf(1, 2, 3), value)
+fun mappedIterableValues(values: Iterable<Int>, value: Int): Int = values.map { it + value }[2]
+fun mappedSet(value: Int): Int = setOf(1, 2, 3).map { it + value }[2]
+fun mappedMutableSet(value: Int): Int {
+    val values = mutableSetOf(1, 2)
+    values.add(3)
+    return values.map { it + value }[2]
+}
+fun invalidSetMap(): List<Int> {
+    val values = mutableSetOf(1, 2)
+    return values.map { value ->
+        values.add(value + 10)
+        value
+    }
+}

@@ -3,7 +3,6 @@ package genericrejected
 fun <T, R> arrayMap(values: Array<T>, transform: (T) -> R): List<R> = values.map(transform)
 fun <T> arrayFilter(values: Array<T>, predicate: (T) -> Boolean): List<T> = values.filter(predicate)
 fun <T, R> sequenceMap(values: Sequence<T>, transform: (T) -> R): Sequence<R> = values.map(transform)
-fun <T, R> iterableMap(values: Iterable<T>, transform: (T) -> R): List<R> = values.map(transform)
 fun <T> projectedFilter(values: List<*>, predicate: (Any?) -> Boolean): List<Any?> = values.filter(predicate)
 
 class SameNames<T> {

@@ -160,6 +160,12 @@ class StandardLibraryRules : CallRule {
         }
         if (name == "kotlin.String.get" && signature("kotlin.String", "kotlin.Char", "kotlin.Int"))
             return external("__etsStringGet", listOf(EtsTypes.STRING, EtsTypes.NUMBER), EtsTypes.STRING, listOf(receiverNode(), arg(0)))
+        // No-arg uppercase/lowercase use Locale.ROOT. Binary metadata has no IR body.
+        if (name in setOf("kotlin.text.uppercase", "kotlin.text.lowercase") &&
+            signature("kotlin.String", "kotlin.String") && args.isEmpty()) {
+            val method = if (name.endsWith("uppercase")) "toUpperCase" else "toLowerCase"
+            return member(receiverNode(), method, emptyList(), EtsTypes.STRING)
+        }
         if (name == "kotlin.text.substring" &&
             (signature("kotlin.String", "kotlin.String", "kotlin.Int") ||
                 signature("kotlin.String", "kotlin.String", "kotlin.Int", "kotlin.Int"))) {
@@ -256,16 +262,29 @@ class StandardLibraryRules : CallRule {
                             EtsTypes.BOOLEAN, listOf(receiverNode(), arg(0)), listOf(targetElement))
                     }
                 }
-                "kotlin.collections.map" -> {
-                    val (input, output) = mapElements(call) ?: return null
-                    val targetInput = language.type(input)
-                    val targetOutput = language.type(output)
-                    val result = EtsNamedType("Array", listOf(targetOutput))
-                    return external("__etsListMap", listOf(EtsNamedType("Array", listOf(targetInput)),
-                        EtsFunctionType(listOf(targetInput), targetOutput)), result,
-                        listOf(receiverNode(), arg(0)), listOf(targetInput, targetOutput))
-                }
             }
+        }
+        if (name == "kotlin.collections.firstOrNull") {
+            val element = receiver?.type.invariantArguments("kotlin.collections.List", "kotlin.collections.MutableList",
+                "kotlin.collections.Iterable", "kotlin.collections.Collection")?.singleOrNull() ?: return null
+            val targetElement = language.type(element)
+            if (args.isEmpty() && language.type(call.type) == EtsNullableType(targetElement)) {
+                return external("__etsListFirstOrNull", listOf(EtsNamedType("Array", listOf(targetElement))),
+                    EtsNullableType(targetElement), listOf(receiverNode()), listOf(targetElement))
+            }
+        }
+        if (name == "kotlin.collections.map") {
+            val mapped = mapElements(call) ?: return null
+            val targetInput = language.type(mapped.input)
+            val targetOutput = language.type(mapped.output)
+            val result = EtsNamedType("Array", listOf(targetOutput))
+            val transform = EtsFunctionType(listOf(targetInput), targetOutput)
+            return if (mapped.setReceiver) {
+                val setType = EtsNamedType("__etsSet", listOf(targetInput), "stdlib:__etsSet", external = true)
+                external("__etsSetMap", listOf(setType, transform), result, listOf(receiverNode(), arg(0)),
+                    listOf(targetInput, targetOutput))
+            } else external("__etsListMap", listOf(EtsNamedType("Array", listOf(targetInput)), transform), result,
+                listOf(receiverNode(), arg(0)), listOf(targetInput, targetOutput))
         }
         return null
     }
@@ -303,8 +322,10 @@ private fun IrType?.isList(): Boolean =
 private fun IrType?.listElement(): IrType? =
     if (isList()) ((this as IrSimpleType).arguments.singleOrNull() as? IrTypeProjection)?.type else null
 
-// Match the official Iterable<T>.map declaration, retaining the bounded List receiver path.
-private fun mapElements(call: IrCall): Pair<IrType, IrType>? {
+private data class MapElements(val input: IrType, val output: IrType, val setReceiver: Boolean)
+
+// Official Iterable<T>.map. Array-backed Iterable/Collection/List and hashed Set are distinct storages.
+private fun mapElements(call: IrCall): MapElements? {
     val owner = call.symbol.owner
     if (owner.origin != IrDeclarationOrigin.IR_EXTERNAL_DECLARATION_STUB ||
         sourceFile(owner) != null || !owner.isInline || owner.isSuspend || owner.isFakeOverride ||
@@ -325,10 +346,14 @@ private fun mapElements(call: IrCall): Pair<IrType, IrType>? {
         parameter.type.invariantArguments("kotlin.Function1") != listOf(declaredInput, declaredOutput)) return null
     val input = call.getTypeArgument(0) ?: return null
     val output = call.getTypeArgument(1) ?: return null
-    if (call.extensionReceiver?.type.invariantArguments("kotlin.collections.List", "kotlin.collections.MutableList") != listOf(input) ||
+    val receiver = call.extensionReceiver?.type
+    val listReceiver = receiver.invariantArguments("kotlin.collections.List", "kotlin.collections.MutableList",
+        "kotlin.collections.Iterable", "kotlin.collections.Collection") == listOf(input)
+    val setReceiver = receiver.invariantArguments("kotlin.collections.Set", "kotlin.collections.MutableSet") == listOf(input)
+    if ((!listReceiver && !setReceiver) ||
         call.type.invariantArguments("kotlin.collections.List") != listOf(output) ||
         call.getValueArgument(0)?.type.invariantArguments("kotlin.Function1") != listOf(input, output)) return null
-    return input to output
+    return MapElements(input, output, setReceiver)
 }
 
 // Check the resolved declaration as well as the instantiated call before lowering any children.

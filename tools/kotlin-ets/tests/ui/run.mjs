@@ -195,8 +195,8 @@ for (let index = 0; index < 2; index++) {
   assert.ok(depth(heightLayers[index]) > depth(paddingLayers[index]), '8vp height is inside 4vp outer padding');
   if (index === 1) assert.ok(!clickLayers[index].includes('.padding('), 'click-after-padding does not paint or lay out its outer padding');
 }
-assert.match(generate('unsupported-api', join(here, 'UnsupportedApi.kt'), 'negative.UnknownPage', false).message, /LazyColumn/);
-assert.match(generate('unsupported-modifier', join(here, 'UnsupportedModifier.kt'), 'negative.UnknownPage', false).message, /rotate/);
+assert.match(generate('unsupported-api', join(here, 'UnsupportedApi.kt'), 'negative.UnknownPage', false).message, /LazyRow/);
+assert.match(generate('unsupported-modifier', join(here, 'UnsupportedModifier.kt'), 'negative.UnknownPage', false).message, /blur/);
 assert.match(generate('unsupported-text-argument', join(here, 'UnsupportedTextArgument.kt'), 'negative.UnknownPage', false).message, /letterSpacing/);
 assert.match(generate('unsupported-layout-argument', join(here, 'UnsupportedLayoutArgument.kt'), 'negative.UnknownPage', false).message, /verticalArrangement/);
 assert.match(generate('unsupported-pager-count', join(here, 'UnsupportedPagerCount.kt'), 'negative.UnknownPage', false).message, /pageCount/);

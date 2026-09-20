@@ -16,7 +16,7 @@ const modules = new Map(Object.entries(helperSets).map(([name, helpers]) =>
   [name, assertRuntimeHelpers(join(output, name + '.ets'), helpers)]));
 const expectedImports = {
   GenericModels: [], GenericCollections: [],
-  GenericConsumers: ['GenericCollections:listCursor', 'GenericCollections:retainList', 'GenericCollections:transformList'],
+  GenericConsumers: ['GenericCollections:listCursor', 'GenericCollections:retainList', 'GenericCollections:transformIterable'],
   GenericCases: ['GenericCollections:arrayCursor', 'GenericCollections:arrayElement', 'GenericCollections:listCursor',
     'GenericCollections:rejectList', 'GenericCollections:replaceElement', 'GenericCollections:retainList', 'GenericCollections:transformList',
     'GenericConsumers:consumeNext', 'GenericConsumers:cursorMore', 'GenericConsumers:mappedCursor', 'GenericConsumers:preserved',
@@ -25,7 +25,13 @@ const expectedImports = {
 for (const [name, text] of modules) {
   const tree = ts.createSourceFile(name + '.ts', text, ts.ScriptTarget.Latest, true);
   const classes = tree.statements.filter(ts.isClassDeclaration).map(node => node.name.text).filter(name => name.startsWith('__ets'));
-  assert.deepEqual(classes, name === 'GenericModels' ? [] : ['__etsIterator']);
+  const expectedClasses = {
+    GenericModels: [],
+    GenericCollections: ['__etsThrowable', '__etsIterator'],
+    GenericConsumers: ['__etsIterator'],
+    GenericCases: ['__etsThrowable', '__etsIterator'],
+  };
+  assert.deepEqual(classes, expectedClasses[name], `Exact runtime classes for ${name}`);
   const imports = tree.statements.filter(ts.isImportDeclaration).flatMap(node =>
     node.importClause.namedBindings.elements.map(binding => `${node.moduleSpecifier.text.replace(/^\.\//, '')}:${binding.name.text}`));
   assert.deepEqual(imports.sort(), expectedImports[name].sort(), `Exact module imports for ${name}`);

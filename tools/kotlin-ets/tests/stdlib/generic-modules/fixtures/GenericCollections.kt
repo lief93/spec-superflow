@@ -1,6 +1,7 @@
 package genericmodules
 
 fun <T, R> transformList(values: List<T>, transform: (T) -> R): List<R> = values.map(transform)
+fun <T, R> transformIterable(values: Iterable<T>, transform: (T) -> R): List<R> = values.map(transform)
 fun <T> retainList(values: Iterable<T>, predicate: (T) -> Boolean): List<T> = values.filter(predicate)
 fun <T> rejectList(values: List<T>, predicate: (T) -> Boolean): List<T> = values.filterNot(predicate)
 fun <T> listCursor(values: List<T>): Iterator<T> = values.iterator()

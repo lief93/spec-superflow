@@ -26,7 +26,10 @@ internal class ComposeButtonRule(
     }
     private fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         val api = symbolName(call.symbol.owner)
-        if (api !in setOf("androidx.compose.material3.Button", "androidx.compose.material3.TextButton", "androidx.compose.material.Button")) return null
+        if (api !in setOf("androidx.compose.material3.Button", "androidx.compose.material3.TextButton",
+                "androidx.compose.material3.IconButton", "androidx.compose.material.Button",
+                "androidx.compose.material.IconButton")) return null
+        if (api.endsWith("IconButton")) return iconButton(call, language, scope)
         if (api != "androidx.compose.material.Button") return materialButton(call, language, scope, api.endsWith("TextButton"))
         target.checkArguments(call, setOf("onClick", "modifier", "enabled", "content"))
         val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "Button requires content")
@@ -40,6 +43,17 @@ internal class ComposeButtonRule(
             setOf("padding", "backgroundColor", "onClick", "enabled"))
     }
 
+    private fun iconButton(call: IrCall, language: Language, scope: Scope): ComposeElement {
+        target.checkArguments(call, setOf("onClick", "modifier", "enabled", "content"))
+        val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "IconButton requires content")
+        val click = argument(call, "onClick") ?: target.diagnostics.unsupported(call, "IconButton requires callback")
+        val attrs = listOf(target.attribute("onClick", listOf(callback(click, scope)), call),
+            target.attribute("type", listOf(target.enumValue("ButtonType", "Circle", call)), call)) + listOfNotNull(
+            argument(call, "enabled")?.let { target.attribute("enabled", listOf(language.expression(it, scope)), call) })
+        return ComposeElement(target.native("Button", emptyList(), call, content(body, scope)).copy(attributes = attrs),
+            setOf("padding", "backgroundColor", "onClick", "enabled"))
+    }
+
     private fun materialButton(call: IrCall, language: Language, scope: Scope, text: Boolean): ComposeElement {
         target.checkArguments(call, setOf("onClick", "modifier", "enabled", "content", "colors", "shape", "contentPadding"))
         val at = language.source(call)
@@ -48,13 +62,19 @@ internal class ComposeButtonRule(
         val palette = argument(call, "colors")?.let { language.expression(it, scope) } ?: defaultButtonColors(scope, at, text)
         fun repeatable(value: EtsExpression): Boolean = when (value) {
             is EtsLiteral -> true
-            is EtsReference -> value == context || scope.bindings.any { (symbol, binding) -> binding == value && when (val owner = symbol.owner) {
+            is EtsReference -> value == context || value.type in setOf(EtsTypes.NUMBER, buttonColorsType, materialContextType, materialColorSchemeType) ||
+                scope.bindings.any { (symbol, binding) -> binding == value && when (val owner = symbol.owner) {
                 is IrVariable -> !owner.isVar
                 is IrValueParameter -> true
                 else -> false
             } }
             is EtsMember -> value.receiver.type in setOf(buttonColorsType, materialContextType, materialColorSchemeType) && repeatable(value.receiver)
             is EtsNew -> value.classType in setOf(buttonColorsType, materialContextType, materialColorSchemeType) && value.arguments.all(::repeatable)
+            is EtsCall -> value.type == EtsTypes.NUMBER && value.arguments.all(::repeatable) && when (val callee = value.callee) {
+                is EtsReference -> true
+                is EtsMember -> repeatable(callee.receiver)
+                else -> false
+            }
             is EtsBinary -> repeatable(value.left) && repeatable(value.right)
             is EtsConditional -> repeatable(value.condition) && repeatable(value.whenTrue) && repeatable(value.whenFalse)
             else -> false

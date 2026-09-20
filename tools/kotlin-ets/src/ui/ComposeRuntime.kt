@@ -30,6 +30,10 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
                             EtsTypes.NUMBER, EtsTypes.NUMBER, EtsTypes.NUMBER), EtsNamedType("TouchResult"))
                     "compose:materialTypography" -> node is EtsNew && node.classType == EtsNamedType("__etsMaterialTypography", symbolId = id, external = true) &&
                         node.arguments.size == 4 && node.arguments.all { it.type == EtsTypes.NUMBER }
+                    "compose:clearFocus" -> node is EtsReference && node.symbol.name == "__etsClearFocus" &&
+                        node.type == EtsFunctionType(emptyList(), EtsTypes.VOID)
+                    "compose:activeUIContext" -> node is EtsReference && node.symbol.name == "__etsActiveUIContext" &&
+                        node.type == EtsNullableType(focusUIContextType)
                     else -> false
                 }
                 if (!valid) throw InvalidTarget(node.source, "Invalid framework runtime dependency: $id")
@@ -42,6 +46,7 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
             (if ("compose:surface" in required) surfaceLayoutSupport else emptyList()) +
             (if ("compose:imageTint" in required) imageTintSupport else emptyList()) +
             (if ("compose:materialTypography" in required) materialTypographySupport else emptyList()) +
-            (if ("compose:nearestTouch" in required) touchTargetSupport else emptyList())
+            (if ("compose:nearestTouch" in required) touchTargetSupport else emptyList()) +
+            (if ("compose:clearFocus" in required || "compose:activeUIContext" in required) focusSupport else emptyList())
     }
 }

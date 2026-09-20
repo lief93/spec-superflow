@@ -54,7 +54,7 @@ fun main(args: Array<String>) {
     withKotlinModule(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[4], args[2])) { module ->
         val cases = mapOf("MissingResource" to "Unmapped image resource", "NumericId" to "resolved R symbol",
             "DefaultIconTint" to "LocalContentColor", "UnsupportedScale" to "Unsupported ContentScale",
-            "UnsupportedFilter" to "argument: colorFilter", "UnsupportedAlignment" to "argument: alignment",
+            "UnsupportedFilter" to "default SrcIn blend", "UnsupportedAlignment" to "argument: alignment",
             "NullableDescription" to "Nullable image description", "EffectfulSize" to "stable dimensions",
             "FileUrl" to "HTTP(S)", "CredentialUrl" to "credentials", "DynamicModel" to "dynamic models",
             "LoadingCallback" to "argument: onLoading")

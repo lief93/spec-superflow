@@ -85,4 +85,8 @@ fun main() {
     record("listRead(4, 8, 2)") { listRead(4, 8, 2) }
     record("indexed([], 0)") { indexed(emptyList(), 0) }
     record("invalidMap()") { invalidMap() }
+    record("mappedIterable(10)") { mappedIterable(10) }
+    record("mappedSet(10)") { mappedSet(10) }
+    record("mappedMutableSet(10)") { mappedMutableSet(10) }
+    record("invalidSetMap()") { invalidSetMap() }
 }

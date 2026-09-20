@@ -71,6 +71,11 @@ private val supportFunctions = exceptionSupportFunctions + collectionSupportFunc
           return values[index];
         }
     """.trimIndent(), listOf("stdlib:__etsThrowable")),
+    SupportFunction("stdlib:__etsListFirstOrNull", """
+        function __etsListFirstOrNull<T>(values: Array<T>): T | null {
+          return values.length === 0 ? null : values[0];
+        }
+    """.trimIndent()),
     SupportFunction("stdlib:__etsListAdd", """
         function __etsListAdd<T>(values: Array<T>, value: T): boolean {
           values.push(value);
@@ -98,6 +103,16 @@ private val supportFunctions = exceptionSupportFunctions + collectionSupportFunc
           return result;
         }
     """.trimIndent(), listOf("stdlib:__etsThrowable")),
+    SupportFunction("stdlib:__etsSetMap", """
+        function __etsSetMap<T, R>(values: __etsSet<T>, transform: (value: T) => R): Array<R> {
+          const iterator = values.iterator();
+          const result: Array<R> = [];
+          while (iterator.hasNext()) {
+            result.push(transform(iterator.next()));
+          }
+          return result;
+        }
+    """.trimIndent(), listOf("stdlib:__etsSet")),
     SupportFunction("stdlib:__etsListFilter", """
         function __etsListFilter<T>(values: Array<T>, predicate: (value: T) => boolean, keep: boolean): Array<T> {
           const size = values.length;
