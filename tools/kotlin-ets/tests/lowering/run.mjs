@@ -11,8 +11,8 @@ const root = resolve(here, '../..');
 mkdirSync(join(here, '.work'), { recursive: true });
 const work = mkdtempSync(join(here, '.work/run-'));
 console.log(`Evidence: ${work}`);
-function run(label, command, args) {
-  const result = spawnSync(command, args, { encoding: 'utf8' });
+function run(label, command, args, options = {}) {
+  const result = spawnSync(command, args, { encoding: 'utf8', ...options });
   writeFileSync(join(work, `${label}.json`), JSON.stringify({ command, args, status: result.status,
     stdout: result.stdout, stderr: result.stderr }, null, 2));
   if (result.error) throw result.error;
@@ -30,7 +30,28 @@ assert.deepEqual(expected, ['nullA8|B9:AB', 'nullA-1|B0:AB', 'start:X11/Y12:XY',
   'item=seen-3|changed8|seen8;count=9;events=T-3>M-2>T8>']);
 
 const output = join(work, 'concatenation.ets');
-run('public-cli', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', output, fixture]);
+const agentClasses = join(work, 'agent-classes');
+mkdirSync(agentClasses);
+run('agent-compile', 'javac', ['--release', '17', '-cp', classpath, '-d', agentClasses, join(here, 'CliSeamAgent.java')]);
+const agentManifest = join(work, 'agent.mf');
+writeFileSync(agentManifest, 'Premain-Class: CliSeamAgent\n\n');
+const agent = join(work, 'cli-seam-agent.jar');
+run('agent-jar', 'jar', ['cfm', agent, agentManifest, '-C', agentClasses, '.']);
+run('public-cli', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', output, fixture], {
+  env: { ...process.env, JAVA_TOOL_OPTIONS: [process.env.JAVA_TOOL_OPTIONS, `"-javaagent:${agent}"`].filter(Boolean).join(' ') },
+});
+const trace = JSON.parse(readFileSync(join(work, 'public-cli.json'), 'utf8')).stderr.split('\n')
+  .filter(line => line.startsWith('ETS_SEAM ')).map(line => line.slice('ETS_SEAM '.length));
+writeFileSync(join(work, 'cli-seam.json'), JSON.stringify(trace, null, 2) + '\n');
+assert.deepEqual(trace.filter(event => !event.startsWith('EtsProgram.')), [
+  'EtsLoweringPhases.run:enter', 'EtsLoweringPhases.run:exit',
+  'IrToEts.program:enter', 'IrModuleToEts.lower:enter', 'IrFileToEts.lower:enter',
+  'IrFileToEts.lower:exit', 'IrModuleToEts.lower:exit', 'IrToEts.program:exit',
+  'ModulesKt.emitEtsProgram:enter', 'ModulesKt.emitEtsProgram:exit',
+], 'the public CLI must finish IR phases, map modules/files, then emit the target program');
+assert.ok(trace.slice(trace.indexOf('IrModuleToEts.lower:exit'), trace.indexOf('IrToEts.program:exit'))
+  .includes('EtsProgram.<init>:exit'), 'IrToEts must construct EtsProgram before emission');
+console.log('PASS public CLI runtime path: EtsLoweringPhases → IrToEts → IrModuleToEts → IrFileToEts → EtsProgram → emission');
 const source = readFileSync(output, 'utf8');
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }, reportDiagnostics: true,

@@ -19,9 +19,8 @@ import org.jetbrains.kotlin.ir.types.IrType
  */
 object IrToEts {
     fun program(modules: List<IrModuleFragment>, language: Language, diagnostics: DiagnosticSink): EtsProgram {
-        val program = linkAdapterDeclarations(EtsProgram(modules.flatMap { it.files }.map { file ->
-            diagnostics.currentFile = file.fileEntry.name
-            IrFileToEts.lower(file, language, diagnostics)
+        val program = linkAdapterDeclarations(EtsProgram(modules.flatMap { module ->
+            IrModuleToEts.lower(module, language, diagnostics)
         }, externalClasses = exceptionTargetContracts()), language.callRules)
         EtsValidator().validate(program, perFileNames = true)
         return program
