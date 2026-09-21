@@ -184,3 +184,13 @@ route look complete.
 - Not a public CLI.
 - Not an ETS lowering of these three consumer functions; the oracle is JVM-only
   for the spike, plus official IR inspection after producer sources are deleted.
+
+## Alternative: explicitly portable source bodies
+
+The [portable common-body proof](klib-portable-common-proof.md) explores the
+separate route requested after this JS-body closure spike: equivalent pure Kotlin
+range/iterator and generic map bodies, serialized as their own KLIB, plus three
+explicit actual primitives. It does not consume the JS `ArrayList` body and does
+not add a map-specific CallRule. This is an explicit source port with a bounded
+API, not automatic recovery of the official `kotlin.collections.map` declaration;
+the deletion decision above remains unchanged.
