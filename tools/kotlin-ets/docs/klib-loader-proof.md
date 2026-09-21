@@ -85,15 +85,22 @@ paths/offsets remain evidence from IR, not a claim those paths still exist.
 hashes, actual/expected values and evidence levels. This is Node execution of
 generated ETS through the DevEco TypeScript host, not ArkVM or native UI proof.
 
-## Remaining production integration
+## Production KLIB loader
 
-The separate test entry deliberately does not pretend a JVM FIR session is a
-KLIB session. Production still needs a KLIB session/body-origin contract,
-dependency translation-versus-replacement policy, reusable phase context,
-format/runtime boundaries and public diagnostics/input wiring before a KLIB CLI
-can be advertised. This proof does not run all JS lowerings or import the JS
-runtime, and does not prove arbitrary inline bodies, classes or Compose from
-KLIB. Do not route KLIB files through the JVM signature reader.
+The proof now calls `dev.ets.dependency.klib.KlibLoader`. That type reuses the
+same official `ModulesStructure` / `loadIr` / `JsIrLinker` chain and returns
+`List<IrModuleFragment>` with original module ownership. It is still not public
+CLI input support.
+
+See [dependency-ir-contract-proposal.md](dependency-ir-contract-proposal.md) for
+the proposed `SerializedKlibIr` origin (shared `Contract.kt` / `Frontend.kt`
+remain frozen). Collection-body research is in
+[klib-collection-body-closure.md](klib-collection-body-closure.md). JKLIB is
+assessed separately in [jklib-future-assessment.md](jklib-future-assessment.md).
+
+The remaining production gaps are unchanged: KLIB is not a JVM FIR session, JS
+lowerings/runtime are not imported, and KLIB files must not go through the JVM
+signature reader.
 
 An output-quality observation remains: deserialized conditional branches can
 print an unnecessary constant-true fallback ternary. The tested results match,
