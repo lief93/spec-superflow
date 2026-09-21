@@ -119,8 +119,7 @@ function load(name) {
 result.moduleActual = evaluate(vm.createContext({ exports: { ...load('Application'), ...load('Ownership'), ...load('Captures') } }));
 assert.deepEqual(result.moduleActual, result.expected);
 result.negatives = [];
-for (const [name, message] of [['Star', /invariant receiver/], ['MultipleBounds', /one noncyclic receiver bound/],
-  ['Super', /super/i]]) {
+for (const [name, message] of [['Star', /invariant receiver/], ['MultipleBounds', /one noncyclic receiver bound/]]) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
   run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
   const diagnostic = JSON.parse(run(name, 'bash', [cli, '--mode', 'language', '--out', out, input], 2));
@@ -130,7 +129,7 @@ for (const [name, message] of [['Star', /invariant receiver/], ['MultipleBounds'
   assert.equal(existsSync(out), false); result.negatives.push(diagnostic);
 }
 result.formerNegatives = [];
-for (const name of ['Local', 'Inner']) {
+for (const name of ['Local', 'Inner', 'Super']) {
   const input = join(here, 'negatives', name + '.kt'), out = join(work, name + '.ets');
   run(name + '-jvm', 'bash', [compiler, input, '-d', join(work, name + '.jar')]);
   run(name + '-accepted', 'bash', [cli, '--mode', 'language', '--out', out, input]);
@@ -139,7 +138,7 @@ for (const name of ['Local', 'Inner']) {
 const proofJar = join(work, 'ir-proof.jar');
 run('ir-build', 'bash', [compiler, ...['core/Frontend.kt', 'core/Constructors.kt', 'core/ConstructorDispatch.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt',
   'core/ExpectedNullability.kt', 'core/LibraryInlining.kt', 'core/BinaryBodies.kt', 'core/LocalDeclarations.kt',
-  'core/ForLoops.kt', 'core/Contract.kt', 'core/CallCaptures.kt', 'core/GenericBounds.kt', 'target/Tree.kt', 'target/Validator.kt', 'target/TypeSubstitution.kt',
+  'core/ForLoops.kt', 'core/Contract.kt', 'core/CallCaptures.kt', 'core/GenericBounds.kt', 'core/SourceSelection.kt', 'core/SourceDiagnostics.kt', 'lower/EtsLoweringPhases.kt', 'lower/EtsBackendContext.kt', 'target/Tree.kt', 'target/Validator.kt', 'target/TypeSubstitution.kt',
   'target/Traversal.kt'].map(file => join(root, 'src', file)),
   join(here, 'IrEvidence.kt'), '-d', proofJar]);
 result.irEvidence = run('ir-proof', 'java', ['-cp', `${proofJar}:${cp}`, 'dev.ets.IrEvidenceKt', cp, ...sources]).trim();

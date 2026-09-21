@@ -14,7 +14,7 @@ export const boundaries = [
   ['missing-jar', ['entry.jar'], 'Application.kt', 'unlinked serialized dependencies:', /unlinked serialized dependencies:.*extHelper/],
   ['missing-source', ['entry.jar', 'no-source-helper.jar'], 'Application.kt', 'no SourceFile attribute', /no SourceFile attribute.*no-source-helper.jar/],
   ['reified', ['Reified.jar'], 'ReifiedApplication.kt', 'unsupported reified binary inline dependency', /unsupported reified binary inline dependency/],
-  ['member', ['Member.jar'], 'MemberApplication.kt', 'members are unsupported', /members are unsupported/],
+  ['member', ['Member.jar'], 'MemberApplication.kt', 'member-ok', /serialized member inline body/],
   ['constructor', ['Constructor.jar'], 'ConstructorApplication.kt', 'unlinked serialized dependencies:', /unlinked serialized dependencies:.*Artifact/],
   ['multifile', ['Multifile.jar'], 'MultifileApplication.kt', 'unsupported serialized dependency format MULTIFILE_CLASS_PART', /unsupported serialized dependency format MULTIFILE_CLASS_PART/],
 ];

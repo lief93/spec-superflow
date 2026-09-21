@@ -18,7 +18,7 @@ run() {
   if [[ "$status" != 0 ]]; then cat "$WORK/$label.stdout" "$WORK/$label.stderr"; exit "$status"; fi
 }
 SOURCES=()
-while IFS= read -r file; do SOURCES+=("$file"); done < <(find "$ROOT/src/core" "$ROOT/src/language" "$ROOT/src/stdlib" -name '*.kt' ! -name Main.kt | sort)
+while IFS= read -r file; do SOURCES+=("$file"); done < <(find "$ROOT/src/core" "$ROOT/src/lower" "$ROOT/src/language" "$ROOT/src/stdlib" -name '*.kt' ! -name Main.kt | sort)
 IFS=: read -r -a DEPENDENCIES <<< "$CP"
 shasum -a 256 "${SOURCES[@]}" "$ROOT"/src/target/*.kt "$HERE"/* \
   "$ROOT/tests/stdlib/compiler.sh" "${DEPENDENCIES[@]}" > "$WORK/input-sha256.txt"
@@ -34,9 +34,12 @@ compile lower-compile -classpath "$CP" -d "$WORK/lower.jar" "${SOURCES[@]}" \
   "$ROOT/src/target/Tree.kt" "$ROOT/src/target/TypeSubstitution.kt" "$ROOT/src/target/Validator.kt" "$ROOT/src/target/Traversal.kt" "$HERE/BackendContract.kt"
 run lower "$JDK/bin/java" -Xmx2g -cp "$CP:$WORK/lower.jar" dev.ets.tests.backend.BackendContractKt \
   "$CP" "$HERE/Original.kt" "$HERE/Renamed.kt"
+# Printer.kt smart-casts `EtsCall.callee`; that is a public Tree API property, so
+# split compilation against lower.jar cannot smart-cast it. Compile Tree with
+# Printer in one module. Frozen Printer.kt is unchanged.
 compile printer-compile -classpath "$CP:$WORK/lower.jar" -d "$WORK/printer.jar" \
-  "$ROOT/src/target/Printer.kt" "$HERE/PrintContract.kt"
-run printer "$JDK/bin/java" -Xmx2g -cp "$CP:$WORK/lower.jar:$WORK/printer.jar" dev.ets.tests.backend.PrintContractKt \
+  "$ROOT/src/target/Tree.kt" "$ROOT/src/target/Printer.kt" "$HERE/PrintContract.kt"
+run printer "$JDK/bin/java" -Xmx2g -cp "$CP:$WORK/printer.jar:$WORK/lower.jar" dev.ets.tests.backend.PrintContractKt \
   "$CP" "$WORK" "$HERE/Original.kt" "$HERE/Renamed.kt"
 compile jvm-compile -classpath "$CP" -d "$WORK/oracle.jar" "$HERE/Original.kt" "$HERE/Renamed.kt" "$HERE/JvmOracle.kt"
 run jvm "$JDK/bin/java" -cp "$CP:$WORK/oracle.jar" dev.ets.tests.backend.JvmOracleKt

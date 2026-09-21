@@ -1,6 +1,5 @@
 package dev.ets
 
-import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.visitors.*
@@ -29,18 +28,6 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceT
     /** Modules selected for translation share symbol identity; their IR ownership stays intact. */
     fun lower(modules: List<IrModuleFragment>): EtsProgram {
         modules.forEach(::validateSource)
-        val program = linkAdapterDeclarations(EtsProgram(modules.flatMap { it.files }.map { file ->
-            diagnostics.currentFile = file.fileEntry.name
-            EtsFile(file.fileEntry.name, file.declarations.flatMap { declaration -> when (declaration) {
-                is IrSimpleFunction -> listOf(language.function(declaration).copy(
-                    exported = !DescriptorVisibilities.isPrivate(declaration.visibility)))
-                is IrClass -> listOf(language.clazz(declaration).copy(
-                    exported = sourceClassIsExported(declaration))) + language.interfaceDefaults(declaration)
-                is IrProperty -> lowerTopLevelProperty(declaration, language)
-                else -> diagnostics.unsupported(declaration, "Unsupported top-level declaration")
-            } } + lowerFileInitialization(file, language))
-        }, externalClasses = exceptionTargetContracts()), language.callRules)
-        EtsValidator().validate(program, perFileNames = true)
-        return program
+        return IrToEts.program(modules, language, diagnostics)
     }
 }

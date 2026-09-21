@@ -8,12 +8,14 @@ import { spawnSync } from 'node:child_process';
 export const here = dirname(fileURLToPath(import.meta.url));
 export const root = resolve(here, '../../..');
 export const compiler = join(root, 'tests/stdlib/compiler.sh');
-export const core = ['Frontend.kt', 'Constructors.kt', 'ConstructorDispatch.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt', 'LocalDeclarations.kt',
-  'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt', 'CallCaptures.kt', 'GenericBounds.kt'].map(name => join(root, 'src/core', name));
 export const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 export const identities = paths => paths.map(path => ({ path, sha256: hash(path) }));
 export const sources = directory => readdirSync(directory, { withFileTypes: true }).flatMap(entry => entry.isDirectory()
   ? sources(join(directory, entry.name)) : entry.name.endsWith('.kt') ? [join(directory, entry.name)] : []);
+export const core = ['Frontend.kt', 'Constructors.kt', 'ConstructorDispatch.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt', 'LocalDeclarations.kt',
+  'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt', 'CallCaptures.kt', 'GenericBounds.kt', 'SourceSelection.kt', 'SourceDiagnostics.kt'].map(name => join(root, 'src/core', name)).concat([
+  join(root, 'src/lower/EtsLoweringPhases.kt'), join(root, 'src/lower/EtsBackendContext.kt')]);
+export const target = ['Tree.kt', 'TypeSubstitution.kt', 'Validator.kt', 'Traversal.kt'].map(name => join(root, 'src/target', name));
 export function harness(parent = join(here, '.work'), prefix = 'run-') {
   process.env.JAVA_TOOL_OPTIONS = '-XX:ActiveProcessorCount=2 -XX:+UseSerialGC';
   process.env.PATH = `/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin:${process.env.PATH}`;

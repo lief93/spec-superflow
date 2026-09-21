@@ -39,8 +39,13 @@ assert.equal(tree.statements.length, 1);
 const declaration = tree.statements[0];
 assert.ok(ts.isInterfaceDeclaration(declaration)); assert.equal(declaration.name.text, 'GenericMethod');
 assert.equal(declaration.typeParameters?.length ?? 0, 0);
-assert.equal(declaration.members.length, 1);
-const method = declaration.members[0];
+const methods = declaration.members.filter(ts.isMethodSignature);
+const tags = declaration.members.filter(member => ts.isPropertySignature(member) &&
+  ts.isIdentifier(member.name) && member.name.text.startsWith('__etsInterface_'));
+assert.equal(methods.length, 1);
+assert.equal(tags.length, 1);
+assert.equal(declaration.members.length, 2);
+const method = methods[0];
 assert.ok(ts.isMethodSignature(method)); assert.equal(method.name.text, 'read');
 assert.equal(method.body, undefined); assert.equal(method.typeParameters.length, 1);
 const binder = method.typeParameters[0];

@@ -27,6 +27,23 @@ fun main(args: Array<String>) {
         println("PASS ${failure.diagnostic}")
         return
     }
+    if (args.getOrNull(3) == "member-ok") {
+        withKotlinFrontend(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) { session ->
+            val blocks = mutableListOf<IrInlinedFunctionBlock>()
+            session.module.acceptVoid(object : IrElementVisitorVoid {
+                override fun visitElement(element: IrElement) {
+                    if (element is IrInlinedFunctionBlock) blocks.add(element)
+                    if (element is IrCall) check(!element.symbol.owner.isInline) { "Residual inline call: ${element.dump()}" }
+                    element.acceptChildrenVoid(this)
+                }
+            })
+            check(blocks.any { it.inlinedFunctionSymbol?.owner?.name?.asString() == "unsupported" }) {
+                "Expected serialized member inline body: ${blocks.map { it.inlinedFunctionSymbol?.owner?.name }}"
+            }
+            println("PASS serialized member inline body loaded for unsupported")
+        }
+        return
+    }
     withKotlinFrontend(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) { session ->
         if (args.getOrNull(3) == "signature-only") {
             var count = 0

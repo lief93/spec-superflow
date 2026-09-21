@@ -50,6 +50,6 @@ console.log('PASS side-effectful toString: conversion before mutation, conversio
 
 const evidenceJar = join(work, 'ir-evidence.jar');
 run('ir-compile', 'bash', [compiler, ...['core/Frontend.kt', 'core/Constructors.kt', 'core/ConstructorDispatch.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt', 'core/ExpectedNullability.kt', 'core/LibraryInlining.kt', 'core/BinaryBodies.kt', 'core/LocalDeclarations.kt', 'core/ForLoops.kt',
-  'core/Contract.kt', 'core/CallCaptures.kt', 'core/GenericBounds.kt', 'target/Tree.kt', 'target/Validator.kt', 'target/TypeSubstitution.kt', 'target/Traversal.kt'].map(file => join(root, 'src', file)),
+  'core/Contract.kt', 'core/CallCaptures.kt', 'core/GenericBounds.kt', 'core/SourceSelection.kt', 'core/SourceDiagnostics.kt', 'lower/EtsLoweringPhases.kt', 'lower/EtsBackendContext.kt', 'target/Tree.kt', 'target/Validator.kt', 'target/TypeSubstitution.kt', 'target/Traversal.kt'].map(file => join(root, 'src', file)),
   join(here, 'IrEvidence.kt'), '-d', evidenceJar]);
 console.log(run('ir-evidence', 'java', ['-cp', `${evidenceJar}:${classpath}`, 'dev.ets.IrEvidenceKt', fixture, classpath, work]).trim());

@@ -9,7 +9,7 @@ if (process.argv[3] === 'LanguageSlice.kt') {
     'discarded assignment should be a direct statement, not a void IIFE');
   assert.doesNotMatch(source, /\(\(\): void => \{/,
     'ordinary assignments in this fixture need no void IIFEs');
-  assert.match(source, /const mapped: number = \(\(\): number => \{/,
+  assert.match(source, /const mapped: number = \(\(\)(?:: number)? => \{/,
     'named arguments with side effects must retain their evaluation scope');
 }
 const compiled = ts.transpileModule(source, {

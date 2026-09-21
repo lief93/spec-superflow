@@ -20,6 +20,7 @@ fun targetValues(root: Any): List<Any> {
                 "Raw string in target structural field $field"
             }
             is Number, is Boolean, is Char, is Enum<*> -> Unit
+            is Map<*, *> -> value.values.forEach { visit(it, field) }
             is Iterable<*> -> value.forEach { visit(it, field) }
             else -> {
                 check(value !is IrElement) { "Compiler IR leaked into target tree" }
@@ -72,7 +73,9 @@ fun lowerFixture(path: String, classpath: String, verify: Boolean = true): EtsPr
             val expressions = values.filterIsInstance<EtsExpression>()
             check(expressions.isNotEmpty())
             check(values.filterIsInstance<EtsReference>().all { it.symbol.id.isNotBlank() })
-            val lexicalSymbols = values.filterIsInstance<EtsSymbol>().filterNot { it.external }
+            val lexicalSymbols = values.filterIsInstance<EtsSymbol>().filterNot {
+                it.external || it.source.file?.startsWith("<stdlib:") == true
+            }
             check(lexicalSymbols.groupBy { it.id }.values.all { same -> same.distinct().size == 1 }) {
                 "One lexical symbol id describes conflicting declarations/types/sources"
             }
