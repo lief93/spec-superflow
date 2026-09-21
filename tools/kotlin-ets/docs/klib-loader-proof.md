@@ -97,6 +97,9 @@ the proposed `SerializedKlibIr` origin (shared `Contract.kt` / `Frontend.kt`
 remain frozen). Collection-body research is in
 [klib-collection-body-closure.md](klib-collection-body-closure.md). JKLIB is
 assessed separately in [jklib-future-assessment.md](jklib-future-assessment.md).
+A separate [portable common-body proof](klib-portable-common-proof.md) tests
+equivalent pure Kotlin range/iterator and map bodies with three target primitives,
+without translating JS stdlib bodies.
 
 The remaining production gaps are unchanged: KLIB is not a JVM FIR session, JS
 lowerings/runtime are not imported, and KLIB files must not go through the JVM
