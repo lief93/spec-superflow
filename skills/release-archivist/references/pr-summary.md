@@ -11,6 +11,10 @@
 |---|---|---|
 |  |  |  |
 
+When Harmony Quality applies, add one `Harmony quality` row with the exact
+command, `PASS`/`FAIL`/`BLOCKED`, and report path. Omit the row when the check is
+not applicable.
+
 ## AC Test Evidence
 
 Every row must correspond to one row in `tasks.md > TDD Test Plan`. Keep Requirement, AC, Layer, Platform, Test File, and Test Case unchanged. A successful build, Markdown check, or aggregate test count cannot replace evidence for a specific test case.

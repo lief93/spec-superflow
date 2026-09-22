@@ -38,6 +38,33 @@ then freezes
 worktree-aware final candidate without writing another Review artifact, and
 invokes the fixed Reviewer.
 
+For a Harmony repository, identify applicability from real module evidence
+(`src/main/ets`). If `harmony-quality.config.json` exists, run Harmony Quality
+during this pre-review preparation, before computing the final candidate:
+
+```bash
+ssf state get <change-dir> execution_base_commit
+ssf quality check \
+  --project <project-root> \
+  --scope changed \
+  --base <returned-execution-base-commit>
+```
+
+Use the exact immutable `execution_base_commit` returned by the state command;
+do not substitute the current `HEAD`. `PASS` continues. `FAIL` or `BLOCKED` prevents closing:
+record the status, exact report path, and the failing or blocked checks before
+returning to their owner. Closing must never run `ssf quality init`, regenerate,
+or overwrite the configuration. When the repository is clearly Harmony but
+the configuration is missing, report `BLOCKED` with the exact Project Init
+command `ssf quality init --project <project-root>`. For a non-Harmony project,
+skip Harmony Quality without noise.
+
+Mutation remains opt-in. Add `--mutation --max-mutants <N>` only when the
+approved Specs or tasks.md explicitly require mutation testing and define the
+bound. Otherwise run the command above unchanged. When Harmony Quality runs,
+add one `Harmony quality` row to `pr-summary.md > Verification Evidence` with
+the command, result, and report path; do not add that row for skipped projects.
+
 Before final review, `pr-summary.md > Verification Evidence` must contain these
 three exact rows with concrete evidence:
 
@@ -229,6 +256,9 @@ output and route back to the owning Skill.
 ## Lightweight Closure (hotfix/tweak)
 
 Verify files exist and are non-empty, run `node --check` on code files, skip the general 5-step verification. Frontend hotfix/tweak changes still require the contract's UI Test and Device Test obligations. Still record DP-6 and DP-7.
+The Harmony Quality gate in pre-review preparation also remains applicable and
+must run before the lightweight closure guard; it never runs after state has
+transitioned to `closing`.
 
 ## Exception Handling
 

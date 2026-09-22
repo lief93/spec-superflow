@@ -119,6 +119,26 @@ ssf project check
 
 If validation fails, repair the generated documents and run it once more. Do not report completion with unresolved placeholders, missing references, or missing recipe fields.
 
+## Harmony Quality Setup
+
+After the baseline passes validation, detect a Harmony project from real module
+evidence: at least one module contains `src/main/ets`. For a detected Harmony
+project, when `harmony-quality.config.json` is absent, run:
+
+```bash
+ssf quality init --project <project-root>
+```
+
+Normal reruns may return `ALREADY_CONFIGURED`; treat that as success and keep
+the existing `harmony-quality.config.json` unchanged. Never use `--force` from
+Project Init. If the generated configuration contains required commands with
+status `unresolved`, report those commands immediately so the developer can
+configure them before Closing. For a non-Harmony project, skip this setup
+without creating a quality configuration.
+
+This is project quality setup. It is not `/workflow-init`, Plugin setup, or a
+Node, npm, and global CLI readiness check.
+
 ## Output
 
 Report:
@@ -127,4 +147,5 @@ Report:
 - repository type and implementation roles covered
 - classic implementations generated
 - validator result
+- Harmony Quality setup result when applicable, including unresolved commands
 - facts that still need developer confirmation

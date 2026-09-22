@@ -18,6 +18,7 @@ const COMMANDS = {
   audit:          () => import('./lib/cmd-audit.mjs'),
   memories:       () => import('./lib/cmd-memories.mjs'),
   project:        () => import('./lib/cmd-project.mjs'),
+  quality:        () => import('./lib/cmd-quality.mjs'),
   review:         () => import('./lib/cmd-review.mjs'),
   override:       () => import('./lib/cmd-override.mjs'),
   'install-cursor': () => import('./lib/cmd-install-cursor.mjs'),
@@ -48,6 +49,10 @@ Commands:
   audit <dir>           Generate decision-point-audit.md from .spec-superflow.yaml
   memories <sub> [root] Manage Claude-style shared auto memory (init|list|check)
   project check [root]  Validate project development baseline documents
+  quality init --project <root>
+                        Initialize Harmony Quality configuration
+  quality check --project <root> [--scope changed --base <git-ref>]
+                        Run the bundled Harmony Quality checks
   review candidate <dir> <stage> [--base <git-ref>] [--json]
                         Compute the current semantic stage identity
   review record <dir> <stage> [--base <git-ref>] [--json]
@@ -86,6 +91,8 @@ Examples:
   ssf memories init
   ssf memories check
   ssf project check
+  ssf quality init --project .
+  ssf quality check --project . --scope changed --base HEAD
   ssf review candidate changes/my-change/ proposal-specs --json
   ssf review record changes/my-change/ proposal-specs --json
   ssf review check changes/my-change/ final --json

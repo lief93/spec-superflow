@@ -75,6 +75,14 @@ describe('combined Spec Superflow VSIX', () => {
       assert.equal(existsSync(setupAgent), false);
       assert.match(exampleSkill, /spec_superflow_example_mcp_read/);
       assert.doesNotMatch(exampleSkill, /JSON-RPC|child_process|server path|token argument/i);
+      for (const path of [
+        'tools/harmony-quality/bin/harmony-quality.mjs',
+        'tools/harmony-quality/src/cli.mjs',
+        'tools/harmony-quality/src/check.mjs',
+        'tools/harmony-quality/src/init.mjs',
+      ]) {
+        assert.equal(existsSync(join(extensionRoot, 'agent-plugin', path)), true, `${path} must be staged`);
+      }
       assert.throws(
         () => readFileSync(join(extensionRoot, 'agent-plugin', 'servers', 'token-example-mcp.mjs')),
         /ENOENT/,

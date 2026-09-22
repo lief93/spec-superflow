@@ -243,6 +243,10 @@ describe('packaged CLI runtime', () => {
       'servers/spec-superflow-mcp.mjs',
       'skills/grill-me/SKILL.md',
       'skills/test-quality/SKILL.md',
+      'tools/harmony-quality/bin/harmony-quality.mjs',
+      'tools/harmony-quality/src/cli.mjs',
+      'tools/harmony-quality/src/check.mjs',
+      'tools/harmony-quality/src/init.mjs',
     ]) {
       assert.equal(files.has(path), true, `${path} must be packaged`);
     }
