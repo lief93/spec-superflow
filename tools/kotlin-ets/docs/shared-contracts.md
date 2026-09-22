@@ -50,21 +50,28 @@ fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStat
 fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>?
 ```
 
-- `null` declines; an empty statement list is an accepted no-op.
-- Value positions consult only `lower`. Its result is checked against the mapped
-  Kotlin call result type, including when a supported value is later discarded.
+- `null` declines. An empty statement/UI result must have an explicit degradation
+  record at the same source; otherwise it is rejected before emission.
+- Value positions consult only `lower`. The consumer supplies the expected target
+  type and the result is checked against it. Expected-type mapping is lazy, so a
+  declined rule does not replace the ordinary unsupported-call diagnostic.
 - Discarded calls and implicit Unit coercions consult `lowerStatement`, then
   `lower`, for each candidate. Explicit scoped override first, independent
   `Scope.callRules` next, then registered `Language.callRules` in order,
   then the ordinary resolved-source-call path. A selected rule is not run twice.
-- Effects cannot substitute for object-valued initializers or return values.
+- `lowerStatement` returns effect statements directly. A legacy `lower` result
+  with target type `void` is classified as `CallResult.Statements` only in a
+  statement position. It is rejected in a value position; effects cannot
+  substitute for initializers or return values. Unit expression bodies use the
+  statement path and append a target `return` without fabricating a value.
 - UI positions consult only `lowerUi`, which requires an actual Kotlin Unit
   result and returns `CallResult.Ui`. A void-valued expression or statement
   effect cannot silently become UI. `CallResult.Value`, `Statements` and `Ui`
   preserve this distinction through consumption; the target validator still
   checks the produced nodes in their actual placement.
 - Explicitly unsupported adaptations throw `Unsupported` with source evidence;
-  malformed target nodes fail `EtsValidator`. Neither case silently falls back.
+  recorded degradations remain diagnostics, not values. Malformed target nodes
+  fail `EtsValidator`. None of these cases enters the emitter as a plausible value.
 - Runtime calls are typed `EtsCall`/`EtsSymbol` nodes, not arbitrary ETS strings.
 
 UI calls use the same dispatcher as ordinary calls. Layout, text and button
@@ -216,7 +223,8 @@ The completed run and exact evidence paths are recorded in
 
 - `node tools/kotlin-ets/tests/language/typed.mjs`: official cross-file body,
   borrowed lifetime, symbols/defaults, adapter precedence, bad value rejection,
-  registered/scoped effects, Unit coercion and handled empty effects.
+  registered/scoped effects, Unit coercion, expected target checks, void/value
+  separation and rejected empty effects.
 - `bash tools/kotlin-ets/tests/stdlib/check-runtime-tree.sh`: complete target
   traversal, helper closure/identity/order, shared output provider, reject invalid
   target before runtime emission.

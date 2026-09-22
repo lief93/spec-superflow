@@ -10,6 +10,7 @@ fun defaults(first: Int, second: Int = 4): Int = first
 fun omitted(): Int = defaults(3)
 fun effectOnly() { java.time.Instant.now() }
 fun directEffect() { java.lang.System.gc() }
+fun expressionEffect(): Unit = java.lang.System.gc()
 fun coercedEffect(): () -> Unit = { java.time.Instant.now() }
 fun storedEffect() { val instant = java.time.Instant.now() }
 fun returnedEffect(): java.time.Instant = java.time.Instant.now()

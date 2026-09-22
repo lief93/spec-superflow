@@ -59,6 +59,13 @@ ordinary inheritance. Never bypass validation with raw printed expressions or
 invent source symbols. Use `language.expression`, `language.source`, resolved
 arguments and existing typed constructors.
 
+Use `lower` only for a typed value. The shared consumer checks that value against
+the expected target type at its call position, even when the value is discarded.
+Use `lowerStatement` for a pure effect; Unit expression bodies also consume this
+path without inventing a return value. Returning a `void` expression from `lower`
+cannot satisfy a value position. Wrong types, void-as-value and empty unrecorded
+effects fail with the source call span before target emission.
+
 ### Factory lifecycle
 
 SPI instantiates providers once per compiler process. A registry calls

@@ -100,7 +100,7 @@ fun interface CallRule {
     /** Platform value representation; the shared call checker still validates every result. */
     fun mapType(type: IrType, language: Language): EtsType? = null
 
-    /** A typed value, or null to decline. Never return void for an object-valued call. */
+    /** A typed value, or null to decline. Unit effects belong in lowerStatement. */
     fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression?
 
     /** Object construction is value-producing, even when its result is discarded. */
@@ -141,65 +141,94 @@ fun linkAdapterDeclarations(program: EtsProgram, rules: List<CallRule>): EtsProg
 
 enum class CallContext { VALUE, STATEMENT, UI }
 
+/** Successful adapter consumption only. Unsupported throws; degradation stays in DiagnosticSink. */
 sealed interface CallResult {
     data class Value(val expression: EtsExpression) : CallResult
     data class Statements(val statements: List<EtsStatement>) : CallResult
     data class Ui(val statements: List<EtsStatement>) : CallResult
 }
 
+internal tailrec fun expressionStatement(value: EtsExpression): EtsExpressionStatement {
+    val lambda = (value as? EtsCall)?.callee as? EtsLambda
+    val effect = lambda?.body?.singleOrNull() as? EtsExpressionStatement
+    // Discard wrappers carry no scope or return boundary of their own.
+    if (value is EtsCall && value.arguments.isEmpty() && lambda != null &&
+        lambda.parameters.isEmpty() && lambda.returnType == EtsTypes.VOID && effect != null) {
+        return expressionStatement(effect.expression)
+    }
+    return EtsExpressionStatement(value)
+}
+
+private fun adapterCallName(call: IrExpression): String = when (call) {
+    is IrFunctionAccessExpression -> symbolName(call.symbol.owner)
+    is IrGetObjectValue -> symbolName(call.symbol.owner)
+    is IrGetField -> symbolName(call.symbol.owner)
+    else -> call.javaClass.simpleName
+}
+
 private fun checkedAdapterValue(call: IrExpression, expression: EtsExpression,
-    language: Language): EtsExpression {
-    val expected = language.type(call.type)
-    if (!etsAssignable(expression.type, expected)) throw Unsupported(Diagnostic("UNSUPPORTED",
-        "Invalid call adapter result for ${when (call) {
-            is IrFunctionAccessExpression -> symbolName(call.symbol.owner)
-            is IrGetObjectValue -> symbolName(call.symbol.owner)
-            is IrGetField -> symbolName(call.symbol.owner)
-            else -> call.javaClass.simpleName
-        }}: expected $expected, got ${expression.type}",
+    language: Language, expectedTargetType: EtsType, allowVoidEffect: Boolean = false): EtsExpression {
+    if (!etsAssignable(expression.type, expectedTargetType)) throw Unsupported(Diagnostic("UNSUPPORTED",
+        "Invalid call adapter result for ${adapterCallName(call)}: expected $expectedTargetType, got ${expression.type}",
         language.source(call)))
+    if (expression.type == EtsTypes.VOID && !allowVoidEffect) throw Unsupported(Diagnostic("UNSUPPORTED",
+        "Void call adapter result requires statement consumption: ${adapterCallName(call)}", language.source(call)))
     return expression
 }
 
 fun adaptConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? {
     for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
-        rule.lowerConstructor(call, language, scope)?.let { return checkedAdapterValue(call, it, language) }
+        rule.lowerConstructor(call, language, scope)?.let {
+            return checkedAdapterValue(call, it, language, language.type(call.type))
+        }
     }
     return null
 }
 
 fun adaptObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? {
     for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
-        rule.lowerObject(value, language, scope)?.let { return checkedAdapterValue(value, it, language) }
+        rule.lowerObject(value, language, scope)?.let {
+            return checkedAdapterValue(value, it, language, language.type(value.type))
+        }
     }
     return null
 }
 
 fun adaptField(value: IrGetField, language: Language, scope: Scope): EtsExpression? {
     for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
-        rule.lowerField(value, language, scope)?.let { return checkedAdapterValue(value, it, language) }
+        rule.lowerField(value, language, scope)?.let {
+            return checkedAdapterValue(value, it, language, language.type(value.type))
+        }
     }
     return null
 }
 
-fun adaptCall(call: IrCall, language: Language, scope: Scope, context: CallContext): CallResult? {
+fun adaptCall(call: IrCall, language: Language, scope: Scope, context: CallContext,
+    expectedTargetType: (() -> EtsType)? = null): CallResult? {
     fun reject(message: String): Nothing = throw Unsupported(Diagnostic("UNSUPPORTED", message, language.source(call)))
     fun explicitlyRecorded() = language.diagnostics?.degradations?.any {
         it.diagnostic.source == language.source(call)
     } == true
-    fun checkedValue(expression: EtsExpression): CallResult.Value {
-        return CallResult.Value(checkedAdapterValue(call, expression, language))
+    fun expected() = expectedTargetType?.invoke() ?: language.type(call.type)
+    fun checkedValue(expression: EtsExpression, allowVoidEffect: Boolean = false): EtsExpression {
+        return checkedAdapterValue(call, expression, language, expected(), allowVoidEffect)
     }
     for (rule in listOfNotNull(scope.callRule) + scope.callRules + language.callRules) {
         when (context) {
-            CallContext.VALUE -> rule.lower(call, language, scope)?.let { return checkedValue(it) }
+            CallContext.VALUE -> rule.lower(call, language, scope)?.let {
+                return CallResult.Value(checkedValue(it))
+            }
             CallContext.STATEMENT -> {
                 rule.lowerStatement(call, language, scope)?.let {
                     if (it.isEmpty() && !explicitlyRecorded())
                         reject("Empty statement adapter result requires an explicit degradation or unsupported record")
                     return CallResult.Statements(it)
                 }
-                rule.lower(call, language, scope)?.let { return checkedValue(it) }
+                rule.lower(call, language, scope)?.let {
+                    val value = checkedValue(it, allowVoidEffect = true)
+                    return if (value.type == EtsTypes.VOID) CallResult.Statements(listOf(expressionStatement(value)))
+                    else CallResult.Value(value)
+                }
             }
             CallContext.UI -> rule.lowerUi(call, language, scope)?.let {
                 if (!call.type.isUnit()) reject("UI call adapter requires kotlin.Unit: ${symbolName(call.symbol.owner)}")

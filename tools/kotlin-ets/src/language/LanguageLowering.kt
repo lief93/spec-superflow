@@ -257,7 +257,8 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
     }
 
     private fun adaptedStatement(call: IrCall, scope: Scope): List<EtsStatement>? =
-        if (call.superQualifierSymbol != null) null else when (val result = adaptCall(call, this, scope, CallContext.STATEMENT)) {
+        if (call.superQualifierSymbol != null) null else when (val result =
+            adaptCall(call, this, scope, CallContext.STATEMENT) { type(call.type) }) {
             null -> null
             is CallResult.Statements -> result.statements
             is CallResult.Value -> listOf(expressionStatement(result.expression))
@@ -266,7 +267,7 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
 
     private fun call(call: IrCall, scope: Scope, adapt: Boolean = true): EtsExpression {
         if (adapt && call.superQualifierSymbol == null) {
-            adaptCall(call, this, scope, CallContext.VALUE)?.let {
+            adaptCall(call, this, scope, CallContext.VALUE) { type(call.type) }?.let {
                 check(it is CallResult.Value) { "Non-value result in value context" }
                 return it.expression
             }
@@ -379,7 +380,9 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         reserveNames(body)
         return when (body) {
             is IrBlockBody -> body.statements.flatMap { statement(it, scope) }
-            is IrExpressionBody -> listOf(EtsReturn(expression(body.expression, scope), source(body)))
+            is IrExpressionBody -> if (body.expression.type.isUnit())
+                statement(body.expression, scope) + EtsReturn(null, source(body))
+            else listOf(EtsReturn(expression(body.expression, scope), source(body)))
             else -> diagnostics.unsupported(body, "Unsupported language body: ${body.javaClass.simpleName}")
         }
     }
@@ -473,17 +476,6 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         }
         is IrGetObjectValue -> if (value.type.isUnit()) emptyList() else consume(expression(value, scope))
         else -> consume(expression(value, scope))
-    }
-
-    private tailrec fun expressionStatement(value: EtsExpression): EtsExpressionStatement {
-        val lambda = (value as? EtsCall)?.callee as? EtsLambda
-        val effect = lambda?.body?.singleOrNull() as? EtsExpressionStatement
-        // Discard wrappers carry no scope or return boundary of their own.
-        if (value is EtsCall && value.arguments.isEmpty() && lambda != null &&
-            lambda.parameters.isEmpty() && lambda.returnType == EtsTypes.VOID && effect != null) {
-            return expressionStatement(effect.expression)
-        }
-        return EtsExpressionStatement(value)
     }
 
     private fun jump(loop: IrLoop, element: IrElement, keyword: String): List<EtsStatement> {
