@@ -22,6 +22,7 @@ const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
   'StateProfile.kt', 'UnsupportedState.kt', 'StateJvmOracle.kt', 'StatePipelineProbe.kt',
   'PagerProfile.kt', 'PagerUnsupported.kt', 'PagerJvmOracle.kt', 'PagerPipelineProbe.kt',
   'ScrollProfile.kt', 'ScrollUnsupported.kt', 'ScrollJvmOracle.kt', 'ScrollPipelineProbe.kt',
+  'LazyListProfile.kt', 'LazyListUnsupported.kt', 'LazyListJvmOracle.kt', 'LazyListPipelineProbe.kt',
   'InputStateProfile.kt', 'InputStateUnsupported.kt', 'InputStateJvmOracle.kt', 'InputStatePipelineProbe.kt',
   'input-state-sdk.mjs', 'PipelineSeamAgent.java'].map(name => join(here, name));
 const implementation = identities([...sources(join(root, 'src')), ...fixtures, fileURLToPath(import.meta.url), uiClasspathFile]);
@@ -161,6 +162,43 @@ const scrollSemantics = join(work, 'scroll-profile-output/scroll-semantics.json'
 writeFileSync(scrollSemantics,
   JSON.stringify({ expected: expectedScroll, actual: scrollContext.result }, null, 2) + '\n');
 console.log('PASS JVM/ETS vertical and horizontal Scroll offset transitions match');
+const lazyListProbeJar = compile('lazy-list-pipeline-probe', [join(here, 'LazyListPipelineProbe.kt')],
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
+console.log(run('lazy-list-profile-pipeline', 'java', ['-cp',
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar, lazyListProbeJar].join(':'),
+  'dev.ets.widgettest.LazyListPipelineProbeKt', uiCp, join(work, 'lazy-list-profile-output'),
+  join(here, 'LazyListProfile.kt'), join(here, 'LazyListUnsupported.kt')]).trim());
+const lazyListOracleJar = compile('lazy-list-jvm-oracle', [join(here, 'LazyListJvmOracle.kt')], cp);
+const expectedLazyList = run('lazy-list-jvm', 'java',
+  ['-cp', `${cp}:${lazyListOracleJar}`, 'widgetlazy.LazyListJvmOracleKt']).trim().split('\n');
+const lazyListOutput = join(work, 'lazy-list-profile-output/LazyListProfile.ets');
+const lazyListCode = readFileSync(lazyListOutput, 'utf8');
+const sourceMatches = [...lazyListCode.matchAll(
+  /new __etsLazyArrayDataSource<([^>]+)>\((\[[^\n]*?\] as Array<[^>]+>|__etsLazyIndices\(\d+\))\)/g)];
+assert.equal(sourceMatches.length, 4, 'Expected values, count, empty and row LazyForEach data sources');
+const lazySources = sourceMatches.map(match => match[2].startsWith('__etsLazyIndices')
+  ? Array.from({ length: Number(match[2].match(/\d+/)[0]) }, (_, index) => index)
+  : JSON.parse(match[2].slice(0, match[2].indexOf(' as Array'))));
+const keyExpressions = [...lazyListCode.matchAll(
+  /\((\w+): (?:string|number), (\w+): number\): string => \{\n\s+return ([^;]+);/g)];
+const renderedKeys = keyExpressions.map(match => match[3]);
+assert.deepEqual(renderedKeys,
+  ['"" + index + ":" + item', 'index.toString()', 'item', 'item']);
+const keyFunctions = keyExpressions.map(match =>
+  new Function(match[1], match[2], `return ${match[3]};`));
+const actualLazyList = ['item|header'];
+for (const [sourceIndex, values] of lazySources.entries()) {
+  const category = ['values', 'count', 'empty', 'row'][sourceIndex];
+  values.forEach((item, index) => {
+    actualLazyList.push(`${category}|${index}|${item}|${keyFunctions[sourceIndex](item, index)}`);
+  });
+}
+assert.deepEqual(actualLazyList, expectedLazyList);
+const lazyListSemantics = join(work, 'lazy-list-profile-output/lazy-list-semantics.json');
+writeFileSync(lazyListSemantics,
+  JSON.stringify({ expected: expectedLazyList, actual: actualLazyList,
+    sources: lazySources, keyExpressions: renderedKeys }, null, 2) + '\n');
+console.log('PASS JVM/ETS lazy-list order, item/index scope and stable keys match');
 const inputStateProbeJar = compile('input-state-pipeline-probe', [join(here, 'InputStatePipelineProbe.kt')],
   [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
 console.log(run('input-state-profile-pipeline', 'java', ['-cp',
@@ -222,6 +260,7 @@ assert.ok(existsSync(coreProfileOutput));
 assert.ok(existsSync(stateOutput));
 assert.ok(existsSync(pagerOutput));
 assert.ok(existsSync(scrollOutput));
+assert.ok(existsSync(lazyListOutput));
 assert.ok(existsSync(inputStateOutput));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
 assert.equal(diagnostics.length, 31);
@@ -231,6 +270,7 @@ writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implemen
   outputs: identities([output, coreProfileOutput, stateOutput, stateSemantics,
     pagerOutput, pagerSemantics, join(work, 'pager-profile-output/pager-diagnostics.tsv'),
     scrollOutput, scrollSemantics, join(work, 'scroll-profile-output/scroll-diagnostics.tsv'),
+    lazyListOutput, lazyListSemantics, join(work, 'lazy-list-profile-output/lazy-list-diagnostics.tsv'),
     inputStateOutput, inputStateSemantics, traceFile,
     join(work, 'output/model.txt'), join(work, 'output/diagnostics.tsv'),
     join(work, 'state-profile-output/state-diagnostics.tsv'),
@@ -241,8 +281,9 @@ writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implemen
   typedTargetValidation: true, coreProfileProductionPipeline: true, composeStateProductionPipeline: true,
   composeStateJvmEtsSemantics: true, pagerProductionPipeline: true, pagerJvmEtsSemantics: true,
   scrollProductionPipeline: true, scrollJvmEtsSemantics: true,
+  lazyListProductionPipeline: true, lazyListJvmEtsSemantics: true,
   inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
-  sourceLinkedRejections: diagnostics.length + 16,
+  sourceLinkedRejections: diagnostics.length + 23,
   sdk: 'separate SDK command required', nativeRendering: 'not run',
 }, null, 2));
 console.log('PASS Widget module isolation, resolved structure, typed ETS and explicit unsupported diagnostics');

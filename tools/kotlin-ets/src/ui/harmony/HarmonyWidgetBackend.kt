@@ -105,6 +105,64 @@ class HarmonyWidgetBackend {
                         call("indicator", listOf(EtsLiteral(false, EtsTypes.BOOLEAN, at)), at),
                         call("onChange", listOf(widget.onPageChange), at)))
             }
+            is Widget.LazyList -> {
+                expect(widget.enabled, EtsTypes.BOOLEAN, "LazyList.enabled", at)
+                fun stringKey(value: EtsExpression, source: SourceSpan): EtsExpression = when (value.type) {
+                    EtsTypes.STRING -> value
+                    EtsTypes.NUMBER -> EtsCall(EtsMember(value, "toString",
+                        EtsFunctionType(emptyList(), EtsTypes.STRING), source),
+                        emptyList(), EtsTypes.STRING, source)
+                    else -> throw IllegalArgumentException(
+                        "LazyList key requires string or number at $source; got ${value.type}")
+                }
+                val slots = widget.slots.map { slot -> when (slot) {
+                    is LazyListSlot.Item -> native("ListItem", children = lower(slot.content, null)).let { item ->
+                        slot.key?.let { key -> item.copy(attributes = listOf(
+                            call("id", listOf(stringKey(key, slot.source)), slot.source))) } ?: item
+                    }
+                    is LazyListSlot.Items -> {
+                        val item = slot.item as? EtsReference ?: throw IllegalArgumentException(
+                            "LazyList item requires a target binding at ${slot.source}")
+                        val index = slot.index as? EtsReference ?: throw IllegalArgumentException(
+                            "LazyList index requires a target binding at ${slot.source}")
+                        expect(index, EtsTypes.NUMBER, "LazyList.index", slot.source)
+                        val values = when (val data = slot.data) {
+                            is LazyListData.Values -> {
+                                val array = data.values.type as? EtsNamedType
+                                require(array?.name == "Array" && array.arguments.singleOrNull() == item.type) {
+                                    "LazyList values require Array<${item.type}> at ${slot.source}; got ${data.values.type}"
+                                }
+                                data.values
+                            }
+                            is LazyListData.Count -> {
+                                expect(data.count, EtsTypes.NUMBER, "LazyList.count", slot.source)
+                                require(item.type == EtsTypes.NUMBER) {
+                                    "LazyList count item requires number at ${slot.source}; got ${item.type}"
+                                }
+                                EtsCall(EtsReference(EtsSymbol("stdlib:__etsLazyIndices", "__etsLazyIndices",
+                                    EtsFunctionType(listOf(EtsTypes.NUMBER),
+                                        EtsNamedType("Array", listOf(EtsTypes.NUMBER))), slot.source, true)),
+                                    listOf(data.count), EtsNamedType("Array", listOf(EtsTypes.NUMBER)), slot.source)
+                            }
+                        }
+                        val dataSourceType = EtsNamedType("__etsLazyArrayDataSource", listOf(item.type),
+                            "stdlib:__etsLazyArrayDataSource", external = true)
+                        val dataSource = EtsNew(dataSourceType, listOf(values), slot.source)
+                        val key = slot.key?.let { value -> EtsLambda(
+                            listOf(EtsParameter(item.symbol), EtsParameter(index.symbol)),
+                            listOf(EtsReturn(stringKey(value, slot.source), slot.source)),
+                            EtsTypes.STRING, slot.source)
+                        }
+                        EtsUiLazyForEach(dataSource, EtsParameter(item.symbol), EtsParameter(index.symbol),
+                            listOf(native("ListItem", children = lower(slot.content, null))), key, slot.source)
+                    }
+                } }
+                native("List", children = slots).copy(attributes = listOf(
+                    call("listDirection", listOf(enumValue("Axis",
+                        if (widget.axis == WidgetScrollAxis.VERTICAL) "Vertical" else "Horizontal", at)), at),
+                    call("scrollBar", listOf(enumValue("BarState", "Off", at)), at),
+                    call("enableScrollInteraction", listOf(widget.enabled), at)))
+            }
             is Widget.Conditional -> throw IllegalArgumentException(
                 "Conditional widgets require a children boundary at $at")
         }

@@ -4,12 +4,16 @@ package dev.ets.compose
 import dev.ets.*
 import dev.ets.widgets.*
 import java.net.URI
+import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
+import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
+import org.jetbrains.kotlin.ir.visitors.acceptVoid
 import org.jetbrains.kotlin.name.FqName
 
 /** Closed resolved-call adapter. No native control/attribute construction or backend dependency.
@@ -47,6 +51,10 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             is IrVariable -> {
                 val initial = statement.initializer ?: diagnostics.unsupported(statement, "Uninitialized widget local")
                 if (statement.isVar) diagnostics.unsupported(statement, "Mutable widget local is outside the static widget subset")
+                if (initial is IrCall && symbolName(initial.symbol.owner) ==
+                    "androidx.compose.foundation.lazy.rememberLazyListState")
+                    diagnostics.unsupported(initial,
+                        "Lazy list state and prefetch strategies are not supported by the widget pipeline")
                 when {
                     initial.type.classFqName?.asString() in setOf("androidx.compose.ui.Modifier", "androidx.compose.ui.Modifier.Companion") ->
                         modifiers(initial, scope, parent)
@@ -96,6 +104,8 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val image = api in setOf("androidx.compose.foundation.Image", "coil.compose.AsyncImage")
         val textField = api.endsWith("TextField")
         val isPager = api == "androidx.compose.foundation.pager.HorizontalPager"
+        val isLazyList = api in setOf("androidx.compose.foundation.lazy.LazyColumn",
+            "androidx.compose.foundation.lazy.LazyRow")
         checkArguments(call, when {
             text -> setOf("text", "modifier", "fontSize", "fontWeight", "fontFamily", "lineHeight")
             button -> setOf("onClick", "enabled", "modifier", "content")
@@ -104,6 +114,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             else setOf("model", "contentDescription", "modifier")
             textField -> setOf("value", "onValueChange", "modifier", "enabled")
             isPager -> setOf("state", "modifier", "pageContent")
+            isLazyList -> setOf("modifier", "content", "userScrollEnabled")
             else -> setOf("modifier", "content")
         })
         val source = language.source(call)
@@ -131,6 +142,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         }
         if (image) return image(call, api, scope, modifier, source)
         if (isPager) return pager(call, scope, modifier, source)
+        if (isLazyList) return lazyList(call, api, scope, modifier, source)
         if (textField) {
             val value = required("value")
             if (!value.type.isString()) diagnostics.unsupported(value,
@@ -202,6 +214,199 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             IndexedChildren(index, children, language.source(content)), modifiers, source)
     }
 
+    private fun lazyList(call: IrCall, api: String, scope: Scope,
+        modifiers: List<WidgetModifier<EtsExpression, SourceSpan>>,
+        source: SourceSpan): Widget.LazyList<EtsExpression, SourceSpan> {
+        val content = argument(call, "content")
+            ?: diagnostics.unsupported(call, "$api requires content")
+        val lambda = lambda(content, scope)
+            ?: diagnostics.unsupported(content, "$api content requires a direct lambda")
+        if (lambda.valueParameters.isNotEmpty() || !lambda.returnType.isUnit())
+            diagnostics.unsupported(lambda, "$api content requires a LazyListScope receiver and Unit result")
+        val enabled = argument(call, "userScrollEnabled")?.let { value ->
+            if (!value.type.isBoolean()) diagnostics.unsupported(value, "$api userScrollEnabled requires Boolean")
+            scalar(value, scope)
+        } ?: EtsLiteral(true, EtsTypes.BOOLEAN, source)
+        val slots = lazyListBody(lambda.body
+            ?: diagnostics.unsupported(content, "$api content has no body"), scope.fork(), lambda)
+        return Widget.LazyList(
+            if (api.endsWith("LazyColumn")) WidgetScrollAxis.VERTICAL else WidgetScrollAxis.HORIZONTAL,
+            enabled, slots, modifiers, source)
+    }
+
+    private fun lazyListBody(value: IrBody, scope: Scope,
+        owner: IrFunction): List<LazyListSlot<EtsExpression, SourceSpan>> = when (value) {
+        is IrBlockBody -> value.statements.flatMap { lazyListStatement(it, scope, owner) }
+        is IrExpressionBody -> lazyListStatement(value.expression, scope, owner)
+        else -> diagnostics.unsupported(value, "Unsupported lazy list content body")
+    }
+
+    private fun lazyListStatement(value: IrStatement, scope: Scope,
+        owner: IrFunction): List<LazyListSlot<EtsExpression, SourceSpan>> = when (value) {
+        is IrReturn -> {
+            if (value.returnTargetSymbol.owner !== owner)
+                diagnostics.unsupported(value, "Lazy list return must target its content lambda")
+            lazyListStatement(value.value, scope, owner)
+        }
+        is IrBlock -> value.statements.flatMap { lazyListStatement(it, scope.fork(), owner) }
+        is IrComposite -> value.statements.flatMap { lazyListStatement(it, scope, owner) }
+        is IrGetObjectValue -> if (value.type.isUnit()) emptyList() else
+            diagnostics.unsupported(value, "Unexpected lazy list value")
+        is IrCall -> listOf(lazyListCall(value, scope))
+        else -> diagnostics.unsupported(value,
+            "Unsupported lazy list statement: ${value.javaClass.simpleName}")
+    }
+
+    private fun lazyListCall(call: IrCall, scope: Scope): LazyListSlot<EtsExpression, SourceSpan> {
+        val api = symbolName(call.symbol.owner)
+        val source = language.source(call)
+        fun content(name: String = "content"): IrFunction {
+            val value = argument(call, name)
+                ?: diagnostics.unsupported(call, "$api requires $name")
+            return lambda(value, scope)
+                ?: diagnostics.unsupported(value, "$api $name requires a direct lambda")
+        }
+        fun rejectReceiverUse(function: IrFunction) {
+            function.extensionReceiverParameter?.let { receiver ->
+                var animateItem: IrCall? = null
+                (function.body ?: function).acceptVoid(object : IrElementVisitorVoid {
+                    override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
+                    override fun visitCall(expression: IrCall) {
+                        if (symbolName(expression.symbol.owner).endsWith(".animateItem")) animateItem = expression
+                        expression.acceptChildrenVoid(this)
+                    }
+                })
+                animateItem?.let { diagnostics.unsupported(it, "LazyItemScope animateItem is not supported") }
+                if (used(receiver, function.body ?: function))
+                    diagnostics.unsupported(receiver, "LazyItemScope APIs are not supported")
+            }
+        }
+        fun keyValue(value: IrExpression, keyScope: Scope): EtsExpression? {
+            val resolved = resolve(value, keyScope)
+            if (resolved is IrConst && resolved.value == null) return null
+            val emitted = scalar(resolved, keyScope)
+            if (emitted.type !in setOf(EtsTypes.STRING, EtsTypes.NUMBER))
+                diagnostics.unsupported(value, "Lazy list key requires a stable String or Int value")
+            return emitted
+        }
+        if (api in setOf("androidx.compose.foundation.lazy.LazyListScope.item",
+                "androidx.compose.foundation.lazy.item")) {
+            checkArguments(call, setOf("key", "content"))
+            val itemContent = content()
+            if (itemContent.valueParameters.isNotEmpty() || !itemContent.returnType.isUnit())
+                diagnostics.unsupported(itemContent, "Lazy list item content requires no value parameters and Unit result")
+            rejectReceiverUse(itemContent)
+            val children = body(itemContent.body
+                ?: diagnostics.unsupported(itemContent, "Lazy list item content has no body"),
+                scope.fork(), itemContent, parent = null)
+            val key = argument(call, "key")?.let { keyValue(it, scope) }
+            return LazyListSlot.Item(key, children, source)
+        }
+        val indexed = api in setOf("androidx.compose.foundation.lazy.itemsIndexed",
+            "androidx.compose.foundation.lazy.LazyListScope.itemsIndexed")
+        val ordinary = api in setOf("androidx.compose.foundation.lazy.items",
+            "androidx.compose.foundation.lazy.LazyListScope.items")
+        if (!indexed && !ordinary)
+            diagnostics.unsupported(call, "Unsupported lazy list DSL: $api")
+        checkArguments(call, setOf("items", "count", "key", "itemContent"))
+        val count = argument(call, "count")
+        val values = argument(call, "items")
+        if (indexed && count != null)
+            diagnostics.unsupported(count, "itemsIndexed does not support a count source")
+        if ((count == null) == (values == null))
+            diagnostics.unsupported(call, "$api requires exactly one items or count source")
+        val itemContent = content("itemContent")
+        rejectReceiverUse(itemContent)
+        if (!itemContent.returnType.isUnit())
+            diagnostics.unsupported(itemContent, "$api itemContent requires Unit result")
+        val parameters = itemContent.valueParameters
+        val expected = if (indexed) 2 else 1
+        if (parameters.size != expected)
+            diagnostics.unsupported(itemContent, "$api itemContent requires $expected value parameter(s)")
+
+        val sourceIndex = if (indexed) parameters[0] else if (count != null) parameters[0] else null
+        val sourceItem = if (indexed) parameters[1] else if (values != null) parameters[0] else null
+        sourceIndex?.let { if (!it.type.isInt()) diagnostics.unsupported(it, "$api index requires Int") }
+        val loweredValues = values?.let { value ->
+            val sourceType = value.type.classFqName?.asString()
+            if (sourceType !in lazyCollectionTypes)
+                diagnostics.unsupported(value, "$api requires a List or array source")
+            language.expression(value, scope).also { emitted ->
+                val type = emitted.type as? EtsNamedType
+                if (type?.name != "Array" || type.arguments.size != 1)
+                    diagnostics.unsupported(value, "$api collection requires target Array lowering")
+            }
+        }
+        val loweredCount = count?.let { value ->
+            if (!value.type.isInt()) diagnostics.unsupported(value, "$api count requires Int")
+            scalar(value, scope)
+        }
+        val itemType = loweredValues?.let { (it.type as EtsNamedType).arguments.single() } ?: EtsTypes.NUMBER
+        sourceItem?.let { parameter ->
+            if (language.type(parameter.type) != itemType)
+                diagnostics.unsupported(parameter, "$api item parameter differs from its collection element")
+        }
+        val itemName = sourceItem?.name?.asString() ?: "__lazyItem"
+        val indexName = sourceIndex?.name?.asString()?.takeUnless { it == itemName } ?: "__lazyIndex"
+        val item = EtsSymbol("compose-lazy:${source.file}:${source.start}:item", itemName,
+            itemType, source)
+        val index = EtsSymbol("compose-lazy:${source.file}:${source.start}:index", indexName,
+            EtsTypes.NUMBER, source)
+        val itemRef = EtsReference(item)
+        val indexRef = EtsReference(index)
+        val childScope = scope.fork().also { nested ->
+            sourceItem?.let { nested.bindings[it.symbol] = itemRef }
+            sourceIndex?.let { nested.bindings[it.symbol] = indexRef }
+        }
+        val children = body(itemContent.body
+            ?: diagnostics.unsupported(itemContent, "$api itemContent has no body"),
+            childScope, itemContent, parent = null)
+        val key = argument(call, "key")?.let { keyExpression ->
+            val keyLambda = lambda(keyExpression, scope)
+                ?: diagnostics.unsupported(keyExpression, "$api key requires a direct lambda")
+            val keyParameters = keyLambda.valueParameters
+            if (keyParameters.size != expected)
+                diagnostics.unsupported(keyLambda, "$api key requires $expected value parameter(s)")
+            val keyScope = scope.fork()
+            if (indexed) {
+                keyScope.bindings[keyParameters[0].symbol] = indexRef
+                keyScope.bindings[keyParameters[1].symbol] = itemRef
+            } else {
+                keyScope.bindings[keyParameters[0].symbol] = if (count != null) indexRef else itemRef
+            }
+            keyValue(lambdaResult(keyLambda), keyScope)
+        }
+        val data = loweredValues?.let { LazyListData.Values(it) }
+            ?: LazyListData.Count(checkNotNull(loweredCount))
+        return LazyListSlot.Items(data, itemRef, indexRef, key, children, source)
+    }
+
+    private fun lambdaResult(function: IrFunction): IrExpression {
+        val value = when (val body = function.body) {
+            is IrExpressionBody -> body.expression
+            is IrBlockBody -> (body.statements.singleOrNull() as? IrReturn)?.takeIf {
+                it.returnTargetSymbol.owner === function
+            }?.value
+            else -> null
+        }
+        return value ?: diagnostics.unsupported(function,
+            "Lazy list key requires a single expression result")
+    }
+
+    private fun used(parameter: IrValueParameter, element: IrElement): Boolean {
+        var found = false
+        element.acceptVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) {
+                if (!found) element.acceptChildrenVoid(this)
+            }
+            override fun visitGetValue(expression: IrGetValue) {
+                if (expression.symbol == parameter.symbol) found = true
+                if (!found) expression.acceptChildrenVoid(this)
+            }
+        })
+        return found
+    }
+
     private fun image(call: IrCall, api: String, scope: Scope,
         modifiers: List<WidgetModifier<EtsExpression, SourceSpan>>, source: SourceSpan): Widget.Image<EtsExpression, SourceSpan> {
         fun required(name: String) = argument(call, name)
@@ -249,6 +454,11 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val call = expression as? IrCall ?: diagnostics.unsupported(expression, "Unsupported widget Modifier value")
         if (sourceFile(call.symbol.owner) != null) diagnostics.unsupported(call, "Source Modifier functions require explicit widget semantics")
         val api = symbolName(call.symbol.owner)
+        if (api.endsWith(".animateItem"))
+            diagnostics.unsupported(call, "LazyItemScope animateItem is not supported")
+        if (call.symbol.owner.dispatchReceiverParameter?.type?.classFqName?.asString() ==
+            "androidx.compose.foundation.lazy.LazyItemScope")
+            diagnostics.unsupported(call, "LazyItemScope modifier APIs are not supported")
         val receiver = call.extensionReceiver ?: call.dispatchReceiver
             ?: diagnostics.unsupported(call, "Widget Modifier requires a receiver")
         val previous = modifiers(receiver, scope, parent)
@@ -492,7 +702,11 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             "androidx.compose.foundation.text.BasicTextField", "androidx.compose.material.TextField",
             "androidx.compose.material3.TextField", "androidx.compose.material3.OutlinedTextField",
             "androidx.compose.foundation.pager.HorizontalPager",
+            "androidx.compose.foundation.lazy.LazyColumn", "androidx.compose.foundation.lazy.LazyRow",
             "androidx.compose.foundation.layout.Row", "androidx.compose.foundation.layout.Column",
             "androidx.compose.foundation.layout.Box")
+        val lazyCollectionTypes = setOf("kotlin.Array", "kotlin.collections.List",
+            "kotlin.collections.MutableList", "kotlin.IntArray", "kotlin.FloatArray",
+            "kotlin.DoubleArray", "kotlin.ByteArray", "kotlin.ShortArray", "kotlin.BooleanArray")
     }
 }

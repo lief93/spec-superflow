@@ -662,7 +662,9 @@ class EtsValidator {
         val scope = outer.toMutableMap()
         val names = occupiedNames.toMutableSet()
         values.forEach { value ->
-            if (ui && value !is EtsUiElement && value !is EtsUiComponent && value !is EtsUiForEach && value !is EtsIf) reject(value, "Ordinary statement cannot occur directly in target UI DSL")
+            if (ui && value !is EtsUiElement && value !is EtsUiComponent && value !is EtsUiForEach &&
+                value !is EtsUiLazyForEach && value !is EtsIf)
+                reject(value, "Ordinary statement cannot occur directly in target UI DSL")
             when (value) {
             is EtsVariable -> {
                 valueBindingName(value.symbol.name, value.source); type(value.symbol.type, value.source)
@@ -735,6 +737,27 @@ class EtsValidator {
                 val array = value.items.type as? EtsNamedType ?: reject(value, "UI iteration requires a target array")
                 if (array.name != "Array" || array.arguments.size != 1 || array.arguments.single() != value.item.symbol.type || value.item.defaultValue != null) reject(value, "UI iteration item type differs from its array")
                 statements(value.body, parameters(listOf(value.item), scope), EtsTypes.VOID, emptySet(), setOf(value.item.symbol.name), ui = true)
+            }
+            is EtsUiLazyForEach -> {
+                if (!ui) reject(value, "Lazy UI iteration requires a builder body")
+                expression(value.dataSource, scope)
+                val source = value.dataSource.type as? EtsNamedType
+                    ?: reject(value, "Lazy UI iteration requires a typed data source")
+                if (source.symbolId != "stdlib:__etsLazyArrayDataSource" || !source.external ||
+                    source.arguments.singleOrNull() != value.item.symbol.type)
+                    reject(value, "Lazy UI iteration data source differs from its item type")
+                if (value.item.defaultValue != null || value.index.defaultValue != null ||
+                    value.index.symbol.type != EtsTypes.NUMBER || value.item.symbol.name == value.index.symbol.name)
+                    reject(value, "Lazy UI iteration requires distinct item and numeric index parameters")
+                val nested = parameters(listOf(value.item, value.index), scope)
+                statements(value.body, nested, EtsTypes.VOID, emptySet(),
+                    setOf(value.item.symbol.name, value.index.symbol.name), ui = true)
+                value.key?.let { key ->
+                    if (key.parameters.map { it.symbol } != listOf(value.item.symbol, value.index.symbol) ||
+                        key.returnType != EtsTypes.STRING)
+                        reject(key, "Lazy UI key generator requires the item and index and returns string")
+                    expression(key, scope)
+                }
             }
             is EtsFunction -> reject(value, "Nested target function declarations are not supported (arkts-no-nested-funcs)")
         } }

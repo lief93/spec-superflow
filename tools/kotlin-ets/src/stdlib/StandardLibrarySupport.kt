@@ -4,6 +4,29 @@ internal data class SupportFunction(val symbol: String, val source: String, val 
 
 // Pinned target runtime, in stable dependency-before-consumer order. Bodies do not depend on input IR.
 private val supportFunctions = exceptionSupportFunctions + collectionSupportFunctions + listOf(
+    SupportFunction("stdlib:__etsLazyArrayDataSource", """
+        class __etsLazyArrayDataSource<T> implements IDataSource {
+          private readonly values: Array<T>;
+          private readonly listeners: Array<DataChangeListener> = [];
+
+          constructor(values: Array<T>) { this.values = values; }
+          totalCount(): number { return this.values.length; }
+          getData(index: number): T { return this.values[index]; }
+          registerDataChangeListener(listener: DataChangeListener): void { this.listeners.push(listener); }
+          unregisterDataChangeListener(listener: DataChangeListener): void {
+            const index = this.listeners.indexOf(listener);
+            if (index >= 0) { this.listeners.splice(index, 1); }
+          }
+        }
+    """.trimIndent()),
+    SupportFunction("stdlib:__etsLazyIndices", """
+        function __etsLazyIndices(count: number): Array<number> {
+          if (count < 0) { return __etsIllegalArgumentException('Lazy list count must be non-negative.'); }
+          const values: Array<number> = [];
+          for (let index = 0; index < count; index++) { values.push(index); }
+          return values;
+        }
+    """.trimIndent(), listOf("stdlib:__etsIllegalArgumentException")),
     SupportFunction("stdlib:__etsIntArrayHash", """
         function __etsIntArrayHash(values: Array<number> | null): number {
           if (values === null) { return 0; }

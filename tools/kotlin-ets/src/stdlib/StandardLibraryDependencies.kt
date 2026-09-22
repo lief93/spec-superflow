@@ -34,6 +34,10 @@ private class StandardLibraryDependencies {
                 is EtsSuperConstructorCall -> type(child.baseClass)
                 is EtsCall -> child.typeArguments.forEach(::type)
                 is EtsUiForEach -> type(child.item.symbol.type)
+                is EtsUiLazyForEach -> {
+                    type(child.item.symbol.type)
+                    type(child.index.symbol.type)
+                }
                 else -> Unit
             }
             if (child is EtsReference) {
@@ -54,7 +58,7 @@ private class StandardLibraryDependencies {
                 val id = value.symbolId
                 if (id?.startsWith("stdlib:") == true) {
                     val arity = when (id) {
-                        "stdlib:__etsIterator", "stdlib:__etsSet" -> 1
+                        "stdlib:__etsIterator", "stdlib:__etsSet", "stdlib:__etsLazyArrayDataSource" -> 1
                         "stdlib:__etsMap", "stdlib:__etsMapEntry", "stdlib:__etsPair" -> 2
                         "stdlib:__etsIntProgression", "stdlib:__etsThrowable" -> 0
                         else -> error("Unknown standard library runtime type: $id")

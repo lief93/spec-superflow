@@ -34,6 +34,12 @@ fun walkEts(node: EtsNode, visit: (EtsNode) -> Unit) {
         is EtsUiElement -> { walk(node.call); node.children?.forEach(::walk); node.attributes.forEach(::walk) }
         is EtsUiComponent -> { walk(node.component); node.properties.values.forEach(::walk) }
         is EtsUiForEach -> { walk(node.items); parameters(listOf(node.item)); node.body.forEach(::walk) }
+        is EtsUiLazyForEach -> {
+            walk(node.dataSource)
+            parameters(listOf(node.item, node.index))
+            node.body.forEach(::walk)
+            node.key?.let(::walk)
+        }
         is EtsFunction -> { parameters(node.parameters); node.body.forEach(::walk) }
         is EtsField -> node.initializer?.let(::walk)
         is EtsClass -> node.members.forEach(::walk)
