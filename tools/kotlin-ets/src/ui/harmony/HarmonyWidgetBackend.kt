@@ -82,6 +82,29 @@ class HarmonyWidgetBackend {
             is Widget.Column -> native("Column", children = lower(widget.children, WidgetLayoutScope.COLUMN)).copy(attributes = listOf(
                 call("alignItems", listOf(enumValue("HorizontalAlign", "Start", at)), at)))
             is Widget.Box -> native("Stack", listOf(stackOptions(at)), lower(widget.children, WidgetLayoutScope.BOX))
+            is Widget.Pager -> {
+                expect(widget.currentPage, EtsTypes.NUMBER, "Pager.currentPage", at)
+                expect(widget.pageCount, EtsTypes.NUMBER, "Pager.pageCount", at)
+                expect(widget.controller, EtsNamedType("SwiperController"), "Pager.controller", at)
+                expect(widget.onPageChange, EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.VOID),
+                    "Pager.onPageChange", at)
+                expect(widget.pageContent.index, EtsTypes.NUMBER, "Pager.pageContent.index", widget.pageContent.source)
+                val index = widget.pageContent.index as? EtsReference
+                    ?: throw IllegalArgumentException("Pager.pageContent.index requires a target binding at ${widget.pageContent.source}")
+                val count = (widget.pageCount as? EtsLiteral)?.value as? Number
+                require(count != null && count.toDouble().isFinite() && count.toDouble() % 1.0 == 0.0 && count.toInt() > 0) {
+                    "Pager.pageCount requires a positive integer literal at $at"
+                }
+                val pages = EtsArray((0 until count.toInt()).map { EtsLiteral(it, EtsTypes.NUMBER, at) },
+                    EtsTypes.NUMBER, at)
+                native("Swiper", listOf(widget.controller), listOf(EtsUiForEach(pages,
+                    EtsParameter(index.symbol), lower(widget.pageContent.children, null), widget.pageContent.source)))
+                    .copy(attributes = listOf(
+                        call("index", listOf(widget.currentPage), at),
+                        call("loop", listOf(EtsLiteral(false, EtsTypes.BOOLEAN, at)), at),
+                        call("indicator", listOf(EtsLiteral(false, EtsTypes.BOOLEAN, at)), at),
+                        call("onChange", listOf(widget.onPageChange), at)))
+            }
             is Widget.Conditional -> throw IllegalArgumentException(
                 "Conditional widgets require a children boundary at $at")
             is Widget.BuilderCall -> {

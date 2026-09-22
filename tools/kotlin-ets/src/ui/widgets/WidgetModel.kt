@@ -23,6 +23,9 @@ sealed interface Widget<V, S> {
         override val source: S) : Widget<V, S>
     data class Box<V, S>(val children: Children<V, S>, override val modifiers: List<WidgetModifier<V, S>>,
         override val source: S) : Widget<V, S>
+    data class Pager<V, S>(val currentPage: V, val pageCount: V, val controller: V,
+        val onPageChange: V, val pageContent: IndexedChildren<V, S>,
+        override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
     data class Conditional<V, S>(val branches: List<WidgetBranch<V, S>>, override val source: S) : Widget<V, S> {
         override val modifiers: List<WidgetModifier<V, S>> = emptyList()
     }
@@ -52,6 +55,7 @@ data class WidgetTextStyle<V, S>(val fontSize: WidgetValue<V, S>?,
     val lineHeight: WidgetValue<V, S>?)
 
 data class Children<V, S>(val widgets: List<Widget<V, S>>)
+data class IndexedChildren<V, S>(val index: V, val children: Children<V, S>, val source: S)
 
 enum class WidgetLayoutScope { ROW, COLUMN, BOX }
 

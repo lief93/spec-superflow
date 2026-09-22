@@ -21,6 +21,7 @@ const pipelineProbe = join(here, 'CoreProfilePipelineProbe.kt');
 const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
   'BackendTest.kt', 'WidgetProbe.kt', 'CoreProfile.kt', 'CoreProfilePipelineProbe.kt',
   'StateProfile.kt', 'UnsupportedState.kt', 'StateJvmOracle.kt', 'StatePipelineProbe.kt',
+  'PagerProfile.kt', 'PagerUnsupported.kt', 'PagerJvmOracle.kt', 'PagerPipelineProbe.kt',
   'InputStateProfile.kt', 'InputStateUnsupported.kt', 'InputStateJvmOracle.kt', 'InputStatePipelineProbe.kt',
   'ReusableCard.kt', 'HelperEntry.kt', 'HelperUnsupported.kt', 'HelperJvmOracle.kt', 'HelperPipelineProbe.kt',
   'input-state-sdk.mjs', 'helper-sdk.mjs', 'PipelineSeamAgent.java'].map(name => join(here, name));
@@ -100,6 +101,34 @@ assert.deepEqual(context.result, expectedState);
 const stateSemantics = join(work, 'state-profile-output/state-semantics.json');
 writeFileSync(stateSemantics, JSON.stringify({ expected: expectedState, actual: context.result }, null, 2) + '\n');
 console.log('PASS JVM/ETS Compose state transitions preserve update order and runtime branch reads');
+const pagerProbeJar = compile('pager-pipeline-probe', [join(here, 'PagerPipelineProbe.kt')],
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
+console.log(run('pager-profile-pipeline', 'java', ['-cp',
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar, pagerProbeJar].join(':'),
+  'dev.ets.widgettest.PagerPipelineProbeKt', uiCp, join(work, 'pager-profile-output'),
+  join(here, 'PagerProfile.kt'), join(here, 'PagerUnsupported.kt')]).trim());
+const pagerOracleJar = compile('pager-jvm-oracle', [join(here, 'PagerJvmOracle.kt')], cp);
+const expectedPager = run('pager-jvm', 'java', ['-cp', `${cp}:${pagerOracleJar}`, 'widgetpager.PagerJvmOracleKt'])
+  .trim().split('\n');
+const pagerOutput = join(work, 'pager-profile-output/PagerProfile.ets');
+const pagerCode = readFileSync(pagerOutput, 'utf8');
+const pagerInitial = pagerCode.match(/@State private pager_currentPage: number = (\d+);/)?.[1];
+const pagerCallback = pagerCode.match(/\.onChange\(\(index: number\): void => \{([\s\S]*?)\n\s*\}\)/)?.[1];
+assert.ok(pagerInitial && pagerCallback, 'Expected typed Pager state and onChange callback in generated ETS');
+const pagerRuntimeSource = `class RuntimePager {
+  pager_currentPage = ${pagerInitial};
+  change(index) {${pagerCallback}\n  }
+}
+const pager = new RuntimePager();
+result.push(String(pager.pager_currentPage));
+for (const page of [2, 0]) { pager.change(page); result.push(String(pager.pager_currentPage)); }`;
+const pagerContext = { result: [] };
+vm.runInNewContext(pagerRuntimeSource, pagerContext, { timeout: 1000 });
+assert.deepEqual(pagerContext.result, expectedPager);
+const pagerSemantics = join(work, 'pager-profile-output/pager-semantics.json');
+writeFileSync(pagerSemantics,
+  JSON.stringify({ expected: expectedPager, actual: pagerContext.result }, null, 2) + '\n');
+console.log('PASS JVM/ETS Pager onChange transitions preserve currentPage state');
 const inputStateProbeJar = compile('input-state-pipeline-probe', [join(here, 'InputStatePipelineProbe.kt')],
   [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
 console.log(run('input-state-profile-pipeline', 'java', ['-cp',
@@ -184,6 +213,7 @@ const coreProfileOutput = join(work, 'core-profile-output/CoreProfile.ets');
 assert.ok(existsSync(output));
 assert.ok(existsSync(coreProfileOutput));
 assert.ok(existsSync(stateOutput));
+assert.ok(existsSync(pagerOutput));
 assert.ok(existsSync(inputStateOutput));
 assert.ok(existsSync(helperOutput));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
@@ -192,6 +222,7 @@ assert.ok(diagnostics.every(line => line.includes('UNSUPPORTED') && line.include
 assert.ok(implementation.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,
   outputs: identities([output, coreProfileOutput, stateOutput, stateSemantics,
+    pagerOutput, pagerSemantics, join(work, 'pager-profile-output/pager-diagnostics.tsv'),
     inputStateOutput, inputStateSemantics, traceFile,
     helperOutput, helperSemantics,
     join(work, 'output/model.txt'), join(work, 'output/diagnostics.tsv'),
@@ -202,9 +233,10 @@ writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implemen
     join(work, 'output/WidgetPage.ets.resources/base/element/string.json')]),
   independentModelCompilation: true, adapterWithoutHarmony: true, backendWithoutCompilerOrCompose: true,
   typedTargetValidation: true, coreProfileProductionPipeline: true, composeStateProductionPipeline: true,
-  composeStateJvmEtsSemantics: true, inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
+  composeStateJvmEtsSemantics: true, pagerProductionPipeline: true, pagerJvmEtsSemantics: true,
+  inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
   composeHelperProductionPipeline: true, composeHelperJvmEtsSemantics: true,
-  sourceLinkedRejections: diagnostics.length + 8,
+  sourceLinkedRejections: diagnostics.length + 17,
   sdk: 'separate SDK command required', nativeRendering: 'not run',
 }, null, 2));
 console.log('PASS Widget module isolation, resolved structure, typed ETS and explicit unsupported diagnostics');

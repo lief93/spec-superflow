@@ -17,7 +17,8 @@ import org.jetbrains.kotlin.ir.visitors.acceptVoid
 import org.jetbrains.kotlin.name.FqName
 
 /** Resolved source composables become named builders; composable lambdas remain structured slots. */
-class ComposeHelperLowering(private val backend: EtsBackend, private val diagnostics: DiagnosticSink) {
+class ComposeHelperLowering(private val backend: EtsBackend, private val diagnostics: DiagnosticSink,
+    pagers: Map<IrValueSymbol, ComposeStateLowering.PagerStateBinding> = emptyMap()) {
     data class Plan(
         val signature: EtsFunction,
         val model: Children<EtsExpression, SourceSpan>,
@@ -32,7 +33,7 @@ class ComposeHelperLowering(private val backend: EtsBackend, private val diagnos
     private val active = linkedSetOf<IrSimpleFunction>()
     private val owners = mutableListOf<IrFunction>()
     private val slotSymbols = linkedSetOf<IrValueSymbol>()
-    private val adapter = ComposeWidgetAdapter(backend.language, diagnostics, ::sourceCall)
+    private val adapter = ComposeWidgetAdapter(backend.language, diagnostics, ::sourceCall, pagers)
 
     fun lowerEntry(function: IrSimpleFunction, scope: Scope,
         handledStatements: Set<IrStatement>): Children<EtsExpression, SourceSpan> = withOwner(function) {
