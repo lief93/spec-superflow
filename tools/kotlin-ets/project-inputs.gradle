@@ -4,7 +4,9 @@ import java.nio.file.StandardOpenOption
 
 // Bounded to the real JVM/Android KotlinCompile API (verified with KGP 2.1.20).
 // No configuration-name inference: libraries already carries Gradle transforms.
-gradle.projectsEvaluated {
+// Init scripts are also applied to included builds; the selected absolute
+// project path belongs to the top-level build named on the command line.
+if (gradle.parent == null) gradle.projectsEvaluated {
     def root = gradle.rootProject
     def required = { String name ->
         def value = root.findProperty(name)?.toString()
@@ -27,22 +29,21 @@ gradle.projectsEvaluated {
     def type = compile.class
     while (type != null && type.name != 'org.jetbrains.kotlin.gradle.tasks.KotlinCompile') type = type.superclass
     if (type == null) throw new GradleException("Kotlin/ETS: ${compile.path} is not a supported JVM/Android KotlinCompile task (${compile.class.name})")
-    if (root.tasks.findByName('kotlinEtsCollectInputs') != null) {
-        throw new GradleException('Kotlin/ETS: root task kotlinEtsCollectInputs already exists')
+    if (project.tasks.findByName('kotlinEtsCollectInputs') != null) {
+        throw new GradleException("Kotlin/ETS: ${project.path} task kotlinEtsCollectInputs already exists")
     }
-    root.tasks.register('kotlinEtsCollectInputs') {
+    project.tasks.register('kotlinEtsCollectInputs') {
         description = 'Collect actual Kotlin compile sources and resolved libraries without running that compile task'
         // Include producer dependencies, not the selected KotlinCompile action.
         // Resolving files happens in doLast, after these producers have run.
-        dependsOn { compile.taskDependencies.getDependencies(compile) }
         dependsOn compile.sources.buildDependencies, compile.javaSources.buildDependencies, compile.libraries.buildDependencies
-        doLast {
+        doLast { collectionTask ->
             def completedOutputs = [:]
-            def visited = new HashSet()
-            def visitProducer
-            visitProducer = { producer ->
-                if (producer == compile || !visited.add(producer)) return
-                producer.taskDependencies.getDependencies(producer).each { visitProducer(it) }
+            // Gradle 9 isolates project state during parallel configuration.
+            // The finalized task graph already contains every transitive input
+            // producer and can be inspected without querying another project.
+            gradle.taskGraph.allTasks.each { producer ->
+                if (producer == compile || producer == collectionTask) return
                 def state = producer.state
                 if (state.executed && state.failure == null && (!state.skipped || state.noSource || state.upToDate)) {
                     producer.outputs.files.files.each { file ->
@@ -50,7 +51,6 @@ gradle.projectsEvaluated {
                     }
                 }
             }
-            (compile.taskDependencies.getDependencies(compile) + compile.libraries.buildDependencies.getDependencies(compile)).each { visitProducer(it) }
             def omittedClasspath = []
             def checked = { Collection<File> files, String kind ->
                 def paths = new LinkedHashSet<String>()

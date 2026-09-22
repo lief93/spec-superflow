@@ -68,6 +68,9 @@ project build scripts. It obtains sources and libraries from the selected real
 Kotlin JVM compile task. Gradle resolves transitive dependencies, project outputs
 and Android transformed classpath artifacts; the tool does not glob the global
 cache or guess dependency versions. Android boot classpath is also included.
+The init script ignores included builds and registers the collector in the
+selected module. This keeps Gradle 9 classpath resolution under that project's
+state lock while still allowing included build logic to configure the main build.
 
 A completed prerequisite may legitimately emit no classes. An absent classpath
 entry is omitted only when its exact path is a declared output of a completed

@@ -149,15 +149,51 @@ classpath. Its 100% standard-library result establishes recognition for the
 calls in this entry; it does not establish target KLIB body availability,
 ArkTS SDK compatibility, or device behavior.
 
+The third public-project baseline covers Now in Android's included-build and
+flavored-module topology:
+
+```bash
+node tools/kotlin-ets/tests/preflight/now-in-android.mjs \
+  /absolute/path/to/nowinandroid
+```
+
+The runner creates a detached worktree at revision
+`5e34fb49c04717265d5351035fcc87f6bba6ed18`, collects
+`:core:designsystem:compileDemoDebugKotlin` offline, verifies the production
+compiler-environment rejection, and then runs the fixed 2.1.20 Core Profile CLI
+for
+`com.google.samples.apps.nowinandroid.core.designsystem.component.TagPreview`.
+The collected input has 23 Kotlin sources and 54 classpath entries. The report
+contains 319 calls:
+
+| Category | Total | Recognized | Unsupported | Coverage |
+| --- | ---: | ---: | ---: | ---: |
+| Language semantics | 112 | 112 | 0 | 100% |
+| Standard library | 16 | 16 | 0 | 100% |
+| Neutral Compose widget | 191 | 175 | 16 | 91.62% |
+| Modifier | 0 | 0 | 0 | — |
+| Resources | 0 | 0 | 0 | — |
+| Project dependencies | 0 | 0 | 0 | — |
+
+The schema retains all six categories, including the three empty categories,
+and preserves all 16 unsupported call records with 1-based locations and module
+ownership. The earliest preflight type gap is `ProvidedValue<GradientColors>`
+at line 237, column 9. Generation fails closed first on
+`isSystemInDarkTheme` at line 194, column 26, and emits no ETS target. The
+project pins Kotlin 2.1.10, so the formal project path stops at compiler
+compatibility; the direct fixed-frontend run is compiler/host coverage only and
+does not claim KLIB, ArkTS SDK, or device acceptance.
+
 Final verification evidence:
 
 | Coverage | Result | Evidence |
 | --- | --- | --- |
 | RED: option absent | `--preflight-out` rejected as unknown | `tests/preflight/.work/run-llBELG` |
 | RED: empty UI | empty `@Builder` was generated silently | `tests/preflight/.work/run-ZdiDg6` |
-| Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations and negative no-target cases | `tests/preflight/.work/run-gcipOx` |
+| Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations and negative no-target cases | `tests/preflight/.work/run-VuJGm0` |
 | Mars Photos public baseline | widget 100%, Modifier 100%, resources 50%; two explicit P0 gaps; no target | `tests/preflight/.work/mars-photos-Lh41tH` |
-| Architecture Samples public baseline | 124 calls across all six groups; ten explicit unsupported calls; no target | `tests/preflight/.work/architecture-samples-35FMMz` |
+| Architecture Samples public baseline | 124 calls across all six groups; ten explicit unsupported calls; no target | `tests/preflight/.work/architecture-samples-VFhbPE` |
+| Now in Android public baseline | 319 calls; language and stdlib 100%, Compose 91.62%; no target | `tests/preflight/.work/now-in-android-ejNSx9` |
 | Full language suite | pass | `tests/language/.work/run-01EAKd` |
 | Module suite | 44 JVM/module cases pass | `tests/modules/.work/run-KWHnWz` |
 | Typed backend suite | pass | `tests/preflight/.work/kotlin-ets-backend-tests.SCdkSg` |
