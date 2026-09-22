@@ -67,8 +67,13 @@ const platformFailure = JSON.parse(platform.result.stdout);
 assert.equal(platformFailure.code, 'UNSUPPORTED');
 assert.equal(platformFailure.source.line, 3);
 assert.equal(entry(platform.report, 'java.lang.System.gc(').category, 'project_dependencies');
-assert.match(platform.report.firstUnsupportedNode.message, /Unsupported external call/);
+assert.match(entry(platform.report, 'java.lang.System.gc(').firstUnsupportedNode.message, /Unsupported external call/);
 assert.equal(entry(platform.report, 'java.lang.System.gc(').firstUnsupportedNode.source.line, 3);
+const unsupportedType = entry(platform.report, 'java.lang.System.getProperties(');
+assert.equal(unsupportedType.firstUnsupportedNode.kind, 'target_type');
+assert.equal(unsupportedType.firstUnsupportedNode.source.line, unsupportedType.source.line);
+assert.equal(unsupportedType.firstUnsupportedNode.source.column, unsupportedType.source.column);
+assert.equal(platform.report.firstUnsupportedNode.source.line, unsupportedType.source.line);
 assert.equal(existsSync(platform.output), false);
 
 const dependencyJar = join(work, 'dependency.jar');
@@ -137,5 +142,11 @@ assert.deepEqual(new Set([
   ...coverage.report.calls,
 ].map(call => call.category)), new Set(['language_semantics', 'standard_library', 'neutral_compose_widget',
   'modifier', 'resources', 'project_dependencies']));
+for (const call of [positive, platform, dependency, compose, coverage].flatMap(result => result.report.calls)) {
+  assert.ok(call.source.line > 0 && call.source.column > 0);
+  assert.ok(call.finalRecognizedNode.source.line > 0 && call.finalRecognizedNode.source.column > 0);
+  if (call.firstUnsupportedNode)
+    assert.ok(call.firstUnsupportedNode.source.line > 0 && call.firstUnsupportedNode.source.column > 0);
+}
 console.log('PASS Core Profile: six categories, coverage ownership, recognized/gap nodes and 1-based locations');
 console.log('PASS no silent fallback: source defaults recorded; empty UI rejected; unsupported calls publish no target');

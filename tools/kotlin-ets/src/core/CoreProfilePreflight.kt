@@ -151,49 +151,56 @@ fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnosti
     val recognizedNodes = mutableListOf<CoreProfileNode>()
     module.files.forEach { file ->
         diagnostics.currentFile = file.fileEntry.name
+        val sourceAnchors = mutableListOf<SourceSpan>()
         file.acceptChildrenVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) {
-                if (element !is IrCall) {
-                    val node = when (element) {
-                        is IrGetField -> CoreProfileNode("resolved_field", symbolName(element.symbol.owner),
-                            sourceSpan(element, diagnostics))
-                        is IrGetObjectValue -> CoreProfileNode("resolved_object", symbolName(element.symbol.owner),
-                            sourceSpan(element, diagnostics))
-                        else -> null
+                val elementSource = sourceSpan(element, diagnostics)
+                val sourceLinked = elementSource.start >= 0 && elementSource.end >= elementSource.start
+                if (sourceLinked) sourceAnchors += elementSource
+                val at = if (sourceLinked) elementSource else sourceAnchors.lastOrNull() ?: elementSource
+                try {
+                    if (element !is IrCall) {
+                        val node = when (element) {
+                            is IrGetField -> CoreProfileNode("resolved_field", symbolName(element.symbol.owner), at)
+                            is IrGetObjectValue -> CoreProfileNode("resolved_object", symbolName(element.symbol.owner), at)
+                            else -> null
+                        }
+                        if (node != null) recognizedNodes += node
+                        element.acceptChildrenVoid(this)
+                        return
                     }
-                    if (node != null) recognizedNodes += node
-                    element.acceptChildrenVoid(this)
-                    return
-                }
-                val expression = element
-                val owner = expression.symbol.owner
-                val symbol = symbolName(owner) + owner.valueParameters.joinToString(",", "(", ")") { it.type.render() } +
-                    ":" + owner.returnType.render()
-                val at = sourceSpan(expression, diagnostics)
-                val resolutions = owner.valueParameters.mapIndexedNotNull { index, parameter ->
-                    if (expression.getValueArgument(index) != null) null
-                    else when {
-                        parameter.defaultValue != null -> CoreProfileArgumentResolution(parameter.name.asString(), "source_default")
-                        parameter.varargElementType != null -> CoreProfileArgumentResolution(parameter.name.asString(), "empty_vararg")
-                        else -> diagnostics.unsupported(expression,
-                            "Preflight found a missing resolved argument ${parameter.name} in ${symbolName(owner)}")
+                    val expression = element
+                    val owner = expression.symbol.owner
+                    val symbol = symbolName(owner) + owner.valueParameters.joinToString(",", "(", ")") { it.type.render() } +
+                        ":" + owner.returnType.render()
+                    val resolutions = owner.valueParameters.mapIndexedNotNull { index, parameter ->
+                        if (expression.getValueArgument(index) != null) null
+                        else when {
+                            parameter.defaultValue != null -> CoreProfileArgumentResolution(parameter.name.asString(), "source_default")
+                            parameter.varargElementType != null -> CoreProfileArgumentResolution(parameter.name.asString(), "empty_vararg")
+                            else -> diagnostics.unsupported(expression,
+                                "Preflight found a missing resolved argument ${parameter.name} in ${symbolName(owner)}")
+                        }
                     }
+                    val category = profileCategory(expression)
+                    val module = responsibleModule(expression, category)
+                    var unsupported: CoreProfileUnsupportedNode? = null
+                    val expected = try {
+                        profileType(language.type(expression.type))
+                    } catch (failure: Unsupported) {
+                        val source = failure.diagnostic.source.takeIf { it.start >= 0 && it.end >= it.start } ?: at
+                        unsupported = CoreProfileUnsupportedNode("target_type", symbolName(owner), failure.diagnostic.message,
+                            source, module)
+                        null
+                    }
+                    val recognizedKind = if (expected == null) "resolved_call" else "typed_call"
+                    val recognized = CoreProfileNode(recognizedKind, symbolName(owner), at)
+                    recognizedNodes += recognized
+                    calls += CoreProfileCall(category, symbol, expected, at, resolutions, recognized, unsupported, module)
+                    expression.acceptChildrenVoid(this)
+                } finally {
+                    if (sourceLinked) sourceAnchors.removeAt(sourceAnchors.lastIndex)
                 }
-                val category = profileCategory(expression)
-                val module = responsibleModule(expression, category)
-                var unsupported: CoreProfileUnsupportedNode? = null
-                val expected = try {
-                    profileType(language.type(expression.type))
-                } catch (failure: Unsupported) {
-                    unsupported = CoreProfileUnsupportedNode("target_type", symbolName(owner), failure.diagnostic.message,
-                        failure.diagnostic.source, module)
-                    null
-                }
-                val recognizedKind = if (expected == null) "resolved_call" else "typed_call"
-                val recognized = CoreProfileNode(recognizedKind, symbolName(owner), at)
-                recognizedNodes += recognized
-                calls += CoreProfileCall(category, symbol, expected, at, resolutions, recognized, unsupported, module)
-                expression.acceptChildrenVoid(this)
             }
         })
     }
