@@ -24,8 +24,9 @@ fun main(args: Array<String>) {
         val backend = EtsBackend(sink, listOf(StandardLibraryRules()))
         val plan = ComposeStateLowering(backend.language, sink).lower(entry, Scope(), "LazyListProfile")
         check(plan.lazyLists.size == 2)
+        check(plan.imports == listOf(EtsImport("@kit.ArkUI", "LengthMetrics")))
         check(plan.fields.map { it.symbol.name } == listOf(
-            "__etsState_selected",
+            "__etsState_selected", "__etsState_effectSeed",
             "columnState_firstVisibleItemIndex", "columnState_scroller", "columnState_initialOffsetApplied",
             "rowState_firstVisibleItemIndex", "rowState_scroller", "rowState_initialOffsetApplied"))
         check(plan.fields.filter { it.symbol.name.endsWith("firstVisibleItemIndex") }.all { it.state })
@@ -33,9 +34,10 @@ fun main(args: Array<String>) {
             plan.pagers, plan.scrolls, plan.lazyLists)
             .lower(entry, plan.scope, plan.handledStatements)
         val root = model.widgets.single() as Widget.Column<EtsExpression, SourceSpan>
-        check(root.children.widgets.size == 2)
-        val column = root.children.widgets[0] as Widget.LazyList<EtsExpression, SourceSpan>
-        val row = root.children.widgets[1] as Widget.LazyList<EtsExpression, SourceSpan>
+        check(root.children.widgets.size == 3)
+        check(root.children.widgets[0] is Widget.Button)
+        val column = root.children.widgets[1] as Widget.LazyList<EtsExpression, SourceSpan>
+        val row = root.children.widgets[2] as Widget.LazyList<EtsExpression, SourceSpan>
         check(column.axis == WidgetScrollAxis.VERTICAL && row.axis == WidgetScrollAxis.HORIZONTAL)
         check((column.enabled as EtsLiteral).value == false && (row.enabled as EtsLiteral).value == true)
         check((column.state!!.initialIndex as EtsLiteral).value == 1)
@@ -60,8 +62,8 @@ fun main(args: Array<String>) {
         fun name(element: EtsUiElement) = (element.call.callee as EtsReference).symbol.name
         val targetRoot = target.single() as EtsUiElement
         check(name(targetRoot) == "Column")
-        val targetColumn = targetRoot.children!![0] as EtsUiElement
-        val targetRow = targetRoot.children!![1] as EtsUiElement
+        val targetColumn = targetRoot.children!![1] as EtsUiElement
+        val targetRow = targetRoot.children!![2] as EtsUiElement
         check(name(targetColumn) == "List" && name(targetRow) == "List")
         check((targetColumn.call.arguments.single() as EtsObject).fields.keys ==
             setOf("initialIndex", "scroller"))
@@ -84,6 +86,7 @@ fun main(args: Array<String>) {
         val code = ComposeWidgetPipeline(backend, StandardLibraryRuntime)
             .compile(module, "widgetlazy.LazyListProfile")
         File(output, "LazyListProfile.ets").writeText(code)
+        check("import { LengthMetrics } from \"@kit.ArkUI\";" in code)
         check("class __etsLazyArrayDataSource<T> implements IDataSource" in code)
         check("function __etsLazyIndices(count: number): Array<number>" in code)
         check("List({" in code && "LazyForEach(" in code && "ListItem() {" in code)
@@ -96,6 +99,12 @@ fun main(args: Array<String>) {
         check(".onScrollIndex((start: number, end: number, center: number): void => {" in code)
         check("this.columnState_firstVisibleItemIndex = start;" in code)
         check("this.rowState_firstVisibleItemIndex = start;" in code)
+        check(".scrollToIndex(__etsLazyIndex" in code)
+        check("if (__etsLazyIndex" in code && "if (__etsLazyOffset" in code)
+        check("LazyListState index must be non-negative." in code)
+        check("LazyListState scrollOffset must be non-negative." in code)
+        check("false, ScrollAlign.START, { extraOffset: LengthMetrics.px(__etsLazyOffset" in code)
+        check("true, ScrollAlign.START, { extraOffset: LengthMetrics.px(__etsLazyOffset" in code)
         check("Text(\"\" + \"Selected \" + this.__etsState_selected + \" at \" + " +
             "this.columnState_firstVisibleItemIndex)" in code)
         check("new __etsLazyArrayDataSource<string>([\"Ada\", \"Lin\"] as Array<string>)" in code)
@@ -112,6 +121,8 @@ fun main(args: Array<String>) {
             "NegativeLazyListOffset" to "must be non-negative",
             "ObservedLazyListState" to "Observed or shared LazyListState",
             "UnsupportedLazyListOffsetRead" to "cannot be represented by ArkUI List state",
+            "NegativeProgrammaticLazyListIndex" to "silently ignored by ArkUI scrollToIndex",
+            "UnsupportedLazyListLaunchShape" to "Coroutine launch start semantics cannot be preserved",
             "ReverseList" to "argument: reverseLayout",
             "UnstableKeyList" to "stable String or Int",
             "AnimatedItemList" to "animateItem",
@@ -128,29 +139,36 @@ fun main(args: Array<String>) {
             check(failure.source.start >= 0 && failure.source.end > failure.source.start)
             "$name\t${failure.code}\t${failure.source}\t${failure.message}"
         }.toMutableList()
-        val programmatic = functions.single {
-            it.fqNameWhenAvailable?.asString() == "widgetlazy.ProgrammaticLazyListScroll" }
-        val programmaticBackend = EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules()))
-        val programmaticPlan = ComposeStateLowering(programmaticBackend.language,
-            programmaticBackend.diagnostics).lower(programmatic, Scope(), "ProgrammaticLazyListScroll")
-        var animate: IrCall? = null
-        programmatic.acceptChildrenVoid(object : IrElementVisitorVoid {
+        var scroll: IrCall? = null
+        entry.acceptChildrenVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
             override fun visitCall(expression: IrCall) {
                 if (symbolName(expression.symbol.owner) ==
-                    "androidx.compose.foundation.lazy.LazyListState.animateScrollToItem") animate = expression
+                    "androidx.compose.foundation.lazy.LazyListState.scrollToItem") scroll = expression
                 expression.acceptChildrenVoid(this)
             }
         })
-        val programmaticFailure = try {
-            programmaticBackend.language.expression(checkNotNull(animate), programmaticPlan.scope)
-            error("Accepted programmatic LazyListState animateScrollToItem")
+        val valueFailure = try {
+            backend.language.expression(checkNotNull(scroll), plan.scope)
+            error("Accepted LazyListState effect as a target value")
         } catch (error: Unsupported) { error.diagnostic }
-        check("Programmatic LazyListState scrollToItem/animateScrollToItem is not supported" in
-            programmaticFailure.message)
-        check(programmaticFailure.source.file!!.endsWith("/LazyListUnsupported.kt"))
-        diagnostics += "ProgrammaticLazyListScroll\t${programmaticFailure.code}\t" +
-            "${programmaticFailure.source}\t${programmaticFailure.message}"
+        check("is an effect and cannot produce a target value" in valueFailure.message)
+        check(valueFailure.source.file!!.endsWith("/LazyListProfile.kt"))
+        diagnostics += "LazyListEffectValue\t${valueFailure.code}\t${valueFailure.source}\t${valueFailure.message}"
+
+        val missing = functions.single {
+            it.fqNameWhenAvailable?.asString() == "widgetlazy.MissingProgrammaticLazyListBinding" }
+        val missingBackend = EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules()))
+        val missingPlan = ComposeStateLowering(missingBackend.language, missingBackend.diagnostics)
+            .lower(missing, Scope(), "MissingProgrammaticLazyListBinding")
+        val missingFailure = try {
+            missingBackend.language.statements(checkNotNull(missing.body), missingPlan.scope)
+            error("Accepted programmatic LazyListState without owned binding")
+        } catch (error: Unsupported) { error.diagnostic }
+        check("requires source remembered state bound to its typed Scroller" in missingFailure.message)
+        check(missingFailure.source.file!!.endsWith("/LazyListUnsupported.kt"))
+        diagnostics += "MissingProgrammaticLazyListBinding\t${missingFailure.code}\t" +
+            "${missingFailure.source}\t${missingFailure.message}"
         File(output, "lazy-list-diagnostics.tsv").writeText(diagnostics.joinToString("\n"))
     }
     println("PASS official LazyColumn/LazyRow -> neutral LazyList slots -> typed List/LazyForEach")

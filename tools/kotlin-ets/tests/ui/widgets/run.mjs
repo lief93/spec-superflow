@@ -176,6 +176,10 @@ const expectedLazyList = run('lazy-list-jvm', 'java',
   ['-cp', `${cp}:${lazyListOracleJar}`, 'widgetlazy.LazyListJvmOracleKt']).trim().split('\n');
 const lazyListOutput = join(work, 'lazy-list-profile-output/LazyListProfile.ets');
 const lazyListCode = readFileSync(lazyListOutput, 'utf8');
+const lazyEffectSeed = lazyListCode.match(/@State private __etsState_effectSeed: number = (\d+);/)?.[1];
+const lazyEffectCallback = lazyListCode.match(
+  /\.onClick\(\(\): void => \{([\s\S]*?)\n      \}\)\n      List\(/)?.[1];
+assert.ok(lazyEffectSeed && lazyEffectCallback, 'Expected executable LazyListState scroll effects');
 const lazyStateFields = [...lazyListCode.matchAll(
   /@State private (\w+_firstVisibleItemIndex): number = (\d+);/g)];
 const lazyInitialOffsets = [...lazyListCode.matchAll(
@@ -213,7 +217,22 @@ result.push('visible|column|' + state.${lazyStateFields[0][1]});
 result.push('visible|row|' + state.${lazyStateFields[1][1]});`;
 const lazyStateContext = { result: [] };
 vm.runInNewContext(lazyStateRuntime, lazyStateContext, { timeout: 1000 });
-const actualLazyList = [...lazyStateContext.result, 'item|header'];
+const lazyEffectRuntime = `class RuntimeLazyEffect {
+  __etsState_effectSeed = ${lazyEffectSeed};
+  effects = [];
+  columnState_scroller = { scrollToIndex: (index, smooth, align, options) => {
+    this.effects.push('effect|' + index + '|' + options.extraOffset + '|' + smooth);
+  } };
+  click() {${lazyEffectCallback.replaceAll(/const (\w+): number =/g, 'const $1 =')}\n  }
+}
+const state = new RuntimeLazyEffect();
+state.click();
+result.push(...state.effects, 'effect-seed|' + state.__etsState_effectSeed);`;
+const lazyEffectContext = {
+  result: [], LengthMetrics: { px: value => value }, ScrollAlign: { START: 'start' },
+};
+vm.runInNewContext(lazyEffectRuntime, lazyEffectContext, { timeout: 1000 });
+const actualLazyList = [...lazyEffectContext.result, ...lazyStateContext.result, 'item|header'];
 for (const [sourceIndex, values] of lazySources.entries()) {
   const category = ['values', 'count', 'empty', 'row'][sourceIndex];
   values.forEach((item, index) => {
@@ -339,7 +358,7 @@ writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implemen
   lazyListProductionPipeline: true, lazyListJvmEtsSemantics: true,
   inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
   composeHelperProductionPipeline: true, composeHelperJvmEtsSemantics: true,
-  sourceLinkedRejections: diagnostics.length + 36,
+  sourceLinkedRejections: diagnostics.length + 39,
   sdk: 'separate SDK command required', nativeRendering: 'not run',
 }, null, 2));
 console.log('PASS Widget module isolation, resolved structure, typed ETS and explicit unsupported diagnostics');

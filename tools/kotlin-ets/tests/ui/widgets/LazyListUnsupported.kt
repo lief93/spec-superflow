@@ -10,7 +10,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 
 @Composable
 fun StickyHeaderList() {
@@ -70,13 +73,26 @@ fun LazyGrid() {
     LazyVerticalGrid(columns = GridCells.Fixed(2)) { item { Text("A") } }
 }
 
-private fun launchLazyScroll(block: suspend () -> Unit) = Unit
-
 @Composable
-fun ProgrammaticLazyListScroll() {
+fun NegativeProgrammaticLazyListIndex() {
     val state = rememberLazyListState()
-    Button(onClick = { launchLazyScroll { state.animateScrollToItem(2, 3) } }) {
+    val scope = rememberCoroutineScope()
+    Button(onClick = { scope.launch { state.scrollToItem(-1) } }) {
         Text("Scroll")
     }
     LazyColumn(state = state) { item { Text("A") } }
+}
+
+@Composable
+fun UnsupportedLazyListLaunchShape() {
+    val state = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    Button(onClick = { scope.launch(start = CoroutineStart.LAZY) { state.animateScrollToItem(2) } }) {
+        Text("Scroll")
+    }
+    LazyColumn(state = state) { item { Text("A") } }
+}
+
+suspend fun MissingProgrammaticLazyListBinding(state: LazyListState) {
+    state.scrollToItem(1)
 }
