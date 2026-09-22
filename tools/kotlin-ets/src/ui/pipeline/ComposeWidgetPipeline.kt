@@ -60,7 +60,7 @@ class ComposeWidgetPipeline(
         files.getOrPut(path) { mutableListOf() } += declaration
         val program = backend.link(EtsProgram(files.map { (sourcePath, declarations) ->
             EtsFile(sourcePath, declarations)
-        }))
+        }, imports = state.imports))
         EtsValidator().validate(program)
         return emitEtsProgram(program, runtime)
     }

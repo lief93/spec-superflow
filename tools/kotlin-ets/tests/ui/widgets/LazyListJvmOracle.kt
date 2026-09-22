@@ -1,6 +1,12 @@
 package widgetlazy
 
 fun main() {
+    var effectSeed = 2
+    fun scroll(index: Int, offset: Int, smooth: Boolean) =
+        println("effect|$index|$offset|$smooth")
+    scroll(effectSeed++, effectSeed++, false)
+    scroll(effectSeed++, effectSeed++, true)
+    println("effect-seed|$effectSeed")
     var columnIndex = 1
     var rowIndex = 1
     println("state|column|$columnIndex|6")

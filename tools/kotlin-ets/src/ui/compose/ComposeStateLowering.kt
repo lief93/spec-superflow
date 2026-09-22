@@ -13,6 +13,8 @@ import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.isBoolean
 import org.jetbrains.kotlin.ir.types.isInt
 import org.jetbrains.kotlin.ir.types.isString
+import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
+import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 
 /** Extracts the small Compose state profile before neutral widget adaptation. */
 class ComposeStateLowering(private val language: Language, private val diagnostics: DiagnosticSink) {
@@ -23,6 +25,7 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val pagers: Map<IrValueSymbol, PagerStateBinding> = emptyMap(),
         val scrolls: Map<IrValueSymbol, ScrollStateBinding> = emptyMap(),
         val lazyLists: Map<IrValueSymbol, LazyListStateBinding> = emptyMap(),
+        val imports: List<EtsImport> = emptyList(),
     )
 
     data class PagerStateBinding(
@@ -84,6 +87,7 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val pagerStates = mutableListOf<PagerState>()
         val scrollStates = mutableListOf<ScrollState>()
         val lazyListStates = mutableListOf<LazyListState>()
+        val coroutineScopes = mutableSetOf<IrValueSymbol>()
         val fields = mutableListOf<EtsField>()
         statements.forEach { statement ->
             val state = state(statement, scope, handled)
@@ -104,12 +108,10 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
                         lazyListStates += lazy
                         fields += listOfNotNull(lazy.firstVisibleIndex, lazy.controller,
                             lazy.initialOffsetApplied)
-                    }
+                    } ?: coroutineScope(statement, handled)?.let(coroutineScopes::add)
                 }
             }
         }
-        if (states.isEmpty() && pagerStates.isEmpty() && scrollStates.isEmpty() && lazyListStates.isEmpty())
-            return Plan(emptyList(), scope, handled)
 
         val holders = states.associateBy { it.holder }
         val getters = states.mapNotNull { state -> state.getter?.let { it to state } }.toMap()
@@ -130,11 +132,81 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
             lazy.initialIndex, lazy.initialOffset, member(lazy.firstVisibleIndex, function),
             member(lazy.controller, function), lazy.initialOffsetApplied?.let { member(it, function) },
             lazy.source) }
+        var hasLazyListEffect = false
+        function.acceptChildrenVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
+            override fun visitCall(expression: IrCall) {
+                if (symbolName(expression.symbol.owner) in programmaticLazyListApis) hasLazyListEffect = true
+                expression.acceptChildrenVoid(this)
+            }
+        })
         val rule = object : CallRule {
             private fun direct(call: IrCall): State? {
                 val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
                 if (property !in setOf("androidx.compose.runtime.State.value", "androidx.compose.runtime.MutableState.value")) return null
                 return ((call.dispatchReceiver ?: call.extensionReceiver) as? IrGetValue)?.symbol?.let(holders::get)
+            }
+
+            private fun lazyList(call: IrCall): LazyListStateBinding {
+                val receiver = call.dispatchReceiver ?: call.extensionReceiver
+                return (receiver as? IrGetValue)?.symbol?.let(lazyListBindings::get)
+                    ?: diagnostics.unsupported(receiver ?: call,
+                        "Programmatic LazyListState scrolling requires source remembered state bound to its typed Scroller")
+            }
+
+            private fun lazyListEffect(call: IrCall, language: Language,
+                scope: Scope): List<EtsStatement> {
+                val binding = lazyList(call)
+                val indexSource = argument(call, "index")
+                    ?: diagnostics.unsupported(call, "LazyListState scrolling requires an index")
+                ((indexSource as? IrConst)?.value as? Int)?.takeIf { it < 0 }?.let {
+                    diagnostics.unsupported(indexSource,
+                        "Negative LazyListState index is rejected by Compose but silently ignored by ArkUI scrollToIndex")
+                }
+                val offsetSource = argument(call, "scrollOffset")
+                val at = language.source(call)
+                val index = EtsSymbol("compose-lazy-effect:${at.file}:${at.start}:index",
+                    "__etsLazyIndex${at.start}", EtsTypes.NUMBER, language.source(indexSource))
+                val offset = EtsSymbol("compose-lazy-effect:${at.file}:${at.start}:offset",
+                    "__etsLazyOffset${at.start}", EtsTypes.NUMBER,
+                    offsetSource?.let(language::source) ?: at)
+                val indexValue = language.expression(indexSource, scope)
+                val offsetValue = offsetSource?.let { language.expression(it, scope) }
+                    ?: EtsLiteral(0, EtsTypes.NUMBER, at)
+                val lengthType = EtsNamedType("LengthMetrics", external = true)
+                val lengthFactory = EtsReference(EtsSymbol("arkui:LengthMetrics", "LengthMetrics",
+                    EtsNamedType("LengthMetricsConstructor", external = true), at, external = true))
+                val pixels = EtsCall(EtsMember(lengthFactory, "px",
+                    EtsFunctionType(listOf(EtsTypes.NUMBER), lengthType), at),
+                    listOf(EtsReference(offset)), lengthType, at)
+                val options = EtsObject(linkedMapOf("extraOffset" to pixels),
+                    EtsRecordType("ScrollToIndexOptions", linkedMapOf("extraOffset" to lengthType)), at)
+                val alignType = EtsNamedType("ScrollAlign")
+                val start = EtsMember(EtsReference(EtsSymbol("arkui:ScrollAlign", "ScrollAlign",
+                    alignType, at, external = true)), "START", alignType, at)
+                val method = EtsMember(binding.controller, "scrollToIndex",
+                    EtsFunctionType(listOf(EtsTypes.NUMBER, EtsTypes.BOOLEAN, alignType,
+                        options.type), EtsTypes.VOID), at)
+                val smooth = symbolName(call.symbol.owner) ==
+                    "androidx.compose.foundation.lazy.LazyListState.animateScrollToItem"
+                fun nonNegative(value: EtsSymbol, label: String): EtsIf {
+                    val fail = EtsCall(EtsReference(EtsSymbol("stdlib:__etsIllegalArgumentException",
+                        "__etsIllegalArgumentException",
+                        EtsFunctionType(listOf(EtsTypes.STRING), EtsTypes.NEVER), at, external = true)),
+                        listOf(EtsLiteral("LazyListState $label must be non-negative.",
+                            EtsTypes.STRING, at)), EtsTypes.NEVER, at)
+                    return EtsIf(listOf(EtsBranch(EtsBinary("<", EtsReference(value),
+                        EtsLiteral(0, EtsTypes.NUMBER, at), EtsTypes.BOOLEAN, at),
+                        listOf(EtsExpressionStatement(fail)))), at)
+                }
+                return listOf(
+                    EtsVariable(index, indexValue, mutable = false),
+                    EtsVariable(offset, offsetValue, mutable = false),
+                    nonNegative(index, "index"),
+                    nonNegative(offset, "scrollOffset"),
+                    EtsExpressionStatement(EtsCall(method, listOf(EtsReference(index),
+                        EtsLiteral(smooth, EtsTypes.BOOLEAN, at), start, options), EtsTypes.VOID, at)),
+                )
             }
 
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
@@ -168,10 +240,14 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
                         diagnostics.unsupported(call, "Programmatic ScrollState scrollTo/animateScrollTo is not supported")
                 }
                 if (api in programmaticLazyListApis) {
-                    val receiver = call.dispatchReceiver ?: call.extensionReceiver
-                    if ((receiver as? IrGetValue)?.symbol in lazyListBindings)
-                        diagnostics.unsupported(call,
-                            "Programmatic LazyListState scrollToItem/animateScrollToItem is not supported")
+                    lazyList(call)
+                    diagnostics.unsupported(call,
+                        "LazyListState scrollToItem/animateScrollToItem is an effect and cannot produce a target value")
+                }
+                if (api == coroutineLaunchApi &&
+                    ((call.dispatchReceiver ?: call.extensionReceiver) as? IrGetValue)?.symbol in coroutineScopes) {
+                    diagnostics.unsupported(call,
+                        "Coroutine launch is an effect and cannot produce a target Job value")
                 }
                 getters[call.symbol]?.let { return member(it, call) }
                 setters[call.symbol]?.let { return etsDiscard(assignment(call, it, scope), language.source(call)) }
@@ -185,9 +261,19 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
                 val receiver = call.dispatchReceiver ?: call.extensionReceiver
                 if (api in programmaticScrollApis && (receiver as? IrGetValue)?.symbol in scrollBindings)
                     diagnostics.unsupported(call, "Programmatic ScrollState scrollTo/animateScrollTo is not supported")
-                if (api in programmaticLazyListApis && (receiver as? IrGetValue)?.symbol in lazyListBindings)
-                    diagnostics.unsupported(call,
-                        "Programmatic LazyListState scrollToItem/animateScrollToItem is not supported")
+                if (api in programmaticLazyListApis) return lazyListEffect(call, language, scope)
+                if (api == coroutineLaunchApi && (receiver as? IrGetValue)?.symbol in coroutineScopes) {
+                    call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
+                        call.getValueArgument(index)?.takeIf { parameter.name.asString() != "block" }?.let {
+                            diagnostics.unsupported(it,
+                                "Coroutine launch ${parameter.name} semantics cannot be preserved by an ArkUI event effect")
+                        }
+                    }
+                    val block = lambda(argument(call, "block"), scope)
+                        ?: diagnostics.unsupported(call, "Coroutine launch requires a direct suspend block")
+                    return language.statements(block.body
+                        ?: diagnostics.unsupported(block, "Coroutine launch block has no body"), scope.fork())
+                }
                 val state = setters[call.symbol] ?: direct(call)?.takeIf { call.symbol.owner.valueParameters.isNotEmpty() }
                     ?: return null
                 return listOf(EtsExpressionStatement(assignment(call, state, scope)))
@@ -195,7 +281,24 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         }
         val loweredScope = Scope(LinkedHashMap(scope.bindings), LinkedHashMap(scope.aliases), scope.callRule,
             listOf(rule) + scope.callRules, LinkedHashMap(scope.ambientValues))
-        return Plan(fields, loweredScope, handled, pagerBindings, scrollBindings, lazyListBindings)
+        val imports = if (hasLazyListEffect && lazyListStates.isNotEmpty())
+            listOf(EtsImport("@kit.ArkUI", "LengthMetrics")) else emptyList()
+        return Plan(fields, loweredScope, handled, pagerBindings, scrollBindings, lazyListBindings, imports)
+    }
+
+    private fun coroutineScope(statement: IrStatement,
+        handled: MutableSet<IrStatement>): IrValueSymbol? {
+        val declaration = statement as? IrVariable ?: return null
+        val call = declaration.initializer as? IrCall ?: return null
+        if (symbolName(call.symbol.owner) != "androidx.compose.runtime.rememberCoroutineScope") return null
+        call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
+            call.getValueArgument(index)?.let {
+                diagnostics.unsupported(it,
+                    "rememberCoroutineScope ${parameter.name} semantics cannot be represented by an ArkUI event effect")
+            }
+        }
+        handled += statement
+        return declaration.symbol
     }
 
     private fun lazyListState(statement: IrStatement,
@@ -377,5 +480,6 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val programmaticLazyListApis = setOf(
             "androidx.compose.foundation.lazy.LazyListState.scrollToItem",
             "androidx.compose.foundation.lazy.LazyListState.animateScrollToItem")
+        const val coroutineLaunchApi = "kotlinx.coroutines.launch"
     }
 }
