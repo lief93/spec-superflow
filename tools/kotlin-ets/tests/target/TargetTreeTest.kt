@@ -31,6 +31,7 @@ fun main() {
     checkStrictBindingContract()
     checkGlobalBuilderContract()
     checkComponentPropsContract()
+    checkReactiveStateContract()
     checkGlobalVariableContract()
     checkTryContract()
     check(sum.source == source)
