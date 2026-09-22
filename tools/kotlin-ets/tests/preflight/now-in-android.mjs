@@ -17,8 +17,8 @@ const categories = ['language_semantics', 'standard_library', 'neutral_compose_w
   'project_dependencies'];
 const expectedCoverage = {
   language_semantics: { total: 112, recognized: 112, unsupported: 0, percentage: 100 },
-  standard_library: { total: 16, recognized: 16, unsupported: 0, percentage: 100 },
-  neutral_compose_widget: { total: 191, recognized: 178, unsupported: 13, percentage: 93.19 },
+  standard_library: { total: 16, recognized: 15, unsupported: 1, percentage: 93.75 },
+  neutral_compose_widget: { total: 191, recognized: 179, unsupported: 12, percentage: 93.71 },
   modifier: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   resources: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   project_dependencies: { total: 0, recognized: 0, unsupported: 0, percentage: null },
@@ -69,9 +69,9 @@ try {
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'UNSUPPORTED');
   assert.equal(backendBlocker.message,
-    'Unsupported dimension value: androidx.compose.ui.unit.Dp.Companion.Unspecified');
-  assert.equal(backendBlocker.source.line, 30);
-  assert.equal(backendBlocker.source.column, 33);
+    'Unsupported external field: android.os.Build.VERSION.SDK_INT');
+  assert.equal(backendBlocker.source.line, 250);
+  assert.equal(backendBlocker.source.column, 46);
   assert.equal(existsSync(output), false);
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
@@ -144,6 +144,11 @@ try {
   assert.equal(unspecifiedColors.length, 5);
   assert.ok(unspecifiedColors.every(call => call.expectedTargetType === 'number | null' &&
     call.finalRecognizedNode.kind === 'typed_call' && call.firstUnsupportedNode === null));
+  const unspecifiedDimensions = report.calls.filter(call =>
+    call.finalRecognizedNode.symbol === 'androidx.compose.ui.unit.Dp.Companion.<get-Unspecified>');
+  assert.equal(unspecifiedDimensions.length, 1);
+  assert.ok(unspecifiedDimensions.every(call => call.expectedTargetType === 'number | null' &&
+    call.finalRecognizedNode.kind === 'typed_call' && call.firstUnsupportedNode === null));
   assert.equal(report.firstUnsupportedNode.kind, 'target_type');
   assert.equal(report.firstUnsupportedNode.symbol,
     'androidx.compose.ui.text.style.LineHeightStyle.Alignment.Companion.<get-Bottom>');
@@ -169,8 +174,10 @@ try {
   const unsupportedCalls = report.calls.filter(call => call.firstUnsupportedNode !== null);
   assert.equal(unsupportedCalls.length, 13);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'target_type').length, 12);
-  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 1);
-  assert.ok(unsupportedCalls.every(call => call.category === 'neutral_compose_widget'));
+  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 0);
+  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_field').length, 1);
+  assert.ok(unsupportedCalls.every(call => call.category in
+    { neutral_compose_widget: true, standard_library: true }));
 
   const baseline = {
     schemaVersion: 1,
@@ -184,18 +191,18 @@ try {
     backendBlocker,
     unsupportedCalls,
     p0Gaps: [
-      { category: 'neutral_compose_widget', node: 'androidx.compose.ui.unit.Dp.Unspecified',
-        responsibleModule: 'tools/kotlin-ets/src/ui/DimensionRule.kt', source: backendBlocker.source,
+      { category: 'standard_library', node: 'android.os.Build.VERSION.SDK_INT',
+        responsibleModule: 'tools/kotlin-ets/src/stdlib/StandardLibraryRules.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
       { category: 'neutral_compose_widget', node: 'unsupported_call_inventory',
         responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt',
-        counts: { target_type: 12, unsupported_call: 1 },
-        detail: 'Thirteen source-linked Compose calls remain unsupported; all records are preserved in unsupportedCalls.' },
+        counts: { target_type: 12, unsupported_call: 0, unsupported_field: 1 },
+        detail: 'Thirteen source-linked calls remain unsupported; all records are preserved in unsupportedCalls.' },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS typed optional Color.Unspecified values advance the backend to Dp.Unspecified; all 13 unsupported Compose calls remain explicit');
+  console.log('PASS typed optional Dp.Unspecified values advance the backend to Build.VERSION.SDK_INT; all 13 unsupported calls remain explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

@@ -7,7 +7,7 @@ import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.types.classOrNull
 
 private const val surfaceColorAtElevationApi = "androidx.compose.material3.surfaceColorAtElevation"
-private const val composeDpType = "androidx.compose.ui.unit.Dp"
+private const val composeDpClass = "androidx.compose.ui.unit.Dp"
 
 /** Applies Material's tonal elevation formula to a typed ColorScheme and runtime Dp value. */
 internal class ComposeSurfaceColorAtElevationRule : CallRule {
@@ -21,7 +21,7 @@ internal class ComposeSurfaceColorAtElevationRule : CallRule {
             owner.extensionReceiverParameter?.type?.classOrNull?.owner?.let(::symbolName) !=
                 "androidx.compose.material3.ColorScheme" ||
             owner.valueParameters.size != 1 || owner.valueParameters.single().name.asString() != "elevation" ||
-            owner.valueParameters.single().type.classOrNull?.owner?.let(::symbolName) != composeDpType ||
+            owner.valueParameters.single().type.classOrNull?.owner?.let(::symbolName) != composeDpClass ||
             owner.returnType.classOrNull?.owner?.let(::symbolName) != colorType ||
             call.type.classOrNull?.owner?.let(::symbolName) != colorType || receiver == null || elevation == null)
             throw Unsupported(Diagnostic("UNSUPPORTED", "Unsupported Material3 surfaceColorAtElevation signature", at))
@@ -30,6 +30,7 @@ internal class ComposeSurfaceColorAtElevationRule : CallRule {
 
     private fun lower(value: SurfaceColorAtElevation<IrExpression, SourceSpan>, language: Language,
         scope: Scope): EtsExpression = EtsCall(EtsReference(surfaceColorAtElevation, value.source), listOf(
-            language.expression(value.colorScheme, scope), language.expression(value.elevation, scope)),
+            language.expression(value.colorScheme, scope), requireSpecifiedDp(language.expression(value.elevation, scope),
+                language.source(value.elevation), "surfaceColorAtElevation")),
         EtsTypes.NUMBER, value.source)
 }

@@ -26,3 +26,7 @@ fun choose(wide: Boolean): Dp = if (wide) 96.dp else 48.dp
 
 @Composable fun Em() { Text("unsupported", fontSize = 2.em) }
 @Composable fun Unspecified() { Box(Modifier.width(Dp.Unspecified)) }
+@Composable fun Zero() { Box(Modifier.width(0.dp)) }
+@Composable fun Constraints() {
+    Box(Modifier.sizeIn(minWidth = Dp.Unspecified, maxWidth = Dp.Unspecified))
+}

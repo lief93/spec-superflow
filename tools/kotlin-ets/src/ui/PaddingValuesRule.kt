@@ -14,7 +14,9 @@ internal class ComposePaddingValuesRule : CallRule {
         if (sourceFile(owner) != null || symbolName(owner) != "androidx.compose.foundation.layout.PaddingValues") return null
         val at = language.source(call)
         val names = owner.valueParameters.map { it.name.asString() }
-        fun value(name: String) = argument(call, name)?.let { language.expression(it, scope) } ?: EtsLiteral(0, EtsTypes.NUMBER, at)
+        fun value(name: String) = argument(call, name)?.let {
+            requireSpecifiedDp(language.expression(it, scope), language.source(it), "PaddingValues.$name")
+        } ?: EtsLiteral(0, EtsTypes.NUMBER, at)
         return when (names) {
             listOf("all") -> uniformPadding(value("all"), at)
             listOf("horizontal", "vertical") -> symmetricPadding(value("horizontal"), value("vertical"), at)

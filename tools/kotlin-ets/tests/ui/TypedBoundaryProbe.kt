@@ -23,7 +23,10 @@ private class ObservedLanguage(private val delegate: Language) : Language by del
                 check(value.source.file != null && value.source.start >= 0)
                 check(value.source.end > value.source.start)
                 check(value.symbol.name.none { it in ".()[]" })
-            } else check(value is EtsLiteral) { "Unexpected source binding: $value" }
+            } else {
+                check(value.source.file != null && value.source.start >= 0)
+                check(value.source.end > value.source.start)
+            }
         }
         val original = scope.callRule
         return scope.fork().also { child ->
@@ -49,7 +52,10 @@ private class ObservedLanguage(private val delegate: Language) : Language by del
 fun main(args: Array<String>) {
     val detached = withKotlinModule(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) { module ->
         val diagnostics = DiagnosticSink()
-        val backend = EtsBackend(diagnostics, listOf(StandardLibraryRules(), ComposeColorValueRule()))
+        val backend = EtsBackend(diagnostics, listOf(StandardLibraryRules(), ComposeColorValueRule(),
+            ComposeColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeTypographyRule(),
+            ComposeFontRule(FontResources()), ComposeTextStyleRule(), ComposeDimensionRule(),
+            ComposeCompositionLocalRule(diagnostics), ComposeShapeRule(), ComposeButtonColorsRule()))
         backend.validateSource(module)
         val observed = ObservedLanguage(backend.language)
         val program = ComposeLowering(observed, diagnostics).lower(module, "sample.Page")
@@ -64,7 +70,7 @@ fun main(args: Array<String>) {
         check(program.imports.isNotEmpty())
         check(observed.bindings.values.map { it.symbol.id }.distinct().size == observed.bindings.size)
         check(observed.bindings.values.any {
-            it.type == EtsNamedType("WrappedBuilder", listOf(EtsTupleType(emptyList())))
+            it.type == EtsNamedType("WrappedBuilder", listOf(EtsTupleType(listOf(materialContextType))))
         })
         val sourceFile = module.files.single()
         val sourceModel = sourceFile.declarations.filterIsInstance<IrClass>().single { it.name.asString() == "Model" }
@@ -89,7 +95,7 @@ fun main(args: Array<String>) {
         check(observed.effects.all { it.source.file == args[1] && it.source.start >= 0 && it.source.end > it.source.start })
         val runtime = ComposeRuntime(EtsRuntimeSupport { emptyList() })
         val support = runtime.declarations(program)
-        check(support.count { "class __etsMaterialTypography" in it } == 1)
+        check(support.none { "class __etsMaterialTypography" in it })
         check(support.count { "function __etsNearestTouch" in it } == 1)
         val origin = SourceSpan(args[1], 0, 1)
         val styleType = EtsNamedType("__etsMaterialTypography", symbolId = "compose:materialTypography", external = true)
@@ -109,7 +115,8 @@ fun main(args: Array<String>) {
 private fun verifyUnifiedRules(classpath: String, file: String) {
     withKotlinModule(listOf("-no-stdlib", "-no-reflect", "-classpath", classpath, file)) { module ->
         val diagnostics = DiagnosticSink()
-        val ordinary = EtsBackend(diagnostics, listOf(StandardLibraryRules()))
+        val ordinary = EtsBackend(diagnostics, listOf(StandardLibraryRules(),
+            ComposeCompositionLocalRule(diagnostics), ComposeShapeRule()))
         val unsupported = runCatching { ComposeLowering(ordinary.language, diagnostics).lower(module, "unifiedapi.RulePage") }.exceptionOrNull()
         check(unsupported is Unsupported && "CircularProgressIndicator" in unsupported.message.orEmpty())
         var values = 0
@@ -129,7 +136,8 @@ private fun verifyUnifiedRules(classpath: String, file: String) {
                 return listOf(EtsUiElement(EtsCall(EtsReference(symbol), emptyList(), EtsTypes.VOID, source)))
             }
         }
-        val backend = EtsBackend(diagnostics, listOf(rule, StandardLibraryRules()))
+        val backend = EtsBackend(diagnostics, listOf(rule, StandardLibraryRules(),
+            ComposeCompositionLocalRule(diagnostics), ComposeShapeRule()))
         val result = ComposeLowering(backend.language, diagnostics).lower(module, "unifiedapi.RulePage")
         EtsValidator().validate(result)
         check(values == 1 && controls == 1) { "Registered ordinary/UI rules must both run exactly once" }

@@ -995,7 +995,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val expected = if (unit == "dp") "androidx.compose.ui.unit.Dp" else "androidx.compose.ui.unit.TextUnit"
         if (expression.type.classOrNull?.owner?.let(::symbolName) != expected)
             diagnostics.unsupported(expression, "Expected resolved $unit dimension")
-        return language.expression(expression, scope)
+        val emitted = language.expression(expression, scope)
+        return if (unit == "dp") requireSpecifiedDp(emitted, language.source(expression), "Compose dimension consumer")
+        else emitted
     }
 
     private fun isUnspecifiedDp(value: IrExpression, scope: Scope): Boolean {

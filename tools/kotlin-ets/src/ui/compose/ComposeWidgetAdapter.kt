@@ -488,8 +488,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         fun dimension(value: IrExpression): EtsExpression {
             if (value.type.classFqName?.asString() != "androidx.compose.ui.unit.Dp")
                 diagnostics.unsupported(value, "Widget dimension requires Dp")
-            val emitted = scalar(value, scope)
-            if (emitted.type != EtsTypes.NUMBER) diagnostics.unsupported(value, "Widget Dp requires scalar language lowering")
+            val emitted = requireSpecifiedDp(scalar(value, scope), language.source(value), "Widget dimension")
             val constant = (emitted as? EtsLiteral)?.value as? Number
             if (constant != null && (!constant.toDouble().isFinite() || constant.toDouble() < 0))
                 diagnostics.unsupported(value, "Widget dimension must be finite and non-negative")

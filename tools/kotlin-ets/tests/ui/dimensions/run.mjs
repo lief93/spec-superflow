@@ -26,12 +26,18 @@ function compile(entry, expected = 0, mode = 'page', file = mode === 'page' ? 'P
   return expected === 0 ? readFileSync(output, 'utf8') : result.stdout;
 }
 const page = compile('Page');
-assert.match(page, /Content\(width: number, fontSize: number\)/);
-assert.match(page, /\.width\(width\)/);
+assert.match(page, /Content\(width: number \| null, fontSize: number\)/);
+assert.match(page, /Compose dimension consumer received Dp\.Unspecified/);
+assert.match(page, /\)\(width\)\)/);
 assert.doesNotMatch(page, /layoutPx|migrationContext/);
 assert.match(compile('Em', 2), /Unsupported dimension value: androidx.compose.ui.unit.em/);
-assert.match(compile('Unspecified', 2), /Unspecified/);
+assert.match(compile('Unspecified', 2), /Compose dimension consumer requires a specified Dp value/);
+assert.match(compile('Zero'), /\.width\(0(?:\.0)?\)/);
+assert.doesNotMatch(compile('Constraints'), /constraintSize/);
 const values = compile('Values', 0, 'language');
+assert.match(values, /value: number \| null = null/);
+assert.match(values, /value: number \| null = null, fallback: number \| null = 0/);
+assert.match(values, /value === null/);
 const jar = join(work, 'oracle.jar');
 const build = spawnSync('bash', [join(root, 'tests/stdlib/compiler.sh'), '-classpath', cp.join(':'),
   join(here, 'Values.kt'), join(here, 'Oracle.kt'), '-d', jar], { encoding: 'utf8', timeout: 120000 });
@@ -47,6 +53,8 @@ vm.runInContext(ts.transpileModule(values, { compilerOptions: {
 const actual = Array.from(context.exports.observations());
 assert.deepEqual(actual, expected);
 writeFileSync(join(work, 'parity.json'), JSON.stringify({ expected, actual }, null, 2));
+assert.throws(() => context.exports.consumeUnspecified(), /Dp\.value received Dp\.Unspecified/);
+assert.equal(context.exports.currentDimensionReads(), 1, 'dynamic unspecified Dp must be evaluated once');
 for (const entry of ['RepeatedPadding', 'BoundPadding']) {
   const generated = compile(entry, 0, 'page', 'Padding.kt');
   const parsed = ts.createSourceFile('padding.ts', generated.replace(`export struct ${entry}`, `export class ${entry}`)
@@ -66,4 +74,11 @@ for (const entry of ['RepeatedPadding', 'BoundPadding']) {
   assert.equal(vmContext.exports.paddingReads, 1, 'source padding argument must execute once');
   assert.deepEqual(JSON.parse(JSON.stringify(pads)), [{ left: 1, right: 1, top: 0, bottom: 0 }]);
 }
-console.log('PASS typed dimension construction, JVM Float parity and UI parameter flow; unsupported unit cases reject');
+const sdk = spawnSync(process.execPath, [join(here, '../basic-controls-sdk.mjs'), join(work, 'Page.ets')], {
+  encoding: 'utf8', timeout: 600000,
+  env: { ...process.env, JAVA_TOOL_OPTIONS: '-XX:ActiveProcessorCount=2 -XX:+UseSerialGC',
+    KOTLIN_ETS_SDK_SEED: process.env.KOTLIN_ETS_SDK_SEED ?? '/private/tmp/kotlin-ets-basic-controls-sdk-bZjYXV/harmony' },
+});
+assert.equal(sdk.status, 0, sdk.stdout + sdk.stderr);
+process.stdout.write(sdk.stdout);
+console.log('PASS optional Dp defaults, conditions, equality, concrete guards, ordered effects, JVM parity and SDK');

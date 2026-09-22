@@ -87,11 +87,16 @@ function generate(label, source, entry, accepted = true, trace = false) {
 }
 
 function assertEntryContainer(output, entryCall) {
-  const entryBuild = output.slice(output.lastIndexOf('  build() {'));
-  assert.equal(entryBuild, [
+  const entryBuild = output.slice(output.lastIndexOf('  build() {')).split('\n').slice(0, 7);
+  const actualCall = entryBuild[2]?.trim();
+  const open = entryCall.indexOf('(');
+  assert.ok(actualCall === entryCall || actualCall?.startsWith(entryCall.slice(0, open + 1)) &&
+    actualCall.endsWith(', ' + entryCall.slice(open + 1)), 'entry call must retain its explicit source arguments');
+  entryBuild[2] = '      <entry-call>';
+  assert.equal(entryBuild.join('\n'), [
     '  build() {',
     '    Stack({ alignContent: Alignment.TopStart }) {',
-    `      ${entryCall}`,
+    '      <entry-call>',
     '    }.width("100%").height("100%")',
     '  }',
     '}',
@@ -146,8 +151,9 @@ assert.ok(!composableValues.includes('this.getRawString('), 'value helper is not
 const typedExpressions = generate('typed-expressions', join(here, 'TypedExpressions.kt'), 'typedexpressions.TypedExpressions');
 assertEntryContainer(typedExpressions, 'this.TypedExpressions(0.5, true)');
 assert.ok(typedExpressions.includes('.width(ratio * 100 + "%")'), 'fill uses typed arithmetic and a string literal through the shared printer');
-assert.ok(typedExpressions.includes('.backgroundColor(active ? 4294901760 : 4278190080)'),
-  'resolved Color mapping constructs numeric literals and a typed conditional');
+assert.match(typedExpressions,
+  /\.backgroundColor\(\(\(color: number \| null\)[\s\S]*?\)\(active \? 4294901760 : 4278190080\)\)/,
+  'resolved Color mapping guards the typed conditional before its numeric consumer');
 assert.ok(typedExpressions.includes('.id("typed \\"value\\"")'), 'source string escaping comes from the shared printer');
 
 const materialText = generate('material-text', join(here, 'MaterialText.kt'), 'materialtext.MaterialText');
@@ -198,10 +204,13 @@ for (const [x, expected] of [[62, '0'], [90, '1'], [103, '1'], [104, '2'], [105,
 assertEntryContainer(source, 'this.Page(12, 4)');
 assert.ok(!source.includes('uiTemporary'), 'immutable compiler temporaries must not introduce single-read builders');
 assert.ok(!source.includes('ComposeContentSlot'), 'multi-root content must remain in its source parent layout');
-assert.ok(source.split('Stack({ alignContent: Alignment.TopStart })').length - 1 <= 4,
-  'only the entry, source Box, and ordering-required modifier boundaries need Stacks');
-for (const marker of ['struct Page', 'Page(base: number', 'PageFrame(title: string', 'ContentPanel(spacing: number',
-  'content: WrappedBuilder<[]>', 'content.builder()', 'Swiper(this.pagerState_controller)', 'this.pagerState_currentPage',
+assert.ok(source.split('Stack({ alignContent: Alignment.TopStart })').length - 1 <= 5,
+  'only the entry, source Box, and ordering-required modifier/control boundaries need Stacks');
+for (const marker of ['struct Page', 'Page(__etsMaterialContext: EtsMaterialContext, base: number',
+  'PageFrame(__etsMaterialContext: EtsMaterialContext, title: string',
+  'ContentPanel(__etsMaterialContext: EtsMaterialContext, spacing: number',
+  'content: WrappedBuilder<[EtsMaterialContext]>', 'content.builder(__etsMaterialContext)',
+  'Swiper(this.pagerState_controller)', 'this.pagerState_currentPage',
   'this.callbackCount', '.onChange(', '.changeIndex(', '.id("pager")', 'length: 4']) {
   assert.ok(source.includes(marker), `missing semantic/structural seam: ${marker}`);
 }
@@ -232,7 +241,8 @@ writeFileSync(renamed, readFileSync(fixture, 'utf8')
   .replaceAll('base: Int = 12', 'base: Int = 7').replaceAll('extra: Int = 4', 'extra: Int = 5'));
 const renamedOutput = generate('renamed', renamed, 'sample.NotesPage');
 assertEntryContainer(renamedOutput, 'this.NotesPage(7, 5)');
-for (const marker of ['struct NotesPage', 'NotebookFrame', 'NotebookPanel', 'actionTitle', 'this.clickTotal', 'this.carousel_currentPage', 'this.NotesPage(7, 5)']) {
+for (const marker of ['struct NotesPage', 'NotebookFrame', 'NotebookPanel', 'actionTitle', 'this.clickTotal',
+  'this.carousel_currentPage', 'this.NotesPage(']) {
   assert.ok(renamedOutput.includes(marker), `renamed source lost ${marker}`);
 }
 assert.ok(!renamedOutput.includes('this.pagerState'), 'bindings follow symbols, not fixture names');
@@ -240,9 +250,9 @@ const ordered = generate('modifier-order', join(here, 'ModifierOrder.kt'), 'orde
 const lines = ordered.split('\n');
 const depth = line => line.length - line.trimStart().length;
 const clickLayers = lines.filter(line => line.includes('}.onClick(') || line.includes('.onClick('));
-const paddingLayers = lines.filter(line => line.includes('.padding(4)'));
-const widthLayers = lines.filter(line => line.includes('.width(20)'));
-const heightLayers = lines.filter(line => line.includes('.height(8)'));
+const paddingLayers = lines.filter(line => line.includes('.padding(4.0)'));
+const widthLayers = lines.filter(line => line.includes('.width(20.0)'));
+const heightLayers = lines.filter(line => line.includes('.height(8.0)'));
 assert.equal(clickLayers.length, 2);
 assert.equal(paddingLayers.length, 2);
 assert.ok(depth(clickLayers[0]) <= depth(paddingLayers[0]), 'click-before-padding includes padding in its nominal pointer bounds');
@@ -254,8 +264,10 @@ for (let index = 0; index < 2; index++) {
 }
 assert.match(generate('unsupported-api', join(here, 'UnsupportedApi.kt'), 'negative.UnknownPage', false).message, /LazyRow/);
 assert.match(generate('unsupported-modifier', join(here, 'UnsupportedModifier.kt'), 'negative.UnknownPage', false).message, /blur/);
-assert.match(generate('unsupported-text-argument', join(here, 'UnsupportedTextArgument.kt'), 'negative.UnknownPage', false).message, /letterSpacing/);
-assert.match(generate('unsupported-layout-argument', join(here, 'UnsupportedLayoutArgument.kt'), 'negative.UnknownPage', false).message, /verticalArrangement/);
+assert.match(generate('supported-text-argument', join(here, 'UnsupportedTextArgument.kt'), 'negative.UnknownPage'),
+  /__etsTextStyleModifier\(null, null, null, null, null, 2\.0,/, 'Text letter spacing is preserved');
+assert.ok(generate('supported-layout-argument', join(here, 'UnsupportedLayoutArgument.kt'), 'negative.UnknownPage')
+  .includes('Column({ space: new EtsArrangement(3.0).space })'), 'Column spacing is preserved');
 assert.match(generate('unsupported-pager-count', join(here, 'UnsupportedPagerCount.kt'), 'negative.UnknownPage', false).message, /pageCount/);
 assert.match(generate('unsupported-coroutine', join(here, 'UnsupportedCoroutine.kt'), 'negative.UnknownPage', false).message, /coroutine/);
 assert.match(generate('unsupported-launch-value', join(here, 'UnsupportedLaunchValue.kt'), 'negative.UnknownPage', false).message,
@@ -276,14 +288,14 @@ assert.ok(slotLayouts.includes('HorizontalFrame(content: WrappedBuilder<[]>)'));
 assert.equal(slotLayouts.split('Stack({ alignContent: Alignment.TopStart })').length - 1, 1,
   'simple Text tags and dimensions add no layout wrappers; only native entry bridge remains');
 const layers = generate('modifier-layers', join(here, 'ModifierLayers.kt'), 'layers.ModifierLayers');
-assert.ok(layers.includes('.width(20).height(8).backgroundColor(4278190080).id("direct")'),
+assert.ok(layers.includes('.width(20.0).height(8.0).backgroundColor(4278190080).id("direct")'),
   'independent dimensions, paint, and tag belong directly on the source Box');
-assert.ok(layers.includes('.width(28).height(16).padding(4)'), 'padding inside fixed size preserves the outer constraint');
+assert.ok(layers.includes('.width(28.0).height(16.0).padding(4.0)'), 'padding inside fixed size preserves the outer constraint');
 assert.ok(layers.includes('.width("100%").height("100%").backgroundColor(4287137928).id("inside")'),
   'inner paint receives the remaining content size after padding');
-assert.ok(layers.includes('.backgroundColor(4278190080).padding(4)'), 'outer paint includes padding');
+assert.ok(layers.includes('.backgroundColor(4278190080).padding(4.0)'), 'outer paint includes padding');
 assert.ok(layers.includes('.backgroundColor(4294901760).id("paint")'), 'inner paint remains independently ordered');
-assert.ok(!layers.includes('.width(40)'), 'later preferred size cannot override an already fixed outer width');
+assert.ok(!layers.includes('.width(40.0)'), 'later preferred size cannot override an already fixed outer width');
 assert.ok(layers.includes('.backgroundColor(0).id("alpha")'), 'transparent inner paint does not overwrite outer paint');
 assert.equal(layers.split('Stack({ alignContent: Alignment.TopStart })').length - 1, 12,
   'six source Boxes plus five necessary ordering boundaries and the native entry bridge');
@@ -322,11 +334,16 @@ const ownershipDirectory = join(work, 'ownership');
 const ownershipRun = run('source-builder-modules', 'bash', [cli, '--mode', 'page', '--entry', 'ownership.OwnershipPage',
   '--classpath-file', classpathFile, '--out-dir', ownershipDirectory, ...ownershipSources]);
 assert.equal(ownershipRun.status, 0, ownershipRun.stdout + ownershipRun.stderr);
-assert.deepEqual(readdirSync(ownershipDirectory).sort(), ['Screen.ets', 'Services.ets', 'Widgets.ets']);
+assert.deepEqual(readdirSync(ownershipDirectory).sort(), [
+  'EtsButtonColors.ets', 'EtsFontSelection.ets', 'EtsFontValues.ets', 'EtsMaterialColorScheme.ets',
+  'EtsMaterialContext.ets', 'EtsPadding.ets', 'EtsShape.ets', 'EtsTextStyle.ets',
+  'EtsTextStyleModifier.ets', 'EtsTypography.ets', 'Screen.ets', 'Services.ets', 'Widgets.ets',
+]);
 const widgets = readFileSync(join(ownershipDirectory, 'Widgets.ets'), 'utf8');
 const ownershipPage = readFileSync(join(ownershipDirectory, 'Screen.ets'), 'utf8');
 for (const name of ['Leaf', 'Chain', 'Action', 'Frame']) assert.ok(widgets.includes(`export function ${name}(`));
-assert.ok(widgets.includes('function PrivateCaption(label: string)') && !widgets.includes('export function PrivateCaption'));
+assert.ok(widgets.includes('function PrivateCaption(__etsMaterialContext: EtsMaterialContext, label: string)')
+  && !widgets.includes('export function PrivateCaption'));
 const widgetAst = ts.createSourceFile('Widgets.ets', widgets, ts.ScriptTarget.Latest, true);
 const widgetFunctions = widgetAst.statements.filter(ts.isFunctionDeclaration);
 assert.deepEqual(widgetFunctions.map(node => node.name.text), ['PrivateCaption', 'Leaf', 'Chain', 'Action', 'Frame']);

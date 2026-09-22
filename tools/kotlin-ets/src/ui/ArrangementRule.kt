@@ -25,7 +25,8 @@ internal class ComposeArrangementRule : CallRule {
         if (owner.valueParameters.map { it.name.asString() } != listOf("space"))
             throw Unsupported(Diagnostic("UNSUPPORTED", "Arrangement.spacedBy alignment overload is not supported", language.source(call)))
         val space = argument(call, "space") ?: return null
-        return EtsNew(arrangementType, listOf(language.expression(space, scope)), language.source(call))
+        return EtsNew(arrangementType, listOf(requireSpecifiedDp(language.expression(space, scope),
+            language.source(space), "Arrangement.spacedBy")), language.source(call))
     }
 
     override fun targetFiles(program: EtsProgram): List<EtsFile> {

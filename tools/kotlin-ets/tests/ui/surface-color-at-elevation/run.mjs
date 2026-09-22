@@ -31,8 +31,9 @@ function compile(label, mode, sources, entry, expected = 0) {
 }
 
 const code = compile('models', 'language', ['Models.kt']);
-assert.match(code, /export function elevated\(surface: number \| null, surfaceTint: number \| null, elevation: number\): number \| null/);
-assert.match(code, /as EtsMaterialColorScheme, elevation\);/);
+assert.match(code, /export function elevated\(surface: number \| null, surfaceTint: number \| null, elevation: number \| null\): number \| null/);
+assert.match(code, /surfaceColorAtElevation received Dp\.Unspecified/);
+assert.match(code, /\)\(elevation\)\);/);
 assert.match(code, /if \(elevation === 0 && 1 \/ elevation > 0\) \{\s*return scheme\.surface;/);
 assert.ok(code.indexOf('if (elevation === 0') < code.indexOf('Math.log'), 'positive zero must return before logarithm');
 assert.match(code, /scheme\.surfaceTint/);
@@ -92,12 +93,12 @@ assert.equal(actual.at(-1), 'receiver:elevation', 'receiver and elevation must e
 const unsupported = compile('unsupported', 'page', ['Unsupported.kt'],
   'surfaceelevation.unsupported.Page', 2);
 assert.equal(unsupported.code, 'UNSUPPORTED');
-assert.match(unsupported.message, /Unsupported dimension value: androidx\.compose\.ui\.unit\.Dp\.Companion\.Unspecified/);
+assert.match(unsupported.message, /surfaceColorAtElevation requires a specified Dp value/);
 assert.equal(resolve(unsupported.source.file), resolve(join(here, 'Unsupported.kt')));
 assert.ok(unsupported.source.line > 0 && unsupported.source.column > 0);
 
 const page = compile('page', 'page', ['Models.kt', 'Page.kt'], 'surfaceelevation.Page');
-assert.match(page, /\.fontColor\(__etsSurfaceColorAtElevation\(colors, elevation\)\)/);
+assert.match(page, /\.fontColor\(__etsSurfaceColorAtElevation\(colors, \(\(dimension: number \| null\)/);
 const sdk = spawnSync(process.execPath, [join(here, '../basic-controls-sdk.mjs'), join(work, 'page.ets')], {
   encoding: 'utf8', timeout: 600000,
   env: {...process.env, KOTLIN_ETS_SDK_SEED:
