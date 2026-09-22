@@ -117,7 +117,8 @@ data class EtsFunction(val name: String, val parameters: List<EtsParameter>, val
 data class EtsField(val symbol: EtsSymbol, val initializer: EtsExpression? = null,
     override val visibility: EtsVisibility = EtsVisibility.PUBLIC, val static: Boolean = false,
     override val source: SourceSpan = symbol.source, val state: Boolean = false,
-    val readonly: Boolean = false, val prop: Boolean = false, val watch: String? = null) : EtsClassMember
+    val readonly: Boolean = false, val prop: Boolean = false, val required: Boolean = false,
+    val watch: String? = null) : EtsClassMember
 enum class EtsClassKind { CLASS, INTERFACE }
 data class EtsClass(val name: String, val members: List<EtsClassMember>, override val source: SourceSpan,
     val exported: Boolean = false, val typeParameters: List<EtsTypeParameter> = emptyList(),
