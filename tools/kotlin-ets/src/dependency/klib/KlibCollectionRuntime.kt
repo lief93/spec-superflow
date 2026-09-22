@@ -23,10 +23,11 @@ data class KlibCollectionRuntimeBindings(
     val append: IrFunctionSymbol,
     val capacityListConstructor: IrConstructorSymbol? = null,
     val collectionSizeOrDefault: IrFunctionSymbol? = null,
+    val checkIndexOverflow: IrFunctionSymbol? = null,
 ) {
     init {
         require(listOfNotNull(emptyListConstructor, iterator, hasNext, next, append, capacityListConstructor,
-            collectionSizeOrDefault).all { it.isBound }) {
+            collectionSizeOrDefault, checkIndexOverflow).all { it.isBound }) {
             "Collection runtime bindings require canonical linked KLIB symbols"
         }
         require(emptyListConstructor.owner.parent is IrClass) {
@@ -84,15 +85,31 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
             call.symbol === bindings.next -> Operation.NEXT
             call.symbol === bindings.append -> Operation.APPEND
             bindings.collectionSizeOrDefault?.let { call.symbol === it } == true -> Operation.SIZE_OR_DEFAULT
+            bindings.checkIndexOverflow?.let { call.symbol === it } == true -> Operation.CHECK_INDEX_OVERFLOW
             else -> return null
         }
         if (call.superQualifierSymbol != null || call.typeArgumentsCount !=
             (if (operation == Operation.SIZE_OR_DEFAULT) 1 else 0)) return null
+        val at = language.source(call)
+        val result = language.type(call.type)
+        if (operation == Operation.CHECK_INDEX_OVERFLOW) {
+            if (call.dispatchReceiver != null || call.extensionReceiver != null || call.valueArgumentsCount != 1 ||
+                result != EtsTypes.NUMBER) return null
+            val valueExpression = call.getValueArgument(0) ?: return null
+            if (language.type(valueExpression.type) != EtsTypes.NUMBER) return null
+            val value = language.expression(valueExpression, scope)
+            val parameter = EtsSymbol("klib-collection-index:${at.file}:${at.start}", "__etsIndex", EtsTypes.NUMBER, at)
+            val reference = EtsReference(parameter)
+            val negative = EtsBinary("<", reference, EtsLiteral(0, EtsTypes.NUMBER, at), EtsTypes.BOOLEAN, at)
+            val message = EtsLiteral("Index overflow has happened.", EtsTypes.STRING, at)
+            return EtsCall(EtsLambda(listOf(EtsParameter(parameter)), listOf(
+                EtsIf(listOf(EtsBranch(negative,
+                    listOf(EtsThrow(namedTargetFailure("ArithmeticException", at, message), at)))), at),
+                EtsReturn(reference, at)), EtsTypes.NUMBER, at), listOf(value), EtsTypes.NUMBER, at)
+        }
         val receiverExpression = call.dispatchReceiver ?: call.extensionReceiver ?: return null
         if (call.dispatchReceiver != null && call.extensionReceiver != null) return null
-        val at = language.source(call)
         val receiverType = language.type(receiverExpression.type)
-        val result = language.type(call.type)
 
         fun member(receiver: EtsExpression, name: String): EtsExpression = EtsCall(
             EtsMember(receiver, name, EtsFunctionType(emptyList(), result), at), emptyList(), result, at)
@@ -140,6 +157,7 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
                 EtsCall(EtsLambda(listOf(EtsParameter(receiverParameter), EtsParameter(defaultParameter)),
                     listOf(EtsReturn(length, at)), EtsTypes.NUMBER, at), listOf(receiver, default), EtsTypes.NUMBER, at)
             }
+            Operation.CHECK_INDEX_OVERFLOW -> null
         }
     }
 
@@ -148,7 +166,7 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
         EtsReference(EtsSymbol("stdlib:$name", name, EtsFunctionType(arguments.map { it.type }, result), at,
             external = true)), arguments, result, at, types)
 
-    private enum class Operation { ITERATOR, HAS_NEXT, NEXT, APPEND, SIZE_OR_DEFAULT }
+    private enum class Operation { ITERATOR, HAS_NEXT, NEXT, APPEND, SIZE_OR_DEFAULT, CHECK_INDEX_OVERFLOW }
 }
 
 private fun IrType.collectionElement(expected: Set<IrClass>, invariant: Boolean = false): IrType? {
