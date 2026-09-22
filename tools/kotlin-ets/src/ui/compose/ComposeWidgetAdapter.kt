@@ -15,7 +15,8 @@ import org.jetbrains.kotlin.name.FqName
  * The caller supplies ordinary language lowering and bindings for entry parameters.
  * Children are statically described; callbacks remain typed language expressions.
  */
-class ComposeWidgetAdapter(private val language: Language, private val diagnostics: DiagnosticSink) {
+class ComposeWidgetAdapter(private val language: Language, private val diagnostics: DiagnosticSink,
+    private val sourceWidget: ((IrCall, Scope) -> EtsExpression?)? = null) {
     fun lower(function: IrSimpleFunction, scope: Scope = Scope(),
         handledStatements: Set<IrStatement> = emptySet()): Children<EtsExpression, SourceSpan> {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
@@ -28,6 +29,10 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         return body(function.body ?: diagnostics.unsupported(function, "Widget entry has no body"),
             scope.fork(), function, handledStatements, null)
     }
+
+    fun lowerFunctionBody(function: IrFunction, scope: Scope): Children<EtsExpression, SourceSpan> =
+        body(function.body ?: diagnostics.unsupported(function, "Widget helper has no body"),
+            scope.fork(), function, parent = null)
 
     private fun body(body: IrBody, scope: Scope, owner: IrFunction,
         handledStatements: Set<IrStatement> = emptySet(), parent: WidgetLayoutScope?): Children<EtsExpression, SourceSpan> = when (body) {
@@ -85,6 +90,11 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
     }
 
     private fun widget(call: IrCall, scope: Scope, parent: WidgetLayoutScope?): Widget<EtsExpression, SourceSpan> {
+        sourceWidget?.invoke(call, scope)?.let { lowered ->
+            if (lowered.type != EtsTypes.VOID)
+                diagnostics.unsupported(call, "Source composable call must produce target void")
+            return Widget.BuilderCall(lowered, language.source(call))
+        }
         val api = symbolName(call.symbol.owner)
         if (sourceFile(call.symbol.owner) != null || !call.type.isUnit() || api !in supported)
             diagnostics.unsupported(call, "Unsupported resolved widget API: $api")

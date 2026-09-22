@@ -84,6 +84,12 @@ class HarmonyWidgetBackend {
             is Widget.Box -> native("Stack", listOf(stackOptions(at)), lower(widget.children, WidgetLayoutScope.BOX))
             is Widget.Conditional -> throw IllegalArgumentException(
                 "Conditional widgets require a children boundary at $at")
+            is Widget.BuilderCall -> {
+                val call = widget.call as? EtsCall
+                    ?: throw IllegalArgumentException("Builder call requires a typed target call at $at")
+                expect(call, EtsTypes.VOID, "BuilderCall.call", at)
+                EtsUiElement(call)
+            }
         }
         // Ordinary operations retain their positions and duplicates. Parent-data
         // operations are hoisted afterward so Row/Column/Box sees them on its

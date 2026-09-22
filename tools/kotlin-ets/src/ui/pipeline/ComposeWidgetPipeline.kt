@@ -2,6 +2,7 @@ package dev.ets.pipeline
 
 import dev.ets.*
 import dev.ets.compose.ComposeInputContracts
+import dev.ets.compose.ComposeHelperLowering
 import dev.ets.compose.ComposeStateLowering
 import dev.ets.compose.ComposeWidgetAdapter
 import dev.ets.harmony.HarmonyWidgetBackend
@@ -33,9 +34,10 @@ class ComposeWidgetPipeline(
             backend.diagnostics.unsupported(entry.valueParameters.first(),
                 "Stateful widget entries do not yet support parameters")
         }
-        val model = ComposeWidgetAdapter(backend.language, backend.diagnostics)
-            .lower(entry, state.scope, state.handledStatements)
-        val body = HarmonyWidgetBackend().lower(model)
+        val helpers = ComposeHelperLowering(backend, backend.diagnostics)
+        val model = helpers.lowerEntry(entry, state.scope, state.handledStatements)
+        val widgetBackend = HarmonyWidgetBackend()
+        val body = widgetBackend.lower(model)
         val source = backend.language.source(entry)
         val path = source.file ?: backend.diagnostics.unsupported(entry, "Widget pipeline entry requires a source file")
         val declaration: EtsDeclaration = if (state.fields.isEmpty()) {
@@ -50,6 +52,10 @@ class ComposeWidgetPipeline(
         val files = linkedMapOf<String, MutableList<EtsDeclaration>>()
         ComposeInputContracts(backend.language, backend.diagnostics).lower(entry).forEach { (contractPath, contract) ->
             files.getOrPut(contractPath) { mutableListOf() } += contract
+        }
+        helpers.plans().forEach { plan ->
+            files.getOrPut(plan.sourcePath) { mutableListOf() } +=
+                plan.signature.copy(body = widgetBackend.lower(plan.model))
         }
         files.getOrPut(path) { mutableListOf() } += declaration
         val program = backend.link(EtsProgram(files.map { (sourcePath, declarations) ->

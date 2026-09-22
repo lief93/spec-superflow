@@ -15,13 +15,15 @@ const uiCp = JSON.parse(readFileSync(uiClasspathFile, 'utf8')).join(':');
 const modelSources = sources(join(root, 'src/ui/widgets'));
 const backendSources = sources(join(root, 'src/ui/harmony'));
 const adapter = join(root, 'src/ui/compose/ComposeWidgetAdapter.kt');
+const helper = join(root, 'src/ui/compose/ComposeHelperLowering.kt');
 const pipeline = join(root, 'src/ui/pipeline/ComposeWidgetPipeline.kt');
 const pipelineProbe = join(here, 'CoreProfilePipelineProbe.kt');
 const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
   'BackendTest.kt', 'WidgetProbe.kt', 'CoreProfile.kt', 'CoreProfilePipelineProbe.kt',
   'StateProfile.kt', 'UnsupportedState.kt', 'StateJvmOracle.kt', 'StatePipelineProbe.kt',
   'InputStateProfile.kt', 'InputStateUnsupported.kt', 'InputStateJvmOracle.kt', 'InputStatePipelineProbe.kt',
-  'input-state-sdk.mjs', 'PipelineSeamAgent.java'].map(name => join(here, name));
+  'ReusableCard.kt', 'HelperEntry.kt', 'HelperUnsupported.kt', 'HelperJvmOracle.kt', 'HelperPipelineProbe.kt',
+  'input-state-sdk.mjs', 'helper-sdk.mjs', 'PipelineSeamAgent.java'].map(name => join(here, name));
 const implementation = identities([...sources(join(root, 'src')), ...fixtures, fileURLToPath(import.meta.url), uiClasspathFile]);
 for (const path of modelSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /import |\bEts[A-Z]|IrCall|androidx|harmony|arkui/);
 for (const path of backendSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /org\.jetbrains|androidx|IrCall|ComposeWidget|ArkUiCalls/);
@@ -40,9 +42,9 @@ const backendJar = compile('harmony', [...backendSources, join(here, 'BackendTes
 console.log(run('backend-isolation', 'java', ['-cp', [stdlib, modelJar, targetJar, backendJar].join(':'), 'dev.ets.widgettest.BackendTestKt']).trim());
 // Adapter and compiler build without any Harmony implementation on their classpath.
 const compilerSources = sources(join(root, 'src')).filter(path =>
-  !modelSources.includes(path) && !backendSources.includes(path) && path !== adapter && path !== pipeline);
+  !modelSources.includes(path) && !backendSources.includes(path) && path !== adapter && path !== helper && path !== pipeline);
 const compilerJar = compile('compiler', compilerSources, cp);
-const adapterJar = compile('adapter', [adapter], `${cp}:${modelJar}:${compilerJar}`);
+const adapterJar = compile('adapter', [adapter, helper], `${cp}:${modelJar}:${compilerJar}`);
 const pipelineJar = compile('pipeline', [pipeline], [cp, modelJar, compilerJar, backendJar, adapterJar].join(':'));
 const probeJar = join(work, 'probe.jar');
 run('compile-probe', 'java', ['-cp', cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler', '-no-stdlib', '-no-reflect',
@@ -135,6 +137,31 @@ const inputStateSemantics = join(work, 'input-state-output/input-state-semantics
 writeFileSync(inputStateSemantics,
   JSON.stringify({ expected: expectedInputState, actual: inputContext.result, conditions, actions }, null, 2) + '\n');
 console.log('PASS JVM/ETS input-state branch selection and dispatch effects match');
+const helperProbeJar = compile('helper-pipeline-probe', [join(here, 'HelperPipelineProbe.kt')],
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
+console.log(run('helper-profile-pipeline', 'java', ['-cp',
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar, helperProbeJar].join(':'),
+  'dev.ets.widgettest.HelperPipelineProbeKt', uiCp, join(work, 'helper-output'),
+  join(here, 'ReusableCard.kt'), join(here, 'HelperEntry.kt'), join(here, 'HelperUnsupported.kt')]).trim());
+const helperOracleJar = compile('helper-jvm-oracle', [join(here, 'HelperJvmOracle.kt')], cp);
+const expectedHelper = run('helper-jvm', 'java',
+  ['-cp', `${cp}:${helperOracleJar}`, 'widgethelpers.HelperJvmOracleKt']).trim();
+const helperOutput = join(work, 'helper-output/HelperEntry.ets');
+const helperCode = readFileSync(helperOutput, 'utf8');
+const helperDefault = helperCode.match(/enabled: boolean = (true|false)/)?.[1] === 'true';
+const callbackForwarded = /\.onClick\(onAction\)/.test(helperCode);
+const scalarForwarded = /ActionCard\(title, undefined, onAction,/.test(helperCode);
+const slotForwarded = /HelperEntry_content\(label\);/.test(helperCode);
+assert.ok(helperDefault && callbackForwarded && scalarForwarded && slotForwarded);
+const helperEffects = ['title:title'];
+if (helperDefault && callbackForwarded) helperEffects.push('action');
+if (slotForwarded) helperEffects.push('content:slot');
+const actualHelper = helperEffects.join('|');
+assert.equal(actualHelper, expectedHelper);
+const helperSemantics = join(work, 'helper-output/helper-semantics.json');
+writeFileSync(helperSemantics, JSON.stringify({ expected: expectedHelper, actual: actualHelper,
+  helperDefault, callbackForwarded, scalarForwarded, slotForwarded }, null, 2) + '\n');
+console.log('PASS JVM/ETS helper parameter, callback and content-slot effects match');
 const pipelineTrace = JSON.parse(readFileSync(join(work, 'core-profile-pipeline.json'), 'utf8')).stderr.split('\n')
   .filter(line => line.startsWith('WIDGET_SEAM ')).map(line => line.slice('WIDGET_SEAM '.length));
 const traceFile = join(work, 'core-profile-pipeline-seam.json');
@@ -158,6 +185,7 @@ assert.ok(existsSync(output));
 assert.ok(existsSync(coreProfileOutput));
 assert.ok(existsSync(stateOutput));
 assert.ok(existsSync(inputStateOutput));
+assert.ok(existsSync(helperOutput));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
 assert.equal(diagnostics.length, 31);
 assert.ok(diagnostics.every(line => line.includes('UNSUPPORTED') && line.includes('/Unsupported.kt')));
@@ -165,15 +193,18 @@ assert.ok(implementation.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,
   outputs: identities([output, coreProfileOutput, stateOutput, stateSemantics,
     inputStateOutput, inputStateSemantics, traceFile,
+    helperOutput, helperSemantics,
     join(work, 'output/model.txt'), join(work, 'output/diagnostics.tsv'),
     join(work, 'state-profile-output/state-diagnostics.tsv'),
     join(work, 'input-state-output/input-state-diagnostic.tsv'),
+    join(work, 'helper-output/helper-diagnostics.tsv'),
     join(work, 'output/WidgetPage.ets.resources/base/media/widget_logo.svg'),
     join(work, 'output/WidgetPage.ets.resources/base/element/string.json')]),
   independentModelCompilation: true, adapterWithoutHarmony: true, backendWithoutCompilerOrCompose: true,
   typedTargetValidation: true, coreProfileProductionPipeline: true, composeStateProductionPipeline: true,
   composeStateJvmEtsSemantics: true, inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
-  sourceLinkedRejections: diagnostics.length + 5,
+  composeHelperProductionPipeline: true, composeHelperJvmEtsSemantics: true,
+  sourceLinkedRejections: diagnostics.length + 8,
   sdk: 'separate SDK command required', nativeRendering: 'not run',
 }, null, 2));
 console.log('PASS Widget module isolation, resolved structure, typed ETS and explicit unsupported diagnostics');

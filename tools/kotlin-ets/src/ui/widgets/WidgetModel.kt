@@ -26,6 +26,9 @@ sealed interface Widget<V, S> {
     data class Conditional<V, S>(val branches: List<WidgetBranch<V, S>>, override val source: S) : Widget<V, S> {
         override val modifiers: List<WidgetModifier<V, S>> = emptyList()
     }
+    data class BuilderCall<V, S>(val call: V, override val source: S) : Widget<V, S> {
+        override val modifiers: List<WidgetModifier<V, S>> = emptyList()
+    }
 }
 
 /** A null condition is the final else branch. Conditions remain target-language runtime values. */
