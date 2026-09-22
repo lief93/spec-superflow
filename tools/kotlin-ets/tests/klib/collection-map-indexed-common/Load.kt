@@ -104,7 +104,7 @@ fun main(args: Array<String>) {
         val replacements = decisions.filter { it.kind == KlibDependencyDecision.Kind.TARGET_REPLACEMENT &&
             it.detail.contains("KlibCollectionRuntimeRule") }.map { it.signature }.toSet()
         val expectedReplacements = setOf(emptyConstructor, capacityConstructor, bindings.iterator, bindings.hasNext,
-            bindings.next, bindings.append, checkNotNull(bindings.collectionSizeOrDefault),
+            bindings.next, checkNotNull(bindings.append), checkNotNull(bindings.collectionSizeOrDefault),
             checkNotNull(bindings.checkIndexOverflow)).map { it.signature.toString() }.toSet()
         check(replacements == expectedReplacements) { replacements }
         check(result.runtimeSymbols == setOf("stdlib:__etsIterator", "stdlib:__etsArrayIterator", "stdlib:__etsIntRem",

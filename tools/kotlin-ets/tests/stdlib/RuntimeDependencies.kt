@@ -91,13 +91,13 @@ fun main() {
         check(runCatching { standardLibrarySupportLines(program(function(listOf(statement(invalid))))) }.isFailure)
     }
     check(standardLibrarySupportLines(program(function(emptyList()))).isEmpty()) { "state leaked across programs" }
-    val helpers = listOf("__etsIntDiv", "__etsIntRem", "__etsListGet", "__etsListAdd", "__etsListMap",
+    val helpers = listOf("__etsIntDiv", "__etsIntRem", "__etsListGet", "__etsListAdd", "__etsListAddAll", "__etsListMap",
         "__etsListFilter", "__etsIllegalArgumentException", "__etsProgressionLastElement",
         "__etsSubstring", "__etsSubstringFrom", "__etsArrayIterator", "__etsArrayGet", "__etsArraySet",
         "__etsIntProgressionCreate", "__etsIntUntil", "__etsIntStep", "__etsIntReverse", "__etsProgressionIterator",
         "__etsListAny", "__etsListCount")
     val compatibility = standardLibrarySupportLines()
-    check(compatibility.count { it.startsWith("function __ets") } == 20) { "UI compatibility" }
+    check(compatibility.count { it.startsWith("function __ets") } == 21) { "UI compatibility" }
     check(compatibility.count { it.startsWith("class __ets") } == 2)
     check(compatibility.count { it.startsWith("class __etsIterator<") } == 1)
     check(compatibility.count { it.startsWith("class __etsIntProgression ") } == 1)
