@@ -25,10 +25,13 @@ for (const name of ['Frame', 'Relay', 'Outer']) assert.match(ets,
   new RegExp(`${name}\\(__etsMaterialContext: EtsMaterialContext, content: WrappedBuilder<\\[EtsMaterialContext\\]>`));
 assert.match(ets, /Frame\(__etsMaterialContext, content\)/);
 assert.match(ets, /Relay\(__etsMaterialContext, content\)/);
-for (const [label, typography] of [['Forwarded label', 'labelLarge'], ['Body restored', 'bodyLarge']]) {
+for (const label of ['Forwarded label', 'Body restored']) {
   const line = ets.split('\n').find(line => line.includes(`Text("${label}")`));
-  assert.ok(line?.includes(`__etsMaterialContext.typography.${typography}`) && line.includes("__etsTextStyleModifier("), line);
+  assert.ok(line?.includes('__etsMaterialContext.textStyle ?? __etsMaterialContext.typography.bodyLarge') &&
+    line.includes('__etsTextStyleModifier('), line);
 }
+assert.match(ets, /content\.builder\(new EtsMaterialContext\([\s\S]*?\.typography\.labelLarge,/,
+  'Button supplies labelLarge when it invokes the forwarded slot');
 console.log('PASS multi-hop source slots preserve invocation typography and builder boundaries');
 const externalOutput = join(work, 'External.ets');
 const externalArgs = [resolve(here, '../../../kotlin-ets'), '--entry', 'demo.adapters.ExternalPage',

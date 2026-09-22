@@ -8,7 +8,7 @@ internal class ComposeTextRule(
     private val target: ArkUiCalls,
     private val color: (IrExpression, Scope) -> EtsExpression,
     private val dimension: (IrExpression, Scope, String) -> EtsExpression,
-    private val typography: () -> MaterialTextContext,
+    private val useMaterialTypography: () -> Unit,
     decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,
 ) : ComposeControlRule(decorate) {
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
@@ -22,14 +22,16 @@ internal class ComposeTextRule(
             if (api == "androidx.compose.material.Text" && argument(call, "style") == null)
                 target.diagnostics.unsupported(call, "Material 2 LocalTextStyle requires an explicit style")
             val at = language.source(call)
-            val context = typography()
-            val defaultFields = if (api == "androidx.compose.material3.Text") mapOf("fontSize" to context.size,
-                "fontWeight" to context.weight, "lineHeight" to context.lineHeight, "letterSpacing" to context.tracking) else emptyMap()
-            val values = textStyleArgumentOrder.map { name -> argument(call, name)?.let { language.expression(it, scope) }
-                ?: when (name) {
-                    "style" -> ambient?.let { materialTextStyle(it, context, at) } ?: EtsNew(textStyleType, textStyleFields.keys.map { field ->
-                        defaultFields[field]?.let { EtsLiteral(it, EtsTypes.NUMBER, at) } ?: EtsLiteral(null, EtsTypes.NULL, at)
-                    }, at)
+            val inherited = if (api == "androidx.compose.material3.Text")
+                ambient?.let { materialCurrentTextStyle(it, at) } ?: defaultTypographyRole("bodyLarge", at)
+            else EtsNew(textStyleType, textStyleFields.keys.map { EtsLiteral(null, EtsTypes.NULL, at) }, at)
+            val style = argument(call, "style")?.let { value ->
+                val provided = language.expression(value, scope)
+                if (api == "androidx.compose.material3.Text") mergeTextStyles(inherited, provided, at) else provided
+            } ?: inherited
+            val values = textStyleArgumentOrder.map { name ->
+                if (name == "style") style else argument(call, name)?.let { language.expression(it, scope) }
+                    ?: when (name) {
                     "overflow" -> target.enumValue("TextOverflow", "Clip", call)
                     "maxLines" -> target.literal(Int.MAX_VALUE, call)
                     else -> EtsLiteral(null, EtsTypes.NULL, at)
@@ -51,11 +53,11 @@ internal class ComposeTextRule(
                 }
             val size = argument(call, "fontSize")?.let { dimension(it, scope, "sp") }
             if (api == "androidx.compose.material3.Text") {
-                val context = typography()
+                useMaterialTypography()
                 add(target.attribute("attributeModifier", listOf(EtsNew(
                     EtsNamedType("__etsMaterialTypography", symbolId = "compose:materialTypography", external = true),
-                    listOf(size ?: target.literal(context.size, call), target.literal(context.lineHeight, call),
-                        target.literal(context.weight, call), target.literal(context.tracking, call)), language.source(call))), call))
+                    listOf(size ?: target.literal(16, call), target.literal(24, call),
+                        target.literal(400, call), target.literal(0.5, call)), language.source(call))), call))
             } else if (size != null) add(target.attribute("fontSize", listOf(size), call))
         }
         return ComposeElement(target.native("Text", listOf(language.expression(text, scope)), call).copy(attributes = attrs),

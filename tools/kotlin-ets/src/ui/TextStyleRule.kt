@@ -25,7 +25,7 @@ internal class ComposeTextStyleRule : CallRule {
         if (sourceFile(owner) != null || symbolName(owner) != "androidx.compose.ui.text.TextStyle") return null
         call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
             if (parameter.name.asString() !in textStyleFields && call.getValueArgument(index) != null)
-                reject(call, language, "Unsupported TextStyle argument: ${parameter.name}")
+                reject(call.getValueArgument(index)!!, language, "Unsupported TextStyle argument: ${parameter.name}")
         }
         val at = language.source(call)
         return EtsNew(textStyleType, textStyleFields.keys.map { name ->

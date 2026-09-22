@@ -18,16 +18,14 @@ private val typographyDefaults = linkedMapOf(
     "labelLarge" to listOf(14, 20, 500, 0.1), "labelMedium" to listOf(12, 16, 500, 0.5),
     "labelSmall" to listOf(11, 16, 500, 0.5))
 
-private fun defaultRole(name: String, at: SourceSpan): EtsExpression {
+internal fun defaultTypographyRole(name: String, at: SourceSpan): EtsExpression {
     val values = listOf("fontSize", "lineHeight", "fontWeight", "letterSpacing").zip(typographyDefaults.getValue(name)).toMap()
     return EtsNew(textStyleType, textStyleFields.keys.map { field ->
         values[field]?.let { EtsLiteral(it, EtsTypes.NUMBER, at) } ?: EtsLiteral(null, EtsTypes.NULL, at)
     }, at)
 }
-internal fun defaultTypography(at: SourceSpan) = EtsNew(typographyType, typographyDefaults.keys.map { defaultRole(it, at) }, at)
+internal fun defaultTypography(at: SourceSpan) = EtsNew(typographyType, typographyDefaults.keys.map { defaultTypographyRole(it, at) }, at)
 internal fun materialTypography(context: EtsExpression, at: SourceSpan) = EtsMember(context, "typography", typographyType, at)
-internal fun materialTextStyle(context: EtsExpression, role: MaterialTextContext, at: SourceSpan) =
-    EtsMember(materialTypography(context, at), if (role == MaterialTextContext.LabelLarge) "labelLarge" else "bodyLarge", textStyleType, at)
 
 internal class ComposeTypographyRule : CallRule {
     override fun mapType(type: IrType, language: Language): EtsType? = type.classOrNull?.owner?.let {
@@ -39,7 +37,7 @@ internal class ComposeTypographyRule : CallRule {
         if (call.symbol.owner.valueParameters.map { it.name.asString() } != typographyDefaults.keys.toList())
             throw Unsupported(Diagnostic("UNSUPPORTED", "Unsupported Typography constructor signature", language.source(call)))
         return EtsNew(typographyType, typographyDefaults.keys.map { name ->
-            argument(call, name)?.let { language.expression(it, scope) } ?: defaultRole(name, language.source(call))
+            argument(call, name)?.let { language.expression(it, scope) } ?: defaultTypographyRole(name, language.source(call))
         }, language.source(call))
     }
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {

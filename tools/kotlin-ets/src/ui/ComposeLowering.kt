@@ -35,8 +35,6 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val initializedBuilderFiles = linkedMapOf<IrFile, EtsFunction>()
     private lateinit var root: IrSimpleFunction
     private lateinit var pageReceiver: EtsSymbol
-    private var textContexts: Map<IrFunction, MaterialTextContext> = emptyMap()
-    private var textContext = MaterialTextContext.BodyLarge
     private var usesMaterialTypography = false
     private var usesMaterialContext = false
     private var usesFocusManager = false
@@ -61,7 +59,6 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         diagnostics.currentFile = sourceFile(root)?.fileEntry?.name
         pageReceiver = EtsSymbol("ui:this", "this", etsClassSymbol(root.name.asString(), language.source(root)).type, language.source(root), external = true)
         if (!isUiBuilder(root)) diagnostics.unsupported(root, "UI entry must be @Composable and return Unit")
-        textContexts = materialTextContexts(root, diagnostics)
         val rootScope = scope()
         if (usesMaterialContext) {
             val at = language.source(root)
@@ -178,14 +175,15 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
             ComposeBoxWithConstraintsRule(target, ::constraintsContent, ::modifiers),
             ComposeMaterialThemeRule(target, ::provideMaterialContext),
+            ComposeProvideTextStyleRule(target, ::provideMaterialContext),
             ComposeSurfaceRule(target, ::surfaceContent, { content, scope -> surfaceContent(content, scope, "height") }, ::modifiers),
             ComposeSpacerRule(target, ::modifiers),
             ComposeTextRule(target, ::colorValue, ::dimension,
-                { usesMaterialTypography = true; textContext }, ::modifiers),
+                { usesMaterialTypography = true }, ::modifiers),
             ComposeButtonRule(target, ::uiLambdaBody, ::callback, ::modifiers),
             ComposeBasicTextRule(target, ::modifiers),
-            ComposeBasicTextFieldRule(target, ::bindInnerTextField, { fn, scope -> withTextContext(fn) {
-                uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing decoration body"), scope) } }, ::modifiers),
+            ComposeBasicTextFieldRule(target, ::bindInnerTextField, { fn, scope ->
+                uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing decoration body"), scope) }, ::modifiers),
             ComposeTextFieldDecorationRule(target, ::uiLambdaBody, ::modifiers),
             ComposeClickableTextRule(target, ::modifiers),
             ComposeHorizontalDividerRule(target, ::colorValue, ::dimension, ::modifiers),
@@ -268,7 +266,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
 
     private fun builder(function: IrSimpleFunction, modifiers: Map<IrValueSymbol, IrExpression> = emptyMap(),
         aliases: Map<IrValueSymbol, IrExpression> = emptyMap(), name: String = function.name.asString(),
-        ambient: Map<String, EtsExpression> = emptyMap()): EtsFunction = withTextContext(function) {
+        ambient: Map<String, EtsExpression> = emptyMap()): EtsFunction {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
         if (modifiers.isEmpty()) builderSymbol(function)
         if (function.extensionReceiverParameter != null || function.dispatchReceiverParameter != null)
@@ -308,14 +306,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             val ready = EtsCall(EtsReference(guard.symbol), emptyList(), EtsTypes.BOOLEAN, language.source(function))
             listOf(EtsIf(listOf(EtsBranch(ready, content)), language.source(function)))
         } else content
-        EtsFunction(name, parameters, EtsTypes.VOID, lines, language.source(function),
+        return EtsFunction(name, parameters, EtsTypes.VOID, lines, language.source(function),
             kind = EtsFunctionKind.METHOD, builder = true)
-    }
-
-    private fun <T> withTextContext(function: IrFunction, emit: () -> T): T {
-        val previous = textContext
-        textContext = textContexts[function] ?: diagnostics.unsupported(function, "Unresolved inherited text context")
-        return try { emit() } finally { textContext = previous }
     }
 
     private fun uiBody(body: IrBody, scope: Scope, rootBody: Boolean = false): List<EtsStatement> = when (body) {
@@ -780,7 +772,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val child = scope.fork()
         child.ambientValues.remove(LAYOUT_AXIS)
         if (axis != null) child.ambientValues[LAYOUT_AXIS] = literal(axis, expression)
-        return withTextContext(fn) { uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing content body"), child) }
+        return uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing content body"), child)
     }
 
     private fun provideMaterialContext(context: EtsExpression, content: IrExpression, scope: Scope): List<EtsStatement> {
@@ -844,7 +836,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             if (index < context.size) child.ambientValues.entries.firstOrNull { it.value == EtsReference(symbol) }?.setValue(value)
             else child.bindings[captures[index - context.size]] = value
         }
-        val body = withTextContext(fn) { uiBody(fn.body!!, child) }
+        val body = uiBody(fn.body!!, child)
         val alignment = EtsMember(args, "alignment", EtsNamedType("Alignment"), at)
         val bridge = EtsFunction(slotMethodName("BoxWithConstraintsContent_${at.start}"), listOf(EtsParameter(args.symbol, reactiveInput = true)), EtsTypes.VOID,
             listOf(native("Stack", listOf(record("StackOptions", linkedMapOf("alignContent" to alignment), fn)), fn, body)), at,

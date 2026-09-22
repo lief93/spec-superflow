@@ -23,11 +23,10 @@ The two-argument LineHeightStyle uses Mode.Fixed. Android
 when the requested line height is below font ascent/descent. This is not the same
 as increasing every line's height or using Mode.Minimum for multiline text.
 
-The bounded page host uses default Material3 typography, not arbitrary theme
-overrides. Source providers are rejected. Resolved IR traversal follows source
-wrapper calls and actual slot invocations to determine inherited text context;
-lexical closure creation is not a style boundary. A source builder reached in
-conflicting contexts is rejected rather than duplicated or silently restyled.
+The page host starts with default Material3 typography. MaterialTheme overrides,
+Button label style, and ProvideTextStyle scopes travel in the typed material
+context. Source builders and WrappedBuilder slots consume the context supplied at
+their invocation site, so the same builder may run under multiple text styles.
 ArkUI lineHeight/halfLeading must additionally pass native geometry verification;
 matching source tokens alone is not proof of identical platform font metrics.
 

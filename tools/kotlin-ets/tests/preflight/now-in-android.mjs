@@ -68,9 +68,9 @@ try {
     '--work-dir', projectRun, '--offline'], { env: projectEnv }, 2);
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'UNSUPPORTED');
-  assert.match(backendBlocker.message, /Unsupported resolved UI API: androidx\.compose\.material3\.ProvideTextStyle/);
-  assert.equal(backendBlocker.source.line, 57);
-  assert.equal(backendBlocker.source.column, 13);
+  assert.match(backendBlocker.message, /Unsupported external call: androidx\.compose\.material3\.surfaceColorAtElevation/);
+  assert.equal(backendBlocker.source.line, 210);
+  assert.equal(backendBlocker.source.column, 70);
   assert.equal(existsSync(output), false);
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
@@ -108,6 +108,13 @@ try {
     { parameter: 'green', resolution: 'source_default' },
     { parameter: 'blue', resolution: 'source_default' },
   ])));
+  const textStyleProvider = report.calls.find(call =>
+    call.finalRecognizedNode.symbol === 'androidx.compose.material3.ProvideTextStyle');
+  assert.equal(textStyleProvider?.expectedTargetType, 'void');
+  assert.equal(textStyleProvider?.finalRecognizedNode.kind, 'typed_call');
+  assert.equal(textStyleProvider?.firstUnsupportedNode, null);
+  assert.equal(textStyleProvider?.source.line, 57);
+  assert.equal(textStyleProvider?.source.column, 13);
   assert.equal(report.firstUnsupportedNode.kind, 'target_type');
   assert.equal(report.firstUnsupportedNode.symbol, 'androidx.compose.runtime.ProvidableCompositionLocal.provides');
   assert.match(report.firstUnsupportedNode.message, /ProvidedValue.*GradientColors/);
@@ -147,7 +154,7 @@ try {
     backendBlocker,
     unsupportedCalls,
     p0Gaps: [
-      { category: 'neutral_compose_widget', node: 'androidx.compose.material3.ProvideTextStyle',
+      { category: 'neutral_compose_widget', node: 'androidx.compose.material3.surfaceColorAtElevation',
         responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
       { category: 'neutral_compose_widget', node: 'unsupported_call_inventory',
@@ -158,7 +165,7 @@ try {
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS typed Color.copy lowering advances the backend to ProvideTextStyle; all 16 unsupported Compose calls remain explicit');
+  console.log('PASS typed Color.copy and ProvideTextStyle lowering advance the backend to surfaceColorAtElevation; all 16 unsupported Compose calls remain explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

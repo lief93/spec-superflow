@@ -153,19 +153,23 @@ assert.ok(typedExpressions.includes('.id("typed \\"value\\"")'), 'source string 
 const materialText = generate('material-text', join(here, 'MaterialText.kt'), 'materialtext.MaterialText');
 assert.ok(materialText.includes('}.alignItems(VerticalAlign.Center).justifyContent(FlexAlign.Center)'),
   'Material Button content retains its implicit centered Row, including multi-root source slots');
-for (const [label, size, lineHeight, weight, tracking] of [
-  ['Body', 16, 24, 400, 0.5], ['Large body', 24, 24, 400, 0.5],
-  ['Wrapped label', 14, 20, 500, 0.1], ['Explicit label', 16, 20, 500, 0.1],
-  ['Body restored', 16, 24, 400, 0.5],
+for (const [label, size] of [
+  ['Body', null], ['Large body', 24], ['Wrapped label', null], ['Explicit label', 16], ['Body restored', null],
 ]) {
   const text = materialText.split('\n').find(line => line.includes(`Text("${label}")`));
-  assert.ok(text?.includes(`.attributeModifier(new __etsMaterialTypography(${size}, ${lineHeight}, ${weight}, ${tracking}))`),
-    `${label} must inherit the pinned Material3 typography without duplicating source expressions`);
+  assert.ok(text?.includes(`__etsTextStyleModifier(null, ${size === null ? 'null' : `${size}.0`},`) &&
+    text.includes('__etsMaterialContext.textStyle ?? __etsMaterialContext.typography.bodyLarge'),
+    `${label} must read its typed invocation context and retain explicit Text overrides`);
 }
-assert.ok(materialText.includes('metrics.descent - metrics.ascent - fp2px(this.lineHeight)'), 'leading derives from native font metrics, not a size multiplier');
-assert.ok(materialText.includes('.padding({ top: leading, bottom: leading })'), 'first/last-line leading is outer padding, not a per-line height increase');
-assert.match(generate('unsupported-text-provider', join(here, 'UnsupportedTextProvider.kt'), 'negative.UnknownPage', false).message, /ProvideTextStyle/);
-assert.match(generate('unsupported-text-contexts', join(here, 'UnsupportedTextContexts.kt'), 'negative.UnknownPage', false).message, /different inherited Material text styles/);
+assert.match(materialText, /content\.builder\(new EtsMaterialContext\([\s\S]*?\.typography\.labelLarge,/,
+  'Button invokes a forwarded source slot with labelLarge typography');
+assert.ok(materialText.includes('instance.lineHeight(this.lineHeight ?? 0)'),
+  'typed Material text styles apply their inherited line height through the shared modifier');
+const providedText = generate('provided-text', join(here, 'UnsupportedTextProvider.kt'), 'negative.UnknownPage');
+assert.match(providedText, /__etsMergeTextStyle\(__etsMaterialContext\.textStyle \?\? __etsMaterialContext\.typography\.bodyLarge, new EtsTextStyle/);
+const invocationText = generate('invocation-text-contexts', join(here, 'UnsupportedTextContexts.kt'), 'negative.UnknownPage');
+assert.match(invocationText, /SharedLabel\(__etsMaterialContext\)/);
+assert.match(invocationText, /SharedLabel\(new EtsMaterialContext\([\s\S]*?\.typography\.labelLarge,/);
 const unsupportedValueSource = join(here, 'UnsupportedComposableValue.kt');
 const unsupportedValue = generate('unsupported-composable-value', unsupportedValueSource, 'negative.UnknownPage', false);
 assert.match(unsupportedValue.message, /^Unsupported string concatenation operand: androidx\.compose\.material3\.Typography$/);
@@ -181,7 +185,8 @@ assert.match(generate('unsupported-touch-topology', join(here, 'UnsupportedTouch
 assert.match(generate('unsupported-disabled-touch', join(here, 'UnsupportedDisabledTouch.kt'), 'negative.UnknownPage', false).message,
   /requires enabled targets/, 'disabled candidates cannot silently participate in nearest-target arbitration');
 const source = generate('fixture', fixture, 'sample.Page');
-assert.ok(source.startsWith('import __etsDrawing from "@ohos.graphics.drawing";\n'), 'structured module imports precede stdlib declarations');
+assert.ok(source.startsWith('import __etsFontApi from "@ohos.font";\n'),
+  'typed text-style module imports precede stdlib declarations');
 assert.ok(source.includes('__etsNearestTouch(items, 4.0, 20.0, 8.0)'), 'overlapping expanded targets use nearest-child arbitration');
 const touchRuntime = helperJavascript(source);
 for (const [x, expected] of [[62, '0'], [90, '1'], [103, '1'], [104, '2'], [105, '2'], [106, '2'], [118, '2'], [146, '3']]) {

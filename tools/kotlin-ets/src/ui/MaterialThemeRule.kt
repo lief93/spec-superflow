@@ -16,10 +16,16 @@ internal fun materialContext(scope: Scope, at: SourceSpan): EtsExpression = scop
     ?: throw Unsupported(Diagnostic("UNSUPPORTED", "Material theme read requires a composition invocation context", at))
 internal fun materialScheme(context: EtsExpression, at: SourceSpan) = EtsMember(context, "colorScheme", materialColorSchemeType, at)
 internal fun materialContentColor(context: EtsExpression, at: SourceSpan) = EtsMember(context, "contentColor", EtsTypes.NUMBER, at)
+internal fun materialTextStyleOverride(context: EtsExpression, at: SourceSpan) =
+    EtsMember(context, "textStyle", EtsNullableType(textStyleType), at)
+internal fun materialCurrentTextStyle(context: EtsExpression, at: SourceSpan): EtsExpression =
+    EtsBinary("??", materialTextStyleOverride(context, at),
+        EtsMember(materialTypography(context, at), "bodyLarge", textStyleType, at), textStyleType, at)
 internal fun defaultMaterialContext(at: SourceSpan, shapes: EtsExpression): EtsExpression = EtsNew(materialContextType, listOf(
     EtsNew(materialColorValuesType, materialColorSchemeDefaults.map { (name, defaults) ->
         if (name == "surfaceTint") EtsLiteral(null, EtsTypes.NULL, at) else EtsLiteral(defaults.first, EtsTypes.NUMBER, at)
-    }, at), EtsLiteral(0xFF000000L, EtsTypes.NUMBER, at), defaultTypography(at), shapes), at)
+    }, at), EtsLiteral(0xFF000000L, EtsTypes.NUMBER, at), defaultTypography(at),
+    EtsLiteral(null, EtsTypes.NULL, at), shapes), at)
 
 internal fun requiresMaterialContext(element: IrElement): Boolean {
     var required = false
@@ -28,7 +34,8 @@ internal fun requiresMaterialContext(element: IrElement): Boolean {
         override fun visitCall(expression: IrCall) {
             val owner = expression.symbol.owner
             val api = symbolName(owner)
-            if (sourceFile(owner) == null && (api == "androidx.compose.material3.MaterialTheme" ||
+            if (sourceFile(owner) == null && (api in setOf("androidx.compose.material3.MaterialTheme",
+                "androidx.compose.material3.ProvideTextStyle") ||
                 api in setOf("androidx.compose.material3.Button", "androidx.compose.material3.TextButton",
                     "androidx.compose.material3.Card", "androidx.compose.material3.ButtonDefaults.buttonColors",
                     "androidx.compose.material3.ButtonDefaults.textButtonColors") ||
@@ -119,7 +126,7 @@ internal class ComposeMaterialThemeValueRule : CallRule {
         val at = materialContextSource
         val self = EtsReference(EtsSymbol("material:context:this", "this", materialContextType, at, external = true))
         val values = linkedMapOf("colorScheme" to materialColorSchemeType, "contentColor" to EtsTypes.NUMBER,
-            "typography" to typographyType, "shapes" to materialShapesType)
+            "typography" to typographyType, "textStyle" to EtsNullableType(textStyleType), "shapes" to materialShapesType)
         val parameters = values.map { (name, type) -> EtsParameter(EtsSymbol("material:context:parameter:$name", name, type, at)) }
         val fields = values.map { (name, type) -> EtsField(EtsSymbol("material:context:field:$name", name, type, at), readonly = true) }
         val constructor = EtsFunction("constructor", parameters, EtsTypes.VOID, fields.zip(parameters).map { (field, parameter) ->
@@ -150,6 +157,7 @@ internal class ComposeMaterialThemeRule(private val target: ArkUiCalls,
         val typography = argument(call, "typography")?.let { language.expression(it, scope) } ?: materialTypography(parent, at)
         val shapes = argument(call, "shapes")?.let { language.expression(it, scope) } ?: materialShapes(parent, at)
         val content = argument(call, "content") ?: target.diagnostics.unsupported(call, "MaterialTheme requires content")
-        return provide(EtsNew(materialContextType, listOf(scheme, materialContentColor(parent, at), typography, shapes), at), content, scope)
+        return provide(EtsNew(materialContextType, listOf(scheme, materialContentColor(parent, at), typography,
+            EtsLiteral(null, EtsTypes.NULL, at), shapes), at), content, scope)
     }
 }

@@ -79,7 +79,8 @@ internal class ComposeSurfaceRule(
         val context = scope.ambientValues[MATERIAL_CONTEXT]
         val child = scope.fork()
         if (context != null) child.ambientValues[MATERIAL_CONTEXT] = EtsNew(materialContextType,
-            listOf(materialScheme(context, at), foreground, materialTypography(context, at), materialShapes(context, at)), at)
+            listOf(materialScheme(context, at), foreground, materialTypography(context, at),
+                materialTextStyleOverride(context, at), materialShapes(context, at)), at)
         val slot = if (column) cardContent(body, child) else content(body, child)
         val options = target.record("__etsSurfaceOptions", linkedMapOf(
             "content" to slot, "column" to target.literal(column, call)), call)
