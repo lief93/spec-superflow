@@ -36,10 +36,10 @@ async function fixture(testScript) {
   return { root, relativeSource, original };
 }
 
-async function runAndRead(root) {
+async function runAndRead(root, extraArgs = []) {
   const result = spawnSync(
     process.execPath,
-    [cli, "check", "--project", root, "--scope", "full"],
+    [cli, "check", "--project", root, "--scope", "full", ...extraArgs],
     { cwd: path.resolve("."), encoding: "utf8" },
   );
   const report = JSON.parse(await readFile(
@@ -48,6 +48,31 @@ async function runAndRead(root) {
   ));
   return { result, report };
 }
+
+test("check can enable and bound mutation for one run without rewriting config", async () => {
+  const { root } = await fixture(`
+    import { readFileSync } from "node:fs";
+    const source = readFileSync("entry/src/main/ets/Predicate.ets", "utf8");
+    process.exit(source.includes("!==") ? 1 : 0);
+  `);
+  const configPath = path.join(root, "harmony-quality.config.json");
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  config.mutation.enabled = false;
+  config.mutation.maxMutants = 0;
+  await writeFile(configPath, JSON.stringify(config));
+
+  const { result, report } = await runAndRead(
+    root,
+    ["--mutation", "--max-mutants", "1"],
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(report.mutation.enabled, true);
+  assert.equal(report.mutation.summary.total, 1);
+  const persisted = JSON.parse(await readFile(configPath, "utf8"));
+  assert.equal(persisted.mutation.enabled, false);
+  assert.equal(persisted.mutation.maxMutants, 0);
+});
 
 test("mutation runs in an isolated copy and records a killed mutant", async () => {
   const { root, relativeSource, original } = await fixture(`

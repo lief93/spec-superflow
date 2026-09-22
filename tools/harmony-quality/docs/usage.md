@@ -110,6 +110,16 @@ harmony-quality check --project /absolute/path/to/harmony-project --scope module
 harmony-quality check --project /absolute/path/to/harmony-project --scope full
 ```
 
+Run bounded mutation for one check without changing the project configuration:
+
+```bash
+harmony-quality check --project /absolute/path/to/harmony-project \
+  --scope changed --base HEAD --mutation --max-mutants 10
+```
+
+`--max-mutants` accepts a positive integer. Both overrides apply only to the
+current process and do not rewrite `harmony-quality.config.json`.
+
 The command writes:
 
 ```text

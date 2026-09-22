@@ -32,13 +32,22 @@ function command(script, { required = true, timeoutMs = 5_000 } = {}) {
   };
 }
 
-function runCheck(root, scope = "full") {
+function runCheck(root, scope = "full", extraArgs = []) {
   return spawnSync(
     process.execPath,
-    [cli, "check", "--project", root, "--scope", scope],
+    [cli, "check", "--project", root, "--scope", scope, ...extraArgs],
     { cwd: path.resolve("."), encoding: "utf8" },
   );
 }
+
+test("check rejects an invalid one-run mutation limit", async () => {
+  const root = await createProject({});
+
+  const result = runCheck(root, "full", ["--mutation", "--max-mutants", "many"]);
+
+  assert.equal(result.status, 4);
+  assert.match(result.stderr, /--max-mutants must be a positive integer/);
+});
 
 async function readReport(root) {
   return JSON.parse(

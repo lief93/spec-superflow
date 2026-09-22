@@ -10,6 +10,15 @@ function readOption(args, name) {
   return index === -1 ? undefined : args[index + 1];
 }
 
+function readPositiveIntegerOption(args, name) {
+  if (!args.includes(name)) return undefined;
+  const value = readOption(args, name);
+  if (!value || !/^[1-9]\d*$/.test(value)) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return Number(value);
+}
+
 export async function run(args) {
   const [command] = args;
 
@@ -33,6 +42,8 @@ export async function run(args) {
           mode: readOption(args, "--scope"),
           module: readOption(args, "--module"),
           base: readOption(args, "--base"),
+          mutationEnabled: args.includes("--mutation"),
+          maxMutants: readPositiveIntegerOption(args, "--max-mutants"),
         },
       );
       process.stdout.write(`${result.report.status}: ${result.reportPath}\n`);

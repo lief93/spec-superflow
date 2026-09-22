@@ -111,7 +111,17 @@ function reportDirectory(root, configured) {
 
 export async function checkProject(root, options = {}) {
   const configPath = path.join(root, "harmony-quality.config.json");
-  const config = JSON.parse(await readFile(configPath, "utf8"));
+  const storedConfig = JSON.parse(await readFile(configPath, "utf8"));
+  const config = options.mutationEnabled || options.maxMutants !== undefined
+    ? {
+        ...storedConfig,
+        mutation: {
+          ...storedConfig.mutation,
+          ...(options.mutationEnabled ? { enabled: true } : {}),
+          ...(options.maxMutants !== undefined ? { maxMutants: options.maxMutants } : {}),
+        },
+      }
+    : storedConfig;
   const scope = await resolveScope(root, config, options);
 
   const commands = Object.entries(config.commands ?? {})

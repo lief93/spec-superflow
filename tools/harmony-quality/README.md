@@ -196,6 +196,18 @@ Mutation is opt-in. It runs a passing baseline, copies the project to an isolate
 
 `changed` scope limits mutations to changed source files. Mutation results distinguish `killed`, `survived`, `timeout`, and `compile-error`.
 
+Keep mutation disabled in the project configuration and enable it for one check
+when needed:
+
+```bash
+harmony-quality check --project /path/to/harmony-project \
+  --scope changed --base HEAD --mutation --max-mutants 10
+```
+
+`--mutation` enables mutation only for that process. `--max-mutants` must be a
+positive integer and overrides the configured limit for that process. Neither
+option rewrites `harmony-quality.config.json`.
+
 ## Traceability
 
 The JSON report links:
