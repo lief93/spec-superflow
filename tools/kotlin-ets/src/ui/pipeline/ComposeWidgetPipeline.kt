@@ -33,7 +33,7 @@ class ComposeWidgetPipeline(
             backend.diagnostics.unsupported(entry.valueParameters.first(),
                 "Stateful widget entries do not yet support parameters")
         }
-        val model = ComposeWidgetAdapter(backend.language, backend.diagnostics)
+        val model = ComposeWidgetAdapter(backend.language, backend.diagnostics, state.pagers)
             .lower(entry, state.scope, state.handledStatements)
         val body = HarmonyWidgetBackend().lower(model)
         val source = backend.language.source(entry)

@@ -149,6 +149,24 @@ fun main() {
     check((textField.call.arguments.single() as EtsObject).fields["text"] == EtsLiteral("value", EtsTypes.STRING, source))
     check(textField.attributes.single { (it.callee as EtsReference).symbol.name == "onChange" }
         .arguments.single() == onChange)
+    val currentPage = EtsReference(EtsSymbol("test:currentPage", "currentPage", EtsTypes.NUMBER,
+        source, external = true))
+    val controllerType = EtsNamedType("SwiperController")
+    val controller = EtsReference(EtsSymbol("test:controller", "controller", controllerType,
+        source, external = true))
+    val page = EtsReference(EtsSymbol("test:page", "page", EtsTypes.NUMBER, source))
+    val changedPage = EtsParameter(EtsSymbol("test:changedPage", "index", EtsTypes.NUMBER, source))
+    val pageChanged = EtsLambda(listOf(changedPage), listOf(EtsExpressionStatement(
+        EtsAssignment(currentPage, EtsReference(changedPage.symbol), source))), EtsTypes.VOID, source)
+    val pager = backend.lower(Widget.Pager(currentPage, number(3), controller, pageChanged,
+        IndexedChildren(page, Children(listOf(Widget.Text(string("page"), noStyle, emptyList(), source))), source),
+        emptyList(), source))
+    check(name(pager) == "Swiper")
+    check(pager.attributes.map { (it.callee as EtsReference).symbol.name } ==
+        listOf("index", "loop", "indicator", "onChange"))
+    val pageLoop = pager.children!!.single() as EtsUiForEach
+    check((pageLoop.items as EtsArray).elements.map { (it as EtsLiteral).value } == listOf(0, 1, 2))
+    check(pageLoop.item.symbol == page.symbol)
     val invalidUrl = Widget.Image<EtsExpression, SourceSpan>(ImageSource.Url(number(1), source),
         EtsLiteral(null, EtsTypes.NULL, source), emptyList(), source)
     check(runCatching { backend.lower(invalidUrl) }.exceptionOrNull() is IllegalArgumentException)
@@ -182,7 +200,7 @@ fun main() {
     check(runCatching { backend.lower(invalidConditional) }.exceptionOrNull() is IllegalArgumentException)
     val fn = EtsFunction("view", emptyList(), EtsTypes.VOID,
         listOf(element, rowLayout, boxLayout, styledText, styledButton, styledImage,
-            resourceImage, urlImage, textField, conditional),
+            resourceImage, urlImage, textField, pager, conditional),
         source, builder = true)
     EtsValidator().validate(EtsProgram(listOf(EtsFile("model-only", listOf(fn)))))
     println("PASS backend without compiler/Compose; shared values, scoped layout modifiers, runtime branches and typed rejection")

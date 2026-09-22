@@ -7,6 +7,7 @@ import java.net.URI
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.name.FqName
@@ -15,7 +16,8 @@ import org.jetbrains.kotlin.name.FqName
  * The caller supplies ordinary language lowering and bindings for entry parameters.
  * Children are statically described; callbacks remain typed language expressions.
  */
-class ComposeWidgetAdapter(private val language: Language, private val diagnostics: DiagnosticSink) {
+class ComposeWidgetAdapter(private val language: Language, private val diagnostics: DiagnosticSink,
+    private val pagers: Map<IrValueSymbol, ComposeStateLowering.PagerStateBinding> = emptyMap()) {
     fun lower(function: IrSimpleFunction, scope: Scope = Scope(),
         handledStatements: Set<IrStatement> = emptySet()): Children<EtsExpression, SourceSpan> {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
@@ -92,6 +94,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val button = api.endsWith(".Button")
         val image = api in setOf("androidx.compose.foundation.Image", "coil.compose.AsyncImage")
         val textField = api.endsWith("TextField")
+        val isPager = api == "androidx.compose.foundation.pager.HorizontalPager"
         checkArguments(call, when {
             text -> setOf("text", "modifier", "fontSize", "fontWeight", "fontFamily", "lineHeight")
             button -> setOf("onClick", "enabled", "modifier", "content")
@@ -99,6 +102,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 setOf("painter", "contentDescription", "modifier")
             else setOf("model", "contentDescription", "modifier")
             textField -> setOf("value", "onValueChange", "modifier", "enabled")
+            isPager -> setOf("state", "modifier", "pageContent")
             else -> setOf("modifier", "content")
         })
         val source = language.source(call)
@@ -125,6 +129,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             return Widget.Text(widgetValue(value, scope, WidgetValueType.STRING), style, modifier, source)
         }
         if (image) return image(call, api, scope, modifier, source)
+        if (isPager) return pager(call, scope, modifier, source)
         if (textField) {
             val value = required("value")
             if (!value.type.isString()) diagnostics.unsupported(value,
@@ -163,6 +168,37 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             api.endsWith(".Column") -> Widget.Column(children, modifier, source)
             else -> Widget.Box(children, modifier, source)
         }
+    }
+
+    private fun pager(call: IrCall, scope: Scope,
+        modifiers: List<WidgetModifier<EtsExpression, SourceSpan>>,
+        source: SourceSpan): Widget.Pager<EtsExpression, SourceSpan> {
+        val state = argument(call, "state")
+            ?: diagnostics.unsupported(call, "HorizontalPager requires state")
+        val holder = (resolve(state, scope) as? IrGetValue)?.symbol
+        val binding = holder?.let(pagers::get)
+            ?: diagnostics.unsupported(state, "HorizontalPager state requires source remembered PagerState")
+        val content = argument(call, "pageContent")
+            ?: diagnostics.unsupported(call, "HorizontalPager requires pageContent")
+        val lambda = resolve(content, scope) as? IrFunctionExpression
+            ?: diagnostics.unsupported(content, "HorizontalPager pageContent requires a direct lambda")
+        val parameter = lambda.function.valueParameters.singleOrNull()
+            ?: diagnostics.unsupported(content, "HorizontalPager pageContent requires one page index parameter")
+        if (!parameter.type.isInt() || !lambda.function.returnType.isUnit())
+            diagnostics.unsupported(parameter, "HorizontalPager pageContent requires an Int page index and Unit result")
+        val indexSymbol = EtsSymbol("compose-pager:${source.file}:${source.start}:page",
+            parameter.name.asString(), EtsTypes.NUMBER, language.source(parameter))
+        val index = EtsReference(indexSymbol)
+        val childScope = scope.fork().also { it.bindings[parameter.symbol] = index }
+        val children = body(lambda.function.body
+            ?: diagnostics.unsupported(content, "HorizontalPager pageContent has no body"),
+            childScope, lambda.function, parent = null)
+        val changeSymbol = EtsSymbol("compose-pager:${source.file}:${source.start}:change",
+            "index", EtsTypes.NUMBER, source)
+        val onPageChange = EtsLambda(listOf(EtsParameter(changeSymbol)), listOf(EtsExpressionStatement(
+            EtsAssignment(binding.currentPage, EtsReference(changeSymbol), source))), EtsTypes.VOID, source)
+        return Widget.Pager(binding.currentPage, binding.pageCount, binding.controller, onPageChange,
+            IndexedChildren(index, children, language.source(content)), modifiers, source)
     }
 
     private fun image(call: IrCall, api: String, scope: Scope,
@@ -429,6 +465,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             "androidx.compose.foundation.Image", "coil.compose.AsyncImage",
             "androidx.compose.foundation.text.BasicTextField", "androidx.compose.material.TextField",
             "androidx.compose.material3.TextField", "androidx.compose.material3.OutlinedTextField",
+            "androidx.compose.foundation.pager.HorizontalPager",
             "androidx.compose.foundation.layout.Row", "androidx.compose.foundation.layout.Column",
             "androidx.compose.foundation.layout.Box")
     }

@@ -4,6 +4,7 @@ package dev.ets.compose
 import dev.ets.*
 import java.util.Collections
 import java.util.IdentityHashMap
+import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
@@ -19,6 +20,13 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val fields: List<EtsField>,
         val scope: Scope,
         val handledStatements: Set<IrStatement>,
+        val pagers: Map<IrValueSymbol, PagerStateBinding> = emptyMap(),
+    )
+
+    data class PagerStateBinding(
+        val currentPage: EtsExpression,
+        val pageCount: EtsExpression,
+        val controller: EtsExpression,
     )
 
     private data class State(
@@ -26,6 +34,13 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val holder: IrValueSymbol,
         val getter: IrSimpleFunctionSymbol? = null,
         val setter: IrSimpleFunctionSymbol? = null,
+    )
+
+    private data class PagerState(
+        val holder: IrValueSymbol,
+        val currentPage: EtsField,
+        val pageCount: EtsExpression,
+        val controller: EtsField,
     )
 
     fun lower(function: IrSimpleFunction, scope: Scope, componentName: String): Plan {
@@ -40,19 +55,36 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val self = EtsReference(EtsSymbol("compose-state:${language.source(function).file}:${language.source(function).start}:this",
             "this", componentType, language.source(function), external = true))
         val handled = Collections.newSetFromMap(IdentityHashMap<IrStatement, Boolean>())
-        val states = statements.mapNotNull { statement -> state(statement, scope, handled) }
-        if (states.isEmpty()) return Plan(emptyList(), scope, handled)
+        val states = mutableListOf<State>()
+        val pagerStates = mutableListOf<PagerState>()
+        val fields = mutableListOf<EtsField>()
+        statements.forEach { statement ->
+            val state = state(statement, scope, handled)
+            if (state != null) {
+                states += state
+                fields += state.field
+            } else {
+                pagerState(statement, handled)?.let { pager ->
+                    pagerStates += pager
+                    fields += listOf(pager.currentPage, pager.controller)
+                }
+            }
+        }
+        if (states.isEmpty() && pagerStates.isEmpty()) return Plan(emptyList(), scope, handled)
 
         val holders = states.associateBy { it.holder }
         val getters = states.mapNotNull { state -> state.getter?.let { it to state } }.toMap()
         val setters = states.mapNotNull { state -> state.setter?.let { it to state } }.toMap()
-        fun member(state: State, owner: IrExpression) = EtsMember(self, state.field.symbol.name,
-            state.field.symbol.type, language.source(owner), state.field.symbol.id)
+        fun member(field: EtsField, owner: IrElement) = EtsMember(self, field.symbol.name,
+            field.symbol.type, language.source(owner), field.symbol.id)
+        fun member(state: State, owner: IrExpression) = member(state.field, owner)
         fun assignment(call: IrCall, state: State, scope: Scope): EtsAssignment {
             val value = call.getValueArgument(0)
                 ?: diagnostics.unsupported(call, "State update requires a value")
             return EtsAssignment(member(state, call), language.expression(value, scope), language.source(call))
         }
+        val pagerBindings = pagerStates.associate { pager -> pager.holder to PagerStateBinding(
+            member(pager.currentPage, function), pager.pageCount, member(pager.controller, function)) }
         val rule = object : CallRule {
             private fun direct(call: IrCall): State? {
                 val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
@@ -61,6 +93,13 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
             }
 
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
+                val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+                if (property == "androidx.compose.foundation.pager.PagerState.currentPage") {
+                    val receiver = call.dispatchReceiver ?: call.extensionReceiver
+                    val holder = (receiver as? IrGetValue)?.symbol
+                    return holder?.let(pagerBindings::get)?.currentPage
+                        ?: diagnostics.unsupported(call, "Pager currentPage requires source remembered PagerState")
+                }
                 getters[call.symbol]?.let { return member(it, call) }
                 setters[call.symbol]?.let { return etsDiscard(assignment(call, it, scope), language.source(call)) }
                 val state = direct(call) ?: return null
@@ -76,7 +115,47 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         }
         val loweredScope = Scope(LinkedHashMap(scope.bindings), LinkedHashMap(scope.aliases), scope.callRule,
             listOf(rule) + scope.callRules, LinkedHashMap(scope.ambientValues))
-        return Plan(states.map { it.field }, loweredScope, handled)
+        return Plan(fields, loweredScope, handled, pagerBindings)
+    }
+
+    private fun pagerState(statement: IrStatement, handled: MutableSet<IrStatement>): PagerState? {
+        val declaration = statement as? IrVariable ?: return null
+        val call = declaration.initializer as? IrCall ?: return null
+        if (symbolName(call.symbol.owner) != "androidx.compose.foundation.pager.rememberPagerState") return null
+        call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
+            if (call.getValueArgument(index) != null && parameter.name.asString() !in setOf("initialPage", "pageCount"))
+                diagnostics.unsupported(call.getValueArgument(index)!!,
+                    "Unsupported rememberPagerState argument: ${parameter.name}")
+        }
+        val pageCountLambda = argument(call, "pageCount")
+            ?: diagnostics.unsupported(call, "rememberPagerState requires pageCount")
+        val pageCountFunction = (pageCountLambda as? IrFunctionExpression)?.function
+            ?: diagnostics.unsupported(pageCountLambda, "Pager pageCount requires a direct lambda")
+        val pageCountResult = (pageCountFunction.body as? IrBlockBody)?.statements?.singleOrNull()
+            ?: diagnostics.unsupported(pageCountLambda, "Pager pageCount requires one direct result")
+        val pageCountExpression = (pageCountResult as? IrReturn)?.value ?: pageCountResult as? IrExpression
+            ?: diagnostics.unsupported(pageCountResult, "Pager pageCount requires an integer result")
+        val count = (pageCountExpression as? IrConst)?.value as? Int
+        if (count == null || count <= 0)
+            diagnostics.unsupported(pageCountExpression, "Pager pageCount currently requires a positive integer literal")
+        val initialExpression = argument(call, "initialPage")
+        val initial = if (initialExpression == null) 0 else (initialExpression as? IrConst)?.value as? Int
+            ?: diagnostics.unsupported(initialExpression, "Pager initialPage currently requires an integer literal")
+        if (initial !in 0 until count)
+            diagnostics.unsupported(initialExpression ?: call, "Pager initialPage must be within pageCount")
+        val at = language.source(declaration)
+        val currentName = "${declaration.name}_currentPage"
+        val current = EtsField(EtsSymbol("compose-pager:${at.file}:${at.start}:currentPage",
+            currentName, EtsTypes.NUMBER, at), EtsLiteral(initial, EtsTypes.NUMBER, at),
+            visibility = EtsVisibility.PRIVATE, state = true)
+        val controllerType = EtsNamedType("SwiperController")
+        val controllerName = "${declaration.name}_controller"
+        val controller = EtsField(EtsSymbol("compose-pager:${at.file}:${at.start}:controller",
+            controllerName, controllerType, at), EtsNew(controllerType, emptyList(), at),
+            visibility = EtsVisibility.PRIVATE)
+        handled += statement
+        return PagerState(declaration.symbol, current,
+            EtsLiteral(count, EtsTypes.NUMBER, language.source(pageCountExpression)), controller)
     }
 
     private fun state(statement: IrStatement, scope: Scope, handled: MutableSet<IrStatement>): State? {
