@@ -68,9 +68,9 @@ try {
     '--work-dir', projectRun, '--offline'], { env: projectEnv }, 2);
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'UNSUPPORTED');
-  assert.match(backendBlocker.message, /Unsupported external call: androidx\.compose\.foundation\.isSystemInDarkTheme/);
-  assert.equal(backendBlocker.source.line, 194);
-  assert.equal(backendBlocker.source.column, 26);
+  assert.match(backendBlocker.message, /Unsupported external call: androidx\.compose\.ui\.graphics\.Color\.copy/);
+  assert.equal(backendBlocker.source.line, 42);
+  assert.equal(backendBlocker.source.column, 54);
   assert.equal(existsSync(output), false);
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
@@ -93,6 +93,11 @@ try {
     [category, expectedCoverage[category].total])));
   assert.deepEqual(report.coverage, expectedCoverage);
   assert.equal(report.calls.length, 319);
+  const themeMode = report.calls.find(call =>
+    call.finalRecognizedNode.symbol === 'androidx.compose.foundation.isSystemInDarkTheme');
+  assert.equal(themeMode?.expectedTargetType, 'boolean');
+  assert.equal(themeMode?.finalRecognizedNode.kind, 'typed_call');
+  assert.equal(themeMode?.firstUnsupportedNode, null);
   assert.equal(report.firstUnsupportedNode.kind, 'target_type');
   assert.equal(report.firstUnsupportedNode.symbol, 'androidx.compose.runtime.ProvidableCompositionLocal.provides');
   assert.match(report.firstUnsupportedNode.message, /ProvidedValue.*GradientColors/);
@@ -132,7 +137,7 @@ try {
     backendBlocker,
     unsupportedCalls,
     p0Gaps: [
-      { category: 'neutral_compose_widget', node: 'androidx.compose.foundation.isSystemInDarkTheme',
+      { category: 'neutral_compose_widget', node: 'androidx.compose.ui.graphics.Color.copy',
         responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
       { category: 'neutral_compose_widget', node: 'unsupported_call_inventory',
@@ -143,7 +148,7 @@ try {
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS 319-call six-category baseline; all 16 unsupported Compose calls remain explicit');
+  console.log('PASS runtime theme mode lowering advances the backend to Color.copy; all 16 unsupported Compose calls remain explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }
