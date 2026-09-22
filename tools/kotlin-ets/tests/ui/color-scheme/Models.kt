@@ -54,3 +54,11 @@ fun overrides(): List<Int> {
     return listOf(value.primary.toArgb(), value.secondary.toArgb(), value.surfaceTint.toArgb(),
         reads, explicit.primary.toArgb(), explicit.surfaceTint.toArgb())
 }
+
+fun callForms(): List<Int> {
+    reads = 0
+    val positional = lightColorScheme(nextColor(), nextColor())
+    val mixed = darkColorScheme(nextColor(), onPrimary = nextColor(), secondary = nextColor())
+    return listOf(positional.primary.toArgb(), positional.onPrimary.toArgb(), positional.surfaceTint.toArgb(),
+        mixed.primary.toArgb(), mixed.onPrimary.toArgb(), mixed.secondary.toArgb(), mixed.surfaceTint.toArgb(), reads)
+}

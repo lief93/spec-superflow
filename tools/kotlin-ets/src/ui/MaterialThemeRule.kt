@@ -55,7 +55,10 @@ private val contentRoles = linkedMapOf("primary" to "onPrimary", "secondary" to 
     "tertiaryContainer" to "onTertiaryContainer", "errorContainer" to "onErrorContainer",
     "inverseSurface" to "inverseOnSurface", "surface" to "onSurface", "surfaceVariant" to "onSurfaceVariant",
     "surfaceBright" to "onSurface", "surfaceContainer" to "onSurface", "surfaceContainerHigh" to "onSurface",
-    "surfaceContainerHighest" to "onSurface", "surfaceContainerLow" to "onSurface", "surfaceContainerLowest" to "onSurface")
+    "surfaceContainerHighest" to "onSurface", "surfaceContainerLow" to "onSurface", "surfaceContainerLowest" to "onSurface",
+    "primaryFixed" to "onPrimaryFixed", "primaryFixedDim" to "onPrimaryFixed",
+    "secondaryFixed" to "onSecondaryFixed", "secondaryFixedDim" to "onSecondaryFixed",
+    "tertiaryFixed" to "onTertiaryFixed", "tertiaryFixedDim" to "onTertiaryFixed")
 
 internal fun materialContentColorFor(context: EtsExpression, background: EtsExpression, at: SourceSpan): EtsExpression =
     EtsCall(EtsMember(context, "contentColorFor", EtsFunctionType(listOf(composeColorType), EtsTypes.NUMBER), at),

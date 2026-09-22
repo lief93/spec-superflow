@@ -9,8 +9,9 @@ private val materialColorSchemeSource = SourceSpan("EtsMaterialColorScheme.kt", 
 internal val materialColorSchemeType = etsClassSymbol("EtsMaterialColorScheme", materialColorSchemeSource).type as EtsNamedType
 internal val materialColorValuesType = etsClassSymbol("EtsMaterialColorValues", materialColorSchemeSource).type as EtsNamedType
 
-// AndroidX Material3 1.3.2 ColorLightTokens/ColorDarkTokens, palette v0_210.
-// Order is the factory signature, not alphabetical or ColorScheme constructor order.
+// AndroidX Material3 ColorLightTokens/ColorDarkTokens, palette v0_210. This is
+// the target ColorScheme contract order; resolved source factory overloads bind
+// to it by semantic role name.
 internal val materialColorSchemeDefaults = linkedMapOf(
     "primary" to (0xFF6750A4L to 0xFFD0BCFFL),
     "onPrimary" to (0xFFFFFFFFL to 0xFF381E72L),
@@ -47,7 +48,19 @@ internal val materialColorSchemeDefaults = linkedMapOf(
     "surfaceContainerHighest" to (0xFFE6E0E9L to 0xFF36343BL),
     "surfaceContainerLow" to (0xFFF7F2FAL to 0xFF1D1B20L),
     "surfaceContainerLowest" to (0xFFFFFFFFL to 0xFF0F0D13L),
-    "surfaceDim" to (0xFFDED8E1L to 0xFF141218L)
+    "surfaceDim" to (0xFFDED8E1L to 0xFF141218L),
+    "primaryFixed" to (0xFFEADDFFL to 0xFFEADDFFL),
+    "primaryFixedDim" to (0xFFD0BCFFL to 0xFFD0BCFFL),
+    "onPrimaryFixed" to (0xFF21005DL to 0xFF21005DL),
+    "onPrimaryFixedVariant" to (0xFF4F378BL to 0xFF4F378BL),
+    "secondaryFixed" to (0xFFE8DEF8L to 0xFFE8DEF8L),
+    "secondaryFixedDim" to (0xFFCCC2DCL to 0xFFCCC2DCL),
+    "onSecondaryFixed" to (0xFF1D192BL to 0xFF1D192BL),
+    "onSecondaryFixedVariant" to (0xFF4A4458L to 0xFF4A4458L),
+    "tertiaryFixed" to (0xFFFFD8E4L to 0xFFFFD8E4L),
+    "tertiaryFixedDim" to (0xFFEFB8C8L to 0xFFEFB8C8L),
+    "onTertiaryFixed" to (0xFF31111DL to 0xFF31111DL),
+    "onTertiaryFixedVariant" to (0xFF633B48L to 0xFF633B48L),
 )
 
 internal val materialColorSchemeParameters = materialColorSchemeDefaults.keys.map {
@@ -71,15 +84,37 @@ internal class ComposeColorSchemeRule : CallRule {
         val api = symbolName(owner)
         val at = language.source(call)
         if (api in setOf("androidx.compose.material3.lightColorScheme", "androidx.compose.material3.darkColorScheme")) {
-            if (owner.valueParameters.map { it.name.asString() } != materialColorSchemeDefaults.keys.toList())
-                throw Unsupported(Diagnostic("UNSUPPORTED", "Unsupported Material3 ColorScheme factory signature", at))
+            if (owner.dispatchReceiverParameter != null || owner.extensionReceiverParameter != null ||
+                owner.returnType.classOrNull?.owner?.let(::symbolName) != "androidx.compose.material3.ColorScheme")
+                throw Unsupported(Diagnostic("UNSUPPORTED", "Unsupported Material3 ColorScheme factory receiver or result type", at))
+            val parameters = owner.valueParameters
+            val names = parameters.map { it.name.asString() }
+            val unknown = names.filterNot(materialColorSchemeDefaults::containsKey)
+            if (unknown.isNotEmpty() || names.distinct().size != names.size)
+                throw Unsupported(Diagnostic("UNSUPPORTED",
+                    "Unsupported Material3 ColorScheme roles: ${unknown.ifEmpty { names }}", at))
+            val roleOrder = materialColorSchemeDefaults.keys.withIndex().associate { it.value to it.index }
+            val resolvedOrder = names.map(roleOrder::getValue)
+            if (resolvedOrder != resolvedOrder.sorted())
+                throw Unsupported(Diagnostic("UNSUPPORTED",
+                    "Material3 ColorScheme role order cannot preserve source evaluation order", at))
+            parameters.firstOrNull {
+                it.varargElementType != null || it.type.classOrNull?.owner?.let(::symbolName) != colorType
+            }?.let { parameter ->
+                throw Unsupported(Diagnostic("UNSUPPORTED",
+                    "Material3 ColorScheme role ${parameter.name} must resolve to Color", at))
+            }
             val dark = api == "androidx.compose.material3.darkColorScheme"
-            val values = materialColorSchemeDefaults.entries.mapIndexed { index, (name, defaults) ->
-                val fallback = EtsLiteral(if (dark) defaults.second else defaults.first, EtsTypes.NUMBER, at)
+            val explicit = parameters.mapIndexedNotNull { index, parameter ->
                 call.getValueArgument(index)?.let { value ->
-                    val lowered = language.expression(value, scope)
-                    if (name == "surfaceTint") lowered
-                    else resolveComposeColor(lowered, fallback, language.source(value))
+                    parameter.name.asString() to language.expression(value, scope)
+                }
+            }.toMap()
+            val values = materialColorSchemeDefaults.map { (name, defaults) ->
+                val fallback = EtsLiteral(if (dark) defaults.second else defaults.first, EtsTypes.NUMBER, at)
+                explicit[name]?.let { value ->
+                    if (name == "surfaceTint") value
+                    else resolveComposeColor(value, fallback, value.source)
                 } ?: if (name == "surfaceTint") EtsLiteral(null, EtsTypes.NULL, at) else fallback
             }
             return EtsCast(EtsNew(materialColorValuesType, values, at), materialColorSchemeType, at)

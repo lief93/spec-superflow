@@ -18,7 +18,7 @@ const categories = ['language_semantics', 'standard_library', 'neutral_compose_w
 const expectedCoverage = {
   language_semantics: { total: 109, recognized: 109, unsupported: 0, percentage: 100 },
   standard_library: { total: 15, recognized: 15, unsupported: 0, percentage: 100 },
-  neutral_compose_widget: { total: 191, recognized: 178, unsupported: 13, percentage: 93.19 },
+  neutral_compose_widget: { total: 191, recognized: 179, unsupported: 12, percentage: 93.71 },
   modifier: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   resources: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   project_dependencies: { total: 0, recognized: 0, unsupported: 0, percentage: null },
@@ -68,9 +68,10 @@ try {
     '--work-dir', projectRun, '--offline'], { env: projectEnv }, 2);
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'UNSUPPORTED');
-  assert.equal(backendBlocker.message, 'Unsupported Material3 ColorScheme factory signature');
-  assert.equal(backendBlocker.source.line, 39);
-  assert.equal(backendBlocker.source.column, 31);
+  assert.equal(backendBlocker.message,
+    'Unsupported language type: androidx.compose.ui.text.style.LineHeightStyle.Alignment.Companion');
+  assert.equal(backendBlocker.source.line, 67);
+  assert.equal(backendBlocker.source.column, 35);
   assert.equal(existsSync(output), false);
   const diagnosis = JSON.parse(readFileSync(output + '.diagnosis.json', 'utf8'));
   assert.equal(diagnosis.status, 'blocked');
@@ -157,6 +158,12 @@ try {
   assert.equal(unspecifiedDimensions.length, 1);
   assert.ok(unspecifiedDimensions.every(call => call.expectedTargetType === 'number | null' &&
     call.finalRecognizedNode.kind === 'typed_call' && call.firstUnsupportedNode === null));
+  const staticColorSchemes = report.calls.filter(call =>
+    call.finalRecognizedNode.symbol === 'androidx.compose.material3.lightColorScheme' ||
+    call.finalRecognizedNode.symbol === 'androidx.compose.material3.darkColorScheme');
+  assert.equal(staticColorSchemes.length, 4);
+  assert.ok(staticColorSchemes.every(call => call.expectedTargetType === 'EtsMaterialColorScheme' &&
+    call.finalRecognizedNode.kind === 'typed_call' && call.firstUnsupportedNode === null));
   assert.equal(report.firstUnsupportedNode.kind, 'target_type');
   assert.equal(report.firstUnsupportedNode.symbol,
     'androidx.compose.ui.text.style.LineHeightStyle.Alignment.Companion.<get-Bottom>');
@@ -180,9 +187,9 @@ try {
   }
 
   const unsupportedCalls = report.calls.filter(call => call.firstUnsupportedNode !== null);
-  assert.equal(unsupportedCalls.length, 13);
+  assert.equal(unsupportedCalls.length, 12);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'target_type').length, 12);
-  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 1);
+  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 0);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_field').length, 0);
   assert.ok(unsupportedCalls.every(call => call.category === 'neutral_compose_widget'));
 
@@ -198,18 +205,19 @@ try {
     backendBlocker,
     unsupportedCalls,
     p0Gaps: [
-      { category: 'neutral_compose_widget', node: 'androidx.compose.material3.lightColorScheme',
-        responsibleModule: 'tools/kotlin-ets/src/ui/ColorSchemeRule.kt', source: backendBlocker.source,
+      { category: 'neutral_compose_widget',
+        node: 'androidx.compose.ui.text.style.LineHeightStyle.Alignment.Companion',
+        responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
       { category: 'neutral_compose_widget', node: 'unsupported_call_inventory',
         responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt',
-        counts: { target_type: 12, unsupported_call: 1, unsupported_field: 0 },
-        detail: 'Thirteen source-linked calls remain unsupported; all records are preserved in unsupportedCalls.' },
+        counts: { target_type: 12, unsupported_call: 0, unsupported_field: 0 },
+        detail: 'Twelve source-linked calls remain unsupported; all records are preserved in unsupportedCalls.' },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS Android platform-version guards map project colors or select declared fallbacks; all 13 unsupported calls remain explicit');
+  console.log('PASS Material3 light/dark ColorScheme factories bind resolved roles; all 12 remaining unsupported calls stay explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

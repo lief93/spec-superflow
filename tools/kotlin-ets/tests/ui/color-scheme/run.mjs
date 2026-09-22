@@ -34,9 +34,9 @@ vm.runInContext(ts.transpileModule(readFileSync(output, 'utf8'), { compilerOptio
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS
 } }).outputText, context, { timeout: 2000 });
 const actual = [...context.exports.roles(context.exports.scheme(false)),
-  ...context.exports.roles(context.exports.scheme(true)), ...context.exports.overrides()];
+  ...context.exports.roles(context.exports.scheme(true)), ...context.exports.overrides(), ...context.exports.callForms()];
 assert.deepEqual(actual, expected);
-assert.equal(actual.length, 78);
+assert.equal(actual.length, 86);
 writeFileSync(join(work, 'parity.json'), JSON.stringify({ expected, actual }, null, 2));
 run('page', 'bash', [join(root, 'kotlin-ets'), '--entry', 'colorscheme.Page', '--classpath-file', cpFile,
   '--out', join(work, 'Page.ets'), join(here, 'Models.kt'), join(here, 'Page.kt')]);
@@ -49,4 +49,4 @@ for (const name of ['Models', 'Consumer']) {
   assert.doesNotMatch(code, /class EtsMaterialColorScheme/);
 }
 assert.match(readFileSync(join(work, 'modules/EtsMaterialColorScheme.ets'), 'utf8'), /export interface EtsMaterialColorScheme/);
-console.log('PASS 36 light/dark roles, dependent defaults, ordered effects, parameter/property flow and type-only module support');
+console.log('PASS light/dark semantic defaults, named/positional/mixed calls, ordered effects, parameter/property flow and type-only module support');
