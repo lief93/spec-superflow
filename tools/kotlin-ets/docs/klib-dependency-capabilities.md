@@ -1,5 +1,9 @@
 # S1: serialized KLIB dependency capabilities
 
+The follow-on [S1.4 collection architecture audit](klib-collection-architecture.md)
+moves `filter` and `filterNot` through these official bodies and a canonical
+symbol-bound collection runtime seam.
+
 Scope: loading/linking reusable Kotlin bodies and selecting existing minimal ETS
 runtime support. No Compose control, UI backend, public CLI, JVM bytecode
 translation, JS backend phase pipeline or complete stdlib replacement is added.
