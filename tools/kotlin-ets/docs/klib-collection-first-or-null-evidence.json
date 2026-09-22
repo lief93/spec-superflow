@@ -7,7 +7,7 @@
     "file": "kotlin-stdlib-js-2.1.20.klib",
     "sha256": "65a9831cceb606642693f9f3d798de86bbacf09b9588186e763e9e9f3c24d1a3"
   },
-  "firstOrNullRun": "tests/klib/collection-first-or-null-common/.work/run-Ju5BON",
+  "firstOrNullRun": "tests/klib/collection-first-or-null-common/.work/run-ip613O",
   "officialBodies": [
     {
       "name": "firstOrNull()",
