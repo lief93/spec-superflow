@@ -31,6 +31,7 @@ sealed interface FunctionBody {
     sealed interface Origin {
         data object Source : Origin
         data class SerializedJvmIr(val binaryLocation: String) : Origin
+        data class SerializedKlibIr(val libraryLocation: String, val moduleName: String) : Origin
     }
     enum class Reason(val evidence: String) {
         UNBOUND_SYMBOL("The function symbol is unbound."),
@@ -39,7 +40,8 @@ sealed interface FunctionBody {
         NO_BODY("The source declaration has no function body."),
         NON_INLINE_BINARY("Loading non-inline JVM binary bodies is not supported."),
         NO_BINARY_METADATA("JVM binary metadata is unavailable for this declaration."),
-        NO_SERIALIZED_IR("JVM binary metadata contains no serialized IR.")
+        NO_SERIALIZED_IR("JVM binary metadata contains no serialized IR."),
+        NON_TRANSLATED_KLIB("The linked KLIB is dependency-only; its body was not selected for reuse.")
     }
 }
 

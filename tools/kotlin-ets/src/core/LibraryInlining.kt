@@ -1,6 +1,8 @@
 @file:OptIn(org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI::class)
 package dev.ets
 
+import org.jetbrains.kotlin.backend.common.LoweringContext
+import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.backend.common.lower.ReturnableBlockTransformer
 import org.jetbrains.kotlin.backend.common.ir.ValueRemapper
 import org.jetbrains.kotlin.backend.common.lower.inline.KlibSyntheticAccessorGenerator
@@ -50,14 +52,8 @@ internal fun lowerSourceInlineFunctions(input: JvmFir2IrPipelineArtifact, bodies
             }
         })
     }
-    val resolver = object : InlineFunctionResolver(InlineMode.ALL_INLINE_FUNCTIONS) {
-        override fun needsInlining(function: IrFunction): Boolean =
-            function.isInline && bodies.resolve(function.symbol) is FunctionBody.Available
-    }
     val context = createJvmLoweringContext(input)
-    val callableReferences = CommonInlineCallableReferenceToLambdaPhase(context, resolver)
-    module.files.forEach(callableReferences::lower)
-    FunctionInlining(context, resolver, produceOuterThisFields = false).inline(module)
+    inlineAvailableFunctions(context, listOf(module), bodies)
     val accessors = KlibSyntheticAccessorGenerator(context)
     val added = linkedMapOf<IrFunction, IrFunction>()
     module.files.forEach { file ->
@@ -122,4 +118,15 @@ internal fun explainUnavailableInlineBody(failure: Unsupported, unavailable: Lis
         "External inline call has no loaded IR body: ${body.symbol}. " +
             "Provide explicit dependency source or a supported serialized dependency; this call has no usable binary IR body. " +
             "${body.evidence} ${failure.diagnostic.message}"))
+}
+
+/** Shared official inliner; the owning frontend supplies body policy and compiler context. */
+internal fun inlineAvailableFunctions(context: LoweringContext, modules: List<IrModuleFragment>, bodies: FunctionBodies) {
+    val resolver = object : InlineFunctionResolver(InlineMode.ALL_INLINE_FUNCTIONS) {
+        override fun needsInlining(function: IrFunction): Boolean =
+            function.isInline && bodies.resolve(function.symbol) is FunctionBody.Available
+    }
+    val callableReferences = CommonInlineCallableReferenceToLambdaPhase(context, resolver)
+    modules.flatMap { it.files }.forEach(callableReferences::lower)
+    modules.forEach { FunctionInlining(context, resolver, produceOuterThisFields = false).inline(it) }
 }

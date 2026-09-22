@@ -1,0 +1,132 @@
+{
+  "scope": "S1 KLIB dependencies; no Compose/UI backend changes",
+  "baseCommit": "230c458",
+  "compilerVersion": "2.1.20",
+  "compilerSourcesSha256": "dc1ec1391e465b56d7e664fcf63d0ff4cfeb7274fc6e2b0dbd71335f8ce1dc11",
+  "officialSources": [
+    "ir/backend/js/jsCompiler.kt",
+    "ir/backend/js/klib.kt",
+    "ir/inline/FunctionInlining.kt"
+  ],
+  "stdlib": {
+    "file": "kotlin-stdlib-js-2.1.20.klib",
+    "sha256": "65a9831cceb606642693f9f3d798de86bbacf09b9588186e763e9e9f3c24d1a3"
+  },
+  "capabilityRun": "tests/klib/capabilities/.work/run-XX3AHU",
+  "provenance": [
+    {
+      "kind": "REUSABLE_BODY",
+      "signature": "dependencies/adjusted|adjusted(kotlin.Int){}[0]",
+      "library": "library.klib",
+      "declaration": "SourceSpan(file=$RUN/producer/Library.kt, start=107, end=162)",
+      "callSite": "null",
+      "detail": "Official serialized KLIB body: SerializedKlibIr(libraryLocation=$RUN/library.klib, moduleName=<library>)"
+    },
+    {
+      "kind": "REUSABLE_BODY",
+      "signature": "kotlin/let|let@0:0(kotlin.Function1<0:0,0:1>){0§<kotlin.Any?>;1§<kotlin.Any?>}[0]",
+      "library": "kotlin-stdlib-js-2.1.20.klib",
+      "declaration": "SourceSpan(file=src/kotlin/util/Standard.kt, start=3486, end=3669)",
+      "callSite": "null",
+      "detail": "Official serialized KLIB body: SerializedKlibIr(libraryLocation=kotlin-stdlib-js-2.1.20.klib, moduleName=<kotlin>)"
+    },
+    {
+      "kind": "TARGET_REPLACEMENT",
+      "signature": "kotlin/Int.rem|rem(kotlin.Int){}[0]",
+      "library": "kotlin-stdlib-js-2.1.20.klib",
+      "declaration": "SourceSpan(file=js/builtins/Primitives.kt, start=38193, end=38310)",
+      "callSite": "SourceSpan(file=$RUN/producer/Consumer.kt, start=102, end=108)",
+      "detail": "Typed target value supplied by dev.ets.StandardLibraryRules"
+    }
+  ],
+  "positive": {
+    "expected": [
+      2,
+      0,
+      0,
+      -1
+    ],
+    "actual": [
+      2,
+      0,
+      0,
+      -1
+    ],
+    "strictHostTypecheck": true,
+    "producerSourcesAbsent": true
+  },
+  "runtime": {
+    "directRoots": [
+      "stdlib:__etsIntRem"
+    ],
+    "emittedSupport": [
+      "__etsIntRem",
+      "__etsThrowable"
+    ],
+    "libraryModuleSupport": []
+  },
+  "rejections": {
+    "external": "Diagnostic(code=UNSUPPORTED_KLIB_DEPENDENCY, message=KLIB dependency dependencies/unavailable|unavailable(kotlin.Int){}[0] at $RUN/external.klib; declaration $RUN/producer/External.kt:22..63: The declaration is external and has no source implementation. No target replacement accepted this call., source=SourceSpan(file=$RUN/producer/Rejected.kt, start=83, end=101))",
+    "unselected": "Diagnostic(code=UNSUPPORTED_KLIB_DEPENDENCY, message=KLIB dependency dependencies/adjusted|adjusted(kotlin.Int){}[0] at $RUN/library.klib; declaration $RUN/producer/Library.kt:107..162: The linked KLIB is dependency-only; its body was not selected for reuse. No target replacement accepted this call., source=SourceSpan(file=$RUN/producer/Consumer.kt, start=80, end=95))"
+  },
+  "regressions": [
+    {
+      "suite": "klib",
+      "passed": true,
+      "result": "tests/klib/.work/run-vEVvEa/result.json"
+    },
+    {
+      "suite": "portable-common",
+      "passed": true,
+      "result": "tests/klib/portable-common/.work/run-6oCL0H/result.json"
+    },
+    {
+      "suite": "jvm-members",
+      "passed": true,
+      "result": "tests/binary-bodies/r2e/.work/run-PWQ1Zr/replay-dbkLpR/result.json"
+    }
+  ],
+  "jvmStructure": {
+    "result": "tests/binary-bodies/r2e/.work/run-PWQ1Zr/complete.json",
+    "inlineBlocks": 26,
+    "negativeBoundaries": 7,
+    "signatureOnlyUnavailable": true
+  },
+  "earlierFailure": {
+    "suite": "tests/binary-bodies/r2/run.mjs",
+    "reason": "Historical narrow source list omits existing SourceSelection and target validation dependencies; baseline already references them. Current R2E suite uses refreshed shared source list and passes.",
+    "result": "tests/binary-bodies/r2/.work/run-MSGIS6/evidence-build.json"
+  },
+  "production": [
+    {
+      "path": "tools/kotlin-ets/src/core/Frontend.kt",
+      "sha256": "d29c68494fd65e9ee3e890a419f90e2eb7a3e07d638de48ad4760cefdbbcbaa8"
+    },
+    {
+      "path": "tools/kotlin-ets/src/core/LibraryInlining.kt",
+      "sha256": "5e4e19e8c61c4a33c1f6b02bf4b230e82baf1228a758648f280510fded08b0f6"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibLoader.kt",
+      "sha256": "fe8cd015362b5bbe0e95de981275b42d747e458450f06550d1faac446eb02020"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibLowering.kt",
+      "sha256": "d0f53f5982c5b7713add08437e53daa05350981649304a8a6fe6a9e0c5d89e6d"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibModuleSelection.kt",
+      "sha256": "4538b0fe931cd5fa16214600b1d5df595b71a1c324eda51932b424284ba1bca4"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibSession.kt",
+      "sha256": "38a517f59713bf8f0b3c4cf634805c6e7e4645972dceae95fed25efc445eddba"
+    },
+    {
+      "path": "tools/kotlin-ets/src/stdlib/StandardLibraryDependencies.kt",
+      "sha256": "ac307b19729728aa269b1d00bfd8e19fd6d3156e420c26660b8967718c0c21b6"
+    }
+  ],
+  "sdk": "not run",
+  "device": "not run"
+}
