@@ -24,6 +24,81 @@ values and UI state behavior. Required target naming/slot/runtime bridges must
 be minimal and source-linked. Preview inputs never erase program conditions.
 Unsupported semantics are diagnosed, not replaced with empty UI or default values.
 
+## Core Profile to real-project rollout (2026-09-22)
+
+This roadmap separates reusable compiler and framework capability from a real
+project pilot. A pilot must consume the Core Profile; it must not become a
+collection of page-specific ETS edits.
+
+### S1: Kotlin to ETS Core Profile
+
+1. Integrate the ETS lowering seam into the formal Kotlin-to-ETS pipeline.
+2. Establish typed ETS target IR and one generation boundary.
+3. Consolidate language evaluation, adapter consumption, and diagnostics in
+   lowering.
+4. Enable Kotlin common-function reuse and the ETS runtime core.
+5. Add profile preflight, source line/column diagnostics, and no-silent-
+   fallback gates.
+
+### S2: Compose semantics and Harmony output
+
+1. Map Compose calls through a semantic adapter into a neutral widget model.
+2. Implement the shared Harmony backend for Text, Image, Button, and TextField.
+3. Implement Row, Column, Box, and children slots in the layout backend.
+4. Normalize ordered Modifier semantics and implement common layout and drawing
+   operations.
+5. Unify colors, strings, typography, images, and theme resource consumption.
+6. Build Core Profile Compose-to-ETS compilation and semantic regressions.
+
+### S3: UI behavior and public-project validation
+
+1. Implement Compose state reads/writes, conditional rendering, and event
+   callbacks.
+2. Bind Redux state and dispatch to loading/error/content UI states.
+3. Implement lazy-list, scroll, pagination, and Pager semantics in the Harmony
+   backend.
+4. Preserve cross-file business components, parameter bindings, and content
+   slots.
+5. Run preflight and Profile coverage regressions on three public Compose
+   projects.
+6. Build HAPs and validate emulator interaction and visual baselines for those
+   public projects.
+
+### S4: Real-project pilot
+
+1. Preflight the selected project and classify every dependency and unsupported
+   construct.
+2. Supply project adapters for tokens, resources, business components, and
+   target-side dependencies.
+3. Close only reusable Core Profile gaps found by the pilot.
+4. Migrate one module or page end-to-end, then compile its HAP and verify it on
+   an emulator with interaction and visual evidence.
+
+### S5: Stabilization and rollout
+
+1. Add a minimal source fixture and ETS/HAP regression for every accepted pilot
+   gap.
+2. Validate the resulting profile against two additional real pages or modules.
+3. Publish the supported scope, adapter contract, evidence, and explicit
+   limitations.
+
+### Handling an unsupported real-project construct
+
+Preflight must report the source location, resolved symbol/call chain, expected
+target type, and one of the following owners:
+
+| Classification | Required action |
+| --- | --- |
+| Kotlin language or type semantics | Extend language lowering or typed ETS target support. |
+| Standard-library behavior | Reuse a Kotlin common implementation where possible; otherwise add a minimal ETS runtime primitive. |
+| Compose control or Modifier semantics | Extend the Compose semantic adapter and the neutral widget/modifier model. |
+| Harmony API difference | Extend the Harmony backend mapping and validate the target API. |
+| Project token, business component, or third-party dependency | Add an independent project adapter or target-side implementation. |
+| Android-only system, network, or animation behavior outside the approved UI scope | Record an explicit replacement or exclusion; never silently substitute default UI. |
+
+Every accepted fix requires a focused regression and a rerun of the affected
+pilot page. Direct edits to generated ETS are not an accepted fix.
+
 ## Operating rules
 
 - Main assistant implements and tests one requirement at a time. Independent
