@@ -1,0 +1,124 @@
+{
+  "scope": "S1.4 KLIB collection dependencies; no Compose/UI/project-adapter changes",
+  "baseCommit": "c39ab37db83859537de66a75c1afadea0dc98230",
+  "compilerVersion": "2.1.20",
+  "compilerSourcesSha256": "dc1ec1391e465b56d7e664fcf63d0ff4cfeb7274fc6e2b0dbd71335f8ce1dc11",
+  "stdlib": {
+    "file": "kotlin-stdlib-js-2.1.20.klib",
+    "sha256": "65a9831cceb606642693f9f3d798de86bbacf09b9588186e763e9e9f3c24d1a3"
+  },
+  "collectionRun": "tests/klib/collection-common/.work/run-DvTXA0",
+  "officialBodies": [
+    {
+      "name": "filter",
+      "declaration": "common/src/generated/_Collections.kt:22752..22879"
+    },
+    {
+      "name": "filterTo",
+      "declaration": "common/src/generated/_Collections.kt:26077..26296"
+    },
+    {
+      "name": "filterNot",
+      "declaration": "common/src/generated/_Collections.kt:24799..24932"
+    },
+    {
+      "name": "filterNotTo",
+      "declaration": "common/src/generated/_Collections.kt:25695..25918"
+    }
+  ],
+  "runtimeReplacements": [
+    "kotlin.collections.ArrayList.<init>|<init>(){}[0]",
+    "kotlin.collections.Iterable.iterator|iterator(){}[0]",
+    "kotlin.collections.Iterator.hasNext|hasNext(){}[0]",
+    "kotlin.collections.Iterator.next|next(){}[0]",
+    "kotlin.collections.MutableCollection.add|add(1:0){}[0]"
+  ],
+  "runtime": {
+    "directRoots": [
+      "stdlib:__etsArrayIterator",
+      "stdlib:__etsIntRem",
+      "stdlib:__etsIterator",
+      "stdlib:__etsListAdd"
+    ],
+    "forbiddenDirectFilterHelperAbsent": true,
+    "kotlinJsOutputAbsent": true
+  },
+  "positive": {
+    "expected": [
+      "2,4|1,3",
+      "|",
+      "-2147483648,-2,0|-3,2147483647"
+    ],
+    "actual": [
+      "2,4|1,3",
+      "|",
+      "-2147483648,-2,0|-3,2147483647"
+    ],
+    "strictHostTypecheck": true,
+    "producerSourcesAbsent": true
+  },
+  "rejection": {
+    "code": "UNSUPPORTED_KLIB_DEPENDENCY",
+    "signature": "kotlin.collections.MutableCollection.add|add(1:0){}[0]",
+    "library": "kotlin-stdlib-js-2.1.20.klib",
+    "declaration": "js/builtins/Collections.kt:3160..3202",
+    "callSite": "deleted producer/Consumer.kt:26259..26271",
+    "targetOutputAbsent": true,
+    "silentFallback": false
+  },
+  "regressions": [
+    {
+      "suite": "klib-capabilities",
+      "passed": true,
+      "result": "tests/klib/capabilities/.work/run-1Zs7ab/result.json"
+    },
+    {
+      "suite": "klib-loader",
+      "passed": true,
+      "result": "tests/klib/.work/run-1zvR8q/result.json"
+    },
+    {
+      "suite": "portable-common",
+      "passed": true,
+      "result": "tests/klib/portable-common/.work/run-iNUk8v/result.json"
+    },
+    {
+      "suite": "jvm-member-bodies",
+      "passed": true,
+      "result": "tests/binary-bodies/r2e/.work/run-0V3Yss/complete.json"
+    },
+    {
+      "suite": "jvm-member-replay",
+      "passed": true,
+      "result": "tests/binary-bodies/r2e/.work/run-0V3Yss/replay-sjEKEv/result.json"
+    },
+    {
+      "suite": "source-filter",
+      "passed": true,
+      "cases": 34,
+      "result": "tests/stdlib/.build/filter.Q4DrNy/result.json"
+    },
+    {
+      "suite": "source-iteration",
+      "passed": true,
+      "cases": 69,
+      "result": "tests/stdlib/.build/iteration.mfQxo7/result.json"
+    }
+  ],
+  "production": [
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibCollectionRuntime.kt",
+      "sha256": "01feb5721d5ce2a86c361aa21676ccf1f5dc9529758ed96363c0027b0abd39fb"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibLowering.kt",
+      "sha256": "d0f53f5982c5b7713add08437e53daa05350981649304a8a6fe6a9e0c5d89e6d"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibSession.kt",
+      "sha256": "38a517f59713bf8f0b3c4cf634805c6e7e4645972dceae95fed25efc445eddba"
+    }
+  ],
+  "sdk": "not run",
+  "device": "not run"
+}
