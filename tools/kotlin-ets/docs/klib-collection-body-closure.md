@@ -1,5 +1,9 @@
 # filter / map / firstOrNull body-closure spike
 
+This is the historical pre-production audit. The filter conclusion is superseded
+by [S1.4](klib-collection-architecture.md), and the map/capacity conclusion by
+the subsequent map proof recorded in the same architecture document.
+
 Status: research only. Stdlib `CallRule`s are **not** deleted.
 
 Goal: decide whether `kotlin.collections.filter`, `map`, and no-arg `firstOrNull`

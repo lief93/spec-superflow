@@ -21,13 +21,20 @@ data class KlibCollectionRuntimeBindings(
     val hasNext: IrFunctionSymbol,
     val next: IrFunctionSymbol,
     val append: IrFunctionSymbol,
+    val capacityListConstructor: IrConstructorSymbol? = null,
+    val collectionSizeOrDefault: IrFunctionSymbol? = null,
 ) {
     init {
-        require(listOf(emptyListConstructor, iterator, hasNext, next, append).all { it.isBound }) {
+        require(listOfNotNull(emptyListConstructor, iterator, hasNext, next, append, capacityListConstructor,
+            collectionSizeOrDefault).all { it.isBound }) {
             "Collection runtime bindings require canonical linked KLIB symbols"
         }
         require(emptyListConstructor.owner.parent is IrClass) {
             "The empty-list constructor must belong to a linked KLIB class"
+        }
+        require(capacityListConstructor == null ||
+            capacityListConstructor.owner.parent === emptyListConstructor.owner.parent) {
+            "Collection constructors must belong to the same linked KLIB class"
         }
     }
 }
@@ -46,15 +53,28 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
     }
 
     override fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? {
-        if (call.symbol !== bindings.emptyListConstructor) return null
-        if (call.valueArgumentsCount != 0 || call.dispatchReceiver != null || call.extensionReceiver != null) return null
+        val capacity = when {
+            call.symbol === bindings.emptyListConstructor -> false
+            bindings.capacityListConstructor?.let { call.symbol === it } == true -> true
+            else -> return null
+        }
+        if (call.valueArgumentsCount != (if (capacity) 1 else 0) ||
+            call.dispatchReceiver != null || call.extensionReceiver != null) return null
         val element = call.type.collectionElement(setOf(listClass.owner), invariant = true) ?: return null
         if (call.typeArgumentsCount != listClass.owner.typeParameters.size ||
             (0 until call.typeArgumentsCount).any { call.getTypeArgument(it) == null } ||
             call.getTypeArgument(0) != element) return null
         val targetElement = language.type(element)
         if (language.type(call.type) != EtsNamedType("Array", listOf(targetElement))) return null
-        return EtsArray(emptyList(), targetElement, language.source(call))
+        val at = language.source(call)
+        if (!capacity) return EtsArray(emptyList(), targetElement, at)
+        val capacityExpression = call.getValueArgument(0) ?: return null
+        if (language.type(capacityExpression.type) != EtsTypes.NUMBER) return null
+        val value = language.expression(capacityExpression, scope)
+        val parameter = EtsSymbol("klib-collection-capacity:${at.file}:${at.start}", "__etsCapacity", value.type, at)
+        val result = EtsArray(emptyList(), targetElement, at)
+        return EtsCall(EtsLambda(listOf(EtsParameter(parameter)), listOf(EtsReturn(result, at)), result.type, at),
+            listOf(value), result.type, at)
     }
 
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
@@ -63,9 +83,11 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
             call.symbol === bindings.hasNext -> Operation.HAS_NEXT
             call.symbol === bindings.next -> Operation.NEXT
             call.symbol === bindings.append -> Operation.APPEND
+            bindings.collectionSizeOrDefault?.let { call.symbol === it } == true -> Operation.SIZE_OR_DEFAULT
             else -> return null
         }
-        if (call.superQualifierSymbol != null || call.typeArgumentsCount != 0) return null
+        if (call.superQualifierSymbol != null || call.typeArgumentsCount !=
+            (if (operation == Operation.SIZE_OR_DEFAULT) 1 else 0)) return null
         val receiverExpression = call.dispatchReceiver ?: call.extensionReceiver ?: return null
         if (call.dispatchReceiver != null && call.extensionReceiver != null) return null
         val at = language.source(call)
@@ -101,6 +123,23 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
                 val value = language.expression(valueExpression, scope)
                 external("__etsListAdd", listOf(receiver, value), result, at, listOf(element))
             }
+            Operation.SIZE_OR_DEFAULT -> {
+                if (call.valueArgumentsCount != 1 || result != EtsTypes.NUMBER) return null
+                val element = receiverType.arrayElement() ?: return null
+                val typeArgument = call.getTypeArgument(0) ?: return null
+                val defaultExpression = call.getValueArgument(0) ?: return null
+                if (language.type(typeArgument) != element || language.type(defaultExpression.type) != EtsTypes.NUMBER)
+                    return null
+                val receiver = language.expression(receiverExpression, scope)
+                val default = language.expression(defaultExpression, scope)
+                val receiverParameter = EtsSymbol("klib-collection-size:${at.file}:${at.start}:receiver",
+                    "__etsValues", receiver.type, at)
+                val defaultParameter = EtsSymbol("klib-collection-size:${at.file}:${at.start}:default",
+                    "__etsDefault", default.type, at)
+                val length = EtsMember(EtsReference(receiverParameter), "length", EtsTypes.NUMBER, at)
+                EtsCall(EtsLambda(listOf(EtsParameter(receiverParameter), EtsParameter(defaultParameter)),
+                    listOf(EtsReturn(length, at)), EtsTypes.NUMBER, at), listOf(receiver, default), EtsTypes.NUMBER, at)
+            }
         }
     }
 
@@ -109,7 +148,7 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
         EtsReference(EtsSymbol("stdlib:$name", name, EtsFunctionType(arguments.map { it.type }, result), at,
             external = true)), arguments, result, at, types)
 
-    private enum class Operation { ITERATOR, HAS_NEXT, NEXT, APPEND }
+    private enum class Operation { ITERATOR, HAS_NEXT, NEXT, APPEND, SIZE_OR_DEFAULT }
 }
 
 private fun IrType.collectionElement(expected: Set<IrClass>, invariant: Boolean = false): IrType? {
