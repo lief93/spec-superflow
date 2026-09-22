@@ -15,7 +15,11 @@ class HarmonyWidgetBackend {
             is Widget.Text -> {
                 val text = consume(widget.text, WidgetValueType.STRING)
                 native("Text", listOf(text)).copy(attributes = listOf(
-                    call("align", listOf(enumValue("Alignment", "TopStart", at)), at)))
+                    call("align", listOf(enumValue("Alignment", "TopStart", at)), at)) + listOfNotNull(
+                    widget.style.fontSize?.let { call("fontSize", listOf(consume(it, WidgetValueType.FONT_SIZE)), it.source) },
+                    widget.style.fontWeight?.let { call("fontWeight", listOf(consume(it, WidgetValueType.FONT_WEIGHT)), it.source) },
+                    widget.style.fontFamily?.let { call("fontFamily", listOf(consume(it, WidgetValueType.FONT_FAMILY)), it.source) },
+                    widget.style.lineHeight?.let { call("lineHeight", listOf(consume(it, WidgetValueType.LINE_HEIGHT)), it.source) }))
             }
             is Widget.Image -> {
                 val image = when (val source = widget.image) {
@@ -114,8 +118,9 @@ class HarmonyWidgetBackend {
             "Widget value requires $expected at ${value.source}; got ${value.type}"
         }
         val target = when (expected) {
-            WidgetValueType.STRING -> EtsTypes.STRING
-            WidgetValueType.COLOR -> EtsTypes.NUMBER
+            WidgetValueType.STRING, WidgetValueType.FONT_FAMILY -> EtsTypes.STRING
+            WidgetValueType.COLOR, WidgetValueType.FONT_SIZE, WidgetValueType.FONT_WEIGHT,
+                WidgetValueType.LINE_HEIGHT -> EtsTypes.NUMBER
         }
         expect(value.value, target, "Widget value $expected", value.source)
         return value.value

@@ -30,13 +30,17 @@ fun main(args: Array<String>) {
                 return when (property) {
                     "widgetsfixture.KnownTokens.label" -> EtsLiteral("Known label", EtsTypes.STRING, language.source(call))
                     "widgetsfixture.KnownTokens.brand" -> EtsLiteral(0xFF336699L, EtsTypes.NUMBER, language.source(call))
+                    "widgetsfixture.KnownTokens.titleSize" -> EtsLiteral(20, EtsTypes.NUMBER, language.source(call))
+                    "widgetsfixture.KnownTokens.titleWeight" -> EtsLiteral(600, EtsTypes.NUMBER, language.source(call))
+                    "widgetsfixture.KnownTokens.titleFamily" -> EtsLiteral("serif", EtsTypes.STRING, language.source(call))
+                    "widgetsfixture.KnownTokens.titleLineHeight" -> EtsLiteral(28, EtsTypes.NUMBER, language.source(call))
                     else -> null
                 }
             }
         }
         val language = EtsBackend(sink,
             listOf(projectTokens, StandardLibraryRules(), ComposeColorValueRule(), ComposeDimensionRule(),
-                imageResources, strings)).language
+                ComposeFontRule(FontResources()), imageResources, strings)).language
         val functions = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
         val page = functions.single { it.fqNameWhenAvailable?.asString() == "widgetsfixture.Page" }
         val scope = Scope()
@@ -59,6 +63,17 @@ fun main(args: Array<String>) {
         val resourceTitle = column.children.widgets[1] as Widget.Text
         check(resourceTitle.text.provenance == WidgetValueProvenance.Resource("widgetsfixture.R.string.title"))
         check(resourceTitle.text.value.type == EtsTypes.STRING)
+        check(resourceTitle.style.fontSize?.let { it.type == WidgetValueType.FONT_SIZE &&
+            it.provenance == WidgetValueProvenance.Literal && (it.value as EtsLiteral).value == 18.0 } == true)
+        check(resourceTitle.style.fontWeight?.let { it.type == WidgetValueType.FONT_WEIGHT &&
+            it.provenance == WidgetValueProvenance.Resource("androidx.compose.ui.text.font.FontWeight.Companion.Bold") &&
+            (it.value as EtsLiteral).value == 700 } == true)
+        check(resourceTitle.style.fontFamily?.let { it.type == WidgetValueType.FONT_FAMILY &&
+            it.provenance == WidgetValueProvenance.Resource("androidx.compose.ui.text.font.FontFamily.Companion.Monospace") &&
+            (it.value as EtsLiteral).value == "monospace" } == true)
+        check(resourceTitle.style.lineHeight?.let { it.type == WidgetValueType.LINE_HEIGHT &&
+            it.provenance == WidgetValueProvenance.Expression("lineHeight") &&
+            (it.value as EtsReference).symbol == parameters[7].symbol } == true)
         val tokenTitle = column.children.widgets[2] as Widget.Text
         check(tokenTitle.text.provenance == WidgetValueProvenance.ThemeToken("widgetsfixture.KnownTokens.label"))
         check((tokenTitle.text.value as EtsLiteral).value == "Known label")
@@ -73,6 +88,11 @@ fun main(args: Array<String>) {
         check(row.children.widgets.size == 2)
         val buttonLabel = row.children.widgets[0] as Widget.Text
         check(buttonLabel.text.provenance == WidgetValueProvenance.Resource("widgetsfixture.R.string.action"))
+        check(listOf(buttonLabel.style.fontSize, buttonLabel.style.fontWeight,
+            buttonLabel.style.fontFamily, buttonLabel.style.lineHeight).all {
+            it?.provenance is WidgetValueProvenance.ThemeToken
+        })
+        check((buttonLabel.style.fontFamily!!.value as EtsLiteral).value == "serif")
         val box = row.children.widgets[1] as Widget.Box
         check(box.children.widgets.single() is Widget.Text)
         check(box.modifiers.map { it.javaClass.simpleName } == listOf("Height", "Width"))
@@ -135,7 +155,8 @@ fun main(args: Array<String>) {
             EtsLiteral("https://example.invalid/widget.png", EtsTypes.STRING, at),
             EtsLiteral("input", EtsTypes.STRING, at),
             EtsLambda(listOf(changed), emptyList(), EtsTypes.VOID, at),
-            EtsLiteral(0xFF112233L, EtsTypes.NUMBER, at)), EtsTypes.VOID, at))
+            EtsLiteral(0xFF112233L, EtsTypes.NUMBER, at),
+            EtsLiteral(24, EtsTypes.NUMBER, at)), EtsTypes.VOID, at))
         // The SDK requires an entry container. It is itself a semantic Box.
         val shell = HarmonyWidgetBackend().lower(Widget.Box(Children(emptyList()), emptyList(), at)).copy(children = listOf(content))
         val entry = EtsClass("WidgetPage", listOf(EtsFunction("build", emptyList(), EtsTypes.VOID,
@@ -165,6 +186,11 @@ fun main(args: Array<String>) {
         check(nativeButton.attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }.arguments.single() == button.onClick)
         check(elements.filter { (it.call.callee as? EtsReference)?.symbol?.name == "Text" }
             .any { it.call.arguments.single() == buttonLabel.text.value })
+        fun textAttributes(text: Widget.Text<EtsExpression, SourceSpan>) = elements.single {
+            (it.call.callee as? EtsReference)?.symbol?.name == "Text" && it.call.arguments.single() == text.text.value
+        }.attributes.map { (it.callee as EtsReference).symbol.name }
+        check(textAttributes(resourceTitle) == listOf("align", "fontSize", "fontWeight", "fontFamily", "lineHeight"))
+        check(textAttributes(buttonLabel) == listOf("align", "fontSize", "fontWeight", "fontFamily", "lineHeight"))
         val nativeFields = elements.filter { (it.call.callee as? EtsReference)?.symbol?.name == "TextInput" }
         check(nativeFields.all { field ->
             (field.call.arguments.single() as EtsObject).fields["text"] == materialField.value &&
@@ -193,7 +219,7 @@ fun main(args: Array<String>) {
             .arguments.single() == imageClick.onClick)
         val expected = linkedMapOf(
             "UnknownWidget" to "Unsupported resolved widget API", "UnknownModifier" to "Unsupported resolved widget Modifier API",
-            "UnknownArgument" to "widget argument: fontSize", "Conditional" to "Unsupported widget children statement",
+            "WholeTextStyle" to "widget argument: style", "Conditional" to "Unsupported widget children statement",
             "Helper" to "Unsupported resolved widget API", "EffectfulValue" to "stable scalars",
             "CallbackFactory" to "callback requires a lambda", "NegativePadding" to "finite and non-negative",
             "MutableLocal" to "Mutable widget local", "EarlyReturn" to "Widget return",
@@ -209,7 +235,8 @@ fun main(args: Array<String>) {
             "NegativeSize" to "finite and non-negative",
             "EffectfulBackground" to "stable scalars",
             "UnknownStringToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.label",
-            "UnknownColorToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.color")
+            "UnknownColorToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.color",
+            "UnknownStyleToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.fontSize")
         val diagnostics = expected.map { (name, message) ->
             val function = functions.single { it.name.asString() == name }
             val failure = try { adapter.lower(function); error("Accepted unsupported fixture $name") } catch (error: Unsupported) { error.diagnostic }

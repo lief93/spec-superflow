@@ -86,7 +86,7 @@ const coreProfileOutput = join(work, 'core-profile-output/CoreProfile.ets');
 assert.ok(existsSync(output));
 assert.ok(existsSync(coreProfileOutput));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
-assert.equal(diagnostics.length, 26);
+assert.equal(diagnostics.length, 27);
 assert.ok(diagnostics.every(line => line.includes('UNSUPPORTED') && line.includes('/Unsupported.kt')));
 assert.ok(implementation.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,

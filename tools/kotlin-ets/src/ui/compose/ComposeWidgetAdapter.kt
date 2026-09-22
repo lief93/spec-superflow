@@ -67,7 +67,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val image = api in setOf("androidx.compose.foundation.Image", "coil.compose.AsyncImage")
         val textField = api.endsWith("TextField")
         checkArguments(call, when {
-            text -> setOf("text", "modifier")
+            text -> setOf("text", "modifier", "fontSize", "fontWeight", "fontFamily", "lineHeight")
             button -> setOf("onClick", "enabled", "modifier", "content")
             image -> if (api == "androidx.compose.foundation.Image")
                 setOf("painter", "contentDescription", "modifier")
@@ -82,7 +82,21 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         if (text) {
             val value = required("text")
             if (!value.type.isString()) diagnostics.unsupported(value, "Widget Text requires String text")
-            return Widget.Text(widgetValue(value, scope, WidgetValueType.STRING), modifier, source)
+            fun style(name: String, sourceType: String, targetType: WidgetValueType): WidgetValue<EtsExpression, SourceSpan>? =
+                argument(call, name)?.let {
+                    val actual = it.type.classFqName?.asString()
+                    val matches = actual == sourceType || sourceType == "androidx.compose.ui.text.font.FontFamily" &&
+                        actual?.startsWith("androidx.compose.ui.text.font.") == true && actual.endsWith("FontFamily")
+                    if (!matches)
+                        diagnostics.unsupported(it, "Widget Text $name requires $sourceType")
+                    widgetValue(it, scope, targetType)
+                }
+            val style = WidgetTextStyle(
+                style("fontSize", "androidx.compose.ui.unit.TextUnit", WidgetValueType.FONT_SIZE),
+                style("fontWeight", "androidx.compose.ui.text.font.FontWeight", WidgetValueType.FONT_WEIGHT),
+                style("fontFamily", "androidx.compose.ui.text.font.FontFamily", WidgetValueType.FONT_FAMILY),
+                style("lineHeight", "androidx.compose.ui.unit.TextUnit", WidgetValueType.LINE_HEIGHT))
+            return Widget.Text(widgetValue(value, scope, WidgetValueType.STRING), style, modifier, source)
         }
         if (image) return image(call, api, scope, modifier, source)
         if (textField) {
@@ -250,6 +264,12 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val propertyName = property?.let(::symbolName)
         val api = owner?.let(::symbolName)
         val sourceOwnedToken = owner != null && property != null && sourceFile(owner) != null
+        val constructor = (resolved as? IrConstructorCall)?.symbol?.owner?.parent as? IrClass
+        val systemFontFamily = propertyName
+            ?.takeIf { it.startsWith("androidx.compose.ui.text.font.FontFamily.Companion.") }
+            ?.removePrefix("androidx.compose.ui.text.font.FontFamily.Companion.")
+            ?.let { name -> mapOf("Default" to "sans-serif", "SansSerif" to "sans-serif", "Serif" to "serif",
+                "Monospace" to "monospace", "Cursive" to "cursive")[name] }
         val stringResource = if (api == "androidx.compose.ui.res.stringResource") {
             val id = argument(call!!, "id")?.let { resolve(it, scope) }
             (id as? IrGetField)?.symbol?.owner?.let(::symbolName) ?: api
@@ -257,8 +277,14 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val provenance = when {
             resolved is IrConst -> WidgetValueProvenance.Literal
             api == "androidx.compose.ui.graphics.Color" -> WidgetValueProvenance.Literal
+            constructor != null -> WidgetValueProvenance.Literal
+            propertyName == "androidx.compose.ui.unit.sp" &&
+                resolve(call!!.extensionReceiver ?: call.dispatchReceiver!!, scope) is IrConst -> WidgetValueProvenance.Literal
             stringResource != null -> WidgetValueProvenance.Resource(stringResource)
             propertyName?.startsWith("androidx.compose.ui.graphics.Color.Companion.") == true ->
+                WidgetValueProvenance.Resource(propertyName)
+            propertyName?.startsWith("androidx.compose.ui.text.font.FontWeight.Companion.") == true ||
+                propertyName?.startsWith("androidx.compose.ui.text.font.FontFamily.Companion.") == true ->
                 WidgetValueProvenance.Resource(propertyName)
             sourceOwnedToken -> WidgetValueProvenance.ThemeToken(propertyName!!)
             propertyName?.startsWith("androidx.compose.material3.MaterialTheme.") == true ||
@@ -267,10 +293,13 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             else -> WidgetValueProvenance.Expression((resolved as? IrGetValue)?.symbol?.owner?.name?.asString())
         }
         val expected = when (type) {
-            WidgetValueType.STRING -> EtsTypes.STRING
-            WidgetValueType.COLOR -> EtsTypes.NUMBER
+            WidgetValueType.STRING, WidgetValueType.FONT_FAMILY -> EtsTypes.STRING
+            WidgetValueType.COLOR, WidgetValueType.FONT_SIZE, WidgetValueType.FONT_WEIGHT,
+                WidgetValueType.LINE_HEIGHT -> EtsTypes.NUMBER
         }
-        val emitted = if (sourceOwnedToken) {
+        val emitted = if (type == WidgetValueType.FONT_FAMILY && systemFontFamily != null) {
+            EtsLiteral(systemFontFamily, EtsTypes.STRING, language.source(resolved))
+        } else if (sourceOwnedToken) {
             val adapted = adaptCall(call!!, language, scope, CallContext.VALUE) { expected }
             (adapted as? CallResult.Value)?.expression ?: diagnostics.unsupported(resolved,
                 "Unmapped project widget token $propertyName; provide a project adapter mapping")

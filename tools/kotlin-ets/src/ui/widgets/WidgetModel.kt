@@ -8,7 +8,8 @@ sealed interface Widget<V, S> {
     val modifiers: List<WidgetModifier<V, S>>
     val source: S
 
-    data class Text<V, S>(val text: WidgetValue<V, S>, override val modifiers: List<WidgetModifier<V, S>>,
+    data class Text<V, S>(val text: WidgetValue<V, S>, val style: WidgetTextStyle<V, S>,
+        override val modifiers: List<WidgetModifier<V, S>>,
         override val source: S) : Widget<V, S>
     data class Image<V, S>(val image: ImageSource<V, S>, val contentDescription: V,
         override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
@@ -25,7 +26,7 @@ sealed interface Widget<V, S> {
 }
 
 /** Semantic value type and source origin are explicit at the platform seam. */
-enum class WidgetValueType { STRING, COLOR }
+enum class WidgetValueType { STRING, COLOR, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY, LINE_HEIGHT }
 
 sealed interface WidgetValueProvenance {
     data object Literal : WidgetValueProvenance
@@ -36,6 +37,10 @@ sealed interface WidgetValueProvenance {
 
 data class WidgetValue<V, S>(val type: WidgetValueType, val value: V,
     val provenance: WidgetValueProvenance, val source: S)
+
+data class WidgetTextStyle<V, S>(val fontSize: WidgetValue<V, S>?,
+    val fontWeight: WidgetValue<V, S>?, val fontFamily: WidgetValue<V, S>?,
+    val lineHeight: WidgetValue<V, S>?)
 
 data class Children<V, S>(val widgets: List<Widget<V, S>>)
 

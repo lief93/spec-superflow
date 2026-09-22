@@ -13,7 +13,8 @@ fun main() {
             EtsLiteral(value, EtsTypes.STRING, source), provenance, source)
     fun color(value: Int, provenance: WidgetValueProvenance = WidgetValueProvenance.Literal) =
         WidgetValue<EtsExpression, SourceSpan>(WidgetValueType.COLOR, number(value), provenance, source)
-    val text = Widget.Text<EtsExpression, SourceSpan>(string("direct"), listOf(
+    val noStyle = WidgetTextStyle<EtsExpression, SourceSpan>(null, null, null, null)
+    val text = Widget.Text<EtsExpression, SourceSpan>(string("direct"), noStyle, listOf(
         WidgetModifier.Width(number(100), source),
         WidgetModifier.Padding(number(1), number(2), number(3), number(4), source),
         WidgetModifier.Width(number(40), source)), source)
@@ -37,9 +38,16 @@ fun main() {
         WidgetModifier.Click(click, EtsLiteral(false, EtsTypes.BOOLEAN, source), source),
         WidgetModifier.Padding(number(1), number(1), number(1), number(1), source))
     val sharedText = string("styled", WidgetValueProvenance.Resource("sample.R.string.styled"))
-    val styledText = backend.lower(Widget.Text(sharedText, shared, source))
+    val sharedStyle = WidgetTextStyle<EtsExpression, SourceSpan>(
+        WidgetValue(WidgetValueType.FONT_SIZE, number(18), WidgetValueProvenance.Literal, source),
+        WidgetValue(WidgetValueType.FONT_WEIGHT, number(700),
+            WidgetValueProvenance.Resource("FontWeight.Bold"), source),
+        WidgetValue(WidgetValueType.FONT_FAMILY, EtsLiteral("monospace", EtsTypes.STRING, source),
+            WidgetValueProvenance.Resource("FontFamily.Monospace"), source),
+        WidgetValue(WidgetValueType.LINE_HEIGHT, number(24), WidgetValueProvenance.Expression("lineHeight"), source))
+    val styledText = backend.lower(Widget.Text(sharedText, sharedStyle, shared, source))
     val button = Widget.Button<EtsExpression, SourceSpan>(click, null,
-        Children(listOf(Widget.Text(sharedText, emptyList(), source))),
+        Children(listOf(Widget.Text(sharedText, sharedStyle, emptyList(), source))),
         listOf(WidgetModifier.Background(sharedColor, source)), source)
     val styledButton = backend.lower(button)
     check(styledButton.attributes.single().arguments.single() == sharedColor.value)
@@ -47,13 +55,24 @@ fun main() {
     val buttonRow = nativeButton.children!!.single() as EtsUiElement
     val buttonText = buttonRow.children!!.single() as EtsUiElement
     check(buttonText.call.arguments.single() == sharedText.value)
+    check(buttonText.attributes.map { (it.callee as EtsReference).symbol.name } ==
+        listOf("align", "fontSize", "fontWeight", "fontFamily", "lineHeight"))
     val invalid = Widget.Text<EtsExpression, SourceSpan>(
-        WidgetValue(WidgetValueType.STRING, number(1), WidgetValueProvenance.Expression(null), source), emptyList(), source)
+        WidgetValue(WidgetValueType.STRING, number(1), WidgetValueProvenance.Expression(null), source), noStyle,
+        emptyList(), source)
     check(runCatching { backend.lower(invalid) }.exceptionOrNull() is IllegalArgumentException)
     val invalidSemantic = Widget.Text<EtsExpression, SourceSpan>(
         WidgetValue(WidgetValueType.COLOR, EtsLiteral("bad", EtsTypes.STRING, source),
-            WidgetValueProvenance.Literal, source), emptyList(), source)
+            WidgetValueProvenance.Literal, source), noStyle, emptyList(), source)
     check(runCatching { backend.lower(invalidSemantic) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidStyle = Widget.Text(string("bad style"), WidgetTextStyle(
+        null, null, WidgetValue(WidgetValueType.FONT_FAMILY, number(1),
+            WidgetValueProvenance.Expression(null), source), null), emptyList(), source)
+    check(runCatching { backend.lower(invalidStyle) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidStyleSemantic = Widget.Text(string("bad style semantic"), WidgetTextStyle(
+        WidgetValue(WidgetValueType.FONT_WEIGHT, number(18), WidgetValueProvenance.Literal, source),
+        null, null, null), emptyList(), source)
+    check(runCatching { backend.lower(invalidStyleSemantic) }.exceptionOrNull() is IllegalArgumentException)
     val invalidButton = Widget.Button<EtsExpression, SourceSpan>(number(1), null, Children(emptyList()), emptyList(), source)
     check(runCatching { backend.lower(invalidButton) }.exceptionOrNull() is IllegalArgumentException)
     val resource = EtsReference(EtsSymbol("test:resource", "resource",
@@ -104,20 +123,20 @@ fun main() {
     val invalidField = Widget.TextField<EtsExpression, SourceSpan>(EtsLiteral("value", EtsTypes.STRING, source), number(1),
         null, emptyList(), source)
     check(runCatching { backend.lower(invalidField) }.exceptionOrNull() is IllegalArgumentException)
-    val invalidSize = Widget.Text(string("x"),
+    val invalidSize = Widget.Text(string("x"), noStyle,
         listOf(WidgetModifier.Size<EtsExpression, SourceSpan>(number(1),
             EtsLiteral("bad", EtsTypes.STRING, source), source)), source)
     check(runCatching { backend.lower(invalidSize) }.exceptionOrNull() is IllegalArgumentException)
-    val invalidBackground = Widget.Text(string("x"),
+    val invalidBackground = Widget.Text(string("x"), noStyle,
         listOf(WidgetModifier.Background<EtsExpression, SourceSpan>(
             WidgetValue(WidgetValueType.COLOR, EtsLiteral("bad", EtsTypes.STRING, source),
                 WidgetValueProvenance.Expression(null), source), source)), source)
     check(runCatching { backend.lower(invalidBackground) }.exceptionOrNull() is IllegalArgumentException)
-    val invalidClick = Widget.Text(string("x"),
+    val invalidClick = Widget.Text(string("x"), noStyle,
         listOf(WidgetModifier.Click<EtsExpression, SourceSpan>(number(1), null, source)), source)
     check(runCatching { backend.lower(invalidClick) }.exceptionOrNull() is IllegalArgumentException)
     val fn = EtsFunction("view", emptyList(), EtsTypes.VOID,
         listOf(element, styledText, styledButton, styledImage, resourceImage, urlImage, textField), source, builder = true)
     EtsValidator().validate(EtsProgram(listOf(EtsFile("model-only", listOf(fn)))))
-    println("PASS backend without compiler/Compose; shared String/Color consumption, ordered modifiers and typed rejection")
+    println("PASS backend without compiler/Compose; shared String/Color/text-style consumption, ordered modifiers and typed rejection")
 }

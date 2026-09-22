@@ -16,7 +16,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -24,11 +26,12 @@ import coil.compose.AsyncImage
 object UnknownTokens {
     val label: String get() = "unknown"
     val color: Color get() = Color.Red
+    val fontSize: TextUnit get() = 20.sp
 }
 
 @Composable fun UnknownWidget() { Checkbox(checked = true, onCheckedChange = {}) }
 @Composable fun UnknownModifier() { Text("x", Modifier.fillMaxWidth()) }
-@Composable fun UnknownArgument() { Text("x", fontSize = 20.sp) }
+@Composable fun WholeTextStyle() { Text("x", style = TextStyle(fontSize = 20.sp)) }
 @Composable fun Conditional() { if (true) Text("x") else Text("y") }
 @Composable fun Helper() { LocalText("x") }
 @Composable fun LocalText(value: String) { Text(value) }
@@ -67,3 +70,4 @@ fun paintFactory(): Color = Color.Red
 @Composable fun EffectfulBackground() { Text("x", Modifier.background(paintFactory())) }
 @Composable fun UnknownStringToken() { Text(UnknownTokens.label) }
 @Composable fun UnknownColorToken() { Text("x", Modifier.background(UnknownTokens.color)) }
+@Composable fun UnknownStyleToken() { Text("x", fontSize = UnknownTokens.fontSize) }

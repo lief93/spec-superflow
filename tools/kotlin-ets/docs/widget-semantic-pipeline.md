@@ -1,11 +1,12 @@
-# S2.5: typed widget values → unified Harmony consumption
+# S2.5: typed widget values and text style → unified Harmony consumption
 
 This is an opt-in production compiler interface for a closed static widget
 subset. The existing default `page` CLI remains unchanged; switching all of its
 Material, state, scrolling, and project-adapter behavior is a separate migration.
 No language lowering, KLIB loader, shared compiler contract, or project adapter
-is changed by this slice. S2.5 adds a typed neutral value seam for String and
-Color while retaining the S2.4 widget and ordered-modifier structure.
+is changed by this slice. S2.5 adds a typed neutral value seam for String,
+Color, font size, font weight, font family, and line height while retaining the
+S2.4 widget and ordered-modifier structure.
 
 Redwood remains the architecture/schema reference from
 [the spike](redwood-harmony-reference.md). The implementation does not link
@@ -26,7 +27,7 @@ lowerer, invokes `ComposeWidgetAdapter`, passes the neutral children to
 `HarmonyWidgetBackend`, builds an exported typed builder, validates the
 `EtsProgram`, and emits it through `emitEtsProgram`/`EtsPrinter`.
 
-- `dev.ets.widgets`: `Widget<V, S>`, `WidgetValue<V, S>`,
+- `dev.ets.widgets`: `Widget<V, S>`, `WidgetValue<V, S>`, `WidgetTextStyle<V, S>`,
   `WidgetValueType`, `WidgetValueProvenance`, `ImageSource<V, S>`,
   `WidgetModifier<V, S>`, and `Children<V, S>`.
   This module has no imports and compiles against Kotlin stdlib alone. Values
@@ -74,6 +75,11 @@ sample values or an entry component.
 | `stringResource(R.string.*)` | `Resource` provenance plus typed String expression | native string-resource lookup and emitted string artifact |
 | `Color(...)` / bound Color | `Literal` / `Expression` provenance | typed ARGB value |
 | Compose `Color.Red` and peers | `Resource` provenance | typed ARGB value |
+| `18.sp` font size / bound `TextUnit` line height | `Literal` / `Expression` provenance | typed number attributes |
+| `FontWeight.Bold` | `Resource` provenance and `FONT_WEIGHT` type | native numeric font weight |
+| `FontFamily.Monospace` | `Resource` provenance and `FONT_FAMILY` type | native semantic family name |
+| mapped source-owned typography property | individual `ThemeToken` value | one validated text attribute |
+| whole `style = TextStyle(...)` | source-linked rejection | no object is passed to native Text |
 | mapped source-owned property | `ThemeToken` provenance | project-adapter result after target-type validation |
 | unmapped source-owned property | source-linked rejection | project adapter mapping required |
 | foundation `Image(painterResource(...))` | `Widget.Image(ImageSource.Resource(...))` | native Image with typed Resource |
@@ -106,11 +112,19 @@ control or attribute choice.
 `WidgetValue` carries an explicit semantic type, the already-lowered typed
 target expression, its source span, and one of four origins: `Literal`,
 `Resource(reference)`, `ThemeToken(reference)`, or `Expression(reference?)`.
-The expected semantic type comes from the resolved API position (`Text.text`
-or `background.color`), never from a parameter or property name. The Harmony
+The expected semantic type comes from the resolved API position (`Text.text`,
+`Text.fontSize`, `Text.fontWeight`, `Text.fontFamily`, `Text.lineHeight`, or
+`background.color`), never from a parameter or property name. The Harmony
 backend has one `consume` function that checks semantic type and target type;
 Text, Text nested in Button content, and every widget's Background modifier all
 use that function.
+
+`WidgetTextStyle` stores the four supported properties separately. Harmony maps
+them to `fontSize`, `fontWeight`, `fontFamily`, and `lineHeight` only after the
+shared consumer verifies their explicit semantic and ETS target types. Button
+content contains ordinary `Widget.Text`, so it uses the identical path. A whole
+custom `TextStyle`, state-backed style, and the remaining Compose Text styling
+arguments stay outside this slice and fail instead of being forwarded to ArkUI.
 
 Source-owned property getters are project tokens. They cross this seam only
 when a registered call rule maps them to the required typed target value. An
@@ -148,7 +162,7 @@ supported events still belong to `Language`, not this adapter.
 
 Explicit empty children are valid; ignored behavior is not. Local Modifier
 aliases and the empty identity are accepted. Source composable helper calls,
-forwarded/dynamic content lambdas, state APIs, Material styling parameters,
+forwarded/dynamic content lambdas, state APIs, unsupported Material styling parameters,
 scoped weight/alignment, and arbitrary modifier functions are not implicitly
 expanded by this first interface. The legacy default path keeps those existing
 capabilities until they are deliberately migrated.
@@ -168,6 +182,8 @@ node tools/kotlin-ets/tests/ui/widgets/run.mjs
 bash tools/kotlin-ets/tests/target/run.sh
 node tools/kotlin-ets/tests/ui/modifier-arguments/run.mjs
 node tools/kotlin-ets/tests/ui/material-button/run.mjs
+node tools/kotlin-ets/tests/ui/fonts/run.mjs
+node tools/kotlin-ets/tests/ui/typography/run.mjs
 node tools/kotlin-ets/tests/ui/forwarded-slots/run.mjs
 ```
 
@@ -191,13 +207,15 @@ ABC/HAP output. It does not install or run a device application.
 
 ## Acceptance evidence (five completion criteria)
 
-1. **Resolved-call structure.** `tests/ui/widgets/.work/run-dqoZ1U` compiles
+1. **Resolved-call structure.** `tests/ui/widgets/.work/run-YWetub` compiles
    against real AndroidX and Coil artifacts and asserts all seven widget kinds.
    Resource/URL source kinds, TextField value/event/enabled symbols, aliased Text,
    nested Button content, siblings, empty Box, Modifier identity/then, duplicate
    widths, and all size/background/click/padding values retain their structure.
-   It also asserts String and Color literals, resource references, mapped theme
-   tokens, and bound expressions with their exact provenance and source.
+   It also asserts String, Color, and text-style literals, resource references,
+   mapped theme tokens, and bound expressions with their exact provenance and
+   source. Direct Text and Text inside Button content share the same four
+   individually typed style attributes.
    It proves different ordered chains on Text and Image through the same model
    and backend. `model.txt` records the result. The model compiles alone; the
    adapter compiles without Harmony; the backend compiles and runs without
@@ -206,23 +224,26 @@ ABC/HAP output. It does not install or run a device application.
    distinct ordered modifier wrappers around native controls and copies
    `WidgetPage.ets.resources/base/media/widget_logo.svg`. The unchanged generated
    file, SHA-256
-   `077ab8c136cc136302857fd6625b96d43d04f9cb4c1652d572181278c0e3f11b`,
+   `7a28c06025769a58ad9adf85f46ae87834cf47cdf5addf130a5368c49df8e36f`,
    passes the installed DevEco SDK in
-   `/private/tmp/kotlin-ets-basic-controls-sdk-oyv6iX`. The SDK copy contains the
+   `/private/tmp/kotlin-ets-basic-controls-sdk-uM0TGf`. The SDK copy contains the
    media and string resources and produces ABC
-   `6aef5288ee675dd15999a0035083ae3546d49ca648a2ad257fc3bc786a9736b6`
+   `51f69b12face365f918358f0fbff0d51073fd878e8ecb0818e0f03b628da6e92`
    plus `entry-default-unsigned.hap`. The generated string artifact SHA-256 is
    `29d4d2d7319fbf428c148f50e936869382ebd078eb187d476098ba8a5ae678a4`.
    No generated ETS was edited.
-3. **Explicit rejection.** Twenty-six source-linked failures are recorded in
+3. **Explicit rejection.** Twenty-seven source-linked failures are recorded in
    `diagnostics.tsv`. The S2.2 cases remain, joined by Brush background, shaped
    background, click label/role semantics, dynamic click callback factory,
-   negative size, effectful background factory, and unmapped String/Color project
-   tokens. Empty UI is never used as a recovery value.
-4. **Existing regressions.** Target suite `kotlin-ets-target-tests.Lffn7G`,
-   string-resource suite `kotlin-ets-strings-44nAnT`, modifier argument suite
-   `kotlin-ets-modifier-arguments-AkzL0R`, and Material Button suite
-   `kotlin-ets-material-button-0HWpgG` pass. No legacy UI implementation changed.
+   negative size, effectful background factory, a whole custom TextStyle, and
+   unmapped String/Color/text-style project tokens. Empty UI is never used as a
+   recovery value.
+4. **Existing regressions.** Target suite `kotlin-ets-target-tests.uW9s2j`,
+   string-resource suite `kotlin-ets-strings-aeRD7t`, modifier argument suite
+   `kotlin-ets-modifier-arguments-hY9HB5`, Material Button suite
+   `kotlin-ets-material-button-vyz4tU`, font suite `kotlin-ets-font-values-MMgQGv`,
+   and typography suite `kotlin-ets-typography-dmeeJq` pass. No legacy UI
+   implementation changed.
 5. **Branch scope.** Changes are confined to the three semantic pipeline modules,
    widget fixtures/harness, and this report. Language lowering, KLIB loading,
    project adapters, shared target/core contracts, and default CLI behavior are

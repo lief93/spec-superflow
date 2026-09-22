@@ -13,28 +13,39 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 
 object KnownTokens {
     val label: String get() = error("mapped by project adapter")
     val brand: Color get() = error("mapped by project adapter")
+    val titleSize: TextUnit get() = error("mapped by project adapter")
+    val titleWeight: FontWeight get() = error("mapped by project adapter")
+    val titleFamily: FontFamily get() = error("mapped by project adapter")
+    val titleLineHeight: TextUnit get() = error("mapped by project adapter")
 }
 
 @Composable
 fun Page(title: String, enabled: Boolean, onAction: () -> Unit, imageUrl: String,
-    input: String, onInput: (String) -> Unit, surfaceColor: Color) {
+    input: String, onInput: (String) -> Unit, surfaceColor: Color, lineHeight: TextUnit) {
     val identity = Modifier
     val frame = Modifier.width(120.dp).padding(4.dp).width(80.dp)
     Column(modifier = frame.then(identity)) {
         Label(title)
-        Label(stringResource(R.string.title))
+        Label(stringResource(R.string.title), fontSize = 18.sp, fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace, lineHeight = lineHeight)
         Label(KnownTokens.label)
         Button(onClick = onAction, enabled = enabled,
             modifier = Modifier.background(KnownTokens.brand)
                 .padding(horizontal = 3.dp, vertical = 2.dp).height(40.dp)) {
             Row {
-                Label(stringResource(R.string.action))
+                Label(stringResource(R.string.action), fontSize = KnownTokens.titleSize,
+                    fontWeight = KnownTokens.titleWeight, fontFamily = KnownTokens.titleFamily,
+                    lineHeight = KnownTokens.titleLineHeight)
                 Box(modifier = Modifier.height(8.dp).then(Modifier.width(12.dp))) {
                     Label("right")
                 }
