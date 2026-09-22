@@ -77,9 +77,12 @@ fun main(arguments: Array<String>) {
         }
         val adapters = AdapterModules.load()
         val stdlib = StandardLibraryRules()
-        val rules = listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeProjectColorSchemeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposeDimensionRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeFlowRule(), ComposeShapeRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
+        val shapes = ComposeShapeRule()
+        val rules = listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeProjectColorSchemeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposeDimensionRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeFlowRule(), shapes, ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
         var preflight: CoreProfileReport? = null
-        val target = withKotlinFrontend(compilerArgs, entry, prepareDeclaration = { declaration ->
+        val target = withKotlinFrontend(compilerArgs, entry, prepareModule = { module ->
+            if (mode == "page") rules.forEach { it.prepareModule(module, diagnostics) }
+        }, prepareDeclaration = { declaration ->
             if (mode == "page") rules.forEach { it.prepareSource(declaration, diagnostics) }
         }) { frontend ->
             val module = frontend.module

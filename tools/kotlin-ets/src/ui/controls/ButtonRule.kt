@@ -85,12 +85,16 @@ internal class ComposeButtonRule(
             EtsMember(palette, name, EtsTypes.NUMBER, at),
             EtsMember(palette, "disabled" + name.replaceFirstChar { it.uppercaseChar() }, EtsTypes.NUMBER, at), EtsTypes.NUMBER, at)
         val child = scope.fork()
-        child.ambientValues[MATERIAL_CONTEXT] = EtsNew(materialContextType, listOf(materialScheme(context, at), selected("contentColor"), materialTypography(context, at)), at)
+        child.ambientValues[MATERIAL_CONTEXT] = EtsNew(materialContextType, listOf(materialScheme(context, at),
+            selected("contentColor"), materialTypography(context, at), materialShapes(context, at)), at)
         val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "Button requires content")
         val click = argument(call, "onClick") ?: target.diagnostics.unsupported(call, "Button requires callback")
         val padding = argument(call, "contentPadding")?.let { language.expression(it, scope) }
             ?: symmetricPadding(target.literal(if (text) 12 else 24, call), target.literal(8, call), at)
-        val shape = argument(call, "shape")?.let { language.expression(it, scope) } ?: target.literal("50%", call)
+        val shape = argument(call, "shape")?.let {
+            language.callRules.filterIsInstance<ComposeShapeRule>().single()
+                .borderRadius(it, language, scope, target.diagnostics)
+        } ?: target.literal("50%", call)
         val row = target.native("Row", emptyList(), call, content(body, child)).copy(attributes = listOf(
             target.attribute("alignItems", listOf(target.enumValue("VerticalAlign", "Center", call)), call),
             target.attribute("justifyContent", listOf(target.enumValue("FlexAlign", "Center", call)), call)))

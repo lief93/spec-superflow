@@ -59,7 +59,10 @@ internal class ComposeTextFieldDecorationRule(
         argument(call, "interactionSource")?.let { language.expression(it, scope) }
         argument(call, "colors")?.let { language.expression(it, scope) }
         argument(call, "isError")?.let { language.expression(it, scope) }
-        val shape = argument(call, "shape")?.let { language.expression(it, scope) }
+        val shape = argument(call, "shape")?.let {
+            language.callRules.filterIsInstance<ComposeShapeRule>().single()
+                .borderRadius(it, language, scope, target.diagnostics)
+        }
         val attrs = buildList {
             add(target.attribute("width", listOf(target.literal("100%", call)), call))
             add(target.attribute("height", listOf(target.literal("100%", call)), call))

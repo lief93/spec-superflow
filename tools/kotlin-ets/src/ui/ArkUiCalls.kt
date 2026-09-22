@@ -31,6 +31,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "scrollBar" -> EtsNamedType("BarState")
             "index", "fontSize", "fontColor", "fontWeight", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight" -> EtsTypes.NUMBER
             "hitTestBehavior" -> EtsNamedType("HitTestMode")
+            "clipShape" -> pathShapeType
             "type" -> value.type.takeIf { it == EtsNamedType("ButtonType") || it == EtsNamedType("InputType") }
             "buttonStyle" -> EtsNamedType("ButtonStyleMode")
             "constraintSize" -> value.type.takeIf { it is EtsRecordType && it.name == "ConstraintSizeOptions" &&
@@ -44,7 +45,11 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
                     it == EtsFunctionType(listOf(EtsTypes.STRING), EtsTypes.VOID)
             } ?: EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.VOID)
             "onChildTouchTest" -> EtsFunctionType(listOf(EtsNamedType("Array", listOf(EtsNamedType("TouchTestInfo")))), EtsNamedType("TouchResult"))
-            "width", "height", "borderRadius" -> value.type.takeIf { it == EtsTypes.NUMBER || it == EtsTypes.STRING }
+            "width", "height" -> value.type.takeIf { it == EtsTypes.NUMBER || it == EtsTypes.STRING }
+            "borderRadius" -> value.type.takeIf { it == EtsTypes.NUMBER || it == EtsTypes.STRING ||
+                it is EtsRecordType && it.name == "BorderRadiuses" && it.fields.keys ==
+                    setOf("topLeft", "topRight", "bottomRight", "bottomLeft") &&
+                    it.fields.values.all { field -> field == EtsTypes.NUMBER } }
             "offset" -> value.type.takeIf { it is EtsRecordType && it.name == "Position" &&
                 it.fields.keys.all { field -> field in setOf("x", "y") } && it.fields.values.all { it == EtsTypes.NUMBER } }
             "rotate" -> value.type.takeIf { it is EtsRecordType && it.name == "RotateOptions" &&

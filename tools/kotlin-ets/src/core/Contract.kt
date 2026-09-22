@@ -91,6 +91,9 @@ interface Language {
 }
 
 fun interface CallRule {
+    /** Whole resolved source module hook; runs before page reachability removes unrelated declarations. */
+    fun prepareModule(module: IrModuleFragment, diagnostics: DiagnosticSink) {}
+
     /** Framework source projections run before the shared dependency worklist and language lowerings. */
     fun prepareSource(declaration: IrDeclaration, diagnostics: DiagnosticSink) {}
 

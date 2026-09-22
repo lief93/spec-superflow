@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,3 +27,4 @@ import androidx.compose.ui.unit.dp
     }
 }
 @Composable fun UnsupportedShape() { Box(Modifier.size(20.dp).clip(RoundedCornerShape(topStart = 4.dp, topEnd = 8.dp))) }
+@Composable fun CutThroughHelper() { Tile(CutCornerShape(4.dp)) }

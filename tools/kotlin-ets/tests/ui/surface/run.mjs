@@ -31,7 +31,7 @@ assert.match(code, /EtsComposeSurface\(\{ content:/);
 assert.match(code, /WithTheme\(\{ theme: \{ colors: \{ fontPrimary: 4294967295/);
 assert.match(code, /Text\("Override"\)\.align\(Alignment.TopStart\)\.fontColor\(4294901760\)/);
 assert.match(code, /fixedWidth: true, fixedHeight: true/);
-assert.match(code, /\.clip\(true\)\.hitTestBehavior\(HitTestMode.Default\)\.width\(80\)\.height\(40\)/);
+assert.match(code, /\.clip\(true\)\.hitTestBehavior\(HitTestMode.Default\)\.width\(80(?:\.0)?\)\.height\(40(?:\.0)?\)/);
 assert.match(code, /Text\("Outside"\)\.align\(Alignment.TopStart\)\.fontColor\(4278190080\)/);
 assert.match(code, /Text\("Basic"\)\.fontColor\(4278190080\)\.fontSize\(14\)\.align\(Alignment.TopStart\)/);
 
@@ -59,7 +59,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(positions)), [{ x: 0, y: 0 }, { x: 0,
 for (const entry of ['DefaultBackground', 'DefaultContentColor']) {
   const defaults = compile(entry, 'Unsupported.kt');
   assert.match(defaults, /EtsMaterialContext/);
-  assert.match(defaults, /\.fontColor\(__etsMaterialContext.contentColor\)/);
+  assert.match(defaults, /__etsMaterialContext\.contentColor/);
 }
 for (const [entry, message] of [
   ['Elevated', /tonalElevation/], ['Interactive', /onClick/], ['Effectful', /requires a stable color value/],

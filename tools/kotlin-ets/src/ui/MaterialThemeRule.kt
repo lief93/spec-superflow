@@ -16,10 +16,10 @@ internal fun materialContext(scope: Scope, at: SourceSpan): EtsExpression = scop
     ?: throw Unsupported(Diagnostic("UNSUPPORTED", "Material theme read requires a composition invocation context", at))
 internal fun materialScheme(context: EtsExpression, at: SourceSpan) = EtsMember(context, "colorScheme", materialColorSchemeType, at)
 internal fun materialContentColor(context: EtsExpression, at: SourceSpan) = EtsMember(context, "contentColor", EtsTypes.NUMBER, at)
-internal fun defaultMaterialContext(at: SourceSpan): EtsExpression = EtsNew(materialContextType, listOf(
+internal fun defaultMaterialContext(at: SourceSpan, shapes: EtsExpression): EtsExpression = EtsNew(materialContextType, listOf(
     EtsNew(materialColorValuesType, materialColorSchemeDefaults.map { (name, defaults) ->
         if (name == "surfaceTint") EtsLiteral(null, EtsTypes.NULL, at) else EtsLiteral(defaults.first, EtsTypes.NUMBER, at)
-    }, at), EtsLiteral(0xFF000000L, EtsTypes.NUMBER, at), defaultTypography(at)), at)
+    }, at), EtsLiteral(0xFF000000L, EtsTypes.NUMBER, at), defaultTypography(at), shapes), at)
 
 internal fun requiresMaterialContext(element: IrElement): Boolean {
     var required = false
@@ -31,7 +31,7 @@ internal fun requiresMaterialContext(element: IrElement): Boolean {
             if (sourceFile(owner) == null && (api == "androidx.compose.material3.MaterialTheme" ||
                 api in setOf("androidx.compose.material3.Button", "androidx.compose.material3.TextButton",
                     "androidx.compose.material3.ButtonDefaults.buttonColors", "androidx.compose.material3.ButtonDefaults.textButtonColors") ||
-                owner.correspondingPropertySymbol?.owner?.let(::symbolName) in setOf("androidx.compose.material3.MaterialTheme.colorScheme", "androidx.compose.material3.MaterialTheme.typography") ||
+                owner.correspondingPropertySymbol?.owner?.let(::symbolName) in setOf("androidx.compose.material3.MaterialTheme.colorScheme", "androidx.compose.material3.MaterialTheme.typography", "androidx.compose.material3.MaterialTheme.shapes") ||
                 api == "androidx.compose.material3.contentColorFor" ||
                 api == "androidx.compose.material3.Surface" &&
                 (argument(expression, "color") == null || argument(expression, "contentColor") == null))) required = true
@@ -66,12 +66,16 @@ internal class ComposeMaterialThemeValueRule : CallRule {
         if (sourceFile(owner) != null) return null
         val at = language.source(call)
         val property = owner.correspondingPropertySymbol?.owner?.let(::symbolName)
-        if (property in setOf("androidx.compose.material3.MaterialTheme.colorScheme", "androidx.compose.material3.MaterialTheme.typography")) {
+        if (property in setOf("androidx.compose.material3.MaterialTheme.colorScheme", "androidx.compose.material3.MaterialTheme.typography", "androidx.compose.material3.MaterialTheme.shapes")) {
             if (call.dispatchReceiver !is IrGetObjectValue && call.dispatchReceiver !is IrGetValue)
                 throw Unsupported(Diagnostic("UNSUPPORTED", "Bind MaterialTheme receiver to a source variable before reading theme properties", at))
             // The singleton is not a snapshot: getters read the invocation's CompositionLocal.
-            return if (property!!.endsWith(".colorScheme")) materialScheme(materialContext(scope, at), at)
-                else materialTypography(materialContext(scope, at), at)
+            val context = materialContext(scope, at)
+            return when {
+                property!!.endsWith(".colorScheme") -> materialScheme(context, at)
+                property.endsWith(".typography") -> materialTypography(context, at)
+                else -> materialShapes(context, at)
+            }
         }
         if (symbolName(owner) == "androidx.compose.material3.contentColorFor") {
             if (owner.extensionReceiverParameter != null || owner.dispatchReceiverParameter != null)
@@ -113,7 +117,8 @@ internal class ComposeMaterialThemeValueRule : CallRule {
         if (!used) return if (marker.isEmpty()) emptyList() else listOf(EtsFile(materialContextSource.file!!, marker))
         val at = materialContextSource
         val self = EtsReference(EtsSymbol("material:context:this", "this", materialContextType, at, external = true))
-        val values = linkedMapOf("colorScheme" to materialColorSchemeType, "contentColor" to EtsTypes.NUMBER, "typography" to typographyType)
+        val values = linkedMapOf("colorScheme" to materialColorSchemeType, "contentColor" to EtsTypes.NUMBER,
+            "typography" to typographyType, "shapes" to materialShapesType)
         val parameters = values.map { (name, type) -> EtsParameter(EtsSymbol("material:context:parameter:$name", name, type, at)) }
         val fields = values.map { (name, type) -> EtsField(EtsSymbol("material:context:field:$name", name, type, at), readonly = true) }
         val constructor = EtsFunction("constructor", parameters, EtsTypes.VOID, fields.zip(parameters).map { (field, parameter) ->
@@ -136,13 +141,14 @@ internal class ComposeMaterialThemeRule(private val target: ArkUiCalls,
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
     override fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? {
         if (symbolName(call.symbol.owner) != "androidx.compose.material3.MaterialTheme") return null
-        target.checkArguments(call, setOf("colorScheme", "typography", "content"))
+        target.checkArguments(call, setOf("colorScheme", "typography", "shapes", "content"))
         val at = language.source(call)
         val parent = materialContext(scope, at)
         val scheme = if (call.usesNativeProjectTheme == true) currentProjectColorScheme(at)
             else argument(call, "colorScheme")?.let { language.expression(it, scope) } ?: materialScheme(parent, at)
         val typography = argument(call, "typography")?.let { language.expression(it, scope) } ?: materialTypography(parent, at)
+        val shapes = argument(call, "shapes")?.let { language.expression(it, scope) } ?: materialShapes(parent, at)
         val content = argument(call, "content") ?: target.diagnostics.unsupported(call, "MaterialTheme requires content")
-        return provide(EtsNew(materialContextType, listOf(scheme, materialContentColor(parent, at), typography), at), content, scope)
+        return provide(EtsNew(materialContextType, listOf(scheme, materialContentColor(parent, at), typography, shapes), at), content, scope)
     }
 }

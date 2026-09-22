@@ -90,7 +90,7 @@ try {
     modifier: 10, resources: 8, project_dependencies: 3 });
   assert.equal(report.coverage.language_semantics.percentage, 100);
   assert.equal(report.coverage.standard_library.percentage, 100);
-  assert.equal(report.coverage.neutral_compose_widget.percentage, 92.85);
+  assert.equal(report.coverage.neutral_compose_widget.percentage, 96.42);
   assert.equal(report.coverage.modifier.percentage, 100);
   assert.equal(report.coverage.resources.percentage, 100);
   assert.equal(report.coverage.project_dependencies.percentage, 100);
@@ -103,11 +103,15 @@ try {
   assert.ok(loadingCall);
   assert.equal(loadingCall.firstUnsupportedNode, null);
   assert.equal(loadingCall.expectedTargetType, 'string');
-  assert.equal(report.firstUnsupportedNode.source.line, 128);
-  assert.equal(report.firstUnsupportedNode.source.column, 31);
+  const shapes = report.calls.find(call => call.resolvedSymbol.startsWith('androidx.compose.material3.MaterialTheme.<get-shapes>'));
+  assert.ok(shapes);
+  assert.equal(shapes.firstUnsupportedNode, null);
+  assert.equal(shapes.expectedTargetType, 'EtsMaterialShapes');
+  assert.equal(report.firstUnsupportedNode.source.line, 129);
+  assert.equal(report.firstUnsupportedNode.source.column, 34);
   assert.equal(report.firstUnsupportedNode.kind, 'target_type');
-  assert.equal(report.firstUnsupportedNode.symbol, 'androidx.compose.material3.MaterialTheme.<get-shapes>');
-  assert.match(report.firstUnsupportedNode.message, /Unsupported language type: androidx\.compose\.material3\.Shapes/);
+  assert.equal(report.firstUnsupportedNode.symbol, 'androidx.compose.material3.CardDefaults.cardElevation');
+  assert.match(report.firstUnsupportedNode.message, /Unsupported language type: androidx\.compose\.material3\.CardElevation/);
   assert.match(report.firstUnsupportedNode.responsibleModule, /ComposeWidgetAdapter/);
   for (const call of report.calls) {
     assert.ok(call.source.line > 0 && call.source.column > 0);
@@ -123,14 +127,14 @@ try {
       compatibilityDecision: report.compatibilityDecision },
     coverage: report.coverage,
     p0Gaps: [
-      { category: 'neutral_compose_widget', node: 'androidx.compose.material3.MaterialTheme.shapes',
+      { category: 'neutral_compose_widget', node: 'androidx.compose.material3.CardDefaults.cardElevation',
         responsibleModule: report.firstUnsupportedNode.responsibleModule, source: report.firstUnsupportedNode.source,
         detail: report.firstUnsupportedNode.message },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
-  console.log('PASS Mars Photos 8399c839: project images and strings materialize through the formal selected-variant path');
-  console.log('PASS no target: MaterialTheme.shapes is the next real P0 at HomeScreen.kt:128:31');
+  console.log('PASS Mars Photos 8399c839: project images, strings and MaterialTheme.shapes resolve through the formal selected-variant path');
+  console.log('PASS no target: CardDefaults.cardElevation is the next real P0 at HomeScreen.kt:129:34');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

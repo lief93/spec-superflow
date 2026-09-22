@@ -41,6 +41,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private var usesMaterialContext = false
     private var usesFocusManager = false
     private val touchBoxes = linkedMapOf<IrCall, TouchTargets>()
+    private val shapes by lazy { language.callRules.filterIsInstance<ComposeShapeRule>().single() }
 
     fun lower(module: IrModuleFragment, entryName: String): EtsProgram {
         fields.clear(); states.clear(); pagers.clear(); coroutineScopes.clear()
@@ -62,7 +63,10 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         if (!isUiBuilder(root)) diagnostics.unsupported(root, "UI entry must be @Composable and return Unit")
         textContexts = materialTextContexts(root, diagnostics)
         val rootScope = scope()
-        if (usesMaterialContext) rootScope.ambientValues[MATERIAL_CONTEXT] = defaultMaterialContext(language.source(root))
+        if (usesMaterialContext) {
+            val at = language.source(root)
+            rootScope.ambientValues[MATERIAL_CONTEXT] = defaultMaterialContext(at, shapes.initialShapes(at))
+        }
         val defaults = root.valueParameters.map { parameter ->
             val value = parameter.defaultValue?.expression
                 ?: diagnostics.unsupported(parameter, "Entry parameter requires a source default")
@@ -1141,7 +1145,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     "androidx.compose.foundation.layout.padding" -> setOf("padding")
                     "androidx.compose.foundation.background" -> if (argument(call, "shape") == null) setOf("backgroundColor")
                         else setOf("backgroundColor", "borderRadius")
-                    "androidx.compose.ui.draw.clip" -> setOf("borderRadius", "clip")
+                    "androidx.compose.ui.draw.clip" -> setOf("borderRadius", "clip", "clipShape")
                     "androidx.compose.ui.platform.testTag" -> setOf("id")
                     "androidx.compose.foundation.clickable" -> setOf("onClick", "enabled")
                     "androidx.compose.ui.input.pointer.pointerInput" -> setOf("hitTestBehavior")
@@ -1249,13 +1253,17 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     "androidx.compose.foundation.background" -> {
                         checkArguments(call, setOf("color", "shape"))
                         attributes["backgroundColor"] = colorValue(argument(call, "color") ?: diagnostics.unsupported(call, "Missing background color"), scope)
-                        argument(call, "shape")?.let { attributes["borderRadius"] = language.expression(it, scope) }
+                        argument(call, "shape")?.let { attributes["borderRadius"] =
+                            shapes.borderRadius(it, language, scope, diagnostics) }
                     }
                     "androidx.compose.ui.draw.clip" -> {
                         checkArguments(call, setOf("shape"))
                         val shape = argument(call, "shape") ?: diagnostics.unsupported(call, "Missing clip shape")
-                        attributes["borderRadius"] = language.expression(shape, scope)
-                        attributes["clip"] = literal(true, call)
+                        val cut = shapes.cutClip(shape, attributes["width"], attributes["height"], diagnostics)
+                        if (cut != null) attributes["clipShape"] = cut else {
+                            attributes["borderRadius"] = shapes.borderRadius(shape, language, scope, diagnostics)
+                            attributes["clip"] = literal(true, call)
+                        }
                     }
                     "androidx.compose.ui.platform.testTag" -> {
                         checkArguments(call, setOf("tag"))

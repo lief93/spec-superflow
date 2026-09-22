@@ -106,6 +106,7 @@ fun <T> withKotlinModule(arguments: List<String>, emit: (IrModuleFragment) -> T)
 }
 
 fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
+    prepareModule: (IrModuleFragment) -> Unit = {},
     prepareDeclaration: (org.jetbrains.kotlin.ir.declarations.IrDeclaration) -> Unit = {},
     emit: (KotlinFrontendSession) -> T): T {
     val disposable = Disposer.newDisposable()
@@ -133,6 +134,7 @@ fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
         val frontend = KotlinFrontendSession(translated.result.irModuleFragment, BinaryBodies(translated),
             IrTypeSystemContextImpl(translated.result.irBuiltIns), CallCaptures(analyzed.result, translated.result))
         session = frontend
+        prepareModule(frontend.module)
         entry?.let { System.err.println(selectSourceDeclarations(frontend.module, it, prepareDeclaration)) }
         val lowering = EtsLoweringPhases.run(translated, frontend.bodies, frontend::rebindInlinedCaptures)
         check(!translated.diagnosticCollector.hasErrors && !messages.hasErrors()) {
