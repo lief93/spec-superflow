@@ -16,9 +16,9 @@ const entry = 'com.google.samples.apps.nowinandroid.core.designsystem.component.
 const categories = ['language_semantics', 'standard_library', 'neutral_compose_widget', 'modifier', 'resources',
   'project_dependencies'];
 const expectedCoverage = {
-  language_semantics: { total: 112, recognized: 112, unsupported: 0, percentage: 100 },
-  standard_library: { total: 16, recognized: 15, unsupported: 1, percentage: 93.75 },
-  neutral_compose_widget: { total: 191, recognized: 179, unsupported: 12, percentage: 93.71 },
+  language_semantics: { total: 109, recognized: 109, unsupported: 0, percentage: 100 },
+  standard_library: { total: 15, recognized: 15, unsupported: 0, percentage: 100 },
+  neutral_compose_widget: { total: 191, recognized: 178, unsupported: 13, percentage: 93.19 },
   modifier: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   resources: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   project_dependencies: { total: 0, recognized: 0, unsupported: 0, percentage: null },
@@ -64,15 +64,23 @@ try {
   const reportPath = join(evidence, 'core-profile.json');
   const compilation = run('project-preflight', 'node', [join(root, 'project.mjs'), '--project', project,
     '--module', ':core:designsystem', '--variant', 'demoDebug', '--mode', 'page',
-    '--unsupported-policy', 'error', '--entry', entry, '--out', output, '--preflight-out', reportPath,
+    '--unsupported-policy', 'report', '--entry', entry, '--out', output, '--preflight-out', reportPath,
     '--work-dir', projectRun, '--offline'], { env: projectEnv }, 2);
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'UNSUPPORTED');
-  assert.equal(backendBlocker.message,
-    'Unsupported external field: android.os.Build.VERSION.SDK_INT');
-  assert.equal(backendBlocker.source.line, 250);
-  assert.equal(backendBlocker.source.column, 46);
+  assert.equal(backendBlocker.message, 'Unsupported Material3 ColorScheme factory signature');
+  assert.equal(backendBlocker.source.line, 39);
+  assert.equal(backendBlocker.source.column, 31);
   assert.equal(existsSync(output), false);
+  const diagnosis = JSON.parse(readFileSync(output + '.diagnosis.json', 'utf8'));
+  assert.equal(diagnosis.status, 'blocked');
+  assert.deepEqual(diagnosis.degradations.map(value => value.action), [
+    'project_theme_replacement', 'platform_capability_fallback', 'platform_capability_fallback',
+  ]);
+  assert.deepEqual(diagnosis.degradations.map(value => value.source.line), [242, 218, 232]);
+  assert.ok(diagnosis.degradations.every(value => value.source.line > 0 && value.source.column > 0));
+  assert.deepEqual(diagnosis.blockingFailure,
+    { code: backendBlocker.code, message: backendBlocker.message, source: backendBlocker.source });
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
   assert.equal(inputs.compilerVersion, '2.1.10');
@@ -93,7 +101,7 @@ try {
   assert.deepEqual(report.counts, Object.fromEntries(categories.map(category =>
     [category, expectedCoverage[category].total])));
   assert.deepEqual(report.coverage, expectedCoverage);
-  assert.equal(report.calls.length, 319);
+  assert.equal(report.calls.length, 315);
   const themeMode = report.calls.find(call =>
     call.finalRecognizedNode.symbol === 'androidx.compose.foundation.isSystemInDarkTheme');
   assert.equal(themeMode?.expectedTargetType, 'boolean');
@@ -174,10 +182,9 @@ try {
   const unsupportedCalls = report.calls.filter(call => call.firstUnsupportedNode !== null);
   assert.equal(unsupportedCalls.length, 13);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'target_type').length, 12);
-  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 0);
-  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_field').length, 1);
-  assert.ok(unsupportedCalls.every(call => call.category in
-    { neutral_compose_widget: true, standard_library: true }));
+  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 1);
+  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_field').length, 0);
+  assert.ok(unsupportedCalls.every(call => call.category === 'neutral_compose_widget'));
 
   const baseline = {
     schemaVersion: 1,
@@ -191,18 +198,18 @@ try {
     backendBlocker,
     unsupportedCalls,
     p0Gaps: [
-      { category: 'standard_library', node: 'android.os.Build.VERSION.SDK_INT',
-        responsibleModule: 'tools/kotlin-ets/src/stdlib/StandardLibraryRules.kt', source: backendBlocker.source,
+      { category: 'neutral_compose_widget', node: 'androidx.compose.material3.lightColorScheme',
+        responsibleModule: 'tools/kotlin-ets/src/ui/ColorSchemeRule.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
       { category: 'neutral_compose_widget', node: 'unsupported_call_inventory',
         responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt',
-        counts: { target_type: 12, unsupported_call: 0, unsupported_field: 1 },
+        counts: { target_type: 12, unsupported_call: 1, unsupported_field: 0 },
         detail: 'Thirteen source-linked calls remain unsupported; all records are preserved in unsupportedCalls.' },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS typed optional Dp.Unspecified values advance the backend to Build.VERSION.SDK_INT; all 13 unsupported calls remain explicit');
+  console.log('PASS Android platform-version guards map project colors or select declared fallbacks; all 13 unsupported calls remain explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

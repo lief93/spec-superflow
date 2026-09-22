@@ -45,7 +45,7 @@ class DiagnosticSink(var currentFile: String? = null, var reportUiDegradation: B
         // explicit framework projections approved for this migration may omit IR.
         if (!reportUiDegradation || action !in setOf("static_animation_value", "omitted_animation_effect",
                 "omitted_animation_modifier", "project_theme_replacement", "omitted_theme_effect",
-                "omitted_private_modifier")) unsupported(element, message)
+                "omitted_private_modifier", "platform_capability_fallback")) unsupported(element, message)
         omittedUiElements.addAll(discarded)
         degradations += UiDegradation(Diagnostic("UNSUPPORTED", message, sourceSpan(element, this)), capability, action, impact)
     }

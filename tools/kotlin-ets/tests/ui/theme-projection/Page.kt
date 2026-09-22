@@ -21,7 +21,7 @@ fun androidPalette(): ColorScheme = error("Android-only fallback must not be lin
 
 @Composable
 fun AppAppearance(dark: Boolean, content: @Composable () -> Unit) {
-    val colors = if (Build.VERSION.SDK_INT >= 31) {
+    val colors = if (supportsDynamicTheming()) {
         val context = LocalContext.current
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else androidPalette()
@@ -51,8 +51,25 @@ fun AppAppearance(dark: Boolean, content: @Composable () -> Unit) {
 }
 
 @Composable fun RequiredCondition() {
-    if (Build.VERSION.SDK_INT >= 31) Text("A") else Text("B")
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Text("A") else Text("B")
 }
+
+@Composable fun BelowCondition() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) Text("Legacy") else Text("Fallback")
+}
+
+private var conditionChecks = 0
+private fun effectfulCondition(): Boolean { conditionChecks += 1; return conditionChecks > 0 }
+
+@Composable fun CombinedCondition() {
+    if (effectfulCondition() && supportsDynamicTheming()) Text("A") else Text("B")
+}
+
+@Composable fun RequiredNoFallback() {
+    if (supportsDynamicTheming()) Text("A")
+}
+
+@Composable fun ValueFallback() { Text(platformFallbackLabel()) }
 
 @Composable fun Clean() { MaterialTheme { Text("Clean") } }
 

@@ -5,7 +5,6 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.irAttribute
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.visitors.*
@@ -32,21 +31,6 @@ internal fun projectAndroidTheme(declaration: IrDeclaration, diagnostics: Diagno
 }
 
 private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
-    fun dependsOnAndroidVersion(element: IrElement, visited: MutableSet<IrValueSymbol> = mutableSetOf()): Boolean {
-        var found = false
-        element.acceptVoid(object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) {
-                if (element is IrGetField && symbolName(element.symbol.owner) == "android.os.Build.VERSION.SDK_INT" &&
-                    sourceFile(element.symbol.owner) == null) found = true
-                if (element is IrGetValue && visited.add(element.symbol)) {
-                    val local = element.symbol.owner as? IrVariable
-                    if (local != null && !local.isVar && local.initializer?.let { dependsOnAndroidVersion(it, visited) } == true) found = true
-                }
-                element.acceptChildrenVoid(this)
-            }
-        })
-        return found
-    }
     val originalReads = projectionLocalReads(body)
     var projected = false
     body.acceptVoid(object : IrElementVisitorVoid {
@@ -55,7 +39,11 @@ private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
                 sourceFile(element.symbol.owner) == null) {
                 val index = element.symbol.owner.valueParameters.indexOfFirst { it.name.asString() == "colorScheme" }
                 val colors = if (index >= 0) element.getValueArgument(index) else null
-                if (colors != null && dependsOnAndroidVersion(colors)) {
+                val predicates = colors?.let(::androidVersionPredicates).orEmpty()
+                if (colors != null && predicates.isNotEmpty()) {
+                    predicates.forEach {
+                        it.platformCapabilityDecision = PlatformCapabilityDecision.TargetMapping("project.material.color_scheme")
+                    }
                     diagnostics.omitUi(colors, "Android-version-dependent theme selection replaced with the native project palette",
                         "androidx.compose.material3.MaterialTheme.colorScheme", "project_theme_replacement",
                         "Android color selection and its private local dependencies are not evaluated; configure kotlin_ets_material_* colors in the target project. Content and typography are retained.")
