@@ -93,7 +93,7 @@ EtsLoweringPhases.run
   → emitEtsProgram
 ```
 
-`cli-seam.json` stores the actual events; `public-cli.json` stores the CLI result.
+`public-cli-seam.json` stores the actual events; `public-cli.json` stores the CLI result.
 The same generated output then executes against six JVM oracle results, covering
 nullable concatenation, constants, mutation, and side-effectful `toString` order.
 Existing IR evidence separately verifies string-plus normalization and retained
@@ -124,3 +124,73 @@ before/after generated `concatenation.ets` bytes are identical (SHA-256
 `5abb7511f34225110ad62c3bc84b4febdd000804179e3c8e1874a04fae07eabd`).
 All final commands above exited zero; unsupported-input failures are expected
 test outcomes, not compiler regressions. No SDK or device acceptance is claimed.
+
+## S1: unique language generation boundary audit
+
+Baseline: `b9e0374`. No production language bypass was found, so this follow-up
+changes tests and this audit only. The production source tree before and after is
+`b5275ee09652b5760f427a9e11a7d05dcee6f802` (`git rev-parse HEAD:tools/kotlin-ets/src`).
+
+| Entry or construction | Audited route and interpretation |
+| --- | --- |
+| `kotlin-ets` launcher | Compiles production sources and invokes `MainKt`; no alternate language generator |
+| `project.mjs` | Collects inputs and invokes the same launcher with the selected mode/output flag; not an IR or target generator |
+| `Main.kt`, language mode, either output flag | `withKotlinFrontend` → `EtsLoweringPhases.run` → `EtsBackend.lower` → `IrToEts.program` → `IrModuleToEts.lower` → file/declaration mapping → typed `EtsProgram` → `EtsValidator.validate` |
+| `Backend.kt`, both lower overloads | Single-module overload delegates to module-list overload, then the same `IrToEts.program` boundary |
+| `Modules.kt`, `--out` | Accepts an already-typed program, validates and prints it; no Kotlin IR input |
+| `Modules.kt`, `--out-dir` | Accepts the same typed program, validates it, assembles imports/runtime support and prints files; its extra `EtsProgram` constructors are typed subsets/import headers, not a second IR translation |
+| `ComposeLowering.kt` | Separate page assembly exists and is explicitly outside this language-only audit; unchanged |
+
+This retains the Kotlin/JS reference's phase separation: IR-to-IR passes, then
+module/file AST generation, then output assembly/printing. See
+`kotlin-js-backend-reference.md`, sections 2–3. ETS keeps its typed target tree;
+the JS AST/printer is not used as an intermediate representation.
+
+“Unique” here means the audited production **language CLI route** and its two
+output modes, not one `EtsProgram` allocation or a type-system prohibition on
+calling low-level public mappers. Tests can call `IrToEts`/file mappers directly;
+the API does not carry an unforgeable “all phases completed” token. This audit
+does not claim all Kotlin semantics have moved out of `LanguageLowering`, nor
+does it cover Compose, KLIB loading, project adapter behavior, or ArkTS SDK/device
+acceptance. None of those implementations changed.
+
+### Five acceptance checks
+
+1. **Before/after path:** the baseline source already has the route above and the
+   previous `run-kKi6hs/cli-seam.json` records its `--out` execution. This follow-up
+   leaves that source tree unchanged and extends runtime evidence to both output
+   modes and whole-program target validation. There is no claimed production
+   rerouting in this commit.
+2. **Positive source and typed boundary:** `lowering/run.mjs` compiles existing
+   `Concatenation.kt` and `language/ScopeSlice.kt` through the real CLI. Exact
+   traces require one phase run, one program boundary, one module mapper, one
+   file mapping per source, successful `EtsValidator.validate(EtsProgram, ...)`
+   before boundary return, then the selected emitter. It compares six `--out`
+   results and seven two-file `--out-dir` results with the actual JVM oracle.
+   Synthetic validator lambdas/default-argument bridges are not counted as
+   whole-program validation.
+3. **Unsupported source fails closed:** the existing
+   `language/UnsupportedExternalResult.kt` must exit 2 with `UNSUPPORTED`,
+   `java.time.Instant.now`, source path and valid offsets. Its exact trace must
+   stop inside file mapping: no returned program, no emitter, no fallback and
+   no output file.
+4. **Existing regressions:** run the lowering test, module differential suite,
+   backend separation/typed-tree contracts, and JVM contamination gate. Runtime
+   traces and results are retained under the test runners' `.work` directories.
+5. **Branch isolation:** only the test agent, lowering runner/JVM oracle and this
+   document change on `arch/ets-lowering`; no production, Compose, KLIB or adapter
+   files change.
+
+Final S1 audit commands all exited zero (2026-09-22, repository-root cwd):
+
+| Command | Local evidence under `tools/kotlin-ets/tests/` |
+| --- | --- |
+| `node tools/kotlin-ets/tests/lowering/run.mjs` | `lowering/.work/run-aAssIR/`: `public-cli-seam.json`, `public-cli-modules-seam.json`, `public-cli-unsupported-seam.json`, `runtime.json`, `module-runtime.json`, and command/result JSON |
+| `node tools/kotlin-ets/tests/modules/run.mjs` | `modules/.work/run-hmHBtr/result.json`: 44 JVM/module cases and failure boundaries |
+| `TMPDIR="$PWD/tools/kotlin-ets/tests/lowering/.work" bash tools/kotlin-ets/tests/backend/run.sh` | `lowering/.work/kotlin-ets-backend-tests.XuZZBc/`: separate compilation, typed-tree/source/symbol checks, wrong-rule rejection, deterministic printing and JVM differential |
+| `node tools/kotlin-ets/tests/lowering/jvm-contamination.mjs` | PASS on stdout |
+
+The unsupported trace contains only phase entry/exit and entry into the
+program/module/file mappers. Its diagnostic points to
+`UnsupportedExternalResult.kt`, offsets 85–90 (line 3, column 61), and exits 2.
+The single-file ETS output remains byte-identical to the baseline evidence.

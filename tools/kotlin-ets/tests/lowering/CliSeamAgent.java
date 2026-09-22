@@ -2,6 +2,7 @@ import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.Map;
+import java.util.Set;
 import org.jetbrains.org.objectweb.asm.ClassReader;
 import org.jetbrains.org.objectweb.asm.ClassVisitor;
 import org.jetbrains.org.objectweb.asm.ClassWriter;
@@ -10,13 +11,14 @@ import org.jetbrains.org.objectweb.asm.Opcodes;
 
 /** Test-only tracing of the real CLI; no production callbacks or alternate compiler entry. */
 public final class CliSeamAgent {
-    private static final Map<String, String> METHODS = Map.of(
-        "dev/ets/EtsLoweringPhases", "run",
-        "dev/ets/IrToEts", "program",
-        "dev/ets/IrModuleToEts", "lower",
-        "dev/ets/IrFileToEts", "lower",
-        "dev/ets/EtsProgram", "<init>",
-        "dev/ets/ModulesKt", "emitEtsProgram"
+    private static final Map<String, Set<String>> METHODS = Map.of(
+        "dev/ets/EtsLoweringPhases", Set.of("run"),
+        "dev/ets/IrToEts", Set.of("program"),
+        "dev/ets/IrModuleToEts", Set.of("lower"),
+        "dev/ets/IrFileToEts", Set.of("lower"),
+        "dev/ets/EtsProgram", Set.of("<init>"),
+        "dev/ets/EtsValidator", Set.of("validate"),
+        "dev/ets/ModulesKt", Set.of("emitEtsProgram", "emitEtsModules")
     );
 
     public static void premain(String options, Instrumentation instrumentation) {
@@ -26,15 +28,19 @@ public final class CliSeamAgent {
             @Override
             public byte[] transform(ClassLoader loader, String name, Class<?> redefined,
                     ProtectionDomain domain, byte[] bytes) {
-                String method = METHODS.get(name);
-                if (method == null) return null;
+                Set<String> methods = METHODS.get(name);
+                if (methods == null) return null;
                 ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
                 new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9, writer) {
                     @Override
                     public MethodVisitor visitMethod(int access, String methodName, String descriptor,
                             String signature, String[] exceptions) {
                         MethodVisitor target = super.visitMethod(access, methodName, descriptor, signature, exceptions);
-                        if (!methodName.equals(method) && !methodName.startsWith(method + "$")) return target;
+                        // Only the internal phase entry has a module-name suffix. Do not
+                        // mistake validate$lambda helpers for whole-program validation.
+                        String method = name.equals("dev/ets/EtsLoweringPhases") && methodName.startsWith("run$")
+                            ? "run" : methodName;
+                        if (!methods.contains(method)) return target;
                         return new MethodVisitor(Opcodes.ASM9, target) {
                             private void trace(String event) {
                                 super.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "err", "Ljava/io/PrintStream;");

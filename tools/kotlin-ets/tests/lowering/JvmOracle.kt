@@ -7,4 +7,5 @@ fun main() {
     println(foldedConstants())
     println(stringifyBeforeMutation(2))
     println(stringifyBeforeMutation(-3))
+    println(languagefixture.scopeSlice())
 }
