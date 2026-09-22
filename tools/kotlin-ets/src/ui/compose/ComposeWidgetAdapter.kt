@@ -51,6 +51,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 emptyList()
             }
             is IrCall -> listOf(widget(statement, scope))
+            is IrWhen -> listOf(conditional(statement, scope, owner))
             is IrBlock -> statements(statement.statements, scope.fork(), owner, terminal && index == statements.lastIndex,
                 handledStatements)
             is IrReturn -> {
@@ -62,6 +63,21 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 diagnostics.unsupported(statement, "Unsupported object in widget children")
             else -> diagnostics.unsupported(statement, "Unsupported widget children statement: ${statement.javaClass.simpleName}")
         } }
+
+    private fun conditional(value: IrWhen, scope: Scope, owner: IrFunction): Widget.Conditional<EtsExpression, SourceSpan> {
+        if (!value.type.isUnit()) diagnostics.unsupported(value, "Widget conditional must produce Unit children")
+        val branches = value.branches.map { branch ->
+            val condition = if (branch is IrElseBranch) null else {
+                if (!branch.condition.type.isBoolean())
+                    diagnostics.unsupported(branch.condition, "Widget conditional requires a Boolean condition")
+                scalar(branch.condition, scope)
+            }
+            val nested = scope.fork()
+            val children = Children(statements(listOf(branch.result), nested, owner))
+            WidgetBranch(condition, children, language.source(branch.result))
+        }
+        return Widget.Conditional(branches, language.source(value))
+    }
 
     private fun widget(call: IrCall, scope: Scope): Widget<EtsExpression, SourceSpan> {
         val api = symbolName(call.symbol.owner)
@@ -268,7 +284,14 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val property = owner?.correspondingPropertySymbol?.owner
         val propertyName = property?.let(::symbolName)
         val api = owner?.let(::symbolName)
-        val sourceOwnedToken = owner != null && property != null && sourceFile(owner) != null
+        fun rootedInBinding(expression: IrExpression?): Boolean = when (val current = expression?.let { resolve(it, scope) }) {
+            is IrGetValue -> current.symbol in scope.bindings
+            is IrCall -> rootedInBinding(current.dispatchReceiver ?: current.extensionReceiver)
+            is IrTypeOperatorCall -> rootedInBinding(current.argument)
+            else -> false
+        }
+        val sourceOwnedToken = owner != null && property != null && sourceFile(owner) != null &&
+            !rootedInBinding(call.dispatchReceiver ?: call.extensionReceiver)
         val constructor = (resolved as? IrConstructorCall)?.symbol?.owner?.parent as? IrClass
         val systemFontFamily = propertyName
             ?.takeIf { it.startsWith("androidx.compose.ui.text.font.FontFamily.Companion.") }
@@ -320,6 +343,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         fun stable(expression: EtsExpression): Boolean = when (expression) {
             is EtsLiteral, is EtsReference -> true
             is EtsMember -> expression.symbolId != null && stable(expression.receiver)
+            is EtsCast -> stable(expression.value)
             is EtsBinary -> stable(expression.left) && stable(expression.right)
             is EtsUnary -> stable(expression.operand)
             is EtsConditional -> stable(expression.condition) && stable(expression.whenTrue) && stable(expression.whenFalse)

@@ -5,7 +5,15 @@ import dev.ets.widgets.*
 
 /** Only this module selects native controls and interprets ordered widget modifiers. */
 class HarmonyWidgetBackend {
-    fun lower(children: Children<EtsExpression, SourceSpan>): List<EtsUiElement> = children.widgets.map(::lower)
+    fun lower(children: Children<EtsExpression, SourceSpan>): List<EtsStatement> = children.widgets.map(::lowerStatement)
+
+    private fun lowerStatement(widget: Widget<EtsExpression, SourceSpan>): EtsStatement = when (widget) {
+        is Widget.Conditional -> EtsIf(widget.branches.map { branch ->
+            branch.condition?.let { expect(it, EtsTypes.BOOLEAN, "Conditional.condition", branch.source) }
+            EtsBranch(branch.condition, lower(branch.children))
+        }, widget.source)
+        else -> lower(widget)
+    }
 
     fun lower(widget: Widget<EtsExpression, SourceSpan>): EtsUiElement {
         val at = widget.source
@@ -69,6 +77,8 @@ class HarmonyWidgetBackend {
             is Widget.Column -> native("Column", children = lower(widget.children)).copy(attributes = listOf(
                 call("alignItems", listOf(enumValue("HorizontalAlign", "Start", at)), at)))
             is Widget.Box -> native("Stack", listOf(stackOptions(at)), lower(widget.children))
+            is Widget.Conditional -> throw IllegalArgumentException(
+                "Conditional widgets require a children boundary at $at")
         }
         // A distinct wrapper per operation retains its position and duplicates.
         // This preserves semantic structure, not Compose's complete measure policy.

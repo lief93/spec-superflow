@@ -135,8 +135,20 @@ fun main() {
     val invalidClick = Widget.Text(string("x"), noStyle,
         listOf(WidgetModifier.Click<EtsExpression, SourceSpan>(number(1), null, source)), source)
     check(runCatching { backend.lower(invalidClick) }.exceptionOrNull() is IllegalArgumentException)
+    val conditional = backend.lower(Children(listOf(Widget.Conditional(listOf(
+        WidgetBranch(EtsLiteral(true, EtsTypes.BOOLEAN, source),
+            Children(listOf(Widget.Text(string("yes"), noStyle, emptyList(), source))), source),
+        WidgetBranch(null,
+            Children(listOf(Widget.Text(string("no"), noStyle, emptyList(), source))), source),
+    ), source)))).single() as EtsIf
+    check(conditional.branches.size == 2 && conditional.branches.last().condition == null)
+    check(conditional.branches.all { it.body.single() is EtsUiElement })
+    val invalidConditional: Children<EtsExpression, SourceSpan> = Children(listOf(Widget.Conditional(listOf(
+        WidgetBranch(number(1), Children(emptyList()), source)), source)))
+    check(runCatching { backend.lower(invalidConditional) }.exceptionOrNull() is IllegalArgumentException)
     val fn = EtsFunction("view", emptyList(), EtsTypes.VOID,
-        listOf(element, styledText, styledButton, styledImage, resourceImage, urlImage, textField), source, builder = true)
+        listOf(element, styledText, styledButton, styledImage, resourceImage, urlImage, textField, conditional),
+        source, builder = true)
     EtsValidator().validate(EtsProgram(listOf(EtsFile("model-only", listOf(fn)))))
-    println("PASS backend without compiler/Compose; shared String/Color/text-style consumption, ordered modifiers and typed rejection")
+    println("PASS backend without compiler/Compose; values, ordered modifiers, runtime branches and typed rejection")
 }

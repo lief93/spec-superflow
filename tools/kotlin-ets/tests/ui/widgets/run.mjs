@@ -20,7 +20,8 @@ const pipelineProbe = join(here, 'CoreProfilePipelineProbe.kt');
 const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
   'BackendTest.kt', 'WidgetProbe.kt', 'CoreProfile.kt', 'CoreProfilePipelineProbe.kt',
   'StateProfile.kt', 'UnsupportedState.kt', 'StateJvmOracle.kt', 'StatePipelineProbe.kt',
-  'PipelineSeamAgent.java'].map(name => join(here, name));
+  'InputStateProfile.kt', 'InputStateUnsupported.kt', 'InputStateJvmOracle.kt', 'InputStatePipelineProbe.kt',
+  'input-state-sdk.mjs', 'PipelineSeamAgent.java'].map(name => join(here, name));
 const implementation = identities([...sources(join(root, 'src')), ...fixtures, fileURLToPath(import.meta.url), uiClasspathFile]);
 for (const path of modelSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /import |\bEts[A-Z]|IrCall|androidx|harmony|arkui/);
 for (const path of backendSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /org\.jetbrains|androidx|IrCall|ComposeWidget|ArkUiCalls/);
@@ -97,6 +98,43 @@ assert.deepEqual(context.result, expectedState);
 const stateSemantics = join(work, 'state-profile-output/state-semantics.json');
 writeFileSync(stateSemantics, JSON.stringify({ expected: expectedState, actual: context.result }, null, 2) + '\n');
 console.log('PASS JVM/ETS Compose state transitions preserve update order and runtime branch reads');
+const inputStateProbeJar = compile('input-state-pipeline-probe', [join(here, 'InputStatePipelineProbe.kt')],
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
+console.log(run('input-state-profile-pipeline', 'java', ['-cp',
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar, inputStateProbeJar].join(':'),
+  'dev.ets.widgettest.InputStatePipelineProbeKt', uiCp, join(work, 'input-state-output'),
+  join(here, 'InputStateProfile.kt'), join(here, 'InputStateUnsupported.kt')]).trim());
+const inputStateOracleJar = compile('input-state-jvm-oracle', [join(here, 'InputStateJvmOracle.kt')], cp);
+const expectedInputState = run('input-state-jvm', 'java',
+  ['-cp', `${cp}:${inputStateOracleJar}`, 'widgetstateinput.InputStateJvmOracleKt']).trim().split('\n');
+const inputStateOutput = join(work, 'input-state-output/InputStateProfile.ets');
+const inputStateCode = readFileSync(inputStateOutput, 'utf8');
+const conditions = inputStateCode.split('\n').map(line => line.trim()).filter(line =>
+  line.startsWith('if (') || line.startsWith('else if (')).map(line =>
+  line.slice(line.indexOf('(') + 1, line.lastIndexOf(')')).replaceAll('(state as UiState)', 'state'));
+const actions = [...inputStateCode.matchAll(/dispatch\("([^"]+)"\);/g)].map(match => match[1]);
+assert.deepEqual(conditions, ['state.loading', '! (state.error === null)']);
+assert.deepEqual(actions, ['retry', 'refresh']);
+const inputRuntimeSource = `function select(state) {
+  const effects = [];
+  let branch;
+  if (${conditions[0]}) { branch = 'loading'; }
+  else if (${conditions[1]}) { effects.push('${actions[0]}'); branch = 'error'; }
+  else { effects.push('${actions[1]}'); branch = 'content'; }
+  return branch + '|' + effects.join();
+}
+result.push(...states.map(select));`;
+const inputContext = { result: [], states: [
+  { loading: true, error: null, content: 'ignored' },
+  { loading: false, error: 'failed', content: 'ignored' },
+  { loading: false, error: null, content: 'ready' },
+] };
+vm.runInNewContext(inputRuntimeSource, inputContext, { timeout: 1000 });
+assert.deepEqual(inputContext.result, expectedInputState);
+const inputStateSemantics = join(work, 'input-state-output/input-state-semantics.json');
+writeFileSync(inputStateSemantics,
+  JSON.stringify({ expected: expectedInputState, actual: inputContext.result, conditions, actions }, null, 2) + '\n');
+console.log('PASS JVM/ETS input-state branch selection and dispatch effects match');
 const pipelineTrace = JSON.parse(readFileSync(join(work, 'core-profile-pipeline.json'), 'utf8')).stderr.split('\n')
   .filter(line => line.startsWith('WIDGET_SEAM ')).map(line => line.slice('WIDGET_SEAM '.length));
 const traceFile = join(work, 'core-profile-pipeline-seam.json');
@@ -119,19 +157,23 @@ const coreProfileOutput = join(work, 'core-profile-output/CoreProfile.ets');
 assert.ok(existsSync(output));
 assert.ok(existsSync(coreProfileOutput));
 assert.ok(existsSync(stateOutput));
+assert.ok(existsSync(inputStateOutput));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
 assert.equal(diagnostics.length, 27);
 assert.ok(diagnostics.every(line => line.includes('UNSUPPORTED') && line.includes('/Unsupported.kt')));
 assert.ok(implementation.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,
-  outputs: identities([output, coreProfileOutput, stateOutput, stateSemantics, traceFile,
+  outputs: identities([output, coreProfileOutput, stateOutput, stateSemantics,
+    inputStateOutput, inputStateSemantics, traceFile,
     join(work, 'output/model.txt'), join(work, 'output/diagnostics.tsv'),
     join(work, 'state-profile-output/state-diagnostics.tsv'),
+    join(work, 'input-state-output/input-state-diagnostic.tsv'),
     join(work, 'output/WidgetPage.ets.resources/base/media/widget_logo.svg'),
     join(work, 'output/WidgetPage.ets.resources/base/element/string.json')]),
   independentModelCompilation: true, adapterWithoutHarmony: true, backendWithoutCompilerOrCompose: true,
   typedTargetValidation: true, coreProfileProductionPipeline: true, composeStateProductionPipeline: true,
-  composeStateJvmEtsSemantics: true, sourceLinkedRejections: diagnostics.length + 4,
+  composeStateJvmEtsSemantics: true, inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
+  sourceLinkedRejections: diagnostics.length + 5,
   sdk: 'separate SDK command required', nativeRendering: 'not run',
 }, null, 2));
 console.log('PASS Widget module isolation, resolved structure, typed ETS and explicit unsupported diagnostics');
