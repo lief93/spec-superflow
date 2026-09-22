@@ -49,6 +49,17 @@ for (const name of ['Wrong', 'Effect']) {
   assert.equal(resolve(report.source.file), join(here, name + '.kt'));
 }
 assert.match(compile('EffectCall'), /31;[\s\S]*return;/);
+const sourceBody = compile('SourceBody');
+assert.match(sourceBody, /return value \+ 1 \| 0;/);
+assert.match(sourceBody, /return sourceBody\(4\);/);
+assert.doesNotMatch(sourceBody, /return 99;/);
+assert.match(compile('AdaptedCall'), /return Math\.abs\(-7\);/);
+assert.match(compile('AdaptedEffect'), /console\.log\("effect"\);/);
+const missingCall = compile('MissingCall', 2);
+assert.match(missingCall.message, /Missing dependency body or declared typed adapter/);
+assert.equal(resolve(missingCall.source.file), join(here, 'MissingCall.kt'));
+assert.equal(readFileSync(missingCall.source.file, 'utf8').slice(missingCall.source.start, missingCall.source.end),
+  'missingValue()');
 for (const [name, reason] of [['WrongCall', /Invalid call adapter result/],
   ['VoidCall', /Void call adapter result requires statement consumption/]]) {
   const report = compile(name, 2);
@@ -68,4 +79,4 @@ for (const name of ['WrongObject', 'EffectObject']) {
   assert.equal(resolve(report.source.file), join(here, name + '.kt'));
 }
 writeFileSync(join(work, 'parity.json'), JSON.stringify({ expected, actual }, null, 2));
-console.log('PASS adapter SPI typed values, statement effects, void/value rejection, constructors and JVM once-only parity');
+console.log('PASS dependency body-first decisions, typed value/effect adapters, missing-body rejection and constructors');

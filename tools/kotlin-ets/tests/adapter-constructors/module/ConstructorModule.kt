@@ -11,7 +11,12 @@ class ConstructorModule : AdapterModule {
         "constructorapi.Effect", "constructorapi.Unclaimed", "constructorapi.Token", "constructorapi.WrongObject", "constructorapi.EffectObject")
     override val sourceCalls = setOf("constructorapi.Amount.<init>", "constructorapi.Amount.<get-value>",
         "constructorapi.Wrong.<init>", "constructorapi.Effect.<init>", "constructorapi.Token.<get-value>",
-        "constructorapi.goodEffect", "constructorapi.badEffect", "constructorapi.wrongValue")
+        "constructorapi.goodEffect", "constructorapi.badEffect", "constructorapi.wrongValue",
+        "constructorapi.adaptedMagnitude", "constructorapi.adaptedEffect", "constructorvalues.sourceBody")
+    override val targetCalls = listOf(
+        AdapterTargetCall("test.dependencies.magnitude", "abs", EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.NUMBER)),
+        AdapterTargetCall("test.dependencies.effect", "log", EtsFunctionType(listOf(EtsTypes.STRING), EtsTypes.VOID)),
+    )
     override fun create(target: AdapterTargetApi, ui: AdapterUiServices?): CallRule = object : CallRule {
         override fun mapType(type: IrType, language: Language): EtsType? =
             if (type.classOrNull?.owner?.let(::symbolName) in sourceTypes) EtsTypes.NUMBER else null
@@ -23,12 +28,22 @@ class ConstructorModule : AdapterModule {
                 "constructorapi.badEffect" -> EtsCall(EtsLambda(emptyList(), emptyList(), EtsTypes.VOID,
                     language.source(call)), emptyList(), EtsTypes.VOID, language.source(call))
                 "constructorapi.wrongValue" -> EtsLiteral("wrong", EtsTypes.STRING, language.source(call))
+                "constructorapi.adaptedMagnitude" -> target.call("test.dependencies.magnitude",
+                    listOf(language.expression(argument(call, "value")!!, scope)), language.source(call),
+                    receiver("Math", language.source(call)))
+                "constructorvalues.sourceBody" -> EtsLiteral(99, EtsTypes.NUMBER, language.source(call))
                 else -> null
             }
 
         override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
-            if (symbolName(call.symbol.owner) == "constructorapi.goodEffect")
-                listOf(EtsExpressionStatement(EtsLiteral(31, EtsTypes.NUMBER, language.source(call)))) else null
+            when (symbolName(call.symbol.owner)) {
+                "constructorapi.goodEffect" ->
+                    listOf(EtsExpressionStatement(EtsLiteral(31, EtsTypes.NUMBER, language.source(call))))
+                "constructorapi.adaptedEffect" -> listOf(EtsExpressionStatement(target.call("test.dependencies.effect",
+                    listOf(language.expression(argument(call, "value")!!, scope)), language.source(call),
+                    receiver("console", language.source(call)))))
+                else -> null
+            }
 
         override fun lowerObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? =
             when (symbolName(value.symbol.owner)) {
@@ -46,5 +61,8 @@ class ConstructorModule : AdapterModule {
                     language.source(call)), emptyList(), EtsTypes.VOID, language.source(call))
                 else -> null
             }
+
+        private fun receiver(name: String, source: SourceSpan) =
+            EtsReference(EtsSymbol("test.dependencies.receiver:$name", name, EtsTypes.OBJECT, source, external = true))
     }
 }

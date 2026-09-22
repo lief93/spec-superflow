@@ -140,7 +140,7 @@ The report's designated first type gap remains `remember` returning
 `SnackbarHostState` at line 48, column 44. The actual backend attempt stops
 earlier at `hiltViewModel` on line 47, column 38: the inline JVM dependency has
 no loaded IR body and JVM metadata contains no serialized IR. Generation fails
-closed there and emits no ETS target.
+closed there because no typed adapter declares the call, and emits no ETS target.
 
 This project pins Kotlin 2.1.10, so production project generation rejects its
 compiler environment before frontend execution. The fixed 2.1.20 direct CLI run
@@ -192,7 +192,7 @@ Final verification evidence:
 | RED: empty UI | empty `@Builder` was generated silently | `tests/preflight/.work/run-ZdiDg6` |
 | Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations and negative no-target cases | `tests/preflight/.work/run-VuJGm0` |
 | Mars Photos public baseline | widget 100%, Modifier 100%, resources 50%; two explicit P0 gaps; no target | `tests/preflight/.work/mars-photos-Lh41tH` |
-| Architecture Samples public baseline | 124 calls across all six groups; eleven explicit unsupported calls; no target | `tests/preflight/.work/architecture-samples-9uPiLc` |
+| Architecture Samples public baseline | 124 calls across all six groups; eleven explicit unsupported calls; no target | `tests/preflight/.work/architecture-samples-knJwa1` |
 | Now in Android public baseline | 319 calls; language and stdlib 100%, Compose 91.62%; no target | `tests/preflight/.work/now-in-android-ejNSx9` |
 | Full language suite | pass | `tests/language/.work/run-01EAKd` |
 | Module suite | 44 JVM/module cases pass | `tests/modules/.work/run-KWHnWz` |

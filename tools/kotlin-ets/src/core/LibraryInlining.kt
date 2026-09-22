@@ -116,7 +116,8 @@ internal fun explainUnavailableInlineBody(failure: Unsupported, unavailable: Lis
     val body = unavailable.firstOrNull { it.source == failure.diagnostic.source } ?: return failure
     return Unsupported(failure.diagnostic.copy(message =
         "External inline call has no loaded IR body: ${body.symbol}. " +
-            "Provide explicit dependency source or a supported serialized dependency; this call has no usable binary IR body. " +
+            "Provide explicit dependency source, a supported serialized dependency, or a declared typed adapter; " +
+            "this call has no usable binary IR body. " +
             "${body.evidence} ${failure.diagnostic.message}"))
 }
 
