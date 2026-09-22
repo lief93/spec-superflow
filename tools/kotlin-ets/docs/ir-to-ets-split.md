@@ -194,3 +194,61 @@ The unsupported trace contains only phase entry/exit and entry into the
 program/module/file mappers. Its diagnostic points to
 `UnsupportedExternalResult.kt`, offsets 85–90 (line 3, column 61), and exits 2.
 The single-file ETS output remains byte-identical to the baseline evidence.
+
+## S1.2: all production output modes use one typed exit
+
+Reference: `arch/kotlin-ets-v2`. The blobs for `Main.kt`, `Backend.kt`,
+`IrToEts.kt`, and `Modules.kt` are byte-identical on that branch and this one.
+The audit found no production bypass, so S1.2 changes regression evidence and
+this record only. `tools/kotlin-ets/src` remains
+`e217da3792b2b5d0da2a79dd23ac22ae057eae51`.
+
+The production route has one typed output boundary with two serialization forms:
+
+| Production mode | Audited runtime route |
+| --- | --- |
+| language `--out` | official frontend/IR phases → `EtsBackend.lower` → `IrToEts.program` → typed `EtsProgram` → validator → `emitEtsProgram` → validator → printer |
+| language `--out-dir` | same language boundary → `emitEtsModules` → validator → typed per-file assembly → printer |
+| page `--out` | official frontend/IR phases → `ComposeLowering.lower` → typed `EtsProgram` → `emitEtsProgram` → validator → printer |
+| page `--out-dir` | same page assembler → `emitEtsModules` → validator → typed per-file assembly → printer |
+
+`ComposeLowering` is a typed page assembler, so it does not re-enter the
+ordinary-language `IrToEts` mapper. Its public result is `EtsProgram`, and
+`Main.kt` can publish its text only through the same emitters. The final
+`Files.writeString` calls consume strings already
+returned by those emitters. Other writes in `Main.kt` publish diagnostics,
+preflight JSON, or resources rather than ETS source. `project.mjs` only forwards
+the selected mode and output flag to the same `kotlin-ets` launcher; its
+`--collect-only` path produces no target.
+
+The test-only JVM agent now observes `ComposeLowering`, `IrToEts`, whole-program
+validation, the shared emitters, and `EtsPrinter` without adding a production
+trace hook. Exact traces reject an alternate CLI generator, a missing typed
+program, an emitter bypass, or printing that starts before validation. The
+focused page mode is `node tools/kotlin-ets/tests/ui/run.mjs --typed-exit-only`;
+the normal UI run retains the same assertions in its existing `--out` and
+multi-file `--out-dir` cases.
+
+Compiler-independent target tests intentionally continue to construct
+`EtsProgram` and call `EtsPrinter` directly. This includes probes under
+`tests/target`, `tests/backend`, and focused UI ownership/runtime probes. They
+exercise the typed target layer and are not CLI generators. Scripts and staged
+ArkTS templates under `verification/` also remain non-production acceptance
+infrastructure. No `experiments/` production entry exists. These paths were
+retained unchanged; none is invoked by `kotlin-ets`, `MainKt`, or `project.mjs`.
+
+Fresh S1.2 evidence (2026-09-22):
+
+| Command | Result and local evidence |
+| --- | --- |
+| `node tools/kotlin-ets/tests/lowering/run.mjs` | PASS: both language output modes traverse `IrToEts`, validate the typed program before return, then validate before printer entry; `lowering/.work/run-BMKVtw/` |
+| `KOTLIN_ETS_PROBE=/tmp/kotlin-ets-ui-probe-s12d node tools/kotlin-ets/tests/ui/run.mjs --typed-exit-only` | PASS: both page output modes construct typed programs and validate before printer entry; `/var/folders/fj/rrz0bjhx6cq04j7yghy2qkxh0000gn/T/kotlin-ets-ui-tests-3Y01Ht/` |
+| `node tools/kotlin-ets/tests/modules/run.mjs` | PASS: 44 JVM/module cases including imports, filename collisions, and no-overwrite behavior; `modules/.work/run-O7p53V/` |
+| `TMPDIR="$PWD/tools/kotlin-ets/tests/lowering/.work" bash tools/kotlin-ets/tests/backend/run.sh` | PASS: typed AST, printer independence, deterministic printing, and JVM/host differential; `lowering/.work/kotlin-ets-backend-tests.Rdd8Oe/` |
+| `node --test tools/kotlin-ets/tests/project-inputs/launcher.test.mjs` | PASS: 15 project forwarding and validation tests |
+| `node tools/kotlin-ets/tests/lowering/jvm-contamination.mjs` | PASS: no JVM backend imports in lower/target/output |
+
+The page run used an equivalent local classpath manifest recovered from the
+existing project-input evidence because the documented default probe directory
+was absent. This is host/compiler evidence only; no ArkTS SDK or device result is
+claimed.

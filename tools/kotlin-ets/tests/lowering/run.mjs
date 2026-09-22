@@ -50,7 +50,7 @@ function readTrace(label) {
 function compileThroughSeam(label, args, fileCount, emitter) {
   run(label, 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', ...args], { env: traceEnv });
   const trace = readTrace(label);
-  assert.deepEqual(trace.filter(event => !/^Ets(Program|Validator)\./.test(event)), [
+  assert.deepEqual(trace.filter(event => !/^Ets(Program|Validator|Printer)\./.test(event)), [
     'EtsLoweringPhases.run:enter', 'EtsLoweringPhases.run:exit',
     'IrToEts.program:enter', 'IrModuleToEts.lower:enter',
     ...Array.from({ length: fileCount }, () => ['IrFileToEts.lower:enter', 'IrFileToEts.lower:exit']).flat(),
@@ -62,6 +62,10 @@ function compileThroughSeam(label, args, fileCount, emitter) {
   assert.deepEqual(boundary.filter(event => event.startsWith('EtsValidator.')),
     ['EtsValidator.validate:enter', 'EtsValidator.validate:exit'], 'the boundary must validate its typed result before returning');
   assert.ok(boundary.indexOf('EtsProgram.<init>:exit') < boundary.indexOf('EtsValidator.validate:enter'));
+  const emission = trace.slice(trace.indexOf(`ModulesKt.${emitter}:enter`), trace.indexOf(`ModulesKt.${emitter}:exit`) + 1);
+  const firstPrinter = emission.findIndex(event => event.startsWith('EtsPrinter.') && event.endsWith(':enter'));
+  assert.ok(firstPrinter > emission.indexOf('EtsValidator.validate:exit'),
+    'the shared emitter must validate the typed program before printing');
   console.log(`PASS ${label}: shared typed boundary, ${fileCount} files, validation before ${emitter}`);
 }
 compileThroughSeam('public-cli', ['--out', output, fixture], 1, 'emitEtsProgram');

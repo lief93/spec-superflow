@@ -9,6 +9,8 @@ and Compose classpath at `/tmp/kotlin-official-frontend-probe-06`, the actual
 Compose 2.1.20 compiler plugin, and the installed Harmony SDK TypeScript library.
 `KOTLIN_ETS_PROBE` and `JAVA_HOME` can select equivalent installed paths. The
 classpath JSON is converted once to newline paths before invoking the CLI.
+Pass `--typed-exit-only` to run just the public-CLI `--out` and `--out-dir`
+typed-boundary traces without the broader UI semantic assertions.
 
 The real fixture compiles with Compose on JVM. Its ordinary methods then run on
 JVM and in generated target code with matching values for 0, 1, 2, 3, 2. Further

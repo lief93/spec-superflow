@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,16 +25,56 @@ const implementation = readdirSync(join(root, 'src'), { recursive: true }).filte
 const sourceInputs = new Map();
 console.log(`Evidence: ${work}`);
 
-function run(label, command, args) {
-  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+function run(label, command, args, options = {}) {
+  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, ...options });
   writeFileSync(join(work, `${label}.json`), JSON.stringify({ command, args, status: result.status, stdout: result.stdout, stderr: result.stderr }, null, 2));
   if (result.error) throw result.error;
   return result;
 }
-function generate(label, source, entry, accepted = true) {
+const agentClasses = join(work, 'agent-classes');
+mkdirSync(agentClasses);
+const agentCompile = run('seam-agent-compile', 'javac', ['--release', '17', '-cp', dependencies.join(':'),
+  '-d', agentClasses, join(root, 'tests/lowering/CliSeamAgent.java')]);
+assert.equal(agentCompile.status, 0, agentCompile.stderr);
+const agentManifest = join(work, 'agent.mf');
+writeFileSync(agentManifest, 'Premain-Class: CliSeamAgent\n\n');
+const agent = join(work, 'cli-seam-agent.jar');
+const agentJar = run('seam-agent-jar', 'jar', ['cfm', agent, agentManifest, '-C', agentClasses, '.']);
+assert.equal(agentJar.status, 0, agentJar.stderr);
+const traceEnv = { ...process.env,
+  JAVA_TOOL_OPTIONS: [process.env.JAVA_TOOL_OPTIONS, `"-javaagent:${agent}"`].filter(Boolean).join(' ') };
+function readTrace(label) {
+  const trace = JSON.parse(readFileSync(join(work, `${label}.json`), 'utf8')).stderr.split('\n')
+    .filter(line => line.startsWith('ETS_SEAM ')).map(line => line.slice('ETS_SEAM '.length));
+  writeFileSync(join(work, `${label}-seam.json`), JSON.stringify(trace, null, 2) + '\n');
+  return trace;
+}
+function assertPageBoundary(label, emitter, fileCount) {
+  const trace = readTrace(label);
+  assert.deepEqual(trace.filter(event => !/^Ets(Program|Validator|Printer)\./.test(event)), [
+    'EtsLoweringPhases.run:enter', 'EtsLoweringPhases.run:exit',
+    'ComposeLowering.lower:enter', 'ComposeLowering.lower:exit',
+    `ModulesKt.${emitter}:enter`, `ModulesKt.${emitter}:exit`,
+  ], 'page output must assemble one typed program and enter only the shared emitter');
+  const compose = trace.slice(trace.indexOf('ComposeLowering.lower:enter'), trace.indexOf('ComposeLowering.lower:exit') + 1);
+  assert.ok(compose.includes('EtsProgram.<init>:exit'), 'Compose lowering must return a typed EtsProgram');
+  const emission = trace.slice(trace.indexOf(`ModulesKt.${emitter}:enter`), trace.indexOf(`ModulesKt.${emitter}:exit`) + 1);
+  const validations = emission.filter(event => event.startsWith('EtsValidator.'));
+  assert.deepEqual(validations.slice(0, 2),
+    ['EtsValidator.validate:enter', 'EtsValidator.validate:exit'], 'the shared emitter must validate its input');
+  assert.equal(validations.filter(event => event.endsWith(':enter')).length,
+    validations.filter(event => event.endsWith(':exit')).length, 'all emitter/printer validation must return normally');
+  const firstPrinter = emission.findIndex(event => event.startsWith('EtsPrinter.') && event.endsWith(':enter'));
+  assert.ok(firstPrinter > emission.indexOf('EtsValidator.validate:exit'), 'validation must finish before printing');
+  assert.equal(emission.filter(event => event === 'EtsPrinter.program:enter').length, fileCount,
+    'each emitted file must pass through the typed printer');
+  console.log(`PASS ${label}: typed page program, validation before ${emitter}, ${fileCount} printer exits`);
+}
+function generate(label, source, entry, accepted = true, trace = false) {
   sourceInputs.set(source, hash(source));
   const output = join(work, `${label}.ets`);
-  const result = run(label, 'bash', [cli, '--mode', 'page', '--unsupported-policy', 'error', '--entry', entry, '--classpath-file', classpathFile, '--out', output, source]);
+  const result = run(label, 'bash', [cli, '--mode', 'page', '--unsupported-policy', 'error', '--entry', entry, '--classpath-file', classpathFile, '--out', output, source],
+    trace ? { env: traceEnv } : {});
   assert.equal(result.status, accepted ? 0 : 2, `${label}: ${result.stdout}\n${result.stderr}`);
   const report = JSON.parse(result.stdout.trim().split('\n').at(-1));
   assert.equal(report.ok, accepted);
@@ -84,7 +124,19 @@ export function unchanged(value: number): number { return value + 1; }
 assert.ok(!helperProjection.includes('NativeLabel'), 'host oracle excludes native builder declarations through their AST decorator');
 assert.equal(vm.runInNewContext(helperProjection + '\nunchanged(5)', { exports: {} }), 6);
 
-const composableValues = generate('composable-values', join(here, 'ComposableValues.kt'), 'composablevalues.ComposableValues');
+const composableValues = generate('composable-values', join(here, 'ComposableValues.kt'), 'composablevalues.ComposableValues', true, true);
+assertPageBoundary('composable-values', 'emitEtsProgram', 1);
+if (process.argv.includes('--typed-exit-only')) {
+  const sources = ['Models.kt', 'Screen.kt'].map(name => join(here, 'modules', name));
+  const directory = join(work, 'boundary-modules');
+  const result = run('boundary-modules', 'bash', [cli, '--mode', 'page', '--entry', 'multimodule.Page',
+    '--classpath-file', classpathFile, '--out-dir', directory, ...sources], { env: traceEnv });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assertPageBoundary('boundary-modules', 'emitEtsModules', 2);
+  assert.deepEqual(readdirSync(directory).sort(), ['Models.ets', 'Screen.ets']);
+  console.log('PASS both production page output modes use the shared typed ETS exit');
+  process.exit(0);
+}
 const valueJs = helperJavascript(composableValues);
 assert.equal(vm.runInNewContext(valueJs + '\ngetRawString("title") + "|" + getRawString("other")', { exports: {} }, { timeout: 1000 }),
   'Field Notes|Unknown other', 'pure @Composable value helpers must remain executable ordinary functions');
@@ -241,8 +293,9 @@ moduleSources.forEach(path => sourceInputs.set(path, hash(path)));
 const moduleDirectory = join(work, 'modules');
 const moduleArgs = [cli, '--mode', 'page', '--entry', 'multimodule.Page', '--classpath-file', classpathFile,
   '--out-dir', moduleDirectory, ...moduleSources];
-const moduleRun = run('ui-modules', 'bash', moduleArgs);
+const moduleRun = run('ui-modules', 'bash', moduleArgs, { env: traceEnv });
 assert.equal(moduleRun.status, 0, moduleRun.stdout + moduleRun.stderr);
+assertPageBoundary('ui-modules', 'emitEtsModules', 2);
 assert.deepEqual(readdirSync(moduleDirectory).sort(), ['Models.ets', 'Screen.ets']);
 const screen = readFileSync(join(moduleDirectory, 'Screen.ets'), 'utf8');
 const models = readFileSync(join(moduleDirectory, 'Models.ets'), 'utf8');
