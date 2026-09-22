@@ -732,7 +732,7 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         }
     }
 
-    private fun parameters(function: IrFunction, scope: Scope): List<EtsParameter> {
+    internal fun parameters(function: IrFunction, scope: Scope): List<EtsParameter> {
         prepareCapturedParameters(function)
         val parameters = listOfNotNull(function.extensionReceiverParameter) + function.valueParameters
         parameters.forEach { bind(it, scope) }

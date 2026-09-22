@@ -5,8 +5,15 @@ import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.visitors.*
 
 /** Official IR stays alive only while lowering. The returned program is compiler-independent. */
-class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceTypes: SourceTypes? = null) {
-    val language: Language = LanguageLowering(diagnostics, rules, sourceTypes)
+class EtsBackend(val diagnostics: DiagnosticSink, private val rules: List<CallRule>, sourceTypes: SourceTypes? = null) {
+    private val lowering = LanguageLowering(diagnostics, rules, sourceTypes)
+    val language: Language = lowering
+
+    /** Bind a production entry signature with the same naming and type rules as ordinary functions. */
+    fun parameters(function: IrFunction, scope: Scope): List<EtsParameter> = lowering.parameters(function, scope)
+
+    /** Link declarations contributed by the configured call rules. */
+    fun link(program: EtsProgram): EtsProgram = linkAdapterDeclarations(program, rules)
 
     fun validateSource(module: IrModuleFragment) {
         module.files.forEach { file ->

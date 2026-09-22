@@ -15,10 +15,15 @@ runtime, or recomposition engine.
 ## Interfaces and dependency direction
 
 ```kotlin
-val model = ComposeWidgetAdapter(language, diagnostics).lower(function, scope)
-val children = HarmonyWidgetBackend().lower(model)
-// Put children into the existing typed builder/component, validate and print.
+val ets = ComposeWidgetPipeline(backend, StandardLibraryRuntime)
+    .compile(module, "example.CoreProfile")
 ```
+
+`ComposeWidgetPipeline` is the production orchestration boundary. It selects a
+resolved top-level entry, binds its parameters with the ordinary language
+lowerer, invokes `ComposeWidgetAdapter`, passes the neutral children to
+`HarmonyWidgetBackend`, builds an exported typed builder, validates the
+`EtsProgram`, and emits it through `emitEtsProgram`/`EtsPrinter`.
 
 - `dev.ets.widgets`: `Widget<V, S>`, `ImageSource<V, S>`,
   `WidgetModifier<V, S>`, and `Children<V, S>`.
@@ -35,11 +40,28 @@ val children = HarmonyWidgetBackend().lower(model)
   attributes, layout wrappers, and Button content presentation. It compiles and
   runs with only the model, existing target module, and Kotlin stdlib.
 
-The caller binds entry value parameters in `Scope`; unbound parameters fail at
-their source declaration. This API consumes pre-Compose-lowering IR, as does the
-existing compiler. It neither reparses Kotlin text nor executes composable
+The lower-level adapter still requires callers to bind entry values in `Scope`;
+unbound parameters fail at their source declaration. The production pipeline
+performs that binding itself. Both APIs consume pre-Compose-lowering IR, as does
+the existing compiler. They neither reparse Kotlin text nor execute composable
 functions on the JVM. Values/callbacks remain typed expressions from the
 existing language compiler, not serialized strings or callback IDs.
+
+## S2.6 production-pipeline regression
+
+`tests/ui/widgets/CoreProfile.kt` is compiled by the official Kotlin frontend
+and contains Row, Column, Box, Text, Image, Button, TextField, layout child
+slots, and Button content. `CoreProfilePipelineProbe.kt` calls only the
+production pipeline; it does not construct `Widget`, `Children`, or
+`EtsProgram`, and it has no dependency on the legacy page lowering.
+
+The test-only `PipelineSeamAgent` records the actual bytecode route. The runner
+asserts adapter completion before Harmony lowering, typed program construction
+before validation, and validation before `EtsPrinter.program`. Static guards
+also reject direct target/model construction in the probe and legacy text/page
+lowering references in the pipeline. The emitted artifact is an exported
+`@Builder` with typed source parameters, so the regression does not fabricate
+sample values or an entry component.
 
 ## Closed semantic contract
 
@@ -129,7 +151,8 @@ The new runner requires the same pinned Kotlin 2.1.20 compiler cache and real
 AndroidX classpath as existing UI tests. `KOTLIN_ETS_PROBE` can point to a directory
 containing `classpath.json`; the default is `/tmp/kotlin-official-frontend-probe-06`.
 It emits a fresh `.work/run-*` directory with exact commands, source hashes,
-model records, source-linked diagnostics, and `output/WidgetPage.ets`.
+model records, source-linked diagnostics, `output/WidgetPage.ets`,
+`core-profile-output/CoreProfile.ets`, and the production seam trace.
 
 For SDK validation, use the existing harness with a complete Harmony seed:
 
