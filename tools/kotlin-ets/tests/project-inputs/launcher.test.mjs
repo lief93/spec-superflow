@@ -62,13 +62,14 @@ test('project entry selects one module/variant and keeps paths with spaces intac
   assert.ok(args.includes('-PkotlinEtsVariant=demoDebug'));
   assert.ok(args.includes('-PkotlinEtsInputsOutput=/tmp/working dir/inputs.json'));
   assert.ok(args.includes('--offline'));
-  assert.equal(args.at(-1), 'kotlinEtsCollectInputs');
+  assert.equal(args.at(-1), ':feature:onboarding:kotlinEtsCollectInputs');
 });
 
 test('explicit compile task supports non-Android modules, without variant guessing', () => {
   const options = parseOptions(['--project', '/tmp/p', '--module', ':', '--compile-task', 'compileKotlin', '--collect-only']);
   assert.equal(options.compileTask, 'compileKotlin');
   assert.equal(options.collectOnly, true);
+  assert.equal(gradleArguments(options, '/tmp/inputs.json').at(-1), ':kotlinEtsCollectInputs');
   assert.ok(!gradleArguments(options, '/tmp/inputs.json').includes('--offline'));
   assert.ok(!gradleArguments(options, '/tmp/inputs.json').some(argument => argument.startsWith('-PkotlinEtsVariant=')));
 });

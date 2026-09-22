@@ -25,7 +25,8 @@ function run(label, directory, module, task, extra = [], failure) {
   const args = [join(host, 'gradlew'), '-p', directory, '--no-daemon', '--no-configuration-cache', '--console=plain',
     '--offline', '--max-workers=2', '-Dorg.gradle.jvmargs=-Xmx1024m -XX:ActiveProcessorCount=2 -XX:+UseSerialGC',
     '-I', script, '-I', join(here, 'observe.gradle'), `-PkotlinEtsModule=${module}`, `-PkotlinEtsCompileTask=${task}`,
-    `-PkotlinEtsInputsOutput=${output}`, `-PcollectorTestGraph=${graph}`, ...extra, 'kotlinEtsCollectInputs'];
+    `-PkotlinEtsInputsOutput=${output}`, `-PcollectorTestGraph=${graph}`, ...extra,
+    module === ':' ? ':kotlinEtsCollectInputs' : `${module}:kotlinEtsCollectInputs`];
   const result = spawnSync('bash', args, { cwd: directory, env, encoding: 'utf8', timeout: 240000 });
   writeFileSync(join(work, `${label}-command.json`), JSON.stringify({ command: 'bash', args, status: result.status,
     stdout: result.stdout, stderr: result.stderr, error: result.error?.message }, null, 2));

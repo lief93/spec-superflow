@@ -76,11 +76,12 @@ export function parseOptions(args) {
 }
 
 export function gradleArguments(options, manifest) {
+  const collectionTask = options.module === ':' ? ':kotlinEtsCollectInputs' : `${options.module}:kotlinEtsCollectInputs`;
   return [join(options.project, 'gradlew'), '--no-daemon', '--no-configuration-cache', '--console=plain',
     ...(options.offline ? ['--offline'] : []), '-I', join(root, 'project-inputs.gradle'),
     `-PkotlinEtsModule=${options.module}`, `-PkotlinEtsCompileTask=${options.compileTask}`,
     ...(options.variant ? [`-PkotlinEtsVariant=${options.variant}`] : []),
-    `-PkotlinEtsInputsOutput=${manifest}`, 'kotlinEtsCollectInputs'];
+    `-PkotlinEtsInputsOutput=${manifest}`, collectionTask];
 }
 
 export function readInputs(path) {
