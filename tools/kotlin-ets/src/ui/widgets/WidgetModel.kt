@@ -27,6 +27,7 @@ sealed interface Widget<V, S> {
         val onPageChange: V, val pageContent: IndexedChildren<V, S>,
         override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
     data class LazyList<V, S>(val axis: WidgetScrollAxis, val enabled: V,
+        val state: LazyListState<V, S>?,
         val slots: List<LazyListSlot<V, S>>,
         override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
     data class Conditional<V, S>(val branches: List<WidgetBranch<V, S>>, override val source: S) : Widget<V, S> {
@@ -64,6 +65,9 @@ sealed interface LazyListData<V> {
     data class Values<V>(val values: V) : LazyListData<V>
     data class Count<V>(val count: V) : LazyListData<V>
 }
+
+data class LazyListState<V, S>(val initialIndex: V, val initialOffset: V,
+    val firstVisibleIndex: V, val controller: V, val initialOffsetApplied: V?, val source: S)
 
 sealed interface LazyListSlot<V, S> {
     val source: S

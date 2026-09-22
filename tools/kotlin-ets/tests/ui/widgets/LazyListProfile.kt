@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,10 +18,18 @@ import androidx.compose.ui.Modifier
 @Composable
 fun LazyListProfile() {
     var selected by remember { mutableStateOf("none") }
+    val columnState = rememberLazyListState(
+        initialFirstVisibleItemIndex = 1,
+        initialFirstVisibleItemScrollOffset = 6,
+    )
+    val rowState = rememberLazyListState(
+        initialFirstVisibleItemIndex = 1,
+        initialFirstVisibleItemScrollOffset = 4,
+    )
     Column {
-        LazyColumn(userScrollEnabled = false) {
+        LazyColumn(state = columnState, userScrollEnabled = false) {
             item(key = "header") {
-                Text("Selected $selected")
+                Text("Selected $selected at ${columnState.firstVisibleItemIndex}")
             }
             itemsIndexed(listOf("Ada", "Lin"), key = { index, item -> "$index:$item" }) { index, item ->
                 Text("$index:$item", Modifier.clickable { selected = item })
@@ -32,7 +41,7 @@ fun LazyListProfile() {
                 Text(item)
             }
         }
-        LazyRow {
+        LazyRow(state = rowState) {
             items(arrayOf("R1", "R2"), key = { it }) { item ->
                 Text(item)
             }

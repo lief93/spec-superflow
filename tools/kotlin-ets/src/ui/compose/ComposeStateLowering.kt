@@ -22,6 +22,7 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val handledStatements: Set<IrStatement>,
         val pagers: Map<IrValueSymbol, PagerStateBinding> = emptyMap(),
         val scrolls: Map<IrValueSymbol, ScrollStateBinding> = emptyMap(),
+        val lazyLists: Map<IrValueSymbol, LazyListStateBinding> = emptyMap(),
     )
 
     data class PagerStateBinding(
@@ -31,6 +32,15 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
     )
 
     data class ScrollStateBinding(val offset: EtsExpression)
+
+    data class LazyListStateBinding(
+        val initialIndex: EtsExpression,
+        val initialOffset: EtsExpression,
+        val firstVisibleIndex: EtsExpression,
+        val controller: EtsExpression,
+        val initialOffsetApplied: EtsExpression?,
+        val source: SourceSpan,
+    )
 
     private data class State(
         val field: EtsField,
@@ -48,6 +58,16 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
 
     private data class ScrollState(val holder: IrValueSymbol, val offset: EtsField)
 
+    private data class LazyListState(
+        val holder: IrValueSymbol,
+        val initialIndex: EtsExpression,
+        val initialOffset: EtsExpression,
+        val firstVisibleIndex: EtsField,
+        val controller: EtsField,
+        val initialOffsetApplied: EtsField?,
+        val source: SourceSpan,
+    )
+
     fun lower(function: IrSimpleFunction, scope: Scope, componentName: String): Plan {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
         val statements = when (val body = function.body) {
@@ -63,6 +83,7 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val states = mutableListOf<State>()
         val pagerStates = mutableListOf<PagerState>()
         val scrollStates = mutableListOf<ScrollState>()
+        val lazyListStates = mutableListOf<LazyListState>()
         val fields = mutableListOf<EtsField>()
         statements.forEach { statement ->
             val state = state(statement, scope, handled)
@@ -74,13 +95,20 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
                 if (pager != null) {
                     pagerStates += pager
                     fields += listOf(pager.currentPage, pager.controller)
-                } else scrollState(statement, handled)?.let { scroll ->
-                    scrollStates += scroll
-                    fields += scroll.offset
+                } else {
+                    val scroll = scrollState(statement, handled)
+                    if (scroll != null) {
+                        scrollStates += scroll
+                        fields += scroll.offset
+                    } else lazyListState(statement, handled)?.let { lazy ->
+                        lazyListStates += lazy
+                        fields += listOfNotNull(lazy.firstVisibleIndex, lazy.controller,
+                            lazy.initialOffsetApplied)
+                    }
                 }
             }
         }
-        if (states.isEmpty() && pagerStates.isEmpty() && scrollStates.isEmpty())
+        if (states.isEmpty() && pagerStates.isEmpty() && scrollStates.isEmpty() && lazyListStates.isEmpty())
             return Plan(emptyList(), scope, handled)
 
         val holders = states.associateBy { it.holder }
@@ -98,6 +126,10 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
             member(pager.currentPage, function), pager.pageCount, member(pager.controller, function)) }
         val scrollBindings = scrollStates.associate { scroll -> scroll.holder to ScrollStateBinding(
             member(scroll.offset, function)) }
+        val lazyListBindings = lazyListStates.associate { lazy -> lazy.holder to LazyListStateBinding(
+            lazy.initialIndex, lazy.initialOffset, member(lazy.firstVisibleIndex, function),
+            member(lazy.controller, function), lazy.initialOffsetApplied?.let { member(it, function) },
+            lazy.source) }
         val rule = object : CallRule {
             private fun direct(call: IrCall): State? {
                 val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
@@ -120,10 +152,26 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
                     return holder?.let(scrollBindings::get)?.offset
                         ?: diagnostics.unsupported(call, "ScrollState value requires source remembered ScrollState")
                 }
+                if (property?.startsWith("androidx.compose.foundation.lazy.LazyListState.") == true) {
+                    val receiver = call.dispatchReceiver ?: call.extensionReceiver
+                    val binding = (receiver as? IrGetValue)?.symbol?.let(lazyListBindings::get)
+                        ?: diagnostics.unsupported(call,
+                            "LazyListState reads require source remembered state bound to one LazyColumn or LazyRow")
+                    if (property == "androidx.compose.foundation.lazy.LazyListState.firstVisibleItemIndex")
+                        return binding.firstVisibleIndex
+                    diagnostics.unsupported(call,
+                        "LazyListState ${property.substringAfterLast('.')} cannot be represented by ArkUI List state")
+                }
                 if (api in programmaticScrollApis) {
                     val receiver = call.dispatchReceiver ?: call.extensionReceiver
                     if ((receiver as? IrGetValue)?.symbol in scrollBindings)
                         diagnostics.unsupported(call, "Programmatic ScrollState scrollTo/animateScrollTo is not supported")
+                }
+                if (api in programmaticLazyListApis) {
+                    val receiver = call.dispatchReceiver ?: call.extensionReceiver
+                    if ((receiver as? IrGetValue)?.symbol in lazyListBindings)
+                        diagnostics.unsupported(call,
+                            "Programmatic LazyListState scrollToItem/animateScrollToItem is not supported")
                 }
                 getters[call.symbol]?.let { return member(it, call) }
                 setters[call.symbol]?.let { return etsDiscard(assignment(call, it, scope), language.source(call)) }
@@ -137,6 +185,9 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
                 val receiver = call.dispatchReceiver ?: call.extensionReceiver
                 if (api in programmaticScrollApis && (receiver as? IrGetValue)?.symbol in scrollBindings)
                     diagnostics.unsupported(call, "Programmatic ScrollState scrollTo/animateScrollTo is not supported")
+                if (api in programmaticLazyListApis && (receiver as? IrGetValue)?.symbol in lazyListBindings)
+                    diagnostics.unsupported(call,
+                        "Programmatic LazyListState scrollToItem/animateScrollToItem is not supported")
                 val state = setters[call.symbol] ?: direct(call)?.takeIf { call.symbol.owner.valueParameters.isNotEmpty() }
                     ?: return null
                 return listOf(EtsExpressionStatement(assignment(call, state, scope)))
@@ -144,7 +195,49 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         }
         val loweredScope = Scope(LinkedHashMap(scope.bindings), LinkedHashMap(scope.aliases), scope.callRule,
             listOf(rule) + scope.callRules, LinkedHashMap(scope.ambientValues))
-        return Plan(fields, loweredScope, handled, pagerBindings, scrollBindings)
+        return Plan(fields, loweredScope, handled, pagerBindings, scrollBindings, lazyListBindings)
+    }
+
+    private fun lazyListState(statement: IrStatement,
+        handled: MutableSet<IrStatement>): LazyListState? {
+        val declaration = statement as? IrVariable ?: return null
+        val call = declaration.initializer as? IrCall ?: return null
+        if (symbolName(call.symbol.owner) != "androidx.compose.foundation.lazy.rememberLazyListState") return null
+        call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
+            if (call.getValueArgument(index) != null && parameter.name.asString() !in
+                setOf("initialFirstVisibleItemIndex", "initialFirstVisibleItemScrollOffset"))
+                diagnostics.unsupported(call.getValueArgument(index)!!,
+                    "Unsupported rememberLazyListState argument: ${parameter.name}; prefetch strategies are not supported")
+        }
+        fun initial(name: String): Pair<Int, EtsExpression> {
+            val expression = argument(call, name)
+            val value = if (expression == null) 0 else (expression as? IrConst)?.value as? Int
+                ?: diagnostics.unsupported(expression,
+                    "rememberLazyListState $name currently requires an integer literal")
+            if (value < 0) diagnostics.unsupported(expression ?: call,
+                "rememberLazyListState $name must be non-negative")
+            return value to EtsLiteral(value, EtsTypes.NUMBER,
+                expression?.let(language::source) ?: language.source(call))
+        }
+        val (index, initialIndex) = initial("initialFirstVisibleItemIndex")
+        val (offset, initialOffset) = initial("initialFirstVisibleItemScrollOffset")
+        val at = language.source(declaration)
+        val firstVisibleIndex = EtsField(EtsSymbol(
+            "compose-lazy-state:${at.file}:${at.start}:firstVisibleIndex",
+            "${declaration.name}_firstVisibleItemIndex", EtsTypes.NUMBER, at),
+            EtsLiteral(index, EtsTypes.NUMBER, at), visibility = EtsVisibility.PRIVATE, state = true)
+        val controllerType = EtsNamedType("Scroller")
+        val controller = EtsField(EtsSymbol(
+            "compose-lazy-state:${at.file}:${at.start}:controller",
+            "${declaration.name}_scroller", controllerType, at),
+            EtsNew(controllerType, emptyList(), at), visibility = EtsVisibility.PRIVATE)
+        val applied = if (offset == 0) null else EtsField(EtsSymbol(
+            "compose-lazy-state:${at.file}:${at.start}:offsetApplied",
+            "${declaration.name}_initialOffsetApplied", EtsTypes.BOOLEAN, at),
+            EtsLiteral(false, EtsTypes.BOOLEAN, at), visibility = EtsVisibility.PRIVATE, state = true)
+        handled += statement
+        return LazyListState(declaration.symbol, initialIndex, initialOffset,
+            firstVisibleIndex, controller, applied, at)
     }
 
     private fun scrollState(statement: IrStatement, handled: MutableSet<IrStatement>): ScrollState? {
@@ -281,5 +374,8 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val programmaticScrollApis = setOf(
             "androidx.compose.foundation.ScrollState.scrollTo",
             "androidx.compose.foundation.ScrollState.animateScrollTo")
+        val programmaticLazyListApis = setOf(
+            "androidx.compose.foundation.lazy.LazyListState.scrollToItem",
+            "androidx.compose.foundation.lazy.LazyListState.animateScrollToItem")
     }
 }

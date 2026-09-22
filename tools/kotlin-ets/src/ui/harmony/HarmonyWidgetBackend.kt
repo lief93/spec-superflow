@@ -107,6 +107,17 @@ class HarmonyWidgetBackend {
             }
             is Widget.LazyList -> {
                 expect(widget.enabled, EtsTypes.BOOLEAN, "LazyList.enabled", at)
+                val stateArguments = widget.state?.let { state ->
+                    expect(state.initialIndex, EtsTypes.NUMBER, "LazyList.state.initialIndex", state.source)
+                    expect(state.initialOffset, EtsTypes.NUMBER, "LazyList.state.initialOffset", state.source)
+                    expect(state.firstVisibleIndex, EtsTypes.NUMBER,
+                        "LazyList.state.firstVisibleIndex", state.source)
+                    expect(state.controller, EtsNamedType("Scroller"),
+                        "LazyList.state.controller", state.source)
+                    listOf(EtsObject(linkedMapOf("initialIndex" to state.initialIndex,
+                        "scroller" to state.controller), EtsRecordType("ListOptions", linkedMapOf(
+                        "initialIndex" to EtsTypes.NUMBER, "scroller" to EtsNamedType("Scroller"))), state.source))
+                } ?: emptyList()
                 fun stringKey(value: EtsExpression, source: SourceSpan): EtsExpression = when (value.type) {
                     EtsTypes.STRING -> value
                     EtsTypes.NUMBER -> EtsCall(EtsMember(value, "toString",
@@ -157,11 +168,45 @@ class HarmonyWidgetBackend {
                             listOf(native("ListItem", children = lower(slot.content, null))), key, slot.source)
                     }
                 } }
-                native("List", children = slots).copy(attributes = listOf(
+                val stateAttributes = widget.state?.let { state -> buildList {
+                    state.initialOffsetApplied?.let { applied ->
+                        expect(applied, EtsTypes.BOOLEAN,
+                            "LazyList.state.initialOffsetApplied", state.source)
+                        val converted = EtsCall(EtsReference(EtsSymbol("arkui:px2vp", "px2vp",
+                            EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.NUMBER), state.source, true)),
+                            listOf(state.initialOffset), EtsTypes.NUMBER, state.source)
+                        val zero = EtsLiteral(0, EtsTypes.NUMBER, state.source)
+                        val scroll = EtsCall(EtsMember(state.controller, "scrollBy",
+                            EtsFunctionType(listOf(EtsTypes.NUMBER, EtsTypes.NUMBER), EtsTypes.VOID),
+                            state.source), if (widget.axis == WidgetScrollAxis.VERTICAL)
+                            listOf(zero, converted) else listOf(converted, zero), EtsTypes.VOID, state.source)
+                        val initialize = EtsLambda(emptyList(), listOf(EtsIf(listOf(EtsBranch(
+                            EtsUnary("!", applied, EtsTypes.BOOLEAN, state.source), listOf(
+                                EtsExpressionStatement(scroll),
+                                EtsExpressionStatement(EtsAssignment(applied,
+                                    EtsLiteral(true, EtsTypes.BOOLEAN, state.source), state.source))))),
+                            state.source)), EtsTypes.VOID, state.source)
+                        add(call("onAppear", listOf(initialize), state.source))
+                    }
+                    val start = EtsParameter(EtsSymbol(
+                        "harmony-lazy:${state.source.file}:${state.source.start}:start",
+                        "start", EtsTypes.NUMBER, state.source))
+                    val end = EtsParameter(EtsSymbol(
+                        "harmony-lazy:${state.source.file}:${state.source.start}:end",
+                        "end", EtsTypes.NUMBER, state.source))
+                    val center = EtsParameter(EtsSymbol(
+                        "harmony-lazy:${state.source.file}:${state.source.start}:center",
+                        "center", EtsTypes.NUMBER, state.source))
+                    val onIndex = EtsLambda(listOf(start, end, center), listOf(EtsExpressionStatement(
+                        EtsAssignment(state.firstVisibleIndex, EtsReference(start.symbol), state.source))),
+                        EtsTypes.VOID, state.source)
+                    add(call("onScrollIndex", listOf(onIndex), state.source))
+                } } ?: emptyList()
+                native("List", stateArguments, slots).copy(attributes = listOf(
                     call("listDirection", listOf(enumValue("Axis",
                         if (widget.axis == WidgetScrollAxis.VERTICAL) "Vertical" else "Horizontal", at)), at),
                     call("scrollBar", listOf(enumValue("BarState", "Off", at)), at),
-                    call("enableScrollInteraction", listOf(widget.enabled), at)))
+                    call("enableScrollInteraction", listOf(widget.enabled), at)) + stateAttributes)
             }
             is Widget.Conditional -> throw IllegalArgumentException(
                 "Conditional widgets require a children boundary at $at")
