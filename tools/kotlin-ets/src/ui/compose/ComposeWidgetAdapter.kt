@@ -22,7 +22,8 @@ import org.jetbrains.kotlin.name.FqName
  */
 class ComposeWidgetAdapter(private val language: Language, private val diagnostics: DiagnosticSink,
     private val pagers: Map<IrValueSymbol, ComposeStateLowering.PagerStateBinding> = emptyMap(),
-    private val scrolls: Map<IrValueSymbol, ComposeStateLowering.ScrollStateBinding> = emptyMap()) {
+    private val scrolls: Map<IrValueSymbol, ComposeStateLowering.ScrollStateBinding> = emptyMap(),
+    private val lazyLists: Map<IrValueSymbol, ComposeStateLowering.LazyListStateBinding> = emptyMap()) {
     fun lower(function: IrSimpleFunction, scope: Scope = Scope(),
         handledStatements: Set<IrStatement> = emptySet()): Children<EtsExpression, SourceSpan> {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
@@ -51,10 +52,6 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             is IrVariable -> {
                 val initial = statement.initializer ?: diagnostics.unsupported(statement, "Uninitialized widget local")
                 if (statement.isVar) diagnostics.unsupported(statement, "Mutable widget local is outside the static widget subset")
-                if (initial is IrCall && symbolName(initial.symbol.owner) ==
-                    "androidx.compose.foundation.lazy.rememberLazyListState")
-                    diagnostics.unsupported(initial,
-                        "Lazy list state and prefetch strategies are not supported by the widget pipeline")
                 when {
                     initial.type.classFqName?.asString() in setOf("androidx.compose.ui.Modifier", "androidx.compose.ui.Modifier.Companion") ->
                         modifiers(initial, scope, parent)
@@ -114,7 +111,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             else setOf("model", "contentDescription", "modifier")
             textField -> setOf("value", "onValueChange", "modifier", "enabled")
             isPager -> setOf("state", "modifier", "pageContent")
-            isLazyList -> setOf("modifier", "content", "userScrollEnabled")
+            isLazyList -> setOf("modifier", "state", "content", "userScrollEnabled")
             else -> setOf("modifier", "content")
         })
         val source = language.source(call)
@@ -227,11 +224,19 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             if (!value.type.isBoolean()) diagnostics.unsupported(value, "$api userScrollEnabled requires Boolean")
             scalar(value, scope)
         } ?: EtsLiteral(true, EtsTypes.BOOLEAN, source)
+        val state = argument(call, "state")?.let { value ->
+            val holder = (resolve(value, scope) as? IrGetValue)?.symbol
+            val binding = holder?.let(lazyLists::get)
+                ?: diagnostics.unsupported(value,
+                    "$api state requires source remembered LazyListState")
+            LazyListState(binding.initialIndex, binding.initialOffset, binding.firstVisibleIndex,
+                binding.controller, binding.initialOffsetApplied, binding.source)
+        }
         val slots = lazyListBody(lambda.body
             ?: diagnostics.unsupported(content, "$api content has no body"), scope.fork(), lambda)
         return Widget.LazyList(
             if (api.endsWith("LazyColumn")) WidgetScrollAxis.VERTICAL else WidgetScrollAxis.HORIZONTAL,
-            enabled, slots, modifiers, source)
+            enabled, state, slots, modifiers, source)
     }
 
     private fun lazyListBody(value: IrBody, scope: Scope,

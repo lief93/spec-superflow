@@ -8,6 +8,7 @@ import dev.ets.harmony.HarmonyWidgetBackend
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 
 /** Production boundary from resolved Compose IR through the neutral widget model to emitted ETS. */
@@ -24,6 +25,10 @@ class ComposeWidgetPipeline(
         if (entry.parent !is IrFile || entry.extensionReceiverParameter != null || entry.typeParameters.isNotEmpty()) {
             backend.diagnostics.unsupported(entry, "Widget pipeline entry must be a non-generic top-level function without a receiver")
         }
+        entry.valueParameters.firstOrNull {
+            it.type.classFqName?.asString() == "androidx.compose.foundation.lazy.LazyListState"
+        }?.let { backend.diagnostics.unsupported(it,
+            "Observed or shared LazyListState parameters require target state ownership and are not supported") }
 
         val scope = Scope()
         val parameters = backend.parameters(entry, scope)
@@ -33,7 +38,8 @@ class ComposeWidgetPipeline(
             backend.diagnostics.unsupported(entry.valueParameters.first(),
                 "Stateful widget entries do not yet support parameters")
         }
-        val model = ComposeWidgetAdapter(backend.language, backend.diagnostics, state.pagers, state.scrolls)
+        val model = ComposeWidgetAdapter(backend.language, backend.diagnostics,
+            state.pagers, state.scrolls, state.lazyLists)
             .lower(entry, state.scope, state.handledStatements)
         val body = HarmonyWidgetBackend().lower(model)
         val source = backend.language.source(entry)

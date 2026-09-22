@@ -173,6 +173,17 @@ const expectedLazyList = run('lazy-list-jvm', 'java',
   ['-cp', `${cp}:${lazyListOracleJar}`, 'widgetlazy.LazyListJvmOracleKt']).trim().split('\n');
 const lazyListOutput = join(work, 'lazy-list-profile-output/LazyListProfile.ets');
 const lazyListCode = readFileSync(lazyListOutput, 'utf8');
+const lazyStateFields = [...lazyListCode.matchAll(
+  /@State private (\w+_firstVisibleItemIndex): number = (\d+);/g)];
+const lazyInitialOffsets = [...lazyListCode.matchAll(
+  /\.scrollBy\((?:0, px2vp\((\d+)\)|px2vp\((\d+)\), 0)\);/g)]
+  .map(match => Number(match[1] ?? match[2]));
+const lazyIndexCallbacks = [...lazyListCode.matchAll(
+  /\.onScrollIndex\(\(start: number, end: number, center: number\): void => \{([\s\S]*?)\n\s*\}\)/g)]
+  .map(match => match[1]);
+assert.equal(lazyStateFields.length, 2);
+assert.deepEqual(lazyInitialOffsets, [6, 4]);
+assert.equal(lazyIndexCallbacks.length, 2);
 const sourceMatches = [...lazyListCode.matchAll(
   /new __etsLazyArrayDataSource<([^>]+)>\((\[[^\n]*?\] as Array<[^>]+>|__etsLazyIndices\(\d+\))\)/g)];
 assert.equal(sourceMatches.length, 4, 'Expected values, count, empty and row LazyForEach data sources');
@@ -186,7 +197,20 @@ assert.deepEqual(renderedKeys,
   ['"" + index + ":" + item', 'index.toString()', 'item', 'item']);
 const keyFunctions = keyExpressions.map(match =>
   new Function(match[1], match[2], `return ${match[3]};`));
-const actualLazyList = ['item|header'];
+const lazyStateRuntime = `class RuntimeLazyState {
+${lazyStateFields.map(match => `  ${match[1]} = ${match[2]};`).join('\n')}
+  column(start, end, center) {${lazyIndexCallbacks[0]}\n  }
+  row(start, end, center) {${lazyIndexCallbacks[1]}\n  }
+}
+const state = new RuntimeLazyState();
+result.push('state|column|' + state.${lazyStateFields[0][1]} + '|${lazyInitialOffsets[0]}');
+result.push('state|row|' + state.${lazyStateFields[1][1]} + '|${lazyInitialOffsets[1]}');
+state.column(3, 5, 4); state.row(0, 1, 0);
+result.push('visible|column|' + state.${lazyStateFields[0][1]});
+result.push('visible|row|' + state.${lazyStateFields[1][1]});`;
+const lazyStateContext = { result: [] };
+vm.runInNewContext(lazyStateRuntime, lazyStateContext, { timeout: 1000 });
+const actualLazyList = [...lazyStateContext.result, 'item|header'];
 for (const [sourceIndex, values] of lazySources.entries()) {
   const category = ['values', 'count', 'empty', 'row'][sourceIndex];
   values.forEach((item, index) => {
@@ -283,7 +307,7 @@ writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implemen
   scrollProductionPipeline: true, scrollJvmEtsSemantics: true,
   lazyListProductionPipeline: true, lazyListJvmEtsSemantics: true,
   inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
-  sourceLinkedRejections: diagnostics.length + 23,
+  sourceLinkedRejections: diagnostics.length + 28,
   sdk: 'separate SDK command required', nativeRendering: 'not run',
 }, null, 2));
 console.log('PASS Widget module isolation, resolved structure, typed ETS and explicit unsupported diagnostics');
