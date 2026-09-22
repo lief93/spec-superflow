@@ -7,6 +7,7 @@ import dev.ets.harmony.HarmonyWidgetBackend
 import dev.ets.widgets.*
 import java.io.File
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 
 fun main(args: Array<String>) {
@@ -19,8 +20,23 @@ fun main(args: Array<String>) {
             mapOf("widgetsfixture.R.drawable.logo" to imageFile),
             mapOf("widgetsfixture.R.drawable.logo" to 0x7f010001),
         )
+        val strings = StringResources(mapOf("base" to mapOf(
+            "widgetsfixture.R.string.title" to "Resource title",
+            "widgetsfixture.R.string.action" to "Resource action",
+        )))
+        val projectTokens = object : CallRule {
+            override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
+                val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+                return when (property) {
+                    "widgetsfixture.KnownTokens.label" -> EtsLiteral("Known label", EtsTypes.STRING, language.source(call))
+                    "widgetsfixture.KnownTokens.brand" -> EtsLiteral(0xFF336699L, EtsTypes.NUMBER, language.source(call))
+                    else -> null
+                }
+            }
+        }
         val language = EtsBackend(sink,
-            listOf(StandardLibraryRules(), ComposeColorValueRule(), ComposeDimensionRule(), imageResources)).language
+            listOf(projectTokens, StandardLibraryRules(), ComposeColorValueRule(), ComposeDimensionRule(),
+                imageResources, strings)).language
         val functions = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
         val page = functions.single { it.fqNameWhenAvailable?.asString() == "widgetsfixture.Page" }
         val scope = Scope()
@@ -35,30 +51,54 @@ fun main(args: Array<String>) {
         check(column.modifiers.map { it.javaClass.simpleName } == listOf("Width", "Padding", "Width"))
         check((column.modifiers[0] as WidgetModifier.Width).value.let { it as EtsLiteral }.value == 120.0)
         check((column.modifiers[2] as WidgetModifier.Width).value.let { it as EtsLiteral }.value == 80.0)
-        check(column.children.widgets.size == 10)
+        check(column.children.widgets.size == 12)
         val title = column.children.widgets[0] as Widget.Text
-        check((title.text as EtsReference).symbol == parameters[0].symbol)
-        val button = column.children.widgets[1] as Widget.Button
+        check(title.text.type == WidgetValueType.STRING)
+        check(title.text.provenance == WidgetValueProvenance.Expression("title"))
+        check((title.text.value as EtsReference).symbol == parameters[0].symbol)
+        val resourceTitle = column.children.widgets[1] as Widget.Text
+        check(resourceTitle.text.provenance == WidgetValueProvenance.Resource("widgetsfixture.R.string.title"))
+        check(resourceTitle.text.value.type == EtsTypes.STRING)
+        val tokenTitle = column.children.widgets[2] as Widget.Text
+        check(tokenTitle.text.provenance == WidgetValueProvenance.ThemeToken("widgetsfixture.KnownTokens.label"))
+        check((tokenTitle.text.value as EtsLiteral).value == "Known label")
+        val button = column.children.widgets[3] as Widget.Button
         check((button.onClick as EtsReference).symbol == parameters[2].symbol)
         check((button.enabled as EtsReference).symbol == parameters[1].symbol)
-        check(button.modifiers.map { it.javaClass.simpleName } == listOf("Padding", "Height"))
+        check(button.modifiers.map { it.javaClass.simpleName } == listOf("Background", "Padding", "Height"))
+        val buttonBackground = button.modifiers[0] as WidgetModifier.Background
+        check(buttonBackground.color.provenance == WidgetValueProvenance.ThemeToken("widgetsfixture.KnownTokens.brand"))
+        check((buttonBackground.color.value as EtsLiteral).value == 0xFF336699L)
         val row = button.content.widgets.single() as Widget.Row
         check(row.children.widgets.size == 2)
+        val buttonLabel = row.children.widgets[0] as Widget.Text
+        check(buttonLabel.text.provenance == WidgetValueProvenance.Resource("widgetsfixture.R.string.action"))
         val box = row.children.widgets[1] as Widget.Box
         check(box.children.widgets.single() is Widget.Text)
         check(box.modifiers.map { it.javaClass.simpleName } == listOf("Height", "Width"))
-        check(((column.children.widgets[2] as Widget.Text).text as EtsLiteral).value == "after")
-        check((column.children.widgets[3] as Widget.Row).modifiers.map { it.javaClass.simpleName } == listOf("Padding", "Width"))
-        check((column.children.widgets[4] as Widget.Box).children.widgets.isEmpty())
-        val styledText = column.children.widgets[5] as Widget.Text
+        val literalText = (column.children.widgets[4] as Widget.Text).text
+        check(literalText.provenance == WidgetValueProvenance.Literal)
+        check((literalText.value as EtsLiteral).value == "after")
+        val coloredRow = column.children.widgets[5] as Widget.Row
+        check(coloredRow.modifiers.map { it.javaClass.simpleName } == listOf("Padding", "Width", "Background"))
+        val resourceColor = (coloredRow.modifiers[2] as WidgetModifier.Background).color
+        check(resourceColor.provenance == WidgetValueProvenance.Resource("androidx.compose.ui.graphics.Color.Companion.Red"))
+        check(resourceColor.value.type == EtsTypes.NUMBER)
+        val emptyBox = column.children.widgets[6] as Widget.Box
+        check(emptyBox.children.widgets.isEmpty())
+        val literalColor = (emptyBox.modifiers[1] as WidgetModifier.Background).color
+        check(literalColor.provenance == WidgetValueProvenance.Literal && literalColor.value.type == EtsTypes.NUMBER)
+        val styledText = column.children.widgets[7] as Widget.Text
         check(styledText.modifiers.map { it.javaClass.simpleName } == listOf("Size", "Background", "Click", "Padding"))
         val styledSize = styledText.modifiers[0] as WidgetModifier.Size
         check((styledSize.width as EtsLiteral).value == 36.0 && (styledSize.height as EtsLiteral).value == 20.0)
-        check(((styledText.modifiers[1] as WidgetModifier.Background).color as EtsReference).symbol == parameters[6].symbol)
+        val expressionColor = (styledText.modifiers[1] as WidgetModifier.Background).color
+        check(expressionColor.provenance == WidgetValueProvenance.Expression("surfaceColor"))
+        check((expressionColor.value as EtsReference).symbol == parameters[6].symbol)
         val styledClick = styledText.modifiers[2] as WidgetModifier.Click
         check((styledClick.onClick as EtsReference).symbol == parameters[2].symbol)
         check((styledClick.enabled as EtsReference).symbol == parameters[1].symbol)
-        val resourceImage = column.children.widgets[6] as Widget.Image
+        val resourceImage = column.children.widgets[8] as Widget.Image
         val resourceSource = resourceImage.image as ImageSource.Resource
         check((resourceSource.value as EtsCall).let {
             (it.callee as EtsReference).symbol.name == "\$r" &&
@@ -69,15 +109,15 @@ fun main(args: Array<String>) {
         val imageClick = resourceImage.modifiers[0] as WidgetModifier.Click
         check((imageClick.onClick as EtsReference).symbol == parameters[2].symbol)
         check((imageClick.enabled as EtsReference).symbol == parameters[1].symbol)
-        check(((resourceImage.modifiers[1] as WidgetModifier.Background).color as EtsReference).symbol == parameters[6].symbol)
+        check((((resourceImage.modifiers[1] as WidgetModifier.Background).color.value) as EtsReference).symbol == parameters[6].symbol)
         val imageSize = resourceImage.modifiers[2] as WidgetModifier.Size
         check((imageSize.width as EtsLiteral).value == 24.0 && imageSize.width == imageSize.height)
-        val urlImage = column.children.widgets[7] as Widget.Image
+        val urlImage = column.children.widgets[9] as Widget.Image
         val urlSource = urlImage.image as ImageSource.Url
         check((urlSource.value as EtsReference).symbol == parameters[3].symbol)
         check((urlImage.contentDescription as EtsLiteral).value == null)
-        val materialField = column.children.widgets[8] as Widget.TextField
-        val basicField = column.children.widgets[9] as Widget.TextField
+        val materialField = column.children.widgets[10] as Widget.TextField
+        val basicField = column.children.widgets[11] as Widget.TextField
         for (field in listOf(materialField, basicField)) {
             check((field.value as EtsReference).symbol == parameters[4].symbol)
             check((field.onValueChange as EtsReference).symbol == parameters[5].symbol)
@@ -108,16 +148,23 @@ fun main(args: Array<String>) {
             target.parentFile.mkdirs()
             source.copyTo(target)
         }
+        for ((relative, contents) in strings.artifacts()) {
+            val target = File(output, "WidgetPage.ets.resources/$relative")
+            target.parentFile.mkdirs()
+            target.writeText(contents)
+        }
         val tree = mutableListOf<EtsNode>()
         walkEts(builder, tree::add)
         val elements = tree.filterIsInstance<EtsUiElement>()
         check(elements.any { (it.call.callee as? EtsReference)?.symbol?.name == "Stack" })
-        check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Text" } == 6)
+        check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Text" } == 8)
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Image" } == 2)
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "TextInput" } == 2)
         val nativeButton = elements.single { (it.call.callee as? EtsReference)?.symbol?.name == "Button" }
         check(nativeButton.children?.single() is EtsUiElement)
         check(nativeButton.attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }.arguments.single() == button.onClick)
+        check(elements.filter { (it.call.callee as? EtsReference)?.symbol?.name == "Text" }
+            .any { it.call.arguments.single() == buttonLabel.text.value })
         val nativeFields = elements.filter { (it.call.callee as? EtsReference)?.symbol?.name == "TextInput" }
         check(nativeFields.all { field ->
             (field.call.arguments.single() as EtsObject).fields["text"] == materialField.value &&
@@ -160,7 +207,9 @@ fun main(args: Array<String>) {
             "ClickSemantics" to "widget argument: onClickLabel",
             "ClickFactory" to "clickable onClick requires a lambda",
             "NegativeSize" to "finite and non-negative",
-            "EffectfulBackground" to "stable scalars")
+            "EffectfulBackground" to "stable scalars",
+            "UnknownStringToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.label",
+            "UnknownColorToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.color")
         val diagnostics = expected.map { (name, message) ->
             val function = functions.single { it.name.asString() == name }
             val failure = try { adapter.lower(function); error("Accepted unsupported fixture $name") } catch (error: Unsupported) { error.diagnostic }

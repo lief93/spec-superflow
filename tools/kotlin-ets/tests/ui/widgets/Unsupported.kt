@@ -21,6 +21,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 
+object UnknownTokens {
+    val label: String get() = "unknown"
+    val color: Color get() = Color.Red
+}
+
 @Composable fun UnknownWidget() { Checkbox(checked = true, onCheckedChange = {}) }
 @Composable fun UnknownModifier() { Text("x", Modifier.fillMaxWidth()) }
 @Composable fun UnknownArgument() { Text("x", fontSize = 20.sp) }
@@ -60,3 +65,5 @@ fun inputCallbackFactory(): (String) -> Unit = {}
 @Composable fun NegativeSize() { Text("x", Modifier.size((-1).dp)) }
 fun paintFactory(): Color = Color.Red
 @Composable fun EffectfulBackground() { Text("x", Modifier.background(paintFactory())) }
+@Composable fun UnknownStringToken() { Text(UnknownTokens.label) }
+@Composable fun UnknownColorToken() { Text("x", Modifier.background(UnknownTokens.color)) }

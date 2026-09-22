@@ -82,7 +82,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         if (text) {
             val value = required("text")
             if (!value.type.isString()) diagnostics.unsupported(value, "Widget Text requires String text")
-            return Widget.Text(scalar(value, scope), modifier, source)
+            return Widget.Text(widgetValue(value, scope, WidgetValueType.STRING), modifier, source)
         }
         if (image) return image(call, api, scope, modifier, source)
         if (textField) {
@@ -211,10 +211,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             "androidx.compose.foundation.background" -> {
                 checkArguments(call, setOf("color"))
                 val color = required("color")
-                val emitted = scalar(color, scope)
-                if (emitted.type != EtsTypes.NUMBER)
-                    diagnostics.unsupported(color, "Widget background requires a typed ARGB color")
-                WidgetModifier.Background(emitted, at)
+                WidgetModifier.Background(widgetValue(color, scope, WidgetValueType.COLOR), at)
             }
             "androidx.compose.foundation.clickable" -> {
                 checkArguments(call, setOf("onClick", "enabled"))
@@ -243,6 +240,45 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         if (emitted.type != expected)
             diagnostics.unsupported(value, "Widget $label requires $expected")
         return emitted
+    }
+
+    private fun widgetValue(value: IrExpression, scope: Scope, type: WidgetValueType): WidgetValue<EtsExpression, SourceSpan> {
+        val resolved = resolve(value, scope)
+        val call = resolved as? IrCall
+        val owner = call?.symbol?.owner
+        val property = owner?.correspondingPropertySymbol?.owner
+        val propertyName = property?.let(::symbolName)
+        val api = owner?.let(::symbolName)
+        val sourceOwnedToken = owner != null && property != null && sourceFile(owner) != null
+        val stringResource = if (api == "androidx.compose.ui.res.stringResource") {
+            val id = argument(call!!, "id")?.let { resolve(it, scope) }
+            (id as? IrGetField)?.symbol?.owner?.let(::symbolName) ?: api
+        } else null
+        val provenance = when {
+            resolved is IrConst -> WidgetValueProvenance.Literal
+            api == "androidx.compose.ui.graphics.Color" -> WidgetValueProvenance.Literal
+            stringResource != null -> WidgetValueProvenance.Resource(stringResource)
+            propertyName?.startsWith("androidx.compose.ui.graphics.Color.Companion.") == true ->
+                WidgetValueProvenance.Resource(propertyName)
+            sourceOwnedToken -> WidgetValueProvenance.ThemeToken(propertyName!!)
+            propertyName?.startsWith("androidx.compose.material3.MaterialTheme.") == true ||
+                property?.parent?.let { it as? IrClass }?.let(::symbolName) == "androidx.compose.material3.ColorScheme" ->
+                WidgetValueProvenance.ThemeToken(propertyName!!)
+            else -> WidgetValueProvenance.Expression((resolved as? IrGetValue)?.symbol?.owner?.name?.asString())
+        }
+        val expected = when (type) {
+            WidgetValueType.STRING -> EtsTypes.STRING
+            WidgetValueType.COLOR -> EtsTypes.NUMBER
+        }
+        val emitted = if (sourceOwnedToken) {
+            val adapted = adaptCall(call!!, language, scope, CallContext.VALUE) { expected }
+            (adapted as? CallResult.Value)?.expression ?: diagnostics.unsupported(resolved,
+                "Unmapped project widget token $propertyName; provide a project adapter mapping")
+        } else if (provenance is WidgetValueProvenance.Expression) scalar(resolved, scope)
+        else language.expression(resolved, scope)
+        if (emitted.type != expected) diagnostics.unsupported(value,
+            "Widget ${type.name.lowercase()} requires target type $expected; got ${emitted.type}")
+        return WidgetValue(type, emitted, provenance, language.source(resolved))
     }
 
     private fun scalar(value: IrExpression, scope: Scope): EtsExpression {

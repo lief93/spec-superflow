@@ -8,7 +8,7 @@ sealed interface Widget<V, S> {
     val modifiers: List<WidgetModifier<V, S>>
     val source: S
 
-    data class Text<V, S>(val text: V, override val modifiers: List<WidgetModifier<V, S>>,
+    data class Text<V, S>(val text: WidgetValue<V, S>, override val modifiers: List<WidgetModifier<V, S>>,
         override val source: S) : Widget<V, S>
     data class Image<V, S>(val image: ImageSource<V, S>, val contentDescription: V,
         override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
@@ -23,6 +23,19 @@ sealed interface Widget<V, S> {
     data class Box<V, S>(val children: Children<V, S>, override val modifiers: List<WidgetModifier<V, S>>,
         override val source: S) : Widget<V, S>
 }
+
+/** Semantic value type and source origin are explicit at the platform seam. */
+enum class WidgetValueType { STRING, COLOR }
+
+sealed interface WidgetValueProvenance {
+    data object Literal : WidgetValueProvenance
+    data class Resource(val reference: String) : WidgetValueProvenance
+    data class ThemeToken(val reference: String) : WidgetValueProvenance
+    data class Expression(val reference: String?) : WidgetValueProvenance
+}
+
+data class WidgetValue<V, S>(val type: WidgetValueType, val value: V,
+    val provenance: WidgetValueProvenance, val source: S)
 
 data class Children<V, S>(val widgets: List<Widget<V, S>>)
 
@@ -42,7 +55,7 @@ sealed interface WidgetModifier<V, S> {
     data class Height<V, S>(val value: V, override val source: S) : WidgetModifier<V, S>
     data class Padding<V, S>(val start: V, val top: V, val end: V, val bottom: V,
         override val source: S) : WidgetModifier<V, S>
-    data class Background<V, S>(val color: V, override val source: S) : WidgetModifier<V, S>
+    data class Background<V, S>(val color: WidgetValue<V, S>, override val source: S) : WidgetModifier<V, S>
     data class Click<V, S>(val onClick: V, val enabled: V?,
         override val source: S) : WidgetModifier<V, S>
 }

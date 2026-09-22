@@ -8,7 +8,12 @@ fun main() {
     // Runs with only model, target, backend and Kotlin stdlib: no compiler or Compose.
     val source = SourceSpan("model-only", 1, 2)
     fun number(value: Int) = EtsLiteral(value, EtsTypes.NUMBER, source)
-    val text = Widget.Text<EtsExpression, SourceSpan>(EtsLiteral("direct", EtsTypes.STRING, source), listOf(
+    fun string(value: String, provenance: WidgetValueProvenance = WidgetValueProvenance.Literal) =
+        WidgetValue<EtsExpression, SourceSpan>(WidgetValueType.STRING,
+            EtsLiteral(value, EtsTypes.STRING, source), provenance, source)
+    fun color(value: Int, provenance: WidgetValueProvenance = WidgetValueProvenance.Literal) =
+        WidgetValue<EtsExpression, SourceSpan>(WidgetValueType.COLOR, number(value), provenance, source)
+    val text = Widget.Text<EtsExpression, SourceSpan>(string("direct"), listOf(
         WidgetModifier.Width(number(100), source),
         WidgetModifier.Padding(number(1), number(2), number(3), number(4), source),
         WidgetModifier.Width(number(40), source)), source)
@@ -25,14 +30,30 @@ fun main() {
     check(attribute(inner) == "width")
     check(name(inner.children!!.single() as EtsUiElement) == "Text")
     val click = EtsLambda(emptyList(), emptyList(), EtsTypes.VOID, source)
+    val sharedColor = color(7, WidgetValueProvenance.ThemeToken("sample.brand"))
     val shared: List<WidgetModifier<EtsExpression, SourceSpan>> = listOf(
         WidgetModifier.Size(number(48), number(32), source),
-        WidgetModifier.Background(number(7), source),
+        WidgetModifier.Background(sharedColor, source),
         WidgetModifier.Click(click, EtsLiteral(false, EtsTypes.BOOLEAN, source), source),
         WidgetModifier.Padding(number(1), number(1), number(1), number(1), source))
-    val styledText = backend.lower(Widget.Text(EtsLiteral("styled", EtsTypes.STRING, source), shared, source))
-    val invalid = Widget.Text<EtsExpression, SourceSpan>(number(1), emptyList(), source)
+    val sharedText = string("styled", WidgetValueProvenance.Resource("sample.R.string.styled"))
+    val styledText = backend.lower(Widget.Text(sharedText, shared, source))
+    val button = Widget.Button<EtsExpression, SourceSpan>(click, null,
+        Children(listOf(Widget.Text(sharedText, emptyList(), source))),
+        listOf(WidgetModifier.Background(sharedColor, source)), source)
+    val styledButton = backend.lower(button)
+    check(styledButton.attributes.single().arguments.single() == sharedColor.value)
+    val nativeButton = styledButton.children!!.single() as EtsUiElement
+    val buttonRow = nativeButton.children!!.single() as EtsUiElement
+    val buttonText = buttonRow.children!!.single() as EtsUiElement
+    check(buttonText.call.arguments.single() == sharedText.value)
+    val invalid = Widget.Text<EtsExpression, SourceSpan>(
+        WidgetValue(WidgetValueType.STRING, number(1), WidgetValueProvenance.Expression(null), source), emptyList(), source)
     check(runCatching { backend.lower(invalid) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidSemantic = Widget.Text<EtsExpression, SourceSpan>(
+        WidgetValue(WidgetValueType.COLOR, EtsLiteral("bad", EtsTypes.STRING, source),
+            WidgetValueProvenance.Literal, source), emptyList(), source)
+    check(runCatching { backend.lower(invalidSemantic) }.exceptionOrNull() is IllegalArgumentException)
     val invalidButton = Widget.Button<EtsExpression, SourceSpan>(number(1), null, Children(emptyList()), emptyList(), source)
     check(runCatching { backend.lower(invalidButton) }.exceptionOrNull() is IllegalArgumentException)
     val resource = EtsReference(EtsSymbol("test:resource", "resource",
@@ -83,19 +104,20 @@ fun main() {
     val invalidField = Widget.TextField<EtsExpression, SourceSpan>(EtsLiteral("value", EtsTypes.STRING, source), number(1),
         null, emptyList(), source)
     check(runCatching { backend.lower(invalidField) }.exceptionOrNull() is IllegalArgumentException)
-    val invalidSize = Widget.Text(EtsLiteral("x", EtsTypes.STRING, source),
+    val invalidSize = Widget.Text(string("x"),
         listOf(WidgetModifier.Size<EtsExpression, SourceSpan>(number(1),
             EtsLiteral("bad", EtsTypes.STRING, source), source)), source)
     check(runCatching { backend.lower(invalidSize) }.exceptionOrNull() is IllegalArgumentException)
-    val invalidBackground = Widget.Text(EtsLiteral("x", EtsTypes.STRING, source),
+    val invalidBackground = Widget.Text(string("x"),
         listOf(WidgetModifier.Background<EtsExpression, SourceSpan>(
-            EtsLiteral("bad", EtsTypes.STRING, source), source)), source)
+            WidgetValue(WidgetValueType.COLOR, EtsLiteral("bad", EtsTypes.STRING, source),
+                WidgetValueProvenance.Expression(null), source), source)), source)
     check(runCatching { backend.lower(invalidBackground) }.exceptionOrNull() is IllegalArgumentException)
-    val invalidClick = Widget.Text(EtsLiteral("x", EtsTypes.STRING, source),
+    val invalidClick = Widget.Text(string("x"),
         listOf(WidgetModifier.Click<EtsExpression, SourceSpan>(number(1), null, source)), source)
     check(runCatching { backend.lower(invalidClick) }.exceptionOrNull() is IllegalArgumentException)
     val fn = EtsFunction("view", emptyList(), EtsTypes.VOID,
-        listOf(element, styledText, styledImage, resourceImage, urlImage, textField), source, builder = true)
+        listOf(element, styledText, styledButton, styledImage, resourceImage, urlImage, textField), source, builder = true)
     EtsValidator().validate(EtsProgram(listOf(EtsFile("model-only", listOf(fn)))))
-    println("PASS backend without compiler/Compose; shared ordered size/background/click/padding modifiers and typed rejection")
+    println("PASS backend without compiler/Compose; shared String/Color consumption, ordered modifiers and typed rejection")
 }

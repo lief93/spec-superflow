@@ -13,8 +13,8 @@ class HarmonyWidgetBackend {
             EtsUiElement(call(name, arguments, at), children)
         val element = when (widget) {
             is Widget.Text -> {
-                expect(widget.text, EtsTypes.STRING, "Text.text", at)
-                native("Text", listOf(widget.text)).copy(attributes = listOf(
+                val text = consume(widget.text, WidgetValueType.STRING)
+                native("Text", listOf(text)).copy(attributes = listOf(
                     call("align", listOf(enumValue("Alignment", "TopStart", at)), at)))
             }
             is Widget.Image -> {
@@ -93,8 +93,8 @@ class HarmonyWidgetBackend {
                         EtsRecordType("Padding", sides.mapValues { EtsTypes.NUMBER }), source)), source))
                 }
                 is WidgetModifier.Background -> {
-                    expect(modifier.color, EtsTypes.NUMBER, "Background.color", source)
-                    listOf(call("backgroundColor", listOf(modifier.color), source))
+                    val color = consume(modifier.color, WidgetValueType.COLOR)
+                    listOf(call("backgroundColor", listOf(color), source))
                 }
                 is WidgetModifier.Click -> {
                     expect(modifier.onClick, EtsFunctionType(emptyList(), EtsTypes.VOID), "Click.onClick", source)
@@ -106,6 +106,19 @@ class HarmonyWidgetBackend {
             }
             EtsUiElement(call("Stack", listOf(stackOptions(source)), source), listOf(child), attributes)
         }
+    }
+
+    /** The only target-type interpretation for semantic widget values. */
+    private fun consume(value: WidgetValue<EtsExpression, SourceSpan>, expected: WidgetValueType): EtsExpression {
+        require(value.type == expected) {
+            "Widget value requires $expected at ${value.source}; got ${value.type}"
+        }
+        val target = when (expected) {
+            WidgetValueType.STRING -> EtsTypes.STRING
+            WidgetValueType.COLOR -> EtsTypes.NUMBER
+        }
+        expect(value.value, target, "Widget value $expected", value.source)
+        return value.value
     }
 
     private fun expect(value: EtsExpression, type: EtsType, property: String, at: SourceSpan) {

@@ -1,10 +1,11 @@
-# S2.4: resolved Compose → ordered modifiers → Harmony
+# S2.5: typed widget values → unified Harmony consumption
 
 This is an opt-in production compiler interface for a closed static widget
 subset. The existing default `page` CLI remains unchanged; switching all of its
 Material, state, scrolling, and project-adapter behavior is a separate migration.
 No language lowering, KLIB loader, shared compiler contract, or project adapter
-is changed by this slice.
+is changed by this slice. S2.5 adds a typed neutral value seam for String and
+Color while retaining the S2.4 widget and ordered-modifier structure.
 
 Redwood remains the architecture/schema reference from
 [the spike](redwood-harmony-reference.md). The implementation does not link
@@ -25,7 +26,8 @@ lowerer, invokes `ComposeWidgetAdapter`, passes the neutral children to
 `HarmonyWidgetBackend`, builds an exported typed builder, validates the
 `EtsProgram`, and emits it through `emitEtsProgram`/`EtsPrinter`.
 
-- `dev.ets.widgets`: `Widget<V, S>`, `ImageSource<V, S>`,
+- `dev.ets.widgets`: `Widget<V, S>`, `WidgetValue<V, S>`,
+  `WidgetValueType`, `WidgetValueProvenance`, `ImageSource<V, S>`,
   `WidgetModifier<V, S>`, and `Children<V, S>`.
   This module has no imports and compiles against Kotlin stdlib alone. Values
   and source locations are generic. There are no native control strings or
@@ -67,7 +69,13 @@ sample values or an entry component.
 
 | Source form | Neutral model | Harmony interpretation |
 | --- | --- | --- |
-| Material 2/3 String `Text` | `Widget.Text(text)` | native Text |
+| Material 2/3 String `Text` | `Widget.Text(WidgetValue(STRING, ...))` | native Text through the shared value consumer |
+| String literal / bound String | `Literal` / `Expression` provenance | typed String value |
+| `stringResource(R.string.*)` | `Resource` provenance plus typed String expression | native string-resource lookup and emitted string artifact |
+| `Color(...)` / bound Color | `Literal` / `Expression` provenance | typed ARGB value |
+| Compose `Color.Red` and peers | `Resource` provenance | typed ARGB value |
+| mapped source-owned property | `ThemeToken` provenance | project-adapter result after target-type validation |
+| unmapped source-owned property | source-linked rejection | project adapter mapping required |
 | foundation `Image(painterResource(...))` | `Widget.Image(ImageSource.Resource(...))` | native Image with typed Resource |
 | Coil `AsyncImage(String, ...)` | `Widget.Image(ImageSource.Url(...))` | native Image with typed String URL |
 | Material 2/3 `Button` | enabled + callback + `content` slot | native Button with a Row content host |
@@ -78,7 +86,7 @@ sample values or an entry component.
 | scalar Dp `size` | one ordered `Size(width, height)` element | one wrapper with width and height |
 | `width`, `height` | distinct ordered elements | distinct size wrappers |
 | scalar Dp `padding` overloads | start/top/end/bottom | padding wrapper, LTR mapping |
-| solid-color `background` | typed ARGB `Background(color)` | backgroundColor wrapper |
+| solid-color `background` | `Background(WidgetValue(COLOR, ...))` | backgroundColor through the shared value consumer |
 | `clickable(enabled, onClick)` | typed `Click(onClick, enabled)` | enabled/onClick wrapper |
 | `Modifier`, `then` | identity and ordered concatenation | no element erased or overwritten |
 
@@ -94,6 +102,22 @@ layers than `click → background → size`. Uniform and two-axis `size` overloa
 both retain their width/height values. Background color, click callback, and
 click enabled state remain typed expressions; the adapter contains no native
 control or attribute choice.
+
+`WidgetValue` carries an explicit semantic type, the already-lowered typed
+target expression, its source span, and one of four origins: `Literal`,
+`Resource(reference)`, `ThemeToken(reference)`, or `Expression(reference?)`.
+The expected semantic type comes from the resolved API position (`Text.text`
+or `background.color`), never from a parameter or property name. The Harmony
+backend has one `consume` function that checks semantic type and target type;
+Text, Text nested in Button content, and every widget's Background modifier all
+use that function.
+
+Source-owned property getters are project tokens. They cross this seam only
+when a registered call rule maps them to the required typed target value. An
+unknown token fails at the getter use with `Unmapped project widget token ...;
+provide a project adapter mapping`; the adapter does not compile or guess the
+getter body. Material theme and ColorScheme property reads retain
+`ThemeToken` provenance when the existing language rules can lower them.
 
 Image source kind crosses the semantic seam explicitly. A materialized
 `painterResource` stays a typed `Resource`; a Coil String model stays a typed
@@ -167,11 +191,13 @@ ABC/HAP output. It does not install or run a device application.
 
 ## Acceptance evidence (five completion criteria)
 
-1. **Resolved-call structure.** `tests/ui/widgets/.work/run-2iMWe5` compiles
+1. **Resolved-call structure.** `tests/ui/widgets/.work/run-dqoZ1U` compiles
    against real AndroidX and Coil artifacts and asserts all seven widget kinds.
    Resource/URL source kinds, TextField value/event/enabled symbols, aliased Text,
    nested Button content, siblings, empty Box, Modifier identity/then, duplicate
    widths, and all size/background/click/padding values retain their structure.
+   It also asserts String and Color literals, resource references, mapped theme
+   tokens, and bound expressions with their exact provenance and source.
    It proves different ordered chains on Text and Image through the same model
    and backend. `model.txt` records the result. The model compiles alone; the
    adapter compiles without Harmony; the backend compiles and runs without
@@ -180,21 +206,23 @@ ABC/HAP output. It does not install or run a device application.
    distinct ordered modifier wrappers around native controls and copies
    `WidgetPage.ets.resources/base/media/widget_logo.svg`. The unchanged generated
    file, SHA-256
-   `a0789d846d3d5f3dabc82c624f959a088a3b56873be2378ff4b9542f9a878c35`,
+   `077ab8c136cc136302857fd6625b96d43d04f9cb4c1652d572181278c0e3f11b`,
    passes the installed DevEco SDK in
-   `/private/tmp/kotlin-ets-basic-controls-sdk-9VTNE4`. The SDK copy contains the
-   media file and produces ABC
-   `a2eeffa6abd98bc36987a00e45fff801de89dd3f22ea5bb2cc08fdae5ca71dac`
-   plus `entry-default-unsigned.hap`. No generated ETS was edited.
-3. **Explicit rejection.** Twenty-four source-linked failures are recorded in
+   `/private/tmp/kotlin-ets-basic-controls-sdk-oyv6iX`. The SDK copy contains the
+   media and string resources and produces ABC
+   `6aef5288ee675dd15999a0035083ae3546d49ca648a2ad257fc3bc786a9736b6`
+   plus `entry-default-unsigned.hap`. The generated string artifact SHA-256 is
+   `29d4d2d7319fbf428c148f50e936869382ebd078eb187d476098ba8a5ae678a4`.
+   No generated ETS was edited.
+3. **Explicit rejection.** Twenty-six source-linked failures are recorded in
    `diagnostics.tsv`. The S2.2 cases remain, joined by Brush background, shaped
    background, click label/role semantics, dynamic click callback factory,
-   negative size, and effectful background factory. Empty UI is never used as a
-   recovery value.
-4. **Existing regressions.** Target suite `kotlin-ets-target-tests.zBcFI1`,
-   modifier argument suite `kotlin-ets-modifier-arguments-12wrqX`, Material
-   Button suite `kotlin-ets-material-button-4A8hhg`, and forwarded slots suite
-   `kotlin-ets-forwarded-slots-8gWb6z` pass. No legacy UI implementation changed.
+   negative size, effectful background factory, and unmapped String/Color project
+   tokens. Empty UI is never used as a recovery value.
+4. **Existing regressions.** Target suite `kotlin-ets-target-tests.Lffn7G`,
+   string-resource suite `kotlin-ets-strings-44nAnT`, modifier argument suite
+   `kotlin-ets-modifier-arguments-AkzL0R`, and Material Button suite
+   `kotlin-ets-material-button-0HWpgG` pass. No legacy UI implementation changed.
 5. **Branch scope.** Changes are confined to the three semantic pipeline modules,
    widget fixtures/harness, and this report. Language lowering, KLIB loading,
    project adapters, shared target/core contracts, and default CLI behavior are
