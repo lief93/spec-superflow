@@ -2,9 +2,10 @@
 
 This increment audits the collection paths that previously mixed common Kotlin
 algorithms, target representations and compiler intrinsics. It moves the KLIB
-`Iterable.filter` and `filterNot` path through official serialized common bodies
-and one symbol-bound collection runtime seam. Source/JVM compatibility adapters
-remain because the public source compiler does not yet enter a `KlibSession`.
+`Iterable.filter`, map and non-indexed flat-map paths through official serialized
+common bodies and one symbol-bound collection runtime seam. Source/JVM
+compatibility adapters remain because the public source compiler does not yet
+enter a `KlibSession`.
 
 ## Classification
 
@@ -17,17 +18,18 @@ remain because the public source compiler does not yet enter a `KlibSession`.
 | `map` / `mapTo` | Official common body reuse | The linked common bodies use symbol-bound `collectionSizeOrDefault`, capacity construction, traversal and append primitives. Capacity is evaluated once; the target array representation does not expose reserved capacity. |
 | `mapNotNull` / `mapNotNullTo` | Official common body reuse | The linked closure also reuses official `forEach` and `let` bodies. Null filtering stays in common IR; the target seam only allocates, traverses and appends. |
 | `mapIndexed` / `mapIndexedTo` / nullable-result variants | Official common body reuse | Common IR owns the index variable, callback order and null filtering. The exact linked `checkIndexOverflow` symbol supplies the language-level negative-index guard after ordinary Int32 increment wrapping. |
+| `flatMap` / `flatMapTo` | Official common body reuse | Common IR owns callback invocation and outer traversal. The exact linked `kotlin.collections.addAll` extension crosses one typed iterable append boundary, preserving nested empties and element order. Indexed flat-map variants are outside this increment. |
 | empty predicates (`isEmpty`, `isNotEmpty`) | Unified Kotlin-compatible ETS representation primitive | The array-backed collection representation supplies a typed length comparison. There is no need to interpret a platform collection implementation. |
 | `repeat` | Official common inline body candidate | General KLIB lowering has no completed repeat closure in this increment. Existing UI-specific handling stays isolated; no new name rule or runtime claim is added. |
 | `let` | Official common body reuse | S1 already proves explicit canonical approval and official inlining of `kotlin.let`. The source/JVM `LetRule` remains as the compatibility path. |
 | `FunctionN.invoke`, `EQEQ` and compiler-generated type operations | True compiler/language intrinsic | These are handled by language lowering after inlining. They are not modeled as KLIB runtime functions. Primitive arithmetic such as `Int.rem` remains a typed target primitive (`__etsIntRem`), not an intrinsic-body claim. |
 
 No source API is selected by a name in `KlibCollectionRuntimeRule`. Its binding
-object contains five canonical linked symbols: the empty constructor,
-`iterator`, `hasNext`, `next` and `add`. Every call is selected with symbol
-identity and then checked against resolved target receiver, argument and result
-types. Names such as `__etsArrayIterator` and `__etsListAdd` identify target
-runtime declarations only.
+object contains canonical linked symbols for the constructors and collection
+operations needed by an approved closure. Every call is selected with symbol
+identity and then checked against resolved target receiver, type argument,
+value argument and result types. Names such as `__etsArrayIterator`,
+`__etsListAdd` and `__etsListAddAll` identify target runtime declarations only.
 
 The official `filterTo` body includes an erased
 `MutableCollection<in Any?>` cast. The adapter maps that representation only
@@ -86,10 +88,22 @@ elements is not a practical host test, the harness also fault-injects an
 `Int.MAX_VALUE` initial index into a copy of the generated typed program and
 executes two iterations; the second iteration must take the overflow branch.
 
-The next unproved collection group is `flatMap`/`flatMapTo` and the indexed
-flat-map variants, which require a typed `addAll` or nested-traversal boundary.
-The non-inline `firstOrNull` body also still needs an explicit dependency-body
-admission path or a retained representation primitive.
+`tests/klib/collection-flat-map-common/run.mjs` proves the non-indexed flat-map
+follow-on. Its official closure is exactly `flatMap` and `flatMapTo`. The exact
+linked `kotlin.collections.addAll` extension maps the mutable destination and
+the transformed `Iterable<R>` to the shared typed array representation, then
+calls `__etsListAddAll<R>`. The helper snapshots the input length, appends in
+iteration order and returns whether any element was added. No flat-map-specific
+API rule or `__etsListMap` call is used.
+
+The JVM/typed-ETS oracle covers an empty outer iterable, an empty transformed
+iterable, stable nested element order and exactly one callback per outer
+element. A second run declines the exact `addAll` symbol and requires a
+source-linked `UNSUPPORTED_KLIB_DEPENDENCY` from
+`src/kotlin/collections/MutableCollections.kt`, with no ETS file. Indexed
+flat-map variants remain outside this increment. The non-inline `firstOrNull`
+body also still needs an explicit dependency-body admission path or a retained
+representation primitive.
 
 ## Reproduction and frozen evidence
 
@@ -99,6 +113,7 @@ Use the pinned stdlib KLIB through `KOTLIN_JS_STDLIB`:
 node tests/klib/collection-common/run.mjs
 node tests/klib/collection-map-common/run.mjs
 node tests/klib/collection-map-indexed-common/run.mjs
+node tests/klib/collection-flat-map-common/run.mjs
 node tests/klib/capabilities/run.mjs
 node tests/klib/run.mjs
 node tests/klib/portable-common/run.mjs
@@ -110,8 +125,9 @@ node tests/stdlib/check-iteration.mjs
 
 The checked-in [evidence record](klib-collection-architecture-evidence.json)
 plus the [map evidence](klib-collection-map-evidence.json) and
-[indexed-map evidence](klib-collection-map-indexed-evidence.json) contain the
-pinned hashes, provenance, results and completed run directories.
+[indexed-map evidence](klib-collection-map-indexed-evidence.json) and
+[flat-map evidence](klib-collection-flat-map-evidence.json) contain the pinned
+hashes, provenance, results and completed run directories.
 Only the dependency KLIB seam, its focused fixture and these documents change
 across these collection increments. Compose, UI and project adapter files are
 untouched.

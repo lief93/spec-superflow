@@ -4,7 +4,9 @@ The follow-on [S1.4 collection architecture audit](klib-collection-architecture.
 moves `filter` and `filterNot` through these official bodies and a canonical
 symbol-bound collection runtime seam. The same seam now carries `map` and
 `mapNotNull` plus indexed variants, including their official `*To`, traversal
-and `let` closure.
+and `let` closure. Non-indexed `flatMap` and `flatMapTo` reuse their official
+bodies through the exact linked iterable `addAll` primitive; indexed flat-map
+variants remain outside the admitted closure.
 
 Scope: loading/linking reusable Kotlin bodies and selecting existing minimal ETS
 runtime support. No Compose control, UI backend, public CLI, JVM bytecode

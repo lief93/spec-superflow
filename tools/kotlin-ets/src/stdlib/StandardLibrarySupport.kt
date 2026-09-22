@@ -82,6 +82,15 @@ private val supportFunctions = exceptionSupportFunctions + collectionSupportFunc
           return true;
         }
     """.trimIndent()),
+    SupportFunction("stdlib:__etsListAddAll", """
+        function __etsListAddAll<T>(destination: Array<T>, values: Array<T>): boolean {
+          const size = values.length;
+          for (let index = 0; index < size; index++) {
+            destination.push(values[index]);
+          }
+          return size !== 0;
+        }
+    """.trimIndent()),
     SupportFunction("stdlib:__etsListFactory", """
         function __etsListFactory<T>(size: number, init: (index: number) => T): Array<T> {
           if (size < 0) { throw new __etsThrowable('IllegalArgumentException', 'IllegalArgumentException: size must be non-negative'); }

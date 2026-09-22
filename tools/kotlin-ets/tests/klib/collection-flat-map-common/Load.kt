@@ -1,5 +1,5 @@
 @file:OptIn(org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI::class)
-package dev.ets.collectioncommontest
+package dev.ets.collectionflatmapcommontest
 
 import dev.ets.*
 import dev.ets.dependency.klib.*
@@ -26,13 +26,13 @@ fun main(args: Array<String>) {
     val output = File(args[0])
     val consumer = File(args[1])
     val stdlib = File(args[2])
-    val rejectAppend = args.getOrNull(3) == "reject-append"
+    val rejectAppendAll = args.getOrNull(3) == "reject-append-all"
     KlibLoader.withKlibModules(KlibModuleSelection(consumer, listOf(consumer), listOf(stdlib))) { session ->
         val module = session.linkedModules().single()
         val entries = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
-        val rootCalls = entries.flatMap { it.calls() }
-        val filter = rootCalls.single { it.symbol.owner.fqNameWhenAvailable?.asString() == "kotlin.collections.filter" }.symbol
-        val filterNot = rootCalls.single { it.symbol.owner.fqNameWhenAvailable?.asString() == "kotlin.collections.filterNot" }.symbol
+        val flatMap = entries.flatMap { it.calls() }.map { it.symbol }.distinct().single {
+            it.owner.fqNameWhenAvailable?.asString() == "kotlin.collections.flatMap"
+        }
         fun inlineClosure(root: IrFunctionSymbol): Set<IrFunctionSymbol> {
             val result = linkedSetOf<IrFunctionSymbol>()
             val pending = ArrayDeque<IrFunctionSymbol>()
@@ -46,69 +46,73 @@ fun main(args: Array<String>) {
             }
             return result
         }
-        val approved = inlineClosure(filter) + inlineClosure(filterNot)
+        val approved = inlineClosure(flatMap)
+        check(approved.map { symbolName(it.owner) }.toSet() ==
+            setOf("kotlin.collections.flatMap", "kotlin.collections.flatMapTo")) {
+            approved.map { symbolName(it.owner) }
+        }
         val residual = approved.flatMap { it.owner.body!!.calls() }.map { it.symbol }.filter { it !in approved }.toSet()
         fun symbol(name: String) = residual.single { it.owner.fqNameWhenAvailable?.asString() == name }
         val constructor = residual.single { it.owner is IrConstructor &&
             (it.owner.parent as? IrClass)?.fqNameWhenAvailable?.asString() == "kotlin.collections.ArrayList" }
+            as IrConstructorSymbol
+        val appendAll = symbol("kotlin.collections.addAll")
         val bindings = KlibCollectionRuntimeBindings(
-            emptyListConstructor = constructor as IrConstructorSymbol,
+            emptyListConstructor = constructor,
             iterator = symbol("kotlin.collections.Iterable.iterator"),
             hasNext = symbol("kotlin.collections.Iterator.hasNext"),
             next = symbol("kotlin.collections.Iterator.next"),
-            append = symbol("kotlin.collections.MutableCollection.add"),
+            appendAll = appendAll,
         )
         val decisions = mutableListOf<KlibDependencyDecision>()
         val collectionRule = KlibCollectionRuntimeRule(bindings)
-        val selectedRule = if (!rejectAppend) collectionRule else object : CallRule by collectionRule {
+        val selectedRule = if (!rejectAppendAll) collectionRule else object : CallRule by collectionRule {
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
-                if (call.symbol === bindings.append) null else collectionRule.lower(call, language, scope)
+                if (call.symbol === appendAll) null else collectionRule.lower(call, language, scope)
         }
-        if (rejectAppend) {
+        if (rejectAppendAll) {
             val failure = try {
                 session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), approved, decisions::add)
-                error("Missing append binding unexpectedly lowered")
+                error("Missing appendAll primitive unexpectedly lowered")
             } catch (failure: Unsupported) {
                 failure
             }
             val rejection = decisions.single { it.kind == KlibDependencyDecision.Kind.REJECTED }
             check(failure.diagnostic.code == "UNSUPPORTED_KLIB_DEPENDENCY") { failure.diagnostic }
-            check(failure.diagnostic.source == rejection.callSite &&
-                rejection.signature == checkNotNull(bindings.append).signature.toString()) {
+            check(rejection.signature == appendAll.signature.toString() && failure.diagnostic.source == rejection.callSite &&
+                rejection.callSite?.endsWithSource("Consumer.kt") == true) { rejection }
+            check(File(checkNotNull(rejection.library)).canonicalFile == stdlib.canonicalFile)
+            check(rejection.declaration.file?.endsWith("src/kotlin/collections/MutableCollections.kt") == true) {
                 rejection
             }
-            check(File(checkNotNull(rejection.library)).canonicalFile == stdlib.canonicalFile) { rejection }
-            check(rejection.declaration.file?.endsWith("js/builtins/Collections.kt") == true &&
-                rejection.callSite?.endsWithSource("Consumer.kt") == true) { rejection }
             check(output.listFiles().orEmpty().none { it.extension == "ets" })
             File(output, "rejection.tsv").writeText(
                 "${failure.diagnostic.code}\t${rejection.signature}\t${rejection.library}\t${rejection.declaration}" +
                     "\t${rejection.callSite}\t${rejection.detail}\n")
-            println("PASS source-linked rejection when exact append primitive is absent")
+            println("PASS source-linked rejection when appendAll primitive is absent")
             return@withKlibModules
         }
         val result = session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), approved, decisions::add)
-        check(decisions.any { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY && it.signature == filter.signature.toString() })
-        check(decisions.any { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY && it.signature == filterNot.signature.toString() })
-        val collectionReplacements = decisions.filter { it.kind == KlibDependencyDecision.Kind.TARGET_REPLACEMENT &&
-            it.detail.contains("KlibCollectionRuntimeRule") }
-        check(collectionReplacements.map { it.signature }.toSet() ==
-            setOf(constructor, bindings.iterator, bindings.hasNext, bindings.next, checkNotNull(bindings.append))
-                .map { it.signature.toString() }.toSet()) { collectionReplacements }
-        check(result.runtimeSymbols == setOf("stdlib:__etsIterator", "stdlib:__etsArrayIterator", "stdlib:__etsIntRem",
-            "stdlib:__etsListAdd")) {
-            result.runtimeSymbols
-        }
+        check(decisions.any { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY &&
+            it.signature == flatMap.signature.toString() })
+        val replacements = decisions.filter { it.kind == KlibDependencyDecision.Kind.TARGET_REPLACEMENT &&
+            it.detail.contains("KlibCollectionRuntimeRule") }.map { it.signature }.toSet()
+        val expectedReplacements = setOf(constructor, bindings.iterator, bindings.hasNext, bindings.next, appendAll)
+            .map { it.signature.toString() }.toSet()
+        check(replacements == expectedReplacements) { replacements }
+        check(result.runtimeSymbols == setOf("stdlib:__etsIterator", "stdlib:__etsArrayIterator",
+            "stdlib:__etsListAddAll", "stdlib:__etsThrowable")) { result.runtimeSymbols }
         val emitted = emitEtsModules(result.program, StandardLibraryRuntime)
         check(emitted.keys == setOf("Consumer.ets"))
         val code = emitted.getValue("Consumer.ets")
-        check("__etsListFilter" !in code && "function filterEven" in code && "function filterOdd" in code)
+        check("__etsListMap" !in code && "function flatMapTrace" in code && "__etsListAddAll" in code)
         File(output, "Consumer.ets").writeText(code)
         File(output, "decisions.tsv").writeText(decisions.joinToString("\n") {
             "${it.kind}\t${it.signature}\t${it.library}\t${it.declaration}\t${it.callSite}\t${it.detail}"
         })
         File(output, "runtime-symbols.txt").writeText(result.runtimeSymbols.sorted().joinToString("\n"))
-        println("PASS official filter/filterNot bodies with symbol-bound collection primitives")
+        File(output, "official-bodies.txt").writeText(approved.map { symbolName(it.owner) }.sorted().joinToString("\n"))
+        println("PASS official flatMap/flatMapTo bodies with typed appendAll primitive")
     }
 }
 
