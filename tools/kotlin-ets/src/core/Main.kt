@@ -84,24 +84,37 @@ fun main(arguments: Array<String>) {
             val module = frontend.module
             val backend = EtsBackend(diagnostics, rules, frontend.types)
             preflight = coreProfilePreflight(module, backend.language, diagnostics)
-            preflightOutput?.let { file ->
+            fun publishPreflight() = preflightOutput?.let { file ->
                 Files.createDirectories(file.absoluteFile.parentFile.toPath())
                 Files.writeString(file.toPath(), coreProfileJson(requireNotNull(preflight)), CREATE_NEW)
             }
-            if (mode == "page") {
-                backend.validateSource(module)
-                val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
-                    requireNotNull(entry))
-                val targetModule = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
-                diagnostics.verifyNoSilentFallback(targetModule)
-                if ("--out-dir" in options) emitEtsModules(targetModule, ComposeRuntime(StandardLibraryRuntime))
-                else mapOf(output.name to emitEtsProgram(targetModule, ComposeRuntime(StandardLibraryRuntime)))
-            } else {
-                val lowered = backend.lower(module)
-                val program = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
-                diagnostics.verifyNoSilentFallback(program)
-                if ("--out-dir" in options) emitEtsModules(program, StandardLibraryRuntime)
-                else mapOf(output.name to emitEtsProgram(program, StandardLibraryRuntime))
+            try {
+                val generated = if (mode == "page") {
+                    backend.validateSource(module)
+                    val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
+                        requireNotNull(entry))
+                    val targetModule = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
+                    diagnostics.verifyNoSilentFallback(targetModule)
+                    if ("--out-dir" in options) emitEtsModules(targetModule, ComposeRuntime(StandardLibraryRuntime))
+                    else mapOf(output.name to emitEtsProgram(targetModule, ComposeRuntime(StandardLibraryRuntime)))
+                } else {
+                    val lowered = backend.lower(module)
+                    val program = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
+                    diagnostics.verifyNoSilentFallback(program)
+                    if ("--out-dir" in options) emitEtsModules(program, StandardLibraryRuntime)
+                    else mapOf(output.name to emitEtsProgram(program, StandardLibraryRuntime))
+                }
+                publishPreflight()
+                generated
+            } catch (failure: Unsupported) {
+                preflight = requireNotNull(preflight).record(failure.diagnostic)
+                publishPreflight()
+                throw failure
+            } catch (failure: InvalidTarget) {
+                preflight = requireNotNull(preflight).record(Diagnostic("INVALID_TARGET",
+                    failure.message ?: "Invalid target", failure.source))
+                publishPreflight()
+                throw failure
             }
         }
         Files.createDirectories(output.absoluteFile.parentFile.toPath())

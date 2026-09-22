@@ -109,9 +109,11 @@ describe the source project's actual dependencies, not replacement Compose stubs
 arguments supply additional Kotlin source files.
 
 Add `--preflight-out /fresh/path/core-profile.json` to retain the resolved call
-inventory before generation. It records language, stdlib, Compose, platform and
-project-dependency calls with resolved signatures, expected ETS types and
-1-based source locations. The scan does not make unsupported calls acceptable;
+inventory before generation. It groups language semantics, standard library,
+neutral Compose widgets, Modifiers, resources and project dependencies with
+resolved signatures, expected ETS types, responsible modules and 1-based source
+locations. A failed attempt records its first unsupported node. The scan does
+not make unsupported calls acceptable;
 see [Core Profile preflight](docs/core-profile-preflight.md).
 
 Language mode accepts either `--out` or `--out-dir`, never both. The latter keeps

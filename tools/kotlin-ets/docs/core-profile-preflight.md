@@ -1,9 +1,11 @@
 # Core Profile preflight
 
-Every successful FIR2IR/lowering session scans resolved `IrCall` nodes before
-target generation. The scan is read-only: it does not select adapters, rewrite
-IR or decide that an unsupported operation is safe. The normal language or
-Compose generator remains authoritative and still fails closed.
+Every successful FIR2IR session scans resolved `IrCall` nodes before target
+generation. The scan is read-only: it does not select adapters, rewrite IR or
+decide that an unsupported operation is safe. The normal language or Compose
+generator remains authoritative and still fails closed. If generation rejects
+a node, the retained report is annotated with that first observed failure before
+the CLI returns it.
 
 Pass `--preflight-out /fresh/path/core-profile.json` to retain the scan. The
 Gradle project entry accepts and forwards the same option. Existing report paths
@@ -12,24 +14,37 @@ option it returns only `preflightCallCount` in its result JSON.
 
 Each call record contains:
 
-- `category`: `language`, `stdlib`, `compose`, `platform`, or
-  `project_dependency`;
+- `category`: `language_semantics`, `standard_library`,
+  `neutral_compose_widget`, `modifier`, `resources`, or
+  `project_dependencies`;
 - `resolvedSymbol`: the resolved owner name plus parameter and result types, so
   overloads are not collapsed by their display name;
-- `expectedTargetType`: the typed ETS result. If no ETS type exists, the report
-  says `unsupported(<resolved Kotlin type>)` and generation continues to the
-  more specific source-linked rejection;
+- `expectedTargetType`: the typed ETS result, or `null` when type lowering is the
+  first unsupported node;
 - `source`: offsets plus 1-based line/column and exclusive end position, using
   the same BOM/newline/UTF-16 rules as compiler diagnostics;
 - `argumentResolutions`: omitted source defaults and empty varargs. A Kotlin
   source default is preserved semantics, not a degradation or permission to
-  invent a target fallback.
+  invent a target fallback;
+- `finalRecognizedNode`: the resolved call, promoted to `typed_call` when its
+  result has a target type, with the same exact source location;
+- `firstUnsupportedNode`: the first source-linked type or generation failure
+  within that call, including its resolved field/object/call symbol when one is
+  available, otherwise `null`;
+- `responsibleModule`: the production lowering or adapter source file that owns
+  the category. Resource calls identify `StringResources.kt` or
+  `ImageResources.kt` separately.
 
-Category precedence is source ownership first, then known namespaces. A call to
-a source declaration is `language`; resolved external Kotlin declarations are
-`stdlib`; Compose packages are `compose`; Java/Android/AndroidX/KotlinX/Coil/OHOS
-packages are `platform`; remaining external resolved declarations are
-`project_dependency`. Classification does not imply support.
+The top-level `coverage` object repeats all six groups, including empty groups.
+`recognized` counts calls whose target type was recognized and which do not own
+the first observed generation failure. `unsupported` counts recorded failures;
+`percentage` is `recognized / total`, or `null` when the group has no calls.
+This is coverage of the attempted entry, not a claim that every argument shape
+or runtime behavior for the same API is supported.
+
+Category precedence is source ownership first, then resource and Modifier
+semantics, Compose widgets, external Kotlin declarations, and other project or
+platform dependencies. Classification does not imply support.
 
 ## No-silent-fallback gate
 
@@ -55,15 +70,43 @@ appearing in the report.
 
 - `CoreProfile.kt` proves language/stdlib classification, a resolved source
   default, expected target types and exact 1-based locations;
-- `Platform.kt` and a separately compiled `Dependency.kt` prove platform and
-  project-dependency classification, source-linked failure and no target;
+- `Platform.kt` and a separately compiled `Dependency.kt` prove project-
+  dependency classification, source-linked failure and no target;
 - the existing nontrivial `ComposableValues.kt` proves Compose classification
   with the real dependency classpath;
+- `Coverage.kt` proves neutral widget, Modifier and resource grouping and
+  attaches the first resource failure to its containing call;
 - `EmptyUi.kt` proves an empty builder is rejected at its source declaration.
 
 The run retains commands, stdout/stderr, preflight JSON and outputs under
 `tests/preflight/.work/run-*`. This is compiler/host evidence. It is not KLIB,
 ArkTS SDK or device acceptance.
+
+The pinned public-project baseline is reproducible from an existing checkout
+whose object database contains the selected revision:
+
+```bash
+node tools/kotlin-ets/tests/preflight/mars-photos.mjs \
+  /absolute/path/to/basic-android-kotlin-compose-training-mars-photos
+```
+
+The runner creates a detached worktree at Google Mars Photos revision
+`8399c839ce5f4be66e0ae1103ed0e04121c97fe4`, uses the production Gradle input
+collector offline, and runs the production Core Profile CLI for
+`com.example.marsphotos.ui.screens.LoadingScreen`. It records commands, logs,
+the schema-2 report and `public-project-baseline.json` under
+`tests/preflight/.work/mars-photos-*`.
+
+The accepted baseline has two neutral widget calls at 100%, one Modifier call at
+100%, and two resource calls at 50%. Language semantics, standard library and
+project dependency have no calls in this selected entry and therefore report a
+`null` percentage. The first conversion gap is
+`R.drawable.loading_img` at line 73, column 46, owned by
+`ImageResources.kt`; no target is emitted. The public project pins Kotlin 2.1.0
+while the production project launcher requires 2.1.20, so the runner records
+that version mismatch as a separate P0 project-dependency gap and uses the fixed
+2.1.20 CLI only for the coverage attempt. It does not claim project generation
+compatibility.
 
 Final verification evidence:
 
@@ -71,7 +114,8 @@ Final verification evidence:
 | --- | --- | --- |
 | RED: option absent | `--preflight-out` rejected as unknown | `tests/preflight/.work/run-llBELG` |
 | RED: empty UI | empty `@Builder` was generated silently | `tests/preflight/.work/run-ZdiDg6` |
-| Core Profile and no-silent-fallback | five categories, source defaults, types, locations, negative no-target cases | `tests/preflight/.work/run-iZKbaj` |
+| Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations and negative no-target cases | `tests/preflight/.work/run-gcipOx` |
+| Mars Photos public baseline | widget 100%, Modifier 100%, resources 50%; two explicit P0 gaps; no target | `tests/preflight/.work/mars-photos-Lh41tH` |
 | Full language suite | pass | `tests/language/.work/run-01EAKd` |
 | Module suite | 44 JVM/module cases pass | `tests/modules/.work/run-KWHnWz` |
 | Typed backend suite | pass | `tests/preflight/.work/kotlin-ets-backend-tests.SCdkSg` |
