@@ -21,6 +21,7 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val scope: Scope,
         val handledStatements: Set<IrStatement>,
         val pagers: Map<IrValueSymbol, PagerStateBinding> = emptyMap(),
+        val scrolls: Map<IrValueSymbol, ScrollStateBinding> = emptyMap(),
     )
 
     data class PagerStateBinding(
@@ -28,6 +29,8 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val pageCount: EtsExpression,
         val controller: EtsExpression,
     )
+
+    data class ScrollStateBinding(val offset: EtsExpression)
 
     private data class State(
         val field: EtsField,
@@ -43,6 +46,8 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val controller: EtsField,
     )
 
+    private data class ScrollState(val holder: IrValueSymbol, val offset: EtsField)
+
     fun lower(function: IrSimpleFunction, scope: Scope, componentName: String): Plan {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
         val statements = when (val body = function.body) {
@@ -57,6 +62,7 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         val handled = Collections.newSetFromMap(IdentityHashMap<IrStatement, Boolean>())
         val states = mutableListOf<State>()
         val pagerStates = mutableListOf<PagerState>()
+        val scrollStates = mutableListOf<ScrollState>()
         val fields = mutableListOf<EtsField>()
         statements.forEach { statement ->
             val state = state(statement, scope, handled)
@@ -64,13 +70,18 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
                 states += state
                 fields += state.field
             } else {
-                pagerState(statement, handled)?.let { pager ->
+                val pager = pagerState(statement, handled)
+                if (pager != null) {
                     pagerStates += pager
                     fields += listOf(pager.currentPage, pager.controller)
+                } else scrollState(statement, handled)?.let { scroll ->
+                    scrollStates += scroll
+                    fields += scroll.offset
                 }
             }
         }
-        if (states.isEmpty() && pagerStates.isEmpty()) return Plan(emptyList(), scope, handled)
+        if (states.isEmpty() && pagerStates.isEmpty() && scrollStates.isEmpty())
+            return Plan(emptyList(), scope, handled)
 
         val holders = states.associateBy { it.holder }
         val getters = states.mapNotNull { state -> state.getter?.let { it to state } }.toMap()
@@ -85,6 +96,8 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         }
         val pagerBindings = pagerStates.associate { pager -> pager.holder to PagerStateBinding(
             member(pager.currentPage, function), pager.pageCount, member(pager.controller, function)) }
+        val scrollBindings = scrollStates.associate { scroll -> scroll.holder to ScrollStateBinding(
+            member(scroll.offset, function)) }
         val rule = object : CallRule {
             private fun direct(call: IrCall): State? {
                 val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
@@ -93,12 +106,24 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
             }
 
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
+                val api = symbolName(call.symbol.owner)
                 val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
                 if (property == "androidx.compose.foundation.pager.PagerState.currentPage") {
                     val receiver = call.dispatchReceiver ?: call.extensionReceiver
                     val holder = (receiver as? IrGetValue)?.symbol
                     return holder?.let(pagerBindings::get)?.currentPage
                         ?: diagnostics.unsupported(call, "Pager currentPage requires source remembered PagerState")
+                }
+                if (property == "androidx.compose.foundation.ScrollState.value") {
+                    val receiver = call.dispatchReceiver ?: call.extensionReceiver
+                    val holder = (receiver as? IrGetValue)?.symbol
+                    return holder?.let(scrollBindings::get)?.offset
+                        ?: diagnostics.unsupported(call, "ScrollState value requires source remembered ScrollState")
+                }
+                if (api in programmaticScrollApis) {
+                    val receiver = call.dispatchReceiver ?: call.extensionReceiver
+                    if ((receiver as? IrGetValue)?.symbol in scrollBindings)
+                        diagnostics.unsupported(call, "Programmatic ScrollState scrollTo/animateScrollTo is not supported")
                 }
                 getters[call.symbol]?.let { return member(it, call) }
                 setters[call.symbol]?.let { return etsDiscard(assignment(call, it, scope), language.source(call)) }
@@ -108,6 +133,10 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
             }
 
             override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? {
+                val api = symbolName(call.symbol.owner)
+                val receiver = call.dispatchReceiver ?: call.extensionReceiver
+                if (api in programmaticScrollApis && (receiver as? IrGetValue)?.symbol in scrollBindings)
+                    diagnostics.unsupported(call, "Programmatic ScrollState scrollTo/animateScrollTo is not supported")
                 val state = setters[call.symbol] ?: direct(call)?.takeIf { call.symbol.owner.valueParameters.isNotEmpty() }
                     ?: return null
                 return listOf(EtsExpressionStatement(assignment(call, state, scope)))
@@ -115,7 +144,31 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         }
         val loweredScope = Scope(LinkedHashMap(scope.bindings), LinkedHashMap(scope.aliases), scope.callRule,
             listOf(rule) + scope.callRules, LinkedHashMap(scope.ambientValues))
-        return Plan(fields, loweredScope, handled, pagerBindings)
+        return Plan(fields, loweredScope, handled, pagerBindings, scrollBindings)
+    }
+
+    private fun scrollState(statement: IrStatement, handled: MutableSet<IrStatement>): ScrollState? {
+        val declaration = statement as? IrVariable ?: return null
+        val call = declaration.initializer as? IrCall ?: return null
+        if (symbolName(call.symbol.owner) != "androidx.compose.foundation.rememberScrollState") return null
+        call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
+            if (call.getValueArgument(index) != null && parameter.name.asString() != "initial")
+                diagnostics.unsupported(call.getValueArgument(index)!!,
+                    "Unsupported rememberScrollState argument: ${parameter.name}")
+        }
+        val initialExpression = argument(call, "initial")
+        val initial = if (initialExpression == null) 0 else (initialExpression as? IrConst)?.value as? Int
+            ?: diagnostics.unsupported(initialExpression,
+                "ScrollState initial offset currently requires an integer literal")
+        if (initial < 0)
+            diagnostics.unsupported(initialExpression ?: call, "ScrollState initial offset must be non-negative")
+        val at = language.source(declaration)
+        val name = "${declaration.name}_offset"
+        val field = EtsField(EtsSymbol("compose-scroll:${at.file}:${at.start}:offset",
+            name, EtsTypes.NUMBER, at), EtsLiteral(initial, EtsTypes.NUMBER, at),
+            visibility = EtsVisibility.PRIVATE, state = true)
+        handled += statement
+        return ScrollState(declaration.symbol, field)
     }
 
     private fun pagerState(statement: IrStatement, handled: MutableSet<IrStatement>): PagerState? {
@@ -222,5 +275,11 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         }
         return argument(factory, "value")
             ?: diagnostics.unsupported(factory, "Compose state mutableStateOf requires an initial value")
+    }
+
+    private companion object {
+        val programmaticScrollApis = setOf(
+            "androidx.compose.foundation.ScrollState.scrollTo",
+            "androidx.compose.foundation.ScrollState.animateScrollTo")
     }
 }
