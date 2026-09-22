@@ -26,6 +26,9 @@ sealed interface Widget<V, S> {
     data class Pager<V, S>(val currentPage: V, val pageCount: V, val controller: V,
         val onPageChange: V, val pageContent: IndexedChildren<V, S>,
         override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
+    data class LazyList<V, S>(val axis: WidgetScrollAxis, val enabled: V,
+        val slots: List<LazyListSlot<V, S>>,
+        override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
     data class Conditional<V, S>(val branches: List<WidgetBranch<V, S>>, override val source: S) : Widget<V, S> {
         override val modifiers: List<WidgetModifier<V, S>> = emptyList()
     }
@@ -56,6 +59,20 @@ data class WidgetTextStyle<V, S>(val fontSize: WidgetValue<V, S>?,
 
 data class Children<V, S>(val widgets: List<Widget<V, S>>)
 data class IndexedChildren<V, S>(val index: V, val children: Children<V, S>, val source: S)
+
+sealed interface LazyListData<V> {
+    data class Values<V>(val values: V) : LazyListData<V>
+    data class Count<V>(val count: V) : LazyListData<V>
+}
+
+sealed interface LazyListSlot<V, S> {
+    val source: S
+    data class Item<V, S>(val key: V?, val content: Children<V, S>,
+        override val source: S) : LazyListSlot<V, S>
+    data class Items<V, S>(val data: LazyListData<V>, val item: V, val index: V,
+        val key: V?, val content: Children<V, S>,
+        override val source: S) : LazyListSlot<V, S>
+}
 
 enum class WidgetLayoutScope { ROW, COLUMN, BOX }
 enum class WidgetScrollAxis { VERTICAL, HORIZONTAL }

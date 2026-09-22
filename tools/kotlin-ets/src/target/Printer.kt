@@ -135,6 +135,10 @@ class EtsPrinter {
         })
         is EtsUiForEach -> listOf("ForEach(${expression(value.items)}, (${parameters(listOf(value.item))}) => {") +
             indent(statements(value.body)) + "})"
+        is EtsUiLazyForEach -> listOf("LazyForEach(${expression(value.dataSource)}, " +
+            "(${parameters(listOf(value.item, value.index))}) => {") +
+            indent(statements(value.body)) + ("}" +
+            (value.key?.let { ", ${expression(it)})" } ?: ")"))
     } }
 
     private fun visibility(value: EtsVisibility): String = when (value) {

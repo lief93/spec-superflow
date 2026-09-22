@@ -101,6 +101,9 @@ data class EtsUiComponent(val component: EtsReference, val properties: Map<Strin
     override val source: SourceSpan = component.source) : EtsStatement
 data class EtsUiForEach(val items: EtsExpression, val item: EtsParameter, val body: List<EtsStatement>,
     override val source: SourceSpan) : EtsStatement
+data class EtsUiLazyForEach(val dataSource: EtsExpression, val item: EtsParameter,
+    val index: EtsParameter, val body: List<EtsStatement>, val key: EtsLambda?,
+    override val source: SourceSpan) : EtsStatement
 enum class EtsFunctionKind { FUNCTION, METHOD, CONSTRUCTOR, GETTER, SETTER }
 data class EtsFunction(val name: String, val parameters: List<EtsParameter>, val returnType: EtsType,
     val body: List<EtsStatement>, override val source: SourceSpan,

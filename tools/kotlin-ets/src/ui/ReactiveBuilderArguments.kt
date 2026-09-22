@@ -133,6 +133,7 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
             if (node is EtsReference && node.symbol.id == parameter.symbol.id) reads++
             val delayed = when (node) {
                 is EtsUiForEach -> node.body
+                is EtsUiLazyForEach -> node.body
                 is EtsLoop -> node.body
                 is EtsLambda -> if (node in forwardingSlots) emptyList() else node.body
                 else -> emptyList()
@@ -225,6 +226,8 @@ private class ReactiveBuilderRewriter(private val builders: Map<String, EtsFunct
         is EtsUiElement -> value.copy(call = expression(value.call) as EtsCall, children = value.children?.map(::statement), attributes = value.attributes.map { expression(it) as EtsCall })
         is EtsUiComponent -> value.copy(properties = value.properties.mapValues { expression(it.value) })
         is EtsUiForEach -> value.copy(items = expression(value.items), body = value.body.map(::statement))
+        is EtsUiLazyForEach -> value.copy(dataSource = expression(value.dataSource),
+            body = value.body.map(::statement), key = value.key?.let(::expression) as? EtsLambda)
         is EtsFunction -> function(value)
         is EtsJump -> value
     }
