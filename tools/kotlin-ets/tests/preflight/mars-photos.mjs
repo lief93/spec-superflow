@@ -11,7 +11,7 @@ assert.ok(seed && existsSync(join(seed, '.git')), 'Usage: node mars-photos.mjs /
 
 const revision = '8399c839ce5f4be66e0ae1103ed0e04121c97fe4';
 const repository = 'https://github.com/google-developer-training/basic-android-kotlin-compose-training-mars-photos.git';
-const entry = 'com.example.marsphotos.ui.screens.LoadingScreen';
+const entry = 'com.example.marsphotos.ui.screens.HomeScreen';
 mkdirSync(join(here, '.work'), { recursive: true });
 const evidence = mkdtempSync(join(here, '.work/mars-photos-'));
 const project = mkdtempSync('/tmp/kotlin-ets-mars-photos-');
@@ -37,7 +37,7 @@ try {
   const androidHome = process.env.ANDROID_HOME ?? join(process.env.HOME, 'Library/Android/sdk');
   assert.ok(existsSync(join(androidHome, 'platforms/android-35/android.jar')), `Android 35 SDK missing: ${androidHome}`);
   const projectRun = join(evidence, 'project-run');
-  const output = join(evidence, 'LoadingScreen.ets');
+  const output = join(evidence, 'HomeScreen.ets');
   const reportPath = join(evidence, 'core-profile.json');
   const compilation = run('project-preflight', 'node', [join(root, 'project.mjs'), '--project', project,
     '--module', ':app', '--variant', 'debug', '--mode', 'page', '--unsupported-policy', 'error', '--entry', entry,
@@ -67,6 +67,17 @@ try {
   assert.equal(loadingImage.source.sourceSet, 'main');
   assert.ok(existsSync(join(imagePack.output, loadingImage.output)));
   assert.match(readFileSync(join(imagePack.output, loadingImage.output), 'utf8'), /^<svg/);
+  const stringPack = JSON.parse(readFileSync(join(projectRun, 'string-resources.json'), 'utf8'));
+  assert.equal(stringPack.count, 5);
+  const stringProperties = readFileSync(join(stringPack.output, 'base.properties'), 'utf8');
+  for (const name of ['loading', 'loading_failed', 'retry', 'mars_photo']) {
+    assert.match(stringProperties, new RegExp(`com\\.example\\.marsphotos\\.R\\.string\\.${name}=`));
+  }
+  const stringOrigins = JSON.parse(readFileSync(stringPack.provenance, 'utf8'));
+  const loadingString = stringOrigins.resources.find(resource =>
+    resource.symbol === 'com.example.marsphotos.R.string.loading');
+  assert.equal(loadingString.status, 'materialized');
+  assert.equal(loadingString.variants[0].source.sourceSet, 'main');
 
   const report = JSON.parse(readFileSync(reportPath, 'utf8'));
   assert.equal(report.schemaVersion, 2);
@@ -75,21 +86,29 @@ try {
   assert.equal(report.compatibilityDecision, 'same_language_line_older_patch');
   assert.deepEqual(Object.keys(report.coverage), ['language_semantics', 'standard_library', 'neutral_compose_widget',
     'modifier', 'resources', 'project_dependencies']);
-  assert.deepEqual(report.counts, { language_semantics: 0, standard_library: 0, neutral_compose_widget: 2,
-    modifier: 1, resources: 2, project_dependencies: 0 });
-  assert.equal(report.coverage.neutral_compose_widget.percentage, 100);
+  assert.deepEqual(report.counts, { language_semantics: 7, standard_library: 1, neutral_compose_widget: 28,
+    modifier: 10, resources: 8, project_dependencies: 3 });
+  assert.equal(report.coverage.language_semantics.percentage, 100);
+  assert.equal(report.coverage.standard_library.percentage, 100);
+  assert.equal(report.coverage.neutral_compose_widget.percentage, 92.85);
   assert.equal(report.coverage.modifier.percentage, 100);
-  assert.equal(report.coverage.resources.percentage, 50);
+  assert.equal(report.coverage.resources.percentage, 100);
+  assert.equal(report.coverage.project_dependencies.percentage, 100);
   const painter = report.calls.find(call => call.resolvedSymbol.startsWith('androidx.compose.ui.res.painterResource('));
   assert.ok(painter);
   assert.equal(painter.firstUnsupportedNode, null);
   assert.equal(painter.expectedTargetType, 'Resource');
-  assert.equal(report.firstUnsupportedNode.source.line, 74);
-  assert.equal(report.firstUnsupportedNode.source.column, 54);
-  assert.equal(report.firstUnsupportedNode.kind, 'unsupported_expression');
-  assert.equal(report.firstUnsupportedNode.symbol, null);
-  assert.match(report.firstUnsupportedNode.message, /Dynamic stringResource ID/);
-  assert.match(report.firstUnsupportedNode.responsibleModule, /StringResources/);
+  const loadingCall = report.calls.find(call => call.resolvedSymbol.startsWith('androidx.compose.ui.res.stringResource(') &&
+    call.source.line === 74);
+  assert.ok(loadingCall);
+  assert.equal(loadingCall.firstUnsupportedNode, null);
+  assert.equal(loadingCall.expectedTargetType, 'string');
+  assert.equal(report.firstUnsupportedNode.source.line, 128);
+  assert.equal(report.firstUnsupportedNode.source.column, 31);
+  assert.equal(report.firstUnsupportedNode.kind, 'target_type');
+  assert.equal(report.firstUnsupportedNode.symbol, 'androidx.compose.material3.MaterialTheme.<get-shapes>');
+  assert.match(report.firstUnsupportedNode.message, /Unsupported language type: androidx\.compose\.material3\.Shapes/);
+  assert.match(report.firstUnsupportedNode.responsibleModule, /ComposeWidgetAdapter/);
   for (const call of report.calls) {
     assert.ok(call.source.line > 0 && call.source.column > 0);
     assert.ok(call.finalRecognizedNode?.symbol);
@@ -104,14 +123,14 @@ try {
       compatibilityDecision: report.compatibilityDecision },
     coverage: report.coverage,
     p0Gaps: [
-      { category: 'resources', node: 'com.example.marsphotos.R.string.loading',
+      { category: 'neutral_compose_widget', node: 'androidx.compose.material3.MaterialTheme.shapes',
         responsibleModule: report.firstUnsupportedNode.responsibleModule, source: report.firstUnsupportedNode.source,
         detail: report.firstUnsupportedNode.message },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
-  console.log('PASS Mars Photos 8399c839: variant-aware loading_img VectorDrawable materializes through the formal project path');
-  console.log('PASS no target: next real stringResource gap remains explicit');
+  console.log('PASS Mars Photos 8399c839: project images and strings materialize through the formal selected-variant path');
+  console.log('PASS no target: MaterialTheme.shapes is the next real P0 at HomeScreen.kt:128:31');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

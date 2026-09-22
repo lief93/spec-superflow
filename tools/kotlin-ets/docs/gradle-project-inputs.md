@@ -70,6 +70,18 @@ backend publishes only used media and keeps the overlay/source provenance. See
 [image resource materialization](image-resources.md). Unsupported or missing
 selected image definitions remain source-linked failures and never emit ETS.
 
+The same selected-variant input automatically materializes module-owned
+`string`, `plurals` and `string-array` entries from ordered `values*` overlays
+unless `--string-resources` is supplied. Plain strings and common indexed or
+ordered `%s`/`%d` formats retain argument order; `pluralStringResource` retains
+the quantity and format arguments. Default and simple `values-ll[-rCC]` locales
+publish Harmony `string.json`, `plural.json` and `strarray.json` artifacts only
+when referenced. Styled spans, resource references, complex ICU messages,
+complex locale qualifiers, missing module-owned values, ambiguous overlays and
+unknown constant IDs remain explicit source-linked failures with no ETS output.
+The run directory keeps `string-resources.json` and
+`string-resources/string-resource-origins.json` as provenance.
+
 ## Collection semantics and limits
 
 The bundled Gradle init script registers an input-collection task without changing
@@ -190,10 +202,10 @@ Do not report collection or generation as successful application installation.
 - `tests/project-inputs/.work/public-Pr1fhR/result.json`: plugin-free project
   generation and function host execution still pass.
 - `node --test tools/kotlin-ets/tests/project-inputs/compiler-environment.test.mjs`:
-  six compatibility, plugin and fail-closed policy tests pass.
-- `node --test tools/kotlin-ets/tests/project-inputs/launcher.test.mjs`: 17 tests
-  pass, including incompatible compiler and same-priority image-overlay rejection
-  with no report or ETS.
+  seven compatibility, plugin and fail-closed policy tests pass.
+- `node --test tools/kotlin-ets/tests/project-inputs/launcher.test.mjs`: 18 tests
+  pass, including incompatible compiler and same-priority image/string-overlay
+  rejection with no report or ETS.
 
 ## Earlier verification (2026-09-14)
 

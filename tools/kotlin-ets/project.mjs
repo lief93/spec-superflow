@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compilerEnvironment } from './compiler-environment.mjs';
 import { materializeProjectImages } from './image-resources.mjs';
+import { materializeProjectStrings } from './string-resources.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const help = `Kotlin to ETS: Gradle project input
@@ -183,6 +184,15 @@ export function main(args) {
       imageResources = pack.properties;
       writeFileSync(join(workDir, 'image-resources.json'), JSON.stringify(pack, null, 2), { flag: 'wx' });
     }
+    let stringResources = options.stringResources;
+    if (!stringResources && inputs.resourceInputs) {
+      stage = 'string-resources';
+      const pack = materializeProjectStrings({ resourceRoots: inputs.resourceInputs.roots,
+        namespace: inputs.resourceInputs.namespace, variant: inputs.resourceInputs.variant,
+        symbolsFile: inputs.resourceInputs.symbols, out: join(workDir, 'string-resources') });
+      stringResources = pack.output;
+      writeFileSync(join(workDir, 'string-resources.json'), JSON.stringify(pack, null, 2), { flag: 'wx' });
+    }
     stage = 'compiler';
     const compilerArgs = [join(root, 'kotlin-ets'), '--mode', options.mode, options.outputFlag, options.output,
       '--unsupported-policy', options.unsupportedPolicy,
@@ -190,7 +200,7 @@ export function main(args) {
       '--classpath-file', classpath, '--sources-file', sources, '--frontend-arguments-file', frontendArguments,
       ...(options.entry ? ['--entry', options.entry] : []),
       ...(imageResources ? ['--image-resources', imageResources] : []),
-      ...(options.stringResources ? ['--string-resources', options.stringResources] : []),
+      ...(stringResources ? ['--string-resources', stringResources] : []),
       ...(options.fontResources ? ['--font-resources', options.fontResources] : [])];
     if (options.preflightOutput) compilerArgs.push('--preflight-out', options.preflightOutput);
     const result = runLogged('bash', compilerArgs, options.project, workDir, stage);

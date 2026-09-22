@@ -117,6 +117,7 @@ private fun profileType(type: EtsType): String = when (type) {
 
 private val resourceCalls = setOf(
     "androidx.compose.ui.res.stringResource",
+    "androidx.compose.ui.res.pluralStringResource",
     "androidx.compose.ui.res.painterResource",
     "androidx.compose.ui.res.colorResource",
     "androidx.compose.ui.res.dimensionResource",
@@ -140,7 +141,7 @@ private fun profileCategory(call: IrCall): CoreProfileCategory {
 }
 
 private fun responsibleModule(call: IrCall, category: CoreProfileCategory): String = when (symbolName(call.symbol.owner)) {
-    "androidx.compose.ui.res.stringResource" -> "tools/kotlin-ets/src/ui/StringResources.kt"
+    "androidx.compose.ui.res.stringResource", "androidx.compose.ui.res.pluralStringResource" -> "tools/kotlin-ets/src/ui/StringResources.kt"
     "androidx.compose.ui.res.painterResource" -> "tools/kotlin-ets/src/ui/ImageResources.kt"
     else -> category.responsibleModule
 }

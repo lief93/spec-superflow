@@ -226,3 +226,34 @@ test('same-priority project image definitions fail before compiler execution wit
   assert.equal(existsSync(output), false);
   assert.equal(existsSync(preflight), false);
 });
+
+test('same-priority project string definitions fail before compiler execution without ETS', () => {
+  const project = mkdtempSync(join(tmpdir(), 'kotlin-ets-duplicate-strings-'));
+  const source = join(project, 'App.kt');
+  const jar = join(project, 'dependency.jar');
+  const first = join(project, 'first-res');
+  const second = join(project, 'second-res');
+  const symbols = join(project, 'R.txt');
+  writeFileSync(source, 'fun value() = 1\n'); writeFileSync(jar, 'fixture');
+  for (const [root, value] of [[first, 'First'], [second, 'Second']]) {
+    mkdirSync(join(root, 'values'), { recursive: true });
+    writeFileSync(join(root, 'values/strings.xml'), `<resources><string name="repeated">${value}</string></resources>`);
+  }
+  writeFileSync(symbols, 'int string repeated 0x7f010001\n');
+  const manifest = { schemaVersion: 2, sources: [source], classpath: [jar], compilerVersion: '2.1.20',
+    compilerArguments: [], resourceInputs: { namespace: 'sample', variant: 'debug', symbols, roots: [
+      { sourceSet: 'main', overlayPriority: 0, path: first },
+      { sourceSet: 'main', overlayPriority: 0, path: second },
+    ] } };
+  writeFileSync(join(project, 'gradlew'), `#!/usr/bin/env bash\nfor arg in "$@"; do\n  case "$arg" in\n    -PkotlinEtsInputsOutput=*) printf '%s' '${JSON.stringify(manifest)}' > "\${arg#*=}" ;;\n  esac\ndone\n`);
+  const output = join(project, 'out.ets');
+  const preflight = join(project, 'preflight.json');
+  const result = spawnSync('bash', [launcher, '--project', project, '--module', ':app', '--variant', 'debug',
+    '--entry', 'sample.Page', '--out', output, '--preflight-out', preflight], { encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  const diagnostic = JSON.parse(result.stdout);
+  assert.equal(diagnostic.stage, 'string-resources');
+  assert.match(diagnostic.message, /Ambiguous project string resource sample\.R\.string\.repeated/);
+  assert.equal(existsSync(output), false);
+  assert.equal(existsSync(preflight), false);
+});

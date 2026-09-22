@@ -13,6 +13,7 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
             if (id?.startsWith("compose:") == true) {
                 val valid = when (id) {
                     "compose:formatString" -> node is EtsReference && node.symbol.name == "__etsFormatString" && node.type == stringFormatType
+                    "compose:formatPlural" -> node is EtsReference && node.symbol.name == "__etsFormatPlural" && node.type == pluralFormatType
                     "compose:boxConstraints" -> {
                         val options = ((node as? EtsReference)?.type as? EtsFunctionType)?.parameters?.singleOrNull() as? EtsRecordType
                         val data = options?.fields?.get("data")
@@ -41,7 +42,8 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
             }
         } } }
         return languageRuntime.declarations(program) +
-            (if ("compose:formatString" in required) stringFormatSupport else emptyList()) +
+            (if ("compose:formatString" in required || "compose:formatPlural" in required) stringFormatSupport else emptyList()) +
+            (if ("compose:formatPlural" in required) pluralFormatSupport else emptyList()) +
             (if ("compose:boxConstraints" in required) constraintsLayoutSupport else emptyList()) +
             (if ("compose:surface" in required) surfaceLayoutSupport else emptyList()) +
             (if ("compose:imageTint" in required) imageTintSupport else emptyList()) +

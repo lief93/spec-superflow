@@ -4,4 +4,9 @@
     <string name="unused">Must not be emitted</string>
     <string name="styled"><b>Styled</b> text</string>
     <string name="greeting">Hello %1$s: %2$d items</string>
+    <plurals name="photos">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+    <string-array name="labels"><item>First</item><item>Second</item></string-array>
 </resources>

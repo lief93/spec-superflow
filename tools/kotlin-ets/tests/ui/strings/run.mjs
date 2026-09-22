@@ -12,7 +12,7 @@ const cp = JSON.parse(readFileSync('/tmp/kotlin-official-frontend-probe-06/class
 writeFileSync(join(work, 'classpath.txt'), cp.join('\n'));
 console.log(`Evidence: ${work}`);
 const pack = join(work, 'inputs');
-const materialize = spawnSync('python3', [join(root, 'string-resources.py'), '--res-dir', join(here, 'res'),
+const materialize = spawnSync('node', [join(root, 'string-resources.mjs'), '--res-dir', join(here, 'res'),
   '--namespace', 'strings', '--out', pack, '--symbols', join(here, 'R.txt')], { encoding: 'utf8' });
 assert.equal(materialize.status, 0, materialize.stderr);
 function compile(entry, expected) {
@@ -36,7 +36,25 @@ const french = JSON.parse(readFileSync(join(work, 'Page.ets.resources/fr/element
 assert.deepEqual(base.map(x => x.value).sort(), ['Resource subtitle', 'Resource title']);
 assert.deepEqual(french.map(x => x.value).sort(), ['Sous-titre', 'Titre']);
 assert.deepEqual(base.map(x => x.name).sort(), french.map(x => x.name).sort());
-assert.match(compile('Missing', 2), /Unmapped string resource: strings.R.string.missing/);
-assert.match(compile('Styled', 2), /Unsupported string resource.*styled/);
-assert.match(compile('Formatted', 0), /__etsFormatString/);
-console.log('PASS string-valued resource calls, referenced-only resource artifacts, variants and explicit unsupported cases');
+assert.match(compile('Missing', 2), /Unsupported Android values resource.*string\.missing/);
+assert.match(compile('Styled', 2), /Unsupported Android values resource.*styled/);
+assert.match(compile('MissingPlural', 2), /Unsupported Android values resource.*plurals\.missing/);
+assert.match(compile('Unknown', 2), /Unknown selected-build Android string resource ID: 999/);
+const formatted = compile('Formatted', 0);
+assert.match(formatted, /__etsFormatString/);
+assert.match(formatted, /__etsFormatPlural/);
+assert.match(formatted, /function __etsStringResourceId/);
+assert.match(formatted, /function __etsPluralResourceId/);
+assert.match(formatted, /\["Ada", 3\]/);
+const plural = compile('Plural', 0);
+assert.match(plural, /__etsFormatPlural/);
+assert.match(plural, /getPluralStringValueSync/);
+assert.match(plural, /\$r\("app\.plural\.plu_[0-9a-f]{64}"\)\.id, 2, \[2\]/);
+const pluralValues = JSON.parse(readFileSync(join(work, 'Plural.ets.resources/base/element/plural.json'))).plural;
+assert.deepEqual(pluralValues[0].value.map(item => item.quantity).sort(), ['one', 'other']);
+assert.ok(existsSync(join(work, 'Plural.ets.resources/string-resource-origins.json')));
+compile('ArrayValue', 0);
+const arrayValues = JSON.parse(readFileSync(join(work, 'ArrayValue.ets.resources/base/element/strarray.json'))).strarray;
+assert.deepEqual(arrayValues[0].value.map(item => item.value), ['First', 'Second']);
+assert.match(compile('MissingArray', 2), /Unsupported Android values resource.*array\.missing/);
+console.log('PASS string/plural typed resources, format argument order, referenced-only artifacts and explicit no-output diagnostics');

@@ -11,7 +11,9 @@ on a device. In particular, host-language execution is not ArkTS SDK validation.
 Image/Icon and bounded URL AsyncImage support: [usage and limits](docs/compose-images.md).
 Local image assets use the [materializer](docs/image-resources.md), which reuses
 the old vector converter without consuming old page JSON. Android project/variant
-input materializes module-owned drawable and mipmap overlays automatically.
+input materializes module-owned drawable/mipmap and values overlays automatically.
+Plain strings, `%s`/`%d` formatting, plurals and string arrays become typed
+Harmony resources; unsupported styled/ICU/locale cases fail explicitly.
 
 ## Architecture
 
