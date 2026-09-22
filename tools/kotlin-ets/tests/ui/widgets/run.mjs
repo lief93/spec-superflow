@@ -14,7 +14,8 @@ const uiCp = JSON.parse(readFileSync(uiClasspathFile, 'utf8')).join(':');
 const modelSources = sources(join(root, 'src/ui/widgets'));
 const backendSources = sources(join(root, 'src/ui/harmony'));
 const adapter = join(root, 'src/ui/compose/ComposeWidgetAdapter.kt');
-const fixtures = ['Page.kt', 'Unsupported.kt', 'BackendTest.kt', 'WidgetProbe.kt'].map(name => join(here, name));
+const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
+  'BackendTest.kt', 'WidgetProbe.kt'].map(name => join(here, name));
 const implementation = identities([...sources(join(root, 'src')), ...fixtures, fileURLToPath(import.meta.url), uiClasspathFile]);
 for (const path of modelSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /import |\bEts[A-Z]|IrCall|androidx|harmony|arkui/);
 for (const path of backendSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /org\.jetbrains|androidx|IrCall|ComposeWidget|ArkUiCalls/);
@@ -38,15 +39,17 @@ run('compile-probe', 'java', ['-cp', cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMComp
   '-classpath', [cp, modelJar, compilerJar, backendJar, adapterJar].join(':'), `-Xfriend-paths=${compilerJar}`,
   join(here, 'WidgetProbe.kt'), '-d', probeJar]);
 console.log(run('resolved-structure', 'java', ['-cp', [cp, modelJar, compilerJar, backendJar, adapterJar, probeJar].join(':'),
-  'dev.ets.widgettest.WidgetProbeKt', uiCp, join(work, 'output'), join(here, 'Page.kt'), join(here, 'Unsupported.kt')]).trim());
+  'dev.ets.widgettest.WidgetProbeKt', uiCp, join(work, 'output'), join(here, 'widget_logo.svg'),
+  join(here, 'Page.kt'), join(here, 'Unsupported.kt'), join(here, 'ImageR.java')]).trim());
 const output = join(work, 'output/WidgetPage.ets');
 assert.ok(existsSync(output));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
-assert.equal(diagnostics.length, 10);
+assert.equal(diagnostics.length, 18);
 assert.ok(diagnostics.every(line => line.includes('UNSUPPORTED') && line.includes('/Unsupported.kt')));
 assert.ok(implementation.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,
-  outputs: identities([output, join(work, 'output/model.txt'), join(work, 'output/diagnostics.tsv')]),
+  outputs: identities([output, join(work, 'output/model.txt'), join(work, 'output/diagnostics.tsv'),
+    join(work, 'output/WidgetPage.ets.resources/base/media/widget_logo.svg')]),
   independentModelCompilation: true, adapterWithoutHarmony: true, backendWithoutCompilerOrCompose: true,
   typedTargetValidation: true, sourceLinkedRejections: diagnostics.length,
   sdk: 'separate SDK command required', nativeRendering: 'not run',

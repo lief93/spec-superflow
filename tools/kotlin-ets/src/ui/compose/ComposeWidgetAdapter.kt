@@ -3,6 +3,7 @@ package dev.ets.compose
 
 import dev.ets.*
 import dev.ets.widgets.*
+import java.net.URI
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
@@ -39,7 +40,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 if (statement.isVar) diagnostics.unsupported(statement, "Mutable widget local is outside the static widget subset")
                 when {
                     initial.type.classFqName?.asString() in setOf("androidx.compose.ui.Modifier", "androidx.compose.ui.Modifier.Companion") -> modifiers(initial, scope)
-                    resolve(initial, scope) is IrFunctionExpression -> callback(initial, scope)
+                    resolve(initial, scope) is IrFunctionExpression -> Unit
                     else -> scalar(initial, scope)
                 }
                 scope.aliases[statement.symbol] = initial
@@ -63,9 +64,15 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             diagnostics.unsupported(call, "Unsupported resolved widget API: $api")
         val text = api.endsWith(".Text")
         val button = api.endsWith(".Button")
+        val image = api in setOf("androidx.compose.foundation.Image", "coil.compose.AsyncImage")
+        val textField = api.endsWith("TextField")
         checkArguments(call, when {
             text -> setOf("text", "modifier")
             button -> setOf("onClick", "enabled", "modifier", "content")
+            image -> if (api == "androidx.compose.foundation.Image")
+                setOf("painter", "contentDescription", "modifier")
+            else setOf("model", "contentDescription", "modifier")
+            textField -> setOf("value", "onValueChange", "modifier", "enabled")
             else -> setOf("modifier", "content")
         })
         val source = language.source(call)
@@ -77,6 +84,20 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             if (!value.type.isString()) diagnostics.unsupported(value, "Widget Text requires String text")
             return Widget.Text(scalar(value, scope), modifier, source)
         }
+        if (image) return image(call, api, scope, modifier, source)
+        if (textField) {
+            val value = required("value")
+            if (!value.type.isString()) diagnostics.unsupported(value,
+                "Widget TextField requires a String value; rich text values are outside this subset")
+            val enabled = argument(call, "enabled")?.let {
+                if (!it.type.isBoolean()) diagnostics.unsupported(it, "Widget TextField enabled requires Boolean")
+                scalar(it, scope)
+            }
+            return Widget.TextField(scalar(value, scope),
+                event(required("onValueChange"), scope,
+                    EtsFunctionType(listOf(EtsTypes.STRING), EtsTypes.VOID), "TextField onValueChange"),
+                enabled, modifier, source)
+        }
         // A slot owns its nested scope; siblings never inherit bindings from its content.
         val content = argument(call, "content")
         val children = if (content == null && api == "androidx.compose.foundation.layout.Box" &&
@@ -87,7 +108,8 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             body(lambda.function.body ?: diagnostics.unsupported(value, "Widget children have no body"), scope.fork(), lambda.function)
         }
         return when {
-            button -> Widget.Button(callback(required("onClick"), scope), argument(call, "enabled")?.let {
+            button -> Widget.Button(event(required("onClick"), scope,
+                EtsFunctionType(emptyList(), EtsTypes.VOID), "callback"), argument(call, "enabled")?.let {
                 if (!it.type.isBoolean()) diagnostics.unsupported(it, "Widget Button enabled requires Boolean")
                 scalar(it, scope)
             }, children, modifier, source)
@@ -95,6 +117,45 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             api.endsWith(".Column") -> Widget.Column(children, modifier, source)
             else -> Widget.Box(children, modifier, source)
         }
+    }
+
+    private fun image(call: IrCall, api: String, scope: Scope,
+        modifiers: List<WidgetModifier<EtsExpression, SourceSpan>>, source: SourceSpan): Widget.Image<EtsExpression, SourceSpan> {
+        fun required(name: String) = argument(call, name)
+            ?: diagnostics.unsupported(call, "$api requires $name")
+        val description = scalarImageDescription(required("contentDescription"), scope)
+        val image = if (api == "androidx.compose.foundation.Image") {
+            val painter = required("painter")
+            val resolved = resolve(painter, scope) as? IrCall
+                ?: diagnostics.unsupported(painter, "Widget Image requires direct painterResource; arbitrary Painter is unsupported")
+            if (symbolName(resolved.symbol.owner) != "androidx.compose.ui.res.painterResource")
+                diagnostics.unsupported(painter, "Widget Image requires direct painterResource; arbitrary Painter is unsupported")
+            val value = language.expression(resolved, scope)
+            val expected = EtsNamedType("Resource", external = true)
+            if (value.type != expected) diagnostics.unsupported(painter,
+                "Widget painterResource requires a materialized Resource value")
+            ImageSource.Resource(value, language.source(resolved))
+        } else {
+            val model = required("model")
+            if (!model.type.isString()) diagnostics.unsupported(model,
+                "Widget AsyncImage requires a String URL; request and painter models are unsupported")
+            val value = scalar(model, scope)
+            val address = (value as? EtsLiteral)?.value as? String
+            if (address != null) {
+                val uri = runCatching { URI(address) }.getOrNull()
+                if (uri == null || uri.scheme !in setOf("http", "https") || uri.host.isNullOrBlank() || uri.userInfo != null)
+                    diagnostics.unsupported(model, "Widget AsyncImage requires an HTTP(S) URL without embedded credentials")
+            }
+            ImageSource.Url(value, language.source(model))
+        }
+        return Widget.Image(image, description, modifiers, source)
+    }
+
+    private fun scalarImageDescription(value: IrExpression, scope: Scope): EtsExpression {
+        val emitted = scalar(value, scope)
+        if (emitted.type !in setOf(EtsTypes.STRING, EtsTypes.NULL)) diagnostics.unsupported(value,
+            "Widget Image contentDescription requires a non-null String or explicit null")
+        return emitted
     }
 
     private fun modifiers(value: IrExpression?, scope: Scope): List<WidgetModifier<EtsExpression, SourceSpan>> {
@@ -150,13 +211,13 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         else -> value
     }
 
-    private fun callback(value: IrExpression, scope: Scope): EtsExpression {
+    private fun event(value: IrExpression, scope: Scope, expected: EtsFunctionType, label: String): EtsExpression {
         val resolved = resolve(value, scope)
         if (resolved !is IrFunctionExpression && resolved !is IrGetValue)
-            diagnostics.unsupported(value, "Widget callback requires a lambda or bound function value")
+            diagnostics.unsupported(value, "Widget $label requires a lambda or bound function value")
         val emitted = language.expression(resolved, scope)
-        if (emitted.type != EtsFunctionType(emptyList(), EtsTypes.VOID))
-            diagnostics.unsupported(value, "Widget callback requires () -> Unit")
+        if (emitted.type != expected)
+            diagnostics.unsupported(value, "Widget $label requires $expected")
         return emitted
     }
 
@@ -189,6 +250,9 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
     private companion object {
         val supported = setOf("androidx.compose.material.Text", "androidx.compose.material3.Text",
             "androidx.compose.material.Button", "androidx.compose.material3.Button",
+            "androidx.compose.foundation.Image", "coil.compose.AsyncImage",
+            "androidx.compose.foundation.text.BasicTextField", "androidx.compose.material.TextField",
+            "androidx.compose.material3.TextField", "androidx.compose.material3.OutlinedTextField",
             "androidx.compose.foundation.layout.Row", "androidx.compose.foundation.layout.Column",
             "androidx.compose.foundation.layout.Box")
     }

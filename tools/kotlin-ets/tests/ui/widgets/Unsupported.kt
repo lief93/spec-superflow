@@ -1,13 +1,20 @@
 package widgetsnegative
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 
 @Composable fun UnknownWidget() { Checkbox(checked = true, onCheckedChange = {}) }
 @Composable fun UnknownModifier() { Text("x", Modifier.fillMaxWidth()) }
@@ -22,3 +29,18 @@ fun callbackFactory(): () -> Unit = {}
 @Composable fun NegativePadding() { Text("x", Modifier.padding((-1).dp)) }
 @Composable fun MutableLocal() { var value = "x"; Text(value) }
 @Composable fun EarlyReturn() { Text("before"); return; Text("unreachable") }
+@Composable fun ArbitraryPainter() { Image(ColorPainter(Color.Red), null) }
+@Composable fun RichText() { Text(AnnotatedString("rich")) }
+@Composable fun NonUrlImageModel() { AsyncImage(7, null) }
+@Composable fun BadImageUrl() { AsyncImage("file:///private/image.png", null) }
+@Composable fun RichTextField() { BasicTextField(TextFieldValue("rich"), {}) }
+@Composable fun DecorationTextField() {
+    BasicTextField("value", {}, decorationBox = { inner -> inner() })
+}
+@Composable fun MaterialDecoration() {
+    androidx.compose.material3.TextField("value", {}, label = { Text("label") })
+}
+fun inputCallbackFactory(): (String) -> Unit = {}
+@Composable fun TextFieldCallbackFactory() {
+    BasicTextField("value", inputCallbackFactory())
+}

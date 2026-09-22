@@ -10,7 +10,11 @@ sealed interface Widget<V, S> {
 
     data class Text<V, S>(val text: V, override val modifiers: List<WidgetModifier<V, S>>,
         override val source: S) : Widget<V, S>
+    data class Image<V, S>(val image: ImageSource<V, S>, val contentDescription: V,
+        override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
     data class Button<V, S>(val onClick: V, val enabled: V?, val content: Children<V, S>,
+        override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
+    data class TextField<V, S>(val value: V, val onValueChange: V, val enabled: V?,
         override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
     data class Row<V, S>(val children: Children<V, S>, override val modifiers: List<WidgetModifier<V, S>>,
         override val source: S) : Widget<V, S>
@@ -21,6 +25,14 @@ sealed interface Widget<V, S> {
 }
 
 data class Children<V, S>(val widgets: List<Widget<V, S>>)
+
+/** The source kind survives the platform seam; no resource or URL is reduced to source text. */
+sealed interface ImageSource<V, S> {
+    val value: V
+    val source: S
+    data class Resource<V, S>(override val value: V, override val source: S) : ImageSource<V, S>
+    data class Url<V, S>(override val value: V, override val source: S) : ImageSource<V, S>
+}
 
 sealed interface WidgetModifier<V, S> {
     val source: S

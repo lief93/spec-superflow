@@ -1,4 +1,4 @@
-# S2.1: resolved Compose → widget semantics → Harmony
+# S2.2: resolved Compose → widget semantics → Harmony
 
 This is an opt-in production compiler interface for a closed static widget
 subset. The existing default `page` CLI remains unchanged; switching all of its
@@ -20,7 +20,8 @@ val children = HarmonyWidgetBackend().lower(model)
 // Put children into the existing typed builder/component, validate and print.
 ```
 
-- `dev.ets.widgets`: `Widget<V, S>`, `WidgetModifier<V, S>`, and `Children<V, S>`.
+- `dev.ets.widgets`: `Widget<V, S>`, `ImageSource<V, S>`,
+  `WidgetModifier<V, S>`, and `Children<V, S>`.
   This module has no imports and compiles against Kotlin stdlib alone. Values
   and source locations are generic. There are no native control strings or
   compiler IR objects in the schema.
@@ -45,7 +46,11 @@ existing language compiler, not serialized strings or callback IDs.
 | Source form | Neutral model | Harmony interpretation |
 | --- | --- | --- |
 | Material 2/3 String `Text` | `Widget.Text(text)` | native Text |
+| foundation `Image(painterResource(...))` | `Widget.Image(ImageSource.Resource(...))` | native Image with typed Resource |
+| Coil `AsyncImage(String, ...)` | `Widget.Image(ImageSource.Url(...))` | native Image with typed String URL |
 | Material 2/3 `Button` | enabled + callback + `content` slot | native Button with a Row content host |
+| foundation `BasicTextField` | `Widget.TextField(value, onValueChange, enabled)` | native TextInput |
+| Material 2/3 `TextField` / `OutlinedTextField` | the same `Widget.TextField` | the same native TextInput |
 | layout `Row` / `Column` | ordered `children` slot | corresponding native layout |
 | layout `Box` | children slot, including the content-free overload | native Stack |
 | `width`, `height` | distinct ordered elements | distinct size wrappers |
@@ -57,18 +62,32 @@ remains a slot. Children after a slot stay siblings of the Button. Modifier
 lists retain duplicates and order; `width → padding → width` and
 `padding → width` have different target nesting.
 
+Image source kind crosses the semantic seam explicitly. A materialized
+`painterResource` stays a typed `Resource`; a Coil String model stays a typed
+URL expression. The adapter never serializes either expression or selects the
+native Image control. Literal URLs must be HTTP(S), have a host, and contain no
+credentials. Arbitrary Painter objects and non-String Coil models fail closed.
+The backend maps a String content description to `accessibilityText` and an
+explicit null to a disabled accessibility level.
+
+Basic, Material, and outlined text fields converge on one model record. Their
+String value, `(String) -> Unit` event, and Boolean enabled state keep their
+typed expression identity through the backend. Decoration slots, labels, rich
+text values, and other unmodeled arguments fail rather than being dropped.
+
 The closed path uses Harmony's native presentation defaults. It does not claim
 Material theme/typography/color parity or full Compose constraint/measurement
 semantics. In particular, preserving repeated preferred-size wrappers does not
 implement Compose's entire constraint algorithm. RTL, clipping, touch expansion,
 recomposition, and native rendering parity are outside this acceptance.
 
-Values must be stable scalars or statically resolved callback values. Mutable
-builder locals, effectful scalar factories, dynamic callback factories,
-unsupported widgets/modifiers/arguments, conditional children, and nonterminal
-or nonlocal UI returns fail with `Unsupported` and source spans. The adapter
-never substitutes an unknown call with empty children. Ordinary function bodies
-inside supported callbacks still belong to `Language`, not this adapter.
+Values must be stable scalars or statically resolved event values. Mutable
+builder locals, effectful scalar factories, dynamic event factories,
+unsupported widgets/modifiers/arguments, conditional children, arbitrary
+Painters, rich text, decoration slots, invalid literal URLs, and nonterminal or
+nonlocal UI returns fail with `Unsupported` and source spans. The adapter never
+substitutes an unknown call with empty children. Ordinary function bodies inside
+supported events still belong to `Language`, not this adapter.
 
 Explicit empty children are valid; ignored behavior is not. Local Modifier
 aliases and the empty identity are accepted. Source composable helper calls,
@@ -84,7 +103,9 @@ From the repository root:
 ```sh
 node tools/kotlin-ets/tests/ui/widgets/run.mjs
 bash tools/kotlin-ets/tests/target/run.sh
-node tools/kotlin-ets/tests/ui/modifier-arguments/run.mjs
+node tools/kotlin-ets/tests/resources/run.mjs
+node tools/kotlin-ets/tests/ui/images-cli.mjs /path/to/resources-run/res
+node tools/kotlin-ets/tests/ui/async-request/run.mjs /path/to/compose-classpath.txt
 node tools/kotlin-ets/tests/ui/material-button/run.mjs
 node tools/kotlin-ets/tests/ui/forwarded-slots/run.mjs
 ```
@@ -108,42 +129,40 @@ ABC/HAP output. It does not install or run a device application.
 
 ## Acceptance evidence (five completion criteria)
 
-1. **Resolved-call structure.** `tests/ui/widgets/.work/run-GjId7A` compiles
-   against real AndroidX artifacts and asserts all five widget kinds, aliased
-   `Text` import resolution, parameter/callback symbol identity, nested Button
-   content, post-slot siblings, empty Box, Modifier identity/then, duplicate
-   widths, and both width/padding orders. `model.txt` retains the semantic result.
-   The model compiles alone; the adapter compiles without Harmony; the backend
-   compiles/runs without compiler or Compose classes.
-2. **Harmony → typed ETS.** The same run validates the actual `EtsProgram` and
-   emits `WidgetPage.ets`. The unchanged file passes the installed DevEco SDK
-   in `/private/tmp/kotlin-ets-basic-controls-sdk-oMpZ9X`, producing ABC and an
-   unsigned HAP. Its SHA-256 is
-   `6b1368711ec0127ff81233e37fd97b73a67259902687d86de5c5a2c8b45c6da0`.
-   The SDK seed was copied from the repository's Harmony stage template into
-   `.work/sdk-seed`, with SDK `6.0.1(21)`, bundle `dev.ets.widgetproof`, project
-   label `WidgetProof`, and no signing configuration. No generated ETS was edited.
-3. **Explicit rejection.** Ten source-linked failures are recorded in
-   `diagnostics.tsv`: unknown widget, modifier and argument, conditional children,
-   source composable helper, effectful value, callback factory, negative literal
-   padding, mutable local, and early return. The early-return case first failed
-   with `Accepted unsupported fixture EarlyReturn` in
-   `run-v1Nwnb/early-return-red.json`; it now fails closed before any target result
-   is returned. Empty UI is never used as a recovery value.
-4. **Existing regressions.** Target suite `kotlin-ets-target-tests.owCR34` passes,
-   as do UI suites `kotlin-ets-modifier-arguments-bOo2eH`,
-   `kotlin-ets-material-button-ZDcLfZ`, and `kotlin-ets-forwarded-slots-hKa1Bi`
-   under the system temporary directory. The forwarded-slots assertions were
-   stale: they expected context-free builder signatures and literal typography.
-   A compiler jar excluding every new module produced byte-identical output
-   (`run-v1Nwnb/baseline-slots.json`), confirming this predates the change. The
-   test now asserts the existing explicit Material context, slot forwarding,
-   and label/body typography roles; no legacy UI implementation was changed.
-   These are focused related regressions, not a claim that every UI suite ran.
-5. **Branch scope.** Changes are confined to the three new UI modules, widget
-   fixtures/harness, this report and its index link, plus the corrected existing
-   slot regression assertions. Language lowering, KLIB, project adapters, shared
-   target/core contracts, and default CLI behavior are untouched.
+1. **Resolved-call structure.** `tests/ui/widgets/.work/run-L7Vnqi` compiles
+   against real AndroidX and Coil artifacts and asserts all seven widget kinds.
+   Resource/URL source kinds, TextField value/event/enabled symbols, aliased Text,
+   nested Button content, siblings, empty Box, Modifier identity/then, duplicate
+   widths, and both width/padding orders retain their structure. `model.txt`
+   records the result. The model compiles alone; the adapter compiles without
+   Harmony; the backend compiles and runs without compiler or Compose classes.
+2. **Harmony → typed ETS.** The same run validates the actual `EtsProgram`, emits
+   two native Images and two native TextInputs, and copies
+   `WidgetPage.ets.resources/base/media/widget_logo.svg`. The unchanged generated
+   file, SHA-256
+   `4a08da3b7ff935435d6e021641d1c2e39cd726f1143f211d4b2d2378561f1abb`,
+   passes the installed DevEco SDK in
+   `/private/tmp/kotlin-ets-basic-controls-sdk-cbFqSg`. The SDK copy contains the
+   media file and produces ABC
+   `a4747093bdd75d5ab88127de2e056be6fe6ee508645411b30a4924b06a69980a`
+   plus `entry-default-unsigned.hap`. No generated ETS was edited.
+3. **Explicit rejection.** Eighteen source-linked failures are recorded in
+   `diagnostics.tsv`. The original ten cases remain, joined by arbitrary Painter,
+   rich Text, non-String image model, invalid literal URL, rich TextField value,
+   BasicTextField decoration, Material label, and TextField callback factory.
+   Empty UI is never used as a recovery value.
+4. **Existing regressions.** Target suite `kotlin-ets-target-tests.2rEkjV`,
+   resource suite `tests/resources/.work/run-nVizf6`, image CLI suite
+   `kotlin-ets-images-cli-St8um5`, Material Button suite
+   `kotlin-ets-material-button-VmaPbU`, async image suite
+   `kotlin-ets-async-request-YySVt7`, and forwarded slots suite
+   `kotlin-ets-forwarded-slots-kzHUeP` pass. The async image test had one stale
+   context-free Picture signature assertion; it now checks the existing explicit
+   Material context and URL Binding. No legacy UI implementation was changed.
+5. **Branch scope.** Changes are confined to the three semantic pipeline modules,
+   widget fixtures/harness, this report, and the corrected async image assertion.
+   Language lowering, KLIB loading, project adapters, shared target/core
+   contracts, and default CLI behavior are untouched.
 
 The evidence proves the static semantic/compiler/SDK path. It does not establish
 recomposition, Material visual parity, device interaction, or permission to

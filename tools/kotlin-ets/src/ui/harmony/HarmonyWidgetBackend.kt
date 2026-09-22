@@ -17,6 +17,27 @@ class HarmonyWidgetBackend {
                 native("Text", listOf(widget.text)).copy(attributes = listOf(
                     call("align", listOf(enumValue("Alignment", "TopStart", at)), at)))
             }
+            is Widget.Image -> {
+                val image = when (val source = widget.image) {
+                    is ImageSource.Resource -> {
+                        expect(source.value, resourceType, "Image.resource", source.source)
+                        source.value
+                    }
+                    is ImageSource.Url -> {
+                        expect(source.value, EtsTypes.STRING, "Image.url", source.source)
+                        source.value
+                    }
+                }
+                val accessibility = when (widget.contentDescription.type) {
+                    EtsTypes.STRING -> call("accessibilityText", listOf(widget.contentDescription), at)
+                    EtsTypes.NULL -> call("accessibilityLevel",
+                        listOf(EtsLiteral("no", EtsTypes.STRING, at)), at)
+                    else -> throw IllegalArgumentException(
+                        "Image.contentDescription requires string or null at $at; got ${widget.contentDescription.type}")
+                }
+                native("Image", listOf(image)).copy(attributes = listOf(
+                    call("objectFit", listOf(enumValue("ImageFit", "Contain", at)), at), accessibility))
+            }
             is Widget.Button -> {
                 val enabled = widget.enabled ?: EtsLiteral(true, EtsTypes.BOOLEAN, at)
                 expect(enabled, EtsTypes.BOOLEAN, "Button.enabled", at)
@@ -26,6 +47,18 @@ class HarmonyWidgetBackend {
                     call("justifyContent", listOf(enumValue("FlexAlign", "Center", at)), at)))
                 native("Button", children = listOf(content)).copy(attributes = listOf(
                     call("enabled", listOf(enabled), at), call("onClick", listOf(widget.onClick), at)))
+            }
+            is Widget.TextField -> {
+                expect(widget.value, EtsTypes.STRING, "TextField.value", at)
+                expect(widget.onValueChange, EtsFunctionType(listOf(EtsTypes.STRING), EtsTypes.VOID),
+                    "TextField.onValueChange", at)
+                val enabled = widget.enabled ?: EtsLiteral(true, EtsTypes.BOOLEAN, at)
+                expect(enabled, EtsTypes.BOOLEAN, "TextField.enabled", at)
+                val options = EtsObject(mapOf("text" to widget.value),
+                    EtsRecordType("TextInputOptions", mapOf("text" to EtsTypes.STRING)), at)
+                native("TextInput", listOf(options)).copy(attributes = listOf(
+                    call("enabled", listOf(enabled), at),
+                    call("onChange", listOf(widget.onValueChange), at)))
             }
             is Widget.Row -> native("Row", children = lower(widget.children)).copy(attributes = listOf(
                 call("alignItems", listOf(enumValue("VerticalAlign", "Top", at)), at)))
@@ -72,4 +105,8 @@ class HarmonyWidgetBackend {
     private fun stackOptions(at: SourceSpan): EtsExpression = EtsObject(
         mapOf("alignContent" to enumValue("Alignment", "TopStart", at)),
         EtsRecordType("StackOptions", mapOf("alignContent" to EtsNamedType("Alignment"))), at)
+
+    private companion object {
+        val resourceType = EtsNamedType("Resource", external = true)
+    }
 }
