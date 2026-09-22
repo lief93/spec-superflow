@@ -30,7 +30,8 @@ Each call record contains:
   result has a target type, with the same exact source location;
 - `firstUnsupportedNode`: the first source-linked type or generation failure
   within that call, including its resolved field/object/call symbol when one is
-  available, otherwise `null`;
+  available, otherwise `null`. A type diagnostic without its own compiler
+  source offset is anchored to the containing resolved call;
 - `responsibleModule`: the production lowering or adapter source file that owns
   the category. Resource calls identify `StringResources.kt` or
   `ImageResources.kt` separately.
@@ -108,6 +109,46 @@ that version mismatch as a separate P0 project-dependency gap and uses the fixed
 2.1.20 CLI only for the coverage attempt. It does not claim project generation
 compatibility.
 
+A second public-project baseline exercises a broader dependency graph:
+
+```bash
+node tools/kotlin-ets/tests/preflight/architecture-samples.mjs \
+  /absolute/path/to/architecture-samples
+```
+
+The runner creates a detached worktree at Android `architecture-samples`
+revision `ee66e1526b84c026615df032c705842b7d2a521f`, formally collects the
+`:app:compileDebugKotlin` inputs offline, and runs the fixed 2.1.20 Core Profile
+CLI for
+`com.example.android.architecture.blueprints.todoapp.statistics.StatisticsScreen`.
+The collected project inputs contain 85 Kotlin sources and 89 classpath entries.
+The report contains 124 resolved calls with this baseline:
+
+| Category | Total | Recognized | Unsupported | Coverage |
+| --- | ---: | ---: | ---: | ---: |
+| Language semantics | 32 | 31 | 1 | 96.87% |
+| Standard library | 51 | 51 | 0 | 100% |
+| Neutral Compose widget | 15 | 12 | 3 | 80% |
+| Modifier | 7 | 7 | 0 | 100% |
+| Resources | 6 | 6 | 0 | 100% |
+| Project dependencies | 13 | 7 | 6 | 53.84% |
+
+All calls retain a 1-based source span, `finalRecognizedNode`, optional
+`firstUnsupportedNode`, and `responsibleModule`. The generated
+`public-project-baseline.json` preserves all ten unsupported call records. The
+earliest preflight capability gap is `remember` returning
+`SnackbarHostState` at line 48, column 44. The actual backend attempt fails
+closed earlier, at the `openDrawer` entry parameter on line 45, column 5,
+because it has no source default; no ETS target is emitted. The baseline records
+these as separate facts.
+
+This project pins Kotlin 2.1.10, so production project generation rejects its
+compiler environment before frontend execution. The fixed 2.1.20 direct CLI run
+measures only compiler/host Core Profile coverage over the collected JVM
+classpath. Its 100% standard-library result establishes recognition for the
+calls in this entry; it does not establish target KLIB body availability,
+ArkTS SDK compatibility, or device behavior.
+
 Final verification evidence:
 
 | Coverage | Result | Evidence |
@@ -116,6 +157,7 @@ Final verification evidence:
 | RED: empty UI | empty `@Builder` was generated silently | `tests/preflight/.work/run-ZdiDg6` |
 | Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations and negative no-target cases | `tests/preflight/.work/run-gcipOx` |
 | Mars Photos public baseline | widget 100%, Modifier 100%, resources 50%; two explicit P0 gaps; no target | `tests/preflight/.work/mars-photos-Lh41tH` |
+| Architecture Samples public baseline | 124 calls across all six groups; ten explicit unsupported calls; no target | `tests/preflight/.work/architecture-samples-35FMMz` |
 | Full language suite | pass | `tests/language/.work/run-01EAKd` |
 | Module suite | 44 JVM/module cases pass | `tests/modules/.work/run-KWHnWz` |
 | Typed backend suite | pass | `tests/preflight/.work/kotlin-ets-backend-tests.SCdkSg` |
