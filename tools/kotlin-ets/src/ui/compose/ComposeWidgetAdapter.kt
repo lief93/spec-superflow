@@ -16,7 +16,8 @@ import org.jetbrains.kotlin.name.FqName
  * Children are statically described; callbacks remain typed language expressions.
  */
 class ComposeWidgetAdapter(private val language: Language, private val diagnostics: DiagnosticSink) {
-    fun lower(function: IrSimpleFunction, scope: Scope = Scope()): Children<EtsExpression, SourceSpan> {
+    fun lower(function: IrSimpleFunction, scope: Scope = Scope(),
+        handledStatements: Set<IrStatement> = emptySet()): Children<EtsExpression, SourceSpan> {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
         if (!function.hasAnnotation(FqName("androidx.compose.runtime.Composable")) || !function.returnType.isUnit())
             diagnostics.unsupported(function, "Widget entry requires a resolved @Composable Unit function")
@@ -24,17 +25,20 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             if (parameter.symbol !in scope.bindings && parameter.symbol !in scope.aliases)
                 diagnostics.unsupported(parameter, "Widget entry parameter requires a binding: ${parameter.name}")
         }
-        return body(function.body ?: diagnostics.unsupported(function, "Widget entry has no body"), scope.fork(), function)
+        return body(function.body ?: diagnostics.unsupported(function, "Widget entry has no body"),
+            scope.fork(), function, handledStatements)
     }
 
-    private fun body(body: IrBody, scope: Scope, owner: IrFunction): Children<EtsExpression, SourceSpan> = when (body) {
-        is IrBlockBody -> Children(statements(body.statements, scope, owner))
-        is IrExpressionBody -> Children(statements(listOf(body.expression), scope, owner))
+    private fun body(body: IrBody, scope: Scope, owner: IrFunction,
+        handledStatements: Set<IrStatement> = emptySet()): Children<EtsExpression, SourceSpan> = when (body) {
+        is IrBlockBody -> Children(statements(body.statements, scope, owner, handledStatements = handledStatements))
+        is IrExpressionBody -> Children(statements(listOf(body.expression), scope, owner, handledStatements = handledStatements))
         else -> diagnostics.unsupported(body, "Unsupported widget body")
     }
 
-    private fun statements(statements: List<IrStatement>, scope: Scope, owner: IrFunction, terminal: Boolean = true): List<Widget<EtsExpression, SourceSpan>> =
-        statements.flatMapIndexed { index, statement -> when (statement) {
+    private fun statements(statements: List<IrStatement>, scope: Scope, owner: IrFunction, terminal: Boolean = true,
+        handledStatements: Set<IrStatement> = emptySet()): List<Widget<EtsExpression, SourceSpan>> =
+        statements.flatMapIndexed { index, statement -> if (statement in handledStatements) emptyList() else when (statement) {
             is IrVariable -> {
                 val initial = statement.initializer ?: diagnostics.unsupported(statement, "Uninitialized widget local")
                 if (statement.isVar) diagnostics.unsupported(statement, "Mutable widget local is outside the static widget subset")
@@ -47,7 +51,8 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 emptyList()
             }
             is IrCall -> listOf(widget(statement, scope))
-            is IrBlock -> statements(statement.statements, scope.fork(), owner, terminal && index == statements.lastIndex)
+            is IrBlock -> statements(statement.statements, scope.fork(), owner, terminal && index == statements.lastIndex,
+                handledStatements)
             is IrReturn -> {
                 if (statement.returnTargetSymbol.owner !== owner || !terminal || index != statements.lastIndex)
                     diagnostics.unsupported(statement, "Widget return must terminate its own children body")
@@ -314,6 +319,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val emitted = language.expression(resolve(value, scope), scope)
         fun stable(expression: EtsExpression): Boolean = when (expression) {
             is EtsLiteral, is EtsReference -> true
+            is EtsMember -> expression.symbolId != null && stable(expression.receiver)
             is EtsBinary -> stable(expression.left) && stable(expression.right)
             is EtsUnary -> stable(expression.operand)
             is EtsConditional -> stable(expression.condition) && stable(expression.whenTrue) && stable(expression.whenFalse)
