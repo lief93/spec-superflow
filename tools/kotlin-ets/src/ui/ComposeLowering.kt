@@ -63,10 +63,15 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         textContexts = materialTextContexts(root, diagnostics)
         val rootScope = scope()
         if (usesMaterialContext) rootScope.ambientValues[MATERIAL_CONTEXT] = defaultMaterialContext(language.source(root))
-        val defaults = root.valueParameters.map { parameter ->
-            val value = parameter.defaultValue?.expression
-                ?: diagnostics.unsupported(parameter, "Entry parameter requires a source default")
-            val emitted = language.expression(value, rootScope)
+        val rootArguments = root.valueParameters.map { parameter ->
+            val emitted = parameter.defaultValue?.expression?.let { language.expression(it, rootScope) } ?: run {
+                val name = parameter.name.asString()
+                val type = language.type(parameter.type)
+                fieldNames += name
+                fields += EtsField(EtsSymbol("ui:entry-prop:$name", name, type, language.source(parameter)),
+                    prop = true, required = true)
+                field(name, type, parameter)
+            }
             rootScope.bindings[parameter.symbol] = emitted
             emitted
         }
@@ -133,7 +138,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         diagnostics.currentFile = sourceFile(root)?.fileEntry?.name
         val name = root.name.asString()
         val entryBody = native("Stack", listOf(stackOptions(root)), root,
-            listOf(EtsUiElement(methodCall(builderSymbol(root), contextArguments(rootScope) + defaults, root)))).copy(attributes = listOf(
+            listOf(EtsUiElement(methodCall(builderSymbol(root), contextArguments(rootScope) + rootArguments, root)))).copy(attributes = listOf(
                 attribute("width", listOf(literal("100%", root)), root),
                 attribute("height", listOf(literal("100%", root)), root)))
         val build = EtsFunction("build", emptyList(), EtsTypes.VOID, listOf(entryBody), language.source(root),

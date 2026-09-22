@@ -254,7 +254,7 @@ class EtsValidator {
                 if (declaration.kind == EtsClassKind.INTERFACE) when (value) {
                     is EtsFunction -> if (!value.abstract || value.kind != EtsFunctionKind.METHOD || value.visibility != EtsVisibility.PUBLIC)
                         reject(value, "Only abstract method signatures are supported in interfaces")
-                    is EtsField -> if (value.initializer != null || value.visibility != EtsVisibility.PUBLIC || value.static || value.state || value.prop || value.watch != null)
+                    is EtsField -> if (value.initializer != null || value.visibility != EtsVisibility.PUBLIC || value.static || value.state || value.prop || value.required || value.watch != null)
                         reject(value, "Interface property must be a public instance signature")
                 }
                 if (value is EtsFunction) {
@@ -469,8 +469,10 @@ class EtsValidator {
                             reject(member, "State field requires an initialized mutable field")
                         if (member is EtsField) {
                             if (member.prop && (!declaration.component || member.static || member.readonly || member.state ||
-                                member.visibility != EtsVisibility.PUBLIC || member.initializer == null))
+                                member.visibility != EtsVisibility.PUBLIC || member.initializer == null && !member.required))
                                 reject(member, "Prop requires a public initialized component instance field")
+                            if (member.required && !member.prop)
+                                reject(member, "Require requires a component prop")
                             member.watch?.let { watcher ->
                                 name(watcher, member.source)
                                 if (!member.state && !member.prop) reject(member, "Watch requires an observed field")
@@ -724,6 +726,8 @@ class EtsValidator {
                     component.entry || component.typeParameters.isNotEmpty()) reject(value, "UI component requires a declared non-entry component")
                 expression(value.component, scope)
                 val properties = component.members.filterIsInstance<EtsField>().filter { it.prop }.associateBy { it.symbol.name }
+                val missing = properties.values.filter { it.required && it.symbol.name !in value.properties }.map { it.symbol.name }
+                if (missing.isNotEmpty()) reject(value, "Missing required component prop: ${missing.joinToString()}")
                 value.properties.forEach { (name, argument) ->
                     val property = properties[name] ?: reject(value, "Unknown component prop: $name")
                     expression(argument, scope); expect(argument, property.symbol.type)

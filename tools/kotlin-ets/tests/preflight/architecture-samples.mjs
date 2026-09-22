@@ -21,7 +21,7 @@ const expectedCoverage = {
   neutral_compose_widget: { total: 15, recognized: 12, unsupported: 3, percentage: 80 },
   modifier: { total: 7, recognized: 7, unsupported: 0, percentage: 100 },
   resources: { total: 6, recognized: 6, unsupported: 0, percentage: 100 },
-  project_dependencies: { total: 13, recognized: 7, unsupported: 6, percentage: 53.84 },
+  project_dependencies: { total: 13, recognized: 6, unsupported: 7, percentage: 46.15 },
 };
 
 mkdirSync(join(here, '.work'), { recursive: true });
@@ -74,9 +74,12 @@ try {
     '--sources-file', join(collected, 'sources.txt'), '--out', output, '--preflight-out', reportPath], {}, 2);
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'UNSUPPORTED');
-  assert.equal(backendBlocker.message, 'Entry parameter requires a source default');
-  assert.equal(backendBlocker.source.line, 45);
-  assert.equal(backendBlocker.source.column, 5);
+  assert.equal(backendBlocker.message, 'External inline call has no loaded IR body: ' +
+    'androidx.hilt.navigation.compose.hiltViewModel. Provide explicit dependency source or a supported serialized ' +
+    'dependency; this call has no usable binary IR body. JVM binary metadata contains no serialized IR. ' +
+    'Unsupported external call: androidx.hilt.navigation.compose.hiltViewModel');
+  assert.equal(backendBlocker.source.line, 47);
+  assert.equal(backendBlocker.source.column, 38);
   assert.equal(existsSync(output), false);
 
   const report = JSON.parse(readFileSync(reportPath, 'utf8'));
@@ -108,11 +111,11 @@ try {
   }
 
   const unsupportedCalls = report.calls.filter(call => call.firstUnsupportedNode !== null);
-  assert.equal(unsupportedCalls.length, 10);
+  assert.equal(unsupportedCalls.length, 11);
   assert.deepEqual(Object.fromEntries(categories.map(category => [category,
     unsupportedCalls.filter(call => call.category === category).length])), {
     language_semantics: 1, standard_library: 0, neutral_compose_widget: 3,
-    modifier: 0, resources: 0, project_dependencies: 6,
+    modifier: 0, resources: 0, project_dependencies: 7,
   });
 
   const baseline = {
@@ -129,18 +132,18 @@ try {
       { category: 'project_dependencies', node: 'compiler_environment',
         responsibleModule: 'tools/kotlin-ets/compiler-environment.mjs',
         detail: 'The public project pins Kotlin 2.1.10; production project generation requires 2.1.20.' },
-      { category: 'language_semantics', node: 'entry_parameter.openDrawer',
-        responsibleModule: 'tools/kotlin-ets/src/ui/ComposeLowering.kt', source: backendBlocker.source,
+      { category: 'project_dependencies', node: 'androidx.hilt.navigation.compose.hiltViewModel',
+        responsibleModule: 'tools/kotlin-ets/src/adapters/AdapterModules.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
       { category: 'six_category_coverage', node: 'unsupported_call_inventory',
         responsibleModules: [...new Set(unsupportedCalls.map(call => call.responsibleModule))].sort(),
-        counts: { language_semantics: 1, neutral_compose_widget: 3, project_dependencies: 6 },
-        detail: 'Ten source-linked calls remain unsupported; the earliest capability gap is remember returning SnackbarHostState.' },
+        counts: { language_semantics: 1, neutral_compose_widget: 3, project_dependencies: 7 },
+        detail: 'Eleven source-linked calls remain unsupported; the report\'s designated first type gap is remember returning SnackbarHostState.' },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS architecture-samples ee66e152: 124-call six-category Core Profile baseline');
-  console.log('PASS no target: compiler mismatch, entry contract, and all 10 unsupported calls remain explicit P0 evidence');
+  console.log('PASS no target: compiler mismatch, dependency body, and all 11 unsupported calls remain explicit P0 evidence');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }
