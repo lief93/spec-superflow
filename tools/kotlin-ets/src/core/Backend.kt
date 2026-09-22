@@ -1,13 +1,19 @@
 package dev.ets
 
-import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.visitors.*
 
 /** Official IR stays alive only while lowering. The returned program is compiler-independent. */
-class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceTypes: SourceTypes? = null) {
-    val language: Language = LanguageLowering(diagnostics, rules, sourceTypes)
+class EtsBackend(val diagnostics: DiagnosticSink, private val rules: List<CallRule>, sourceTypes: SourceTypes? = null) {
+    private val lowering = LanguageLowering(diagnostics, rules, sourceTypes)
+    val language: Language = lowering
+
+    /** Bind a production entry signature with the same naming and type rules as ordinary functions. */
+    fun parameters(function: IrFunction, scope: Scope): List<EtsParameter> = lowering.parameters(function, scope)
+
+    /** Link declarations contributed by the configured call rules. */
+    fun link(program: EtsProgram): EtsProgram = linkAdapterDeclarations(program, rules)
 
     fun validateSource(module: IrModuleFragment) {
         module.files.forEach { file ->
@@ -29,18 +35,6 @@ class EtsBackend(val diagnostics: DiagnosticSink, rules: List<CallRule>, sourceT
     /** Modules selected for translation share symbol identity; their IR ownership stays intact. */
     fun lower(modules: List<IrModuleFragment>): EtsProgram {
         modules.forEach(::validateSource)
-        val program = linkAdapterDeclarations(EtsProgram(modules.flatMap { it.files }.map { file ->
-            diagnostics.currentFile = file.fileEntry.name
-            EtsFile(file.fileEntry.name, file.declarations.flatMap { declaration -> when (declaration) {
-                is IrSimpleFunction -> listOf(language.function(declaration).copy(
-                    exported = !DescriptorVisibilities.isPrivate(declaration.visibility)))
-                is IrClass -> listOf(language.clazz(declaration).copy(
-                    exported = sourceClassIsExported(declaration))) + language.interfaceDefaults(declaration)
-                is IrProperty -> lowerTopLevelProperty(declaration, language)
-                else -> diagnostics.unsupported(declaration, "Unsupported top-level declaration")
-            } } + lowerFileInitialization(file, language))
-        }, externalClasses = exceptionTargetContracts()), language.callRules)
-        EtsValidator().validate(program, perFileNames = true)
-        return program
+        return IrToEts.program(modules, language, diagnostics)
     }
 }

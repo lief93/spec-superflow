@@ -15,6 +15,21 @@ import org.jetbrains.kotlin.load.kotlin.JvmPackagePartSource
 
 fun main(args: Array<String>) {
     val mode = args.getOrNull(3)
+    if (mode == "member-ok") {
+        withKotlinFrontend(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) { session ->
+            val blocks = mutableListOf<IrInlinedFunctionBlock>()
+            session.module.acceptVoid(object : IrElementVisitorVoid {
+                override fun visitElement(element: IrElement) {
+                    if (element is IrInlinedFunctionBlock) blocks.add(element)
+                    if (element is IrCall) check(!element.symbol.owner.isInline)
+                    element.acceptChildrenVoid(this)
+                }
+            })
+            check(blocks.any { it.inlinedFunctionSymbol?.owner?.name?.asString() == "unsupported" })
+            println("PASS serialized member inline body loaded for unsupported")
+        }
+        return
+    }
     if (mode != null && mode != "signature-only") {
         val failure = runCatching {
             withKotlinFrontend(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], args[1])) {

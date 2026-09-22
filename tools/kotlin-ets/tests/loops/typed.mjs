@@ -19,7 +19,8 @@ function run(label, command, args) {
 }
 function sources(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => entry.isDirectory()
-    ? sources(join(directory, entry.name)) : entry.name.endsWith('.kt') ? [join(directory, entry.name)] : []).sort();
+    ? sources(join(directory, entry.name))
+    : entry.name.endsWith('.kt') && entry.name !== 'Main.kt' ? [join(directory, entry.name)] : []).sort();
 }
 const compiler = join(root, 'tests/stdlib/compiler.sh');
 const cp = run('classpath', 'bash', [compiler, '--classpath']);

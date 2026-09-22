@@ -463,7 +463,10 @@ class EtsValidator {
                         val key = when (member) { is EtsFunction -> member.name + if (member.kind == EtsFunctionKind.SETTER) ":set" else ""; is EtsField -> member.symbol.name }
                         if (!memberNames.add(key)) reject(member, "Conflicting target member: $key")
                         if (member is EtsFunction && (member.builder || member.build) && !declaration.component) reject(member, "UI method requires a target component")
-                        if (member is EtsField && member.state && (!declaration.component || member.static)) reject(member, "State field requires a component instance")
+                        if (member is EtsField && member.state && (!declaration.component || member.static))
+                            reject(member, "State field requires a component instance")
+                        if (member is EtsField && member.state && (member.initializer == null || member.readonly))
+                            reject(member, "State field requires an initialized mutable field")
                         if (member is EtsField) {
                             if (member.prop && (!declaration.component || member.static || member.readonly || member.state ||
                                 member.visibility != EtsVisibility.PUBLIC || member.initializer == null))
@@ -515,6 +518,8 @@ class EtsValidator {
         declaration.symbol.id == ownerId || ancestors(instance(declaration)).any { it.symbolId == ownerId }
 
     private fun memberAccess(owner: EtsNamedType, member: EtsClassMember, receiver: EtsNamedType, node: EtsNode) {
+        if (member is EtsField && member.state && currentClass?.symbol?.id != owner.symbolId)
+            reject(node, "State field access requires its owning component")
         if (member.visibility == EtsVisibility.PUBLIC || currentClass?.symbol?.id == owner.symbolId) return
         val current = currentClass
         val static = when (member) { is EtsFunction -> member.static; is EtsField -> member.static }

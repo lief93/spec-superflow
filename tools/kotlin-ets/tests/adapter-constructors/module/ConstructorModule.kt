@@ -10,14 +10,25 @@ class ConstructorModule : AdapterModule {
     override val sourceTypes = setOf("constructorapi.Amount", "constructorapi.Wrong",
         "constructorapi.Effect", "constructorapi.Unclaimed", "constructorapi.Token", "constructorapi.WrongObject", "constructorapi.EffectObject")
     override val sourceCalls = setOf("constructorapi.Amount.<init>", "constructorapi.Amount.<get-value>",
-        "constructorapi.Wrong.<init>", "constructorapi.Effect.<init>", "constructorapi.Token.<get-value>")
+        "constructorapi.Wrong.<init>", "constructorapi.Effect.<init>", "constructorapi.Token.<get-value>",
+        "constructorapi.goodEffect", "constructorapi.badEffect", "constructorapi.wrongValue")
     override fun create(target: AdapterTargetApi, ui: AdapterUiServices?): CallRule = object : CallRule {
         override fun mapType(type: IrType, language: Language): EtsType? =
             if (type.classOrNull?.owner?.let(::symbolName) in sourceTypes) EtsTypes.NUMBER else null
 
         override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
-            if (symbolName(call.symbol.owner) in setOf("constructorapi.Amount.<get-value>", "constructorapi.Token.<get-value>"))
-                language.expression(call.dispatchReceiver!!, scope) else null
+            when (symbolName(call.symbol.owner)) {
+                "constructorapi.Amount.<get-value>", "constructorapi.Token.<get-value>" ->
+                    language.expression(call.dispatchReceiver!!, scope)
+                "constructorapi.badEffect" -> EtsCall(EtsLambda(emptyList(), emptyList(), EtsTypes.VOID,
+                    language.source(call)), emptyList(), EtsTypes.VOID, language.source(call))
+                "constructorapi.wrongValue" -> EtsLiteral("wrong", EtsTypes.STRING, language.source(call))
+                else -> null
+            }
+
+        override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
+            if (symbolName(call.symbol.owner) == "constructorapi.goodEffect")
+                listOf(EtsExpressionStatement(EtsLiteral(31, EtsTypes.NUMBER, language.source(call)))) else null
 
         override fun lowerObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? =
             when (symbolName(value.symbol.owner)) {

@@ -34,8 +34,9 @@ writeFileSync(join(work, 'library-provenance.json'), JSON.stringify({ bodyRoute:
   librarySha256: hash(library), sources: sources.map(path => ({ path, sha256: hash(path) })) }, null, 2));
 
 const evidence = join(work, 'evidence.jar');
-const core = ['Frontend.kt', 'CallCaptures.kt', 'GenericBounds.kt', 'Constructors.kt', 'ConstructorDispatch.kt', 'DefaultArguments.kt', 'OfficialLowerings.kt', 'ExpectedNullability.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'LocalDeclarations.kt', 'ForLoops.kt'].map(file => join(root, 'src/core', file));
+const core = ['Frontend.kt', 'CallCaptures.kt', 'GenericBounds.kt', 'Constructors.kt', 'ConstructorDispatch.kt', 'DefaultArguments.kt', 'OfficialLowerings.kt', 'ExpectedNullability.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'LocalDeclarations.kt', 'ForLoops.kt', 'SourceSelection.kt', 'SourceDiagnostics.kt'].map(file => join(root, 'src/core', file));
 run('evidence-build', 'bash', [compiler, ...core, join(root, 'src/core/Contract.kt'),
+  join(root, 'src/lower/EtsLoweringPhases.kt'), join(root, 'src/lower/EtsBackendContext.kt'),
   ...['Tree.kt', 'Validator.kt', 'TypeSubstitution.kt', 'Traversal.kt'].map(file => join(root, 'src/target', file)),
   join(here, 'InlineEvidence.kt'), '-d', evidence]);
 console.log(run('inline-evidence', 'java', ['-cp', `${evidence}:${cp}`, 'dev.ets.InlineEvidenceKt', cp, work, ...sources]).trim());

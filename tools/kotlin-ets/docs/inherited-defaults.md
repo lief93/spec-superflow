@@ -80,8 +80,10 @@ Unique private method names now work in a hierarchy; private name shadowing stil
 has an explicit source diagnostic rather than emitting an invalid ETS hierarchy.
 
 This does not add support for inherited member extensions, suspend/inline
-provider combinations, arbitrary external binary default bodies, explicit super
-dispatch, projected receivers or multiple receiver bounds.
+provider combinations, arbitrary external binary default bodies, projected
+receivers or multiple receiver bounds. Explicit `super` dispatch is covered by
+the language super path (`450413c`), not by expanding default-argument injection
+onto super-qualified calls.
 Named local Any-only providers and registered nongeneric inner providers can use
 captured values in defaults, including closures. Local derived classes may forward
 constructor-only captures to their base without storing another copy. This uses
@@ -109,8 +111,8 @@ under `tests/inheritance/defaults/.work/run-*`. It verifies:
   private helpers remain private; callers reference the provider class (or the
   interface helper), not its private dependencies.
 - JVM-valid source boundaries rejected with exact source spans and no ETS output:
-  star projections, multiple receiver bounds and explicit super. Historical local
-  and inner negatives now generate successfully; the behavioral scenarios also
+  star projections and multiple receiver bounds. Historical local, inner and
+  explicit-super negatives now generate successfully; the behavioral scenarios also
   exercise changing shared state, independent outer instances and virtual dispatch.
 - Actual official IR origins and provider links for seventeen generated helpers,
   exactly one virtual implementation dispatch per helper, two mask parameters

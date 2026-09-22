@@ -48,6 +48,13 @@ for (const name of ['Wrong', 'Effect']) {
   assert.match(report.message, /Invalid call adapter result/);
   assert.equal(resolve(report.source.file), join(here, name + '.kt'));
 }
+assert.match(compile('EffectCall'), /31;[\s\S]*return;/);
+for (const [name, reason] of [['WrongCall', /Invalid call adapter result/],
+  ['VoidCall', /Void call adapter result requires statement consumption/]]) {
+  const report = compile(name, 2);
+  assert.match(report.message, reason);
+  assert.equal(resolve(report.source.file), join(here, name + '.kt'));
+}
 assert.match(compile('Unclaimed', 2).message, /Unsupported external constructor/);
 const objects = compile('Objects');
 const objectContext = vm.createContext({ exports: {} });
@@ -61,4 +68,4 @@ for (const name of ['WrongObject', 'EffectObject']) {
   assert.equal(resolve(report.source.file), join(here, name + '.kt'));
 }
 writeFileSync(join(work, 'parity.json'), JSON.stringify({ expected, actual }, null, 2));
-console.log('PASS constructor SPI, typed result rejection, source constructor and JVM once-only parity');
+console.log('PASS adapter SPI typed values, statement effects, void/value rejection, constructors and JVM once-only parity');

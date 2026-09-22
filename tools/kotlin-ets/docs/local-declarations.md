@@ -58,6 +58,7 @@ methods.
 
 ```sh
 node tools/kotlin-ets/tests/local-functions/run.mjs
+node tools/kotlin-ets/tests/language/callback-state/run.mjs
 node tools/kotlin-ets/tests/generics/run.mjs
 node tools/kotlin-ets/tests/language/sdk.mjs
 ```
@@ -74,6 +75,16 @@ generic mutable captures, independently escaping closures, nested captures,
 class-instance captures, defaults, named-argument evaluation order, and Int
 overflow. Negative fixtures check reserved source names and captured variables
 without initializers, including source diagnostics and no published output.
+
+The callback-state regression isolates the S3.1 language basis without Compose
+or a UI adapter. Its official frontend fixture mutates a lambda-captured local
+and two properties, then reads the updated local/property state in an `if`
+condition. A typed-tree probe requires `EtsAssignment` targets for all three
+values, live `EtsReference`/`EtsMember` reads in `EtsIf`, and write statements
+before the branch. The public language CLI output is then executed for four
+input triples and compared exactly with the same-input JVM oracle. This proves
+language state flow only; Compose state ownership and Harmony event binding are
+separate UI work.
 
 The SDK harness regenerates this module alongside the existing language
 fixtures and copies its bytes unchanged into a native build host. Actual ETS

@@ -32,11 +32,13 @@ run('oracle-build', 'bash', [compiler, '-classpath', `${cp}:${library}`, join(he
 const expected = run('jvm', 'java', ['-cp', `${cp}:${library}:${oracle}`, 'genericconsumer.OracleKt']).trim().split('\n');
 assert.deepEqual(expected, ['3/5/5/9/6/IDBOIG', '0/2/2/0/6/IDBOIG', '-2147483647/-2147483645/-2147483645/-2147483645/6/IDBOIG']);
 const core = ['Frontend.kt', 'Constructors.kt', 'ConstructorDispatch.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt', 'LocalDeclarations.kt',
-  'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt', 'CallCaptures.kt', 'GenericBounds.kt'].map(name => join(root, 'src/core', name));
+  'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt', 'CallCaptures.kt', 'GenericBounds.kt', 'SourceSelection.kt', 'SourceDiagnostics.kt'].map(name => join(root, 'src/core', name)).concat([
+  join(root, 'src/lower/EtsLoweringPhases.kt'), join(root, 'src/lower/EtsBackendContext.kt')]);
+const target = ['Tree.kt', 'TypeSubstitution.kt', 'Validator.kt', 'Traversal.kt'].map(name => join(root, 'src/target', name));
 const evidence = join(work, 'evidence.jar');
-writeFileSync(join(work, 'identity.json'), JSON.stringify([...core, ...sources.map(name => join(here, name)), library,
-  join(here, 'Application.kt'), join(here, 'Evidence.kt'), join(root, 'src/target/Tree.kt')].map(path => ({ path, sha256: hash(path) })), null, 2));
-run('evidence-build', 'bash', [compiler, ...core, join(root, 'src/target/Tree.kt'), join(here, 'Evidence.kt'), '-d', evidence]);
+writeFileSync(join(work, 'identity.json'), JSON.stringify([...core, ...target, ...sources.map(name => join(here, name)), library,
+  join(here, 'Application.kt'), join(here, 'Evidence.kt')].map(path => ({ path, sha256: hash(path) })), null, 2));
+run('evidence-build', 'bash', [compiler, ...core, ...target, join(here, 'Evidence.kt'), '-d', evidence]);
 function inspect(name, jars, source = 'Application.kt', mode) {
   const directory = join(work, name);
   mkdirSync(directory);
@@ -70,7 +72,7 @@ for (const [name, jars, source, mode] of [
   ['missing-jar-evidence', ['entry.jar'], 'Application.kt', 'reject:unlinked serialized dependencies:'],
   ['missing-source-evidence', ['entry.jar', 'no-source-helper.jar'], 'Application.kt', 'reject:no SourceFile attribute'],
   ['reified-evidence', ['Reified.jar'], 'ReifiedApplication.kt', 'reject:unsupported reified binary inline dependency'],
-  ['member-evidence', ['Member.jar'], 'MemberApplication.kt', 'reject:members are unsupported'],
+  ['member-evidence', ['Member.jar'], 'MemberApplication.kt', 'member-ok'],
   ['multifile-evidence', ['Multifile.jar'], 'MultifileApplication.kt', 'reject:unsupported serialized dependency format MULTIFILE_CLASS_PART'],
 ]) console.log(inspect(name, jars.map(jar => join(work, jar)), source, mode).trim());
 writeFileSync(join(work, 'producers.json'), JSON.stringify([

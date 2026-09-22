@@ -134,23 +134,14 @@ fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
             IrTypeSystemContextImpl(translated.result.irBuiltIns), CallCaptures(analyzed.result, translated.result))
         session = frontend
         entry?.let { System.err.println(selectSourceDeclarations(frontend.module, it, prepareDeclaration)) }
-        val unavailableInlineBodies = lowerSourceInlineFunctions(translated, frontend.bodies)
-        lowerLocalDeclarations(translated)
-        lowerInheritedDefaults(translated)
-        lowerNativeConstructorDispatch(translated)
-        lowerSecondaryConstructors(translated)
-        lowerForLoops(translated)
-        lowerStringConcatenations(translated)
-        lowerExpectedNullability(translated)
-        lowerGenericBounds(translated)
-        frontend.rebindInlinedCaptures()
+        val lowering = EtsLoweringPhases.run(translated, frontend.bodies, frontend::rebindInlinedCaptures)
         check(!translated.diagnosticCollector.hasErrors && !messages.hasErrors()) {
             "Kotlin lowering diagnostics prohibit target output"
         }
         return try {
             emit(frontend)
         } catch (failure: Unsupported) {
-            throw explainUnavailableInlineBody(failure, unavailableInlineBodies)
+            throw explainUnavailableInlineBody(failure, lowering.unavailableInlineBodies)
         }
     } finally {
         session?.close()

@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { boundaries, expected, layouts } from './cases.mjs';
-import { compiler, core, harness, here, identities, root, hash } from './support.mjs';
+import { compiler, core, target, harness, here, identities, root, hash } from './support.mjs';
 
 const { work, run } = harness();
 const cp = run('classpath', 'bash', [compiler, '--classpath']).trim();
-const production = identities([...core, join(root, 'src/target/Tree.kt')]);
+const production = identities([...core, ...target]);
 writeFileSync(join(work, 'identity.json'), JSON.stringify(production, null, 2));
 const producerSources = ['Direct.kt', 'Entry.kt', 'Helper.kt'].map(name => join(here, name));
 run('combined-build', 'bash', [compiler, '-Xserialize-ir=inline', ...producerSources, '-d', join(work, 'combined.jar')]);
 const evidence = join(work, 'evidence.jar');
-run('evidence-build', 'bash', [compiler, ...core, join(root, 'src/target/Tree.kt'), join(here, 'Evidence.kt'), '-d', evidence]);
+run('evidence-build', 'bash', [compiler, ...core, ...target, join(here, 'Evidence.kt'), '-d', evidence]);
 function inspect(name, jars, source = 'Application.kt', mode) {
   const directory = join(work, name);
   mkdirSync(directory);

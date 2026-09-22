@@ -42,7 +42,8 @@ const oracle = join(work, 'oracle.jar');
 const serialized = provenance[1].jar;
 const evidence = join(work, 'evidence.jar');
 run('evidence-build', 'bash', [compiler, ...['Frontend.kt', 'Constructors.kt', 'ConstructorDispatch.kt', 'DefaultArguments.kt', 'LibraryInlining.kt', 'BinaryBodies.kt', 'OfficialLowerings.kt',
-  'LocalDeclarations.kt', 'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt', 'CallCaptures.kt', 'GenericBounds.kt'].map(name => join(root, 'src/core', name)),
+  'LocalDeclarations.kt', 'ForLoops.kt', 'ExpectedNullability.kt', 'Contract.kt', 'CallCaptures.kt', 'GenericBounds.kt', 'SourceSelection.kt', 'SourceDiagnostics.kt'].map(name => join(root, 'src/core', name)),
+  join(root, 'src/lower/EtsLoweringPhases.kt'), join(root, 'src/lower/EtsBackendContext.kt'),
   ...['Tree.kt', 'TypeSubstitution.kt', 'Validator.kt', 'Traversal.kt'].map(name => join(root, 'src/target', name)),
   join(here, 'BodyEvidence.kt'), '-d', evidence]);
 console.log(run('body-evidence', 'java', ['-cp', `${cp}:${evidence}`, 'dev.ets.BodyEvidenceKt', `${cp}:${serialized}`, application, work]).trim());

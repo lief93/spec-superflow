@@ -21,6 +21,7 @@ bash tools/kotlin-ets/kotlin-ets --project /path/to/android --module :app \\
 --image-resources /path/image-resources.properties  Use materialized image resources
 --string-resources /path/string-inputs  Use materialized string inputs; emit sibling .resources bundle
 --font-resources /path/font-inputs/fonts.properties  Use materialized local font files
+--preflight-out /path/core-profile.json  Write the resolved Core Profile before target generation
 
 Uses the project's Gradle wrapper and compile prerequisites. It does not edit
 build scripts, compile the selected Kotlin task, install an app or upload files.
@@ -30,7 +31,7 @@ Node.js 18+ and the backend's cached compiler dependencies are required.
 export function parseOptions(args) {
   const values = new Map();
   const flags = new Set(['--offline', '--collect-only']);
-  const options = new Set(['--project', '--module', '--variant', '--compile-task', '--mode', '--entry', '--out', '--out-dir', '--work-dir', '--image-resources', '--string-resources', '--font-resources', '--unsupported-policy', '--dependency-sources-file']);
+  const options = new Set(['--project', '--module', '--variant', '--compile-task', '--mode', '--entry', '--out', '--out-dir', '--work-dir', '--image-resources', '--string-resources', '--font-resources', '--unsupported-policy', '--dependency-sources-file', '--preflight-out']);
   for (let i = 0; i < args.length; i++) {
     const key = args[i];
     if (!flags.has(key) && !options.has(key)) throw new Error(`Unknown project option: ${key}`);
@@ -57,12 +58,17 @@ export function parseOptions(args) {
     if (!get('out') && !get('out-dir')) throw new Error('--out or --out-dir is required');
     if (mode === 'page' && !get('entry')) throw new Error('--entry is required for page mode');
   }
+  const output = get('out') || get('out-dir') ? resolve(get('out') || get('out-dir')) : undefined;
+  const preflightOutput = get('preflight-out') ? resolve(get('preflight-out')) : undefined;
+  if (preflightOutput && (preflightOutput === output || (get('out-dir') && preflightOutput.startsWith(output + '/'))))
+    throw new Error(`Preflight report must be outside the target path: ${preflightOutput}`);
   return { project: resolve(get('project')), module: get('module'), compileTask, mode, unsupportedPolicy,
-    entry: get('entry'), output: get('out') || get('out-dir') ? resolve(get('out') || get('out-dir')) : undefined,
+    entry: get('entry'), output,
     outputFlag: get('out-dir') ? '--out-dir' : '--out', workDir: get('work-dir') ? resolve(get('work-dir')) : undefined,
     imageResources: get('image-resources') ? resolve(get('image-resources')) : undefined,
     stringResources: get('string-resources') ? resolve(get('string-resources')) : undefined,
     fontResources: get('font-resources') ? resolve(get('font-resources')) : undefined,
+    preflightOutput,
     dependencySourcesFile: get('dependency-sources-file') ? resolve(get('dependency-sources-file')) : undefined,
     offline: !!get('offline'), collectOnly: !!get('collect-only') };
 }
@@ -120,6 +126,10 @@ export function main(args) {
       try { lstatSync(options.output); throw new Error(`Refusing to overwrite existing target: ${options.output}`); }
       catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
+    if (options.preflightOutput) {
+      try { lstatSync(options.preflightOutput); throw new Error(`Refusing to overwrite existing preflight report: ${options.preflightOutput}`); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
     workDir = options.workDir;
     if (workDir) { mkdirSync(dirname(workDir), { recursive: true }); mkdirSync(workDir); }
     else workDir = mkdtempSync(join(tmpdir(), 'kotlin-ets-project-'));
@@ -153,6 +163,7 @@ export function main(args) {
       ...(options.imageResources ? ['--image-resources', options.imageResources] : []),
       ...(options.stringResources ? ['--string-resources', options.stringResources] : []),
       ...(options.fontResources ? ['--font-resources', options.fontResources] : [])];
+    if (options.preflightOutput) compilerArgs.push('--preflight-out', options.preflightOutput);
     const result = runLogged('bash', compilerArgs, options.project, workDir, stage);
     process.stdout.write(readFileSync(join(workDir, 'compiler.stdout.log')));
     if (result !== 0) process.stderr.write(`Kotlin/ETS backend failed (exit ${result}); see ${join(workDir, 'compiler.stderr.log')}\n`);

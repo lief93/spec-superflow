@@ -118,8 +118,10 @@ const covarianceActual = vm.runInNewContext(covarianceJs.outputText + '\n[new Na
   { exports: {} }, { timeout: 1000 });
 assert.deepEqual(Array.from(covarianceActual, String), covarianceExpected);
 result.supportedFormerDeclarations = { inputs: [covarianceInput, secondaryInput], path: covarianceOutput, sha256: hash(covarianceOutput), expected: covarianceExpected };
-const negatives = readdirSync(here).filter(name => name.startsWith('Unsupported') && name.endsWith('.kt') &&
-  ![genericMethodInput, covarianceInput, secondaryInput].includes(join(here, name))).sort();
+const defaultInterfaceInput = join(here, 'UnsupportedDefault.kt');
+const interfaceCheckInput = join(here, 'UnsupportedInterfaceCheck.kt');
+const interfacePropertyBodyInput = join(here, 'UnsupportedInterfacePropertyBody.kt');
+const superInput = join(here, 'UnsupportedSuper.kt');
 const defaultOutput = join(work, 'SupportedDefaultArgument.ets');
 run('supported-default-argument', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', defaultOutput,
   join(here, 'SupportedDefaultArgument.kt')]);
@@ -127,6 +129,31 @@ const defaultJs = ts.transpileModule(readFileSync(defaultOutput, 'utf8'), { comp
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
 assert.equal(vm.runInNewContext(defaultJs.outputText + '\ncallDefault(new DefaultChild())',
   { exports: {} }, { timeout: 1000 }), 4);
+const interfaceDefaultOutput = join(work, 'SupportedInterfaceDefault.ets');
+run('supported-interface-default', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
+  '--out', interfaceDefaultOutput, defaultInterfaceInput]);
+const interfaceDefaultCode = readFileSync(interfaceDefaultOutput, 'utf8');
+assert.match(interfaceDefaultCode, /function __etsDefault_DefaultOperation_read/);
+const interfaceDefaultJs = ts.transpileModule(interfaceDefaultCode, { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
+assert.equal(vm.runInNewContext(interfaceDefaultJs.outputText + '\nnew DefaultConsumer().read()',
+  { exports: {} }, { timeout: 1000 }), 3);
+const superOutput = join(work, 'SupportedSuper.ets');
+run('supported-super', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', superOutput, superInput]);
+const superJs = ts.transpileModule(readFileSync(superOutput, 'utf8'), { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
+assert.equal(vm.runInNewContext(superJs.outputText + '\nnew SuperChild().read()',
+  { exports: {} }, { timeout: 1000 }), 4);
+run('supported-interface-check', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
+  '--out', join(work, 'SupportedInterfaceCheck.ets'), interfaceCheckInput]);
+assert.match(readFileSync(join(work, 'SupportedInterfaceCheck.ets'), 'utf8'), /function isChecked/);
+const interfacePropertyBodyOutput = join(work, 'SupportedInterfacePropertyBody.ets');
+run('supported-interface-property-body', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
+  '--out', interfacePropertyBodyOutput, interfacePropertyBodyInput]);
+assert.match(readFileSync(interfacePropertyBodyOutput, 'utf8'), /function __etsDefault_PropertyDefault_value_get/);
+const negatives = readdirSync(here).filter(name => name.startsWith('Unsupported') && name.endsWith('.kt') &&
+  ![genericMethodInput, covarianceInput, secondaryInput, defaultInterfaceInput, interfaceCheckInput,
+    interfacePropertyBodyInput, superInput].includes(join(here, name))).sort();
 for (const name of negatives) {
   const input = join(here, name), out = join(work, name + '.ets');
   const diagnostic = JSON.parse(run(name, 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--out', out, input], 2));

@@ -8,3 +8,7 @@ class Amount(val value: Double)
 class Wrong
 class Effect
 class Unclaimed
+
+fun goodEffect() {}
+fun badEffect() {}
+fun wrongValue(): Int = 0

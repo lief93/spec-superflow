@@ -34,5 +34,31 @@ The SDK invocation used the module and inline evidence directories above, not
 previously accepted outputs. SDK compilation is not ArkVM behavioral execution.
 The UI regression does not establish paired-device interaction or visual parity.
 
+## S1.3 result-consumption increment, 2026-09-22
+
+RED `tests/language/.work/typed-mdeUU0` shows the previous dispatcher had no
+consumer-supplied expected target type. The earlier baseline run
+`tests/language/.work/typed-lnFztg` also reached the stale empty-effect acceptance
+and failed the no-silent-fallback gate.
+
+Final evidence:
+
+| Check | Evidence | Result |
+| --- | --- | --- |
+| Typed language/adapter contract | `tests/language/.work/typed-sW3mTh` | expected target checks are lazy; typed values, statement effects, Unit expression bodies, void/value rejection and source spans pass |
+| Public call/constructor adapter | `/var/folders/fj/rrz0bjhx6cq04j7yghy2qkxh0000gn/T/kotlin-ets-adapter-constructors-c6ezjW` | positive effect and JVM parity pass; wrong type and void-as-value publish no target |
+| Field adapter | `/var/folders/fj/rrz0bjhx6cq04j7yghy2qkxh0000gn/T/kotlin-ets-adapter-fields-mZIxhs` | typed fields plus wrong/void/unclaimed/write negatives pass |
+| Adapter contract | `/var/folders/fj/rrz0bjhx6cq04j7yghy2qkxh0000gn/T/kotlin-ets-adapter-contract.buXVJI` | deterministic providers, conflicts and shared target validation pass |
+| Full language suite | `tests/language/.work/run-iqbbHd` | runtime cases and source-linked no-target negatives pass |
+| Core Profile/no fallback | `tests/preflight/.work/run-HJ2ofa` | five categories and empty/unsupported gates pass |
+| Typed backend | `tests/preflight/.work/kotlin-ets-backend-tests.8QEWGt` | AST, printer independence, determinism and JVM/host differential pass |
+| Modules | `tests/modules/.work/run-U2fUvY` | 44 JVM/module cases pass |
+
+The broader adapter-module run `tests/adapter-modules/.work/cli-YHyEmk` completed
+its language/JVM value-and-effect checks and generated the correct Compose page,
+then its unchanged exact-text assertion expected `.width(120)` while the output
+contains `.width(120.0)`. It is not counted as a passing suite and that unrelated
+assertion was not changed in this increment. No SDK or device claim is made.
+
 `git diff --check` passed, but much of `tools/` is untracked in the current dirty
 repository; that command alone is not evidence about all backend files.

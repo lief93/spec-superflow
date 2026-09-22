@@ -9,9 +9,11 @@ the exact upstream files and the distinction between reuse and new ETS code.
 ```text
 Kotlin source + actual dependency classpath
   -> official K2 semantic analysis and FIR2IR
-  -> verified official source-function inline and common IR normalization
+  -> EtsLoweringPhases (IR-to-IR: source inline, locals/inners, inherited defaults,
+     constructor dispatch, secondary constructors, for-loops, string concat,
+     expected nullability, generic bounds, capture rebind)
   -> EtsBackend source checks
-  -> LanguageLowering + registered CallRule.lower implementations
+  -> IrToEts (LanguageLowering + registered CallRule.lower)
   -> typed EtsProgram
   -> target contract validation
   -> module ownership/import assembly and referenced runtime dependency closure
@@ -26,8 +28,10 @@ raw expression string, source parser, or generated JavaScript is a target node.
 
 | Module | Owns | Must not own |
 | --- | --- | --- |
-| `core/Frontend.kt` | Official compiler configuration, dependency resolution, lifetime | Page selection or target syntax |
-| `core/OfficialLowerings.kt` | Explicitly verified official common passes using real compiler services | Running an unvalidated JVM/JS phase chain |
+| `core/Frontend.kt` | Official compiler configuration, dependency resolution, lifetime; invokes `EtsLoweringPhases` | Phase order, page selection, or target syntax |
+| `lower/EtsLoweringPhases.kt` | Ordered IR-to-IR pipeline and `EtsBackendContext` | Target AST construction or JVM codegen |
+| `lower/IrToEts.kt` | IR → `EtsProgram` seam (`IrModuleToEts` … `IrTypeToEts`) | High-level Kotlin semantic lowering |
+| `core/OfficialLowerings.kt` | JVM-frontend adapter hosting verified official common passes | Running an unvalidated JVM/JS phase chain |
 | `core/LibraryInlining.kt` | Select checked source/binary bodies and invoke official inlining/return-block normalization | Inventing bodies from binary signatures or API spelling |
 | `core/BinaryBodies.kt` | Load bounded serialized JVM inline bodies with actual provenance and canonical symbols | Treating signatures as bodies or inventing missing dependency implementations |
 | `core/LocalDeclarations.kt` | Invoke official capture/lifting passes with typed ETS shared cells | Reimplementing capture analysis or importing JVM/JS runtime cells |

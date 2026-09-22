@@ -31,7 +31,7 @@ const out = join(work, 'Page.ets');
 run('page', 'bash', [...common, '--entry', 'asyncimages.Page', '--out', out, join(here, 'Page.kt')]);
 const source = readFileSync(out, 'utf8');
 assert.match(source, /EtsAsyncImage\(\{ request: new EtsImageRequest\(url\.value/);
-assert.match(source, /Picture\(url: Binding<string \| null>\)/);
+assert.match(source, /Picture\(__etsMaterialContext: EtsMaterialContext, url: Binding<string \| null>\)/);
 assert.match(source, /UIUtils\.makeBinding/);
 assert.match(source, /function inspectionPlaceholder\(id: number\)/);
 assert.match(source, /false \? __etsPainterResource\(id\) : null/);

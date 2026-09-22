@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -18,10 +18,18 @@ function run(label, command, args) {
   if (result.status !== 0) process.exit(result.status || 1);
   return result.stdout.trim();
 }
+function kotlinFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? kotlinFiles(path)
+      : entry.name.endsWith('.kt') && entry.name !== 'Main.kt' ? [path] : [];
+  }).sort();
+}
 const compiler = join(root, 'tests/stdlib/compiler.sh');
 const classpath = run('classpath', 'bash', [compiler, '--classpath']);
 const jar = join(work, 'typed-tests.jar');
-run('compile', 'bash', [compiler, ...['target/Tree.kt', 'target/TypeSubstitution.kt', 'target/Validator.kt', 'target/Traversal.kt', 'core/Contract.kt',
-  'core/Frontend.kt', 'core/CallCaptures.kt', 'core/GenericBounds.kt', 'core/Constructors.kt', 'core/ConstructorDispatch.kt', 'core/DefaultArguments.kt', 'core/OfficialLowerings.kt', 'core/ExpectedNullability.kt', 'core/LibraryInlining.kt', 'core/BinaryBodies.kt', 'core/LocalDeclarations.kt', 'core/ForLoops.kt', 'language/LanguageLowering.kt', 'language/OverloadNaming.kt', 'language/ClassNaming.kt'].map(file => join(root, 'src', file)),
+run('compile', 'bash', [compiler, ...kotlinFiles(join(root, 'src/target')).filter(path => !path.endsWith('Printer.kt')),
+  ...kotlinFiles(join(root, 'src/core')), ...kotlinFiles(join(root, 'src/lower')), ...kotlinFiles(join(root, 'src/language')),
+  ...kotlinFiles(join(root, 'src/stdlib')),
   join(here, 'TypedLoweringTest.kt'), '-d', jar]);
 run('test', 'java', ['-cp', `${jar}:${classpath}`, 'dev.ets.TypedLoweringTestKt', join(here, 'TypedSlice.kt'), classpath, join(here, 'TypedHelper.kt')]);
