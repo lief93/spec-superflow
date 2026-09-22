@@ -32,7 +32,7 @@ object UnknownTokens {
 @Composable fun UnknownWidget() { Checkbox(checked = true, onCheckedChange = {}) }
 @Composable fun UnknownModifier() { Text("x", Modifier.fillMaxWidth()) }
 @Composable fun WholeTextStyle() { Text("x", style = TextStyle(fontSize = 20.sp)) }
-@Composable fun Conditional() { if (true) Text("x") else Text("y") }
+@Composable fun Conditional() { if (true) while (false) { } else Text("y") }
 @Composable fun Helper() { LocalText("x") }
 @Composable fun LocalText(value: String) { Text(value) }
 fun effect(): String = "effect"

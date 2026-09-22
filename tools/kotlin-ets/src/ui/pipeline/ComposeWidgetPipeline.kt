@@ -1,6 +1,7 @@
 package dev.ets.pipeline
 
 import dev.ets.*
+import dev.ets.compose.ComposeInputContracts
 import dev.ets.compose.ComposeStateLowering
 import dev.ets.compose.ComposeWidgetAdapter
 import dev.ets.harmony.HarmonyWidgetBackend
@@ -46,7 +47,14 @@ class ComposeWidgetPipeline(
             EtsClass(entry.name.asString(), state.fields + build, source,
                 exported = true, component = true, entry = true)
         }
-        val program = backend.link(EtsProgram(listOf(EtsFile(path, listOf(declaration)))))
+        val files = linkedMapOf<String, MutableList<EtsDeclaration>>()
+        ComposeInputContracts(backend.language, backend.diagnostics).lower(entry).forEach { (contractPath, contract) ->
+            files.getOrPut(contractPath) { mutableListOf() } += contract
+        }
+        files.getOrPut(path) { mutableListOf() } += declaration
+        val program = backend.link(EtsProgram(files.map { (sourcePath, declarations) ->
+            EtsFile(sourcePath, declarations)
+        }))
         EtsValidator().validate(program)
         return emitEtsProgram(program, runtime)
     }

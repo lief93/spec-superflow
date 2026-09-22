@@ -23,7 +23,13 @@ sealed interface Widget<V, S> {
         override val source: S) : Widget<V, S>
     data class Box<V, S>(val children: Children<V, S>, override val modifiers: List<WidgetModifier<V, S>>,
         override val source: S) : Widget<V, S>
+    data class Conditional<V, S>(val branches: List<WidgetBranch<V, S>>, override val source: S) : Widget<V, S> {
+        override val modifiers: List<WidgetModifier<V, S>> = emptyList()
+    }
 }
+
+/** A null condition is the final else branch. Conditions remain target-language runtime values. */
+data class WidgetBranch<V, S>(val condition: V?, val children: Children<V, S>, val source: S)
 
 /** Semantic value type and source origin are explicit at the platform seam. */
 enum class WidgetValueType { STRING, COLOR, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY, LINE_HEIGHT }
