@@ -1,6 +1,7 @@
 package dev.ets.pipeline
 
 import dev.ets.*
+import dev.ets.compose.ComposeStateLowering
 import dev.ets.compose.ComposeWidgetAdapter
 import dev.ets.harmony.HarmonyWidgetBackend
 import org.jetbrains.kotlin.ir.declarations.IrFile
@@ -25,13 +26,27 @@ class ComposeWidgetPipeline(
 
         val scope = Scope()
         val parameters = backend.parameters(entry, scope)
-        val model = ComposeWidgetAdapter(backend.language, backend.diagnostics).lower(entry, scope)
+        val state = ComposeStateLowering(backend.language, backend.diagnostics)
+            .lower(entry, scope, entry.name.asString())
+        if (state.fields.isNotEmpty() && parameters.isNotEmpty()) {
+            backend.diagnostics.unsupported(entry.valueParameters.first(),
+                "Stateful widget entries do not yet support parameters")
+        }
+        val model = ComposeWidgetAdapter(backend.language, backend.diagnostics)
+            .lower(entry, state.scope, state.handledStatements)
         val body = HarmonyWidgetBackend().lower(model)
         val source = backend.language.source(entry)
         val path = source.file ?: backend.diagnostics.unsupported(entry, "Widget pipeline entry requires a source file")
-        val builder = EtsFunction(entry.name.asString(), parameters, EtsTypes.VOID, body, source,
-            exported = true, builder = true)
-        val program = backend.link(EtsProgram(listOf(EtsFile(path, listOf(builder)))))
+        val declaration: EtsDeclaration = if (state.fields.isEmpty()) {
+            EtsFunction(entry.name.asString(), parameters, EtsTypes.VOID, body, source,
+                exported = true, builder = true)
+        } else {
+            val build = EtsFunction("build", emptyList(), EtsTypes.VOID, body, source,
+                kind = EtsFunctionKind.METHOD, build = true)
+            EtsClass(entry.name.asString(), state.fields + build, source,
+                exported = true, component = true, entry = true)
+        }
+        val program = backend.link(EtsProgram(listOf(EtsFile(path, listOf(declaration)))))
         EtsValidator().validate(program)
         return emitEtsProgram(program, runtime)
     }
