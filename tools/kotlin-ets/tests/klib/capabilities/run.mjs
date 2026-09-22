@@ -45,6 +45,13 @@ const checked = ts.createProgram(modules.map(name => join(output, `${name}.ts`))
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, strict: true, noEmit: true, types: [],
 });
 assert.deepEqual(ts.getPreEmitDiagnostics(checked).map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')), []);
+const dependencyOutput = join(work, 'unselected');
+for (const name of modules) writeFileSync(join(dependencyOutput, `${name}.ts`),
+  readFileSync(join(dependencyOutput, `${name}.ets`)));
+const dependencyChecked = ts.createProgram(modules.map(name => join(dependencyOutput, `${name}.ts`)), {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, strict: true, noEmit: true, types: [],
+});
+assert.deepEqual(ts.getPreEmitDiagnostics(dependencyChecked).map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')), []);
 const cache = new Map();
 function execute(name) {
   assert.ok(modules.includes(name));
@@ -71,7 +78,7 @@ assert.ok(binaries.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation, binaries,
   expected, actual, producerSourcesAbsent: true, officialInlineBody: 'kotlin.let from pinned stdlib KLIB',
   runtimeSymbols: readFileSync(join(output, 'runtime-symbols.txt'), 'utf8').split('\n'),
-  rejected: ['external declaration without replacement', 'non-inline dependency-only body'],
+  dependencyOnlyBodyAdmission: true, rejected: ['external declaration without replacement'],
   strictHostTypecheck: true, sdk: 'not run', device: 'not run',
   outputs: identities(modules.map(name => join(output, `${name}.ets`))),
 }, null, 2));

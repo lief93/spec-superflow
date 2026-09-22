@@ -29,11 +29,10 @@ fun main(args: Array<String>) {
                 element.acceptChildrenVoid(this)
             }
         }) }
-        // Test selects the canonical linked symbol, not a production FQName rule.
+        // Test lookup uses the canonical linked symbol; production admission does not inspect this name.
         val let = calls.singleOrNull { it.symbol.owner.fqNameWhenAvailable?.asString() == "kotlin.let" }?.symbol
-        if (let != null) check(session.bodies().resolve(let) ==
-            FunctionBody.Unavailable(FunctionBody.Reason.NON_TRANSLATED_KLIB))
-        val bodies = session.bodies(setOfNotNull(let))
+        val bodies = session.bodies()
+        if (let != null) check(bodies.resolve(let) is FunctionBody.Available)
         val entry = session.linkedModules().first { it.files.any { file -> file.fileEntry.name.endsWith("${if (mode == "external") "Rejected" else "Consumer"}.kt") } }
             .files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>().single { it.name.asString() == "scenario" }
         borrowed = bodies
@@ -43,8 +42,8 @@ fun main(args: Array<String>) {
         check(!File(entryBody.source.file!!).exists())
         val decisions = mutableListOf<KlibDependencyDecision>()
         try {
-            val result = session.lowerToEts(listOf(StandardLibraryRules()), setOfNotNull(let), decisions::add)
-            check(mode == "positive") { "Expected rejection for $mode" }
+            val result = session.lowerToEts(listOf(StandardLibraryRules()), decisions::add)
+            check(mode != "external") { "Expected rejection for $mode" }
             check(result.decisions == decisions)
             check(result.runtimeSymbols == setOf("stdlib:__etsIntRem")) { result.runtimeSymbols }
             val reusedLet = decisions.single { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY && it.signature.startsWith("kotlin/let|") }

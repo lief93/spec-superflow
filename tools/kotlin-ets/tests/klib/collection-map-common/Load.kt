@@ -70,10 +70,15 @@ fun main(args: Array<String>) {
             collectionSizeOrDefault = symbol("kotlin.collections.collectionSizeOrDefault"),
         )
         val decisions = mutableListOf<KlibDependencyDecision>()
-        val rule = KlibCollectionRuntimeRule(if (rejectCapacity) bindings.copy(capacityListConstructor = null) else bindings)
+        val collectionRule = KlibCollectionRuntimeRule(bindings)
+        val rule = if (!rejectCapacity) collectionRule else object : CallRule by collectionRule,
+            KlibPrimitiveBoundary by collectionRule {
+            override fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? =
+                if (call.symbol === capacityConstructor) null else collectionRule.lowerConstructor(call, language, scope)
+        }
         if (rejectCapacity) {
             val failure = try {
-                session.lowerToEts(listOf(rule, StandardLibraryRules()), approved, decisions::add)
+                session.lowerToEts(listOf(rule, StandardLibraryRules()), decisions::add)
                 error("Missing capacity constructor unexpectedly lowered")
             } catch (failure: Unsupported) {
                 failure
@@ -93,7 +98,7 @@ fun main(args: Array<String>) {
             println("PASS source-linked rejection when capacity constructor primitive is absent")
             return@withKlibModules
         }
-        val result = session.lowerToEts(listOf(rule, StandardLibraryRules()), approved, decisions::add)
+        val result = session.lowerToEts(listOf(rule, StandardLibraryRules()), decisions::add)
         val bodies = decisions.filter { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY }.map { it.signature }.toSet()
         check(listOf(map, mapNotNull).all { it.signature.toString() in bodies }) { bodies }
         val replacements = decisions.filter { it.kind == KlibDependencyDecision.Kind.TARGET_REPLACEMENT &&

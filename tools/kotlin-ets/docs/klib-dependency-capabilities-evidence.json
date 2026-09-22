@@ -1,6 +1,6 @@
 {
   "scope": "S1 KLIB dependencies; no Compose/UI backend changes",
-  "baseCommit": "230c458",
+  "baseCommit": "31ac695",
   "compilerVersion": "2.1.20",
   "compilerSourcesSha256": "dc1ec1391e465b56d7e664fcf63d0ff4cfeb7274fc6e2b0dbd71335f8ce1dc11",
   "officialSources": [
@@ -12,7 +12,7 @@
     "file": "kotlin-stdlib-js-2.1.20.klib",
     "sha256": "65a9831cceb606642693f9f3d798de86bbacf09b9588186e763e9e9f3c24d1a3"
   },
-  "capabilityRun": "tests/klib/capabilities/.work/run-XX3AHU",
+  "capabilityRun": "tests/klib/capabilities/.work/run-aQZGhD",
   "provenance": [
     {
       "kind": "REUSABLE_BODY",
@@ -53,7 +53,8 @@
       -1
     ],
     "strictHostTypecheck": true,
-    "producerSourcesAbsent": true
+    "producerSourcesAbsent": true,
+    "dependencyOnlyBodyAdmission": true
   },
   "runtime": {
     "directRoots": [
@@ -66,28 +67,27 @@
     "libraryModuleSupport": []
   },
   "rejections": {
-    "external": "Diagnostic(code=UNSUPPORTED_KLIB_DEPENDENCY, message=KLIB dependency dependencies/unavailable|unavailable(kotlin.Int){}[0] at $RUN/external.klib; declaration $RUN/producer/External.kt:22..63: The declaration is external and has no source implementation. No target replacement accepted this call., source=SourceSpan(file=$RUN/producer/Rejected.kt, start=83, end=101))",
-    "unselected": "Diagnostic(code=UNSUPPORTED_KLIB_DEPENDENCY, message=KLIB dependency dependencies/adjusted|adjusted(kotlin.Int){}[0] at $RUN/library.klib; declaration $RUN/producer/Library.kt:107..162: The linked KLIB is dependency-only; its body was not selected for reuse. No target replacement accepted this call., source=SourceSpan(file=$RUN/producer/Consumer.kt, start=80, end=95))"
+    "external": "Diagnostic(code=UNSUPPORTED_KLIB_DEPENDENCY, message=KLIB dependency dependencies/unavailable|unavailable(kotlin.Int){}[0] at $RUN/external.klib; declaration $RUN/producer/External.kt:22..63: The declaration is external and has no source implementation. No target replacement accepted this call., source=SourceSpan(file=$RUN/producer/Rejected.kt, start=83, end=101))"
   },
   "regressions": [
     {
       "suite": "klib",
       "passed": true,
-      "result": "tests/klib/.work/run-vEVvEa/result.json"
+      "result": "tests/klib/.work/run-w1etNI/result.json"
     },
     {
       "suite": "portable-common",
       "passed": true,
-      "result": "tests/klib/portable-common/.work/run-6oCL0H/result.json"
+      "result": "tests/klib/portable-common/.work/run-Qiqnxa/result.json"
     },
     {
       "suite": "jvm-members",
       "passed": true,
-      "result": "tests/binary-bodies/r2e/.work/run-PWQ1Zr/replay-dbkLpR/result.json"
+      "result": "tests/binary-bodies/r2e/.work/run-lLUdQT/replay-9kDbtZ/result.json"
     }
   ],
   "jvmStructure": {
-    "result": "tests/binary-bodies/r2e/.work/run-PWQ1Zr/complete.json",
+    "result": "tests/binary-bodies/r2e/.work/run-lLUdQT/complete.json",
     "inlineBlocks": 26,
     "negativeBoundaries": 7,
     "signatureOnlyUnavailable": true
@@ -100,7 +100,7 @@
   "production": [
     {
       "path": "tools/kotlin-ets/src/core/Frontend.kt",
-      "sha256": "d29c68494fd65e9ee3e890a419f90e2eb7a3e07d638de48ad4760cefdbbcbaa8"
+      "sha256": "e10040f8e295b7dd44c114a80184aec209cfc12760cf7ee5dbbe098153e3baec"
     },
     {
       "path": "tools/kotlin-ets/src/core/LibraryInlining.kt",
@@ -112,7 +112,7 @@
     },
     {
       "path": "tools/kotlin-ets/src/dependency/klib/KlibLowering.kt",
-      "sha256": "d0f53f5982c5b7713add08437e53daa05350981649304a8a6fe6a9e0c5d89e6d"
+      "sha256": "86523db47ec1be88e336b4e7adfec28c1eb4875b2d2c36fde3c2e96cb1744f09"
     },
     {
       "path": "tools/kotlin-ets/src/dependency/klib/KlibModuleSelection.kt",
@@ -120,7 +120,7 @@
     },
     {
       "path": "tools/kotlin-ets/src/dependency/klib/KlibSession.kt",
-      "sha256": "38a517f59713bf8f0b3c4cf634805c6e7e4645972dceae95fed25efc445eddba"
+      "sha256": "bfa5bfe7b695fbff23211037ab2657b89441a5c60d465c7db0f721fb84f1c1cb"
     },
     {
       "path": "tools/kotlin-ets/src/stdlib/StandardLibraryDependencies.kt",

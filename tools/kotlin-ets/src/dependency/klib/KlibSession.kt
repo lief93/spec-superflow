@@ -3,10 +3,7 @@ package dev.ets.dependency.klib
 
 import dev.ets.*
 import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.util.fileOrNull
-
-
 import org.jetbrains.kotlin.backend.common.IrModuleInfo
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.util.SymbolTable
@@ -47,11 +44,9 @@ class KlibSession internal constructor(
         return modules
     }
 
-    /** Only explicitly approved canonical symbols may borrow bodies from dependency-only libraries. */
-    fun bodies(approvedBodies: Set<IrFunctionSymbol> = emptySet()): FunctionBodies {
+    /** Resolves serialized bodies by canonical symbol across every linked KLIB. */
+    fun bodies(): FunctionBodies {
         checkActive()
-        require(approvedBodies.all { it.isBound && !it.owner.isExternal &&
-            it.owner.fileOrNull?.module in libraryLocations }) { "Body reuse requires canonical linked KLIB symbols" }
         return FunctionBodies { symbol ->
             checkActive()
             when {
@@ -63,11 +58,9 @@ class KlibSession internal constructor(
                     val location = libraryLocations[file?.module]
                     when {
                         location == null -> FunctionBody.Unavailable(FunctionBody.Reason.OUTSIDE_MODULE)
-                        file!!.module !in modules && symbol !in approvedBodies ->
-                            FunctionBody.Unavailable(FunctionBody.Reason.NON_TRANSLATED_KLIB)
                         function.body == null -> FunctionBody.Unavailable(FunctionBody.Reason.NO_BODY)
                         else -> FunctionBody.Available(function, function.body!!,
-                            SourceSpan(file.fileEntry.name, function.startOffset, function.endOffset),
+                            SourceSpan(file!!.fileEntry.name, function.startOffset, function.endOffset),
                             FunctionBody.Origin.SerializedKlibIr(location, file.module.name.asString()))
                     }
                 }

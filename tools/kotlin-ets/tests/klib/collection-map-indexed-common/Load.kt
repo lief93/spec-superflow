@@ -75,10 +75,16 @@ fun main(args: Array<String>) {
             checkIndexOverflow = symbol("kotlin.collections.checkIndexOverflow"),
         )
         val decisions = mutableListOf<KlibDependencyDecision>()
-        val rule = KlibCollectionRuntimeRule(if (rejectIndexCheck) bindings.copy(checkIndexOverflow = null) else bindings)
+        val collectionRule = KlibCollectionRuntimeRule(bindings)
+        val rejectedIndexCheck = checkNotNull(bindings.checkIndexOverflow)
+        val rule = if (!rejectIndexCheck) collectionRule else object : CallRule by collectionRule,
+            KlibPrimitiveBoundary by collectionRule {
+            override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
+                if (call.symbol === rejectedIndexCheck) null else collectionRule.lower(call, language, scope)
+        }
         if (rejectIndexCheck) {
             val failure = try {
-                session.lowerToEts(listOf(rule, StandardLibraryRules()), approved, decisions::add)
+                session.lowerToEts(listOf(rule, StandardLibraryRules()), decisions::add)
                 error("Missing index-overflow primitive unexpectedly lowered")
             } catch (failure: Unsupported) {
                 failure
@@ -98,7 +104,7 @@ fun main(args: Array<String>) {
             println("PASS source-linked rejection when index-overflow primitive is absent")
             return@withKlibModules
         }
-        val result = session.lowerToEts(listOf(rule, StandardLibraryRules()), approved, decisions::add)
+        val result = session.lowerToEts(listOf(rule, StandardLibraryRules()), decisions::add)
         val bodies = decisions.filter { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY }.map { it.signature }.toSet()
         check(listOf(mapIndexed, mapIndexedNotNull).all { it.signature.toString() in bodies }) { bodies }
         val replacements = decisions.filter { it.kind == KlibDependencyDecision.Kind.TARGET_REPLACEMENT &&
