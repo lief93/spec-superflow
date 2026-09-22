@@ -35,7 +35,7 @@ fun checkComponentPropsContract() {
         EtsFile("Child.kt", listOf(component)), EtsFile("Page.kt", listOf(caller))))
     val code = EtsPrinter().program(program())
     check("@Prop @Watch(\"changed\") label: string = \"initial\"" in code)
-    check("@Require @Prop action: (() => void);" in code)
+    check("@Require @BuilderParam action: (() => void);" in code)
     check("Child({ label: this.message, action: ()" in code)
     var sawDependency = false
     walkEts(page) { if (it is EtsReference && it.symbol == child.symbol) sawDependency = true }
