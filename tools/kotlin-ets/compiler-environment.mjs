@@ -7,7 +7,8 @@ const serializationId = 'org.jetbrains.kotlinx.serialization';
 const valued = new Set(['-language-version', '-api-version', '-jvm-target', '-module-name', '-opt-in',
   '-jdk-home', '-Xjvm-default', '-Xjsr305', '-Xjdk-release', '-Xnullability-annotations', '-Xfriend-paths']);
 const flags = new Set(['-no-stdlib', '-no-reflect', '-no-jdk', '-java-parameters', '-progressive', '-nowarn', '-Werror',
-  '-Xcontext-receivers', '-Xemit-jvm-type-annotations', '-Xjspecify-annotations=strict']);
+  '-Xconsistent-data-class-copy-visibility', '-Xcontext-receivers', '-Xemit-jvm-type-annotations',
+  '-Xjspecify-annotations=strict']);
 const buildValues = new Set(['-d', '-classpath', '-cp']);
 const buildFlags = new Set(['-Xallow-no-source-files', '-Xuse-inline-scopes-numbers']);
 const pluginServices = [

@@ -16,9 +16,11 @@ test('forwards serialization and semantic options, isolates JVM destinations', (
   const result = compilerEnvironment({ compilerVersion: '2.1.20', compilerArguments: [
     '-d', '/do not write/classes', '-jvm-target', '17', '-language-version', '2.1',
     '-Xplugin=' + serialization, '-P', option, '-opt-in=sample.Experimental', '-Xjvm-default=all',
+    '-Xconsistent-data-class-copy-visibility',
   ] });
   assert.deepEqual(result.arguments, ['-jvm-target', '17', '-language-version', '2.1',
-    '-Xplugin=' + serialization, '-P', option, '-opt-in=sample.Experimental', '-Xjvm-default=all']);
+    '-Xplugin=' + serialization, '-P', option, '-opt-in=sample.Experimental', '-Xjvm-default=all',
+    '-Xconsistent-data-class-copy-visibility']);
   assert.ok(result.excluded.some(x => x.argument === '-d=/do not write/classes'));
 });
 test('records Compose ownership and excludes scripting for kt/java-only input', () => {

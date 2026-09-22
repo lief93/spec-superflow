@@ -77,3 +77,16 @@ test('same-priority duplicate values names fail without publishing output', () =
     resourceRoots: [{ sourceSet: 'main', overlayPriority: 0, path: first },
       { sourceSet: 'main', overlayPriority: 0, path: second }], out: join(work, 'out') }), /Ambiguous project string resource/);
 });
+
+test('library placeholder IDs retain named resources without inventing runtime IDs', () => {
+  const work = mkdtempSync(join(tmpdir(), 'kotlin-ets-project-string-library-'));
+  const main = join(work, 'main-res');
+  write(join(main, 'values/strings.xml'), '<resources><string name="label">Library</string></resources>');
+  const symbols = join(work, 'R.txt');
+  writeFileSync(symbols, 'int string label 0x0\n');
+  const pack = materializeProjectStrings({ namespace: 'sample.library', variant: 'debug', symbolsFile: symbols,
+    resourceRoots: [{ sourceSet: 'main', overlayPriority: 0, path: main }], out: join(work, 'out') });
+  assert.equal(pack.count, 1);
+  assert.match(readFileSync(join(pack.output, 'base.properties'), 'utf8'), /sample\.library\.R\.string\.label=Library/);
+  assert.equal(readFileSync(join(pack.output, 'source-resource-ids.properties'), 'utf8'), '');
+});

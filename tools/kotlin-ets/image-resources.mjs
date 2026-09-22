@@ -210,15 +210,17 @@ export function materializeProjectImages({ resourceRoots, namespace, out, symbol
 
   const ids = new Map();
   const idNumbers = new Set();
+  const symbols = new Set();
   for (const line of readFileSync(symbolsFile, 'utf8').split(/\r?\n/)) {
     const match = /^int\s+(drawable|mipmap)\s+([a-z_][a-z0-9_]*)\s+(0x[0-9a-fA-F]+|\d+)\s*$/.exec(line);
     if (!match) continue;
     const symbol = `${namespace}.R.${match[1]}.${match[2]}`;
     const id = Number(match[3]);
-    if (!Number.isInteger(id) || id <= 0 || id > 0x7fffffff || ids.has(symbol) || idNumbers.has(id)) {
+    if (!Number.isInteger(id) || id < 0 || id > 0x7fffffff || symbols.has(symbol) || (id > 0 && idNumbers.has(id))) {
       throw new Error(`Invalid or duplicate selected-variant image ID: ${symbol}`);
     }
-    ids.set(symbol, id); idNumbers.add(id);
+    symbols.add(symbol);
+    if (id > 0) { ids.set(symbol, id); idNumbers.add(id); }
   }
 
   const selected = new Map();
@@ -268,7 +270,7 @@ export function materializeProjectImages({ resourceRoots, namespace, out, symbol
 
   const rendered = [];
   for (const entry of [...selected.values()].sort((a, b) => a.symbol.localeCompare(b.symbol))) {
-    if (!ids.has(entry.symbol)) throw new Error(`Selected variant R.txt has no image symbol: ${entry.symbol}`);
+    if (!symbols.has(entry.symbol)) throw new Error(`Selected variant R.txt has no image symbol: ${entry.symbol}`);
     try {
       const renderedImage = projectImageBytes(entry);
       rendered.push({ ...entry, ...renderedImage,
@@ -280,7 +282,7 @@ export function materializeProjectImages({ resourceRoots, namespace, out, symbol
         reason: kind && kind !== 'vector' ? `Unsupported Android image XML <${kind}> at ${entry.path}` : error.message });
     }
   }
-  for (const symbol of ids.keys()) if (!selected.has(symbol) && !unavailable.has(symbol)) {
+  for (const symbol of symbols) if (!selected.has(symbol) && !unavailable.has(symbol)) {
     unavailable.set(symbol, { path: null, source: null, shadowed: [],
       reason: `No ${symbol} file exists in collected module resource roots` });
   }
@@ -294,7 +296,8 @@ export function materializeProjectImages({ resourceRoots, namespace, out, symbol
     for (const entry of rendered) writeFileSync(join(stage, 'media', `${entry.target}${entry.extension}`), entry.bytes, { flag: 'wx' });
     writeFileSync(join(stage, 'image-resources.properties'), rendered.map(entry => `${entry.symbol} = ${entry.target}\n`).join(''),
       { encoding: 'ascii', flag: 'wx' });
-    writeFileSync(join(stage, 'source-resource-ids.properties'), rendered.map(entry => `${entry.symbol} = ${ids.get(entry.symbol)}\n`).join(''),
+    writeFileSync(join(stage, 'source-resource-ids.properties'), rendered.filter(entry => ids.has(entry.symbol))
+      .map(entry => `${entry.symbol} = ${ids.get(entry.symbol)}\n`).join(''),
       { encoding: 'ascii', flag: 'wx' });
     writeFileSync(join(stage, 'unsupported-image-resources.properties'), [...unavailable].sort(([a], [b]) => a.localeCompare(b))
       .map(([symbol, entry]) => `${symbol} = ${Buffer.from(entry.reason).toString('base64')}\n`).join(''), { encoding: 'ascii', flag: 'wx' });

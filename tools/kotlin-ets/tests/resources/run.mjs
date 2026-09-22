@@ -117,6 +117,17 @@ for (const [name, kind] of [['selector', 'selector'], ['animated', 'animated-vec
 assert.match(origins.resources.find(resource => resource.symbol === 'project.example.R.drawable.missing').reason,
   /No .* file exists in collected module resource roots/);
 
+const library = join(work, 'library-res');
+resource(library, 'drawable/library_icon.png', png);
+const librarySymbols = join(work, 'library-R.txt');
+writeFileSync(librarySymbols, 'int drawable library_icon 0x0\n');
+const libraryPack = materializeProjectImages({ namespace: 'library.example', variant: 'debug',
+  resourceRoots: [{ sourceSet: 'main', overlayPriority: 0, path: library }], symbolsFile: librarySymbols,
+  out: join(work, 'library-images') });
+assert.equal(libraryPack.count, 1);
+assert.match(readFileSync(libraryPack.properties, 'utf8'), /library\.example\.R\.drawable\.library_icon/);
+assert.equal(readFileSync(join(libraryPack.output, 'source-resource-ids.properties'), 'utf8'), '');
+
 const duplicateA = join(work, 'duplicate-a');
 const duplicateB = join(work, 'duplicate-b');
 resource(duplicateA, 'drawable/repeated.png', png);

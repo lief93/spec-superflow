@@ -195,13 +195,17 @@ export function materializeProjectStrings({ resourceRoots, namespace, out, symbo
 
   const ids = new Map();
   const idNumbers = new Set();
+  const symbols = new Set();
   for (const line of readFileSync(symbolsFile, 'utf8').split(/\r?\n/)) {
     const match = /^int\s+(string|plurals|array)\s+([a-z_][a-z0-9_]*)\s+(0x[0-9a-fA-F]+|\d+)\s*$/.exec(line);
     if (!match) continue;
     const symbol = `${namespace}.R.${match[1]}.${match[2]}`;
     const id = Number(match[3]);
-    if (!Number.isInteger(id) || id <= 0 || id > 0x7fffffff || ids.has(symbol) || idNumbers.has(id)) throw new Error(`Invalid or duplicate selected-variant string ID: ${symbol}`);
-    ids.set(symbol, id); idNumbers.add(id);
+    if (!Number.isInteger(id) || id < 0 || id > 0x7fffffff || symbols.has(symbol) || (id > 0 && idNumbers.has(id))) {
+      throw new Error(`Invalid or duplicate selected-variant string ID: ${symbol}`);
+    }
+    symbols.add(symbol);
+    if (id > 0) { ids.set(symbol, id); idNumbers.add(id); }
   }
 
   const selected = new Map();
@@ -234,7 +238,8 @@ export function materializeProjectStrings({ resourceRoots, namespace, out, symbo
   }
   const supported = new Map();
   const unavailable = new Map();
-  for (const [symbol, id] of ids) {
+  for (const symbol of symbols) {
+    const id = ids.get(symbol);
     const entries = bySymbol.get(symbol) ?? [];
     const base = entries.find(entry => entry.qualifier === 'base');
     const bad = entries.find(entry => entry.reason);
@@ -262,11 +267,13 @@ export function materializeProjectStrings({ resourceRoots, namespace, out, symbo
     if (!stringPacks.has('base')) writeFileSync(join(stage, 'base.properties'), '', { flag: 'wx' });
     for (const [qualifierName, values] of pluralPacks) writeFileSync(join(stage, `plurals-${qualifierName}.properties`), properties(values), { flag: 'wx' });
     for (const [qualifierName, values] of arrayPacks) writeFileSync(join(stage, `arrays-${qualifierName}.properties`), properties(values), { flag: 'wx' });
-    writeFileSync(join(stage, 'source-resource-ids.properties'), properties([...supported].map(([symbol, item]) => [symbol, item.id])), { flag: 'wx' });
+    writeFileSync(join(stage, 'source-resource-ids.properties'), properties([...supported]
+      .filter(([, item]) => item.id !== undefined).map(([symbol, item]) => [symbol, item.id])), { flag: 'wx' });
     writeFileSync(join(stage, 'unsupported-string-resources.properties'), properties([...unavailable].map(([symbol, item]) => [symbol, Buffer.from(item.reason).toString('base64')])), { flag: 'wx' });
-    writeFileSync(join(stage, 'unsupported-string-resource-ids.properties'), properties([...unavailable].map(([symbol, item]) =>
-      [String(ids.get(symbol)), Buffer.from(`Unsupported Android values resource ${symbol}: ${item.reason}`).toString('base64')])), { flag: 'wx' });
-    const provenance = { schemaVersion: 1, namespace, variant, roots, resources: [...ids.keys()].sort().map(symbol => {
+    writeFileSync(join(stage, 'unsupported-string-resource-ids.properties'), properties([...unavailable]
+      .filter(([symbol]) => ids.has(symbol)).map(([symbol, item]) =>
+        [String(ids.get(symbol)), Buffer.from(`Unsupported Android values resource ${symbol}: ${item.reason}`).toString('base64')])), { flag: 'wx' });
+    const provenance = { schemaVersion: 1, namespace, variant, roots, resources: [...symbols].sort().map(symbol => {
       const item = supported.get(symbol) ?? unavailable.get(symbol);
       return { symbol, status: supported.has(symbol) ? 'materialized' : 'unsupported', ...(item.reason ? { reason: item.reason } : {}),
         variants: item.entries.map(entry => ({ qualifier: entry.qualifier, source: entry.source, shadowed: entry.shadowed })) };
