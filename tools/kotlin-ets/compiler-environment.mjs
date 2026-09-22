@@ -1,4 +1,4 @@
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { basename, isAbsolute } from 'node:path';
 
 export const frontendCompilerVersion = '2.1.20';
@@ -10,6 +10,16 @@ const flags = new Set(['-no-stdlib', '-no-reflect', '-no-jdk', '-java-parameters
   '-Xcontext-receivers', '-Xemit-jvm-type-annotations', '-Xjspecify-annotations=strict']);
 const buildValues = new Set(['-d', '-classpath', '-cp']);
 const buildFlags = new Set(['-Xallow-no-source-files', '-Xuse-inline-scopes-numbers']);
+const pluginServices = [
+  'META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar',
+  'META-INF/services/org.jetbrains.kotlin.compiler.plugin.ComponentRegistrar',
+  'META-INF/services/org.jetbrains.kotlin.compiler.plugin.CommandLineProcessor',
+].map(value => Buffer.from(value));
+
+function declaresCompilerPlugin(path) {
+  const archive = readFileSync(path);
+  return pluginServices.some(service => archive.includes(service));
+}
 
 // This is a compiler-environment boundary, not language/API name rewriting.
 // Record every intentional exclusion; unknown semantic inputs fail closed.
@@ -64,7 +74,8 @@ export function compilerEnvironment(inputs) {
           const versioned = name.match(/-(\d+\.\d+\.\d+)\.jar$/);
           if (serialization && serialization[1] !== frontendCompilerVersion) {
             exclude(path, 'Older serialization compiler codegen is not loaded into the fixed frontend; generated serializer references must resolve without it or source analysis fails');
-          } else if (versioned && versioned[1] === inputs.compilerVersion && versioned[1] !== frontendCompilerVersion) {
+          } else if (versioned && declaresCompilerPlugin(path) &&
+            versioned[1] === inputs.compilerVersion && versioned[1] !== frontendCompilerVersion) {
             throw new Error(`Incompatible compiler plugin ${name}: project plugin ${versioned[1]}, ETS frontend ${frontendCompilerVersion}`);
           } else retained.push(path);
         }

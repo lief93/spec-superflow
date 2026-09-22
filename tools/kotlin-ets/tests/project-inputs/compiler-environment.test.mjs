@@ -7,6 +7,8 @@ import { compilerCompatibility, compilerEnvironment } from '../../compiler-envir
 
 const dir = mkdtempSync(join(tmpdir(), 'compiler plugins '));
 const jar = name => { const path = join(dir, name); writeFileSync(path, 'test path'); return path; };
+const pluginJar = name => { const path = join(dir, name); writeFileSync(path,
+  'META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar'); return path; };
 const serialization = jar('kotlin-serialization-compiler-plugin-embeddable-2.1.20.jar');
 const serialization210 = jar('kotlin-serialization-compiler-plugin-embeddable-2.1.0.jar');
 test('forwards serialization and semantic options, isolates JVM destinations', () => {
@@ -46,7 +48,7 @@ test('accepts an older patch on the same Kotlin language line and records the de
 });
 
 test('rejects incompatible compiler lines, newer patches, unstable labels, arguments and missing artifacts', () => {
-  const coupled = jar('custom-compiler-plugin-2.1.0.jar');
+  const coupled = pluginJar('custom-compiler-plugin-2.1.0.jar');
   for (const version of ['2.0.20', '2.2.0', '2.1.21', '2.1.20-RC1', '', undefined])
     assert.throws(() => compilerCompatibility(version), /Kotlin|compiler|version|patch/i);
   for (const input of [
@@ -64,6 +66,16 @@ test('preserves plugin classloader dependencies and delegates option ownership t
   const option = 'plugin:example.processor:mode=normal';
   const result = compilerEnvironment({ compilerVersion: '2.1.20', compilerArguments: [classpath, '-P', option] });
   assert.deepEqual(result.arguments, [classpath, '-P', option]);
+  assert.deepEqual(result.excluded, []);
+});
+
+test('does not classify versioned plugin classloader dependencies as compiler plugins', () => {
+  const stdlib = jar('kotlin-stdlib-2.1.10.jar');
+  const helper = jar('processor-helper-2.1.10.jar');
+  const result = compilerEnvironment({ compilerVersion: '2.1.10', compilerArguments: [
+    `-Xplugin=${stdlib},${helper}`,
+  ] });
+  assert.deepEqual(result.arguments, [`-Xplugin=${stdlib},${helper}`]);
   assert.deepEqual(result.excluded, []);
 });
 
