@@ -1,0 +1,163 @@
+{
+  "scope": "Canonical ordinary and inline KLIB firstOrNull bodies over typed collection primitives",
+  "baseCommit": "0bd0de7c8ef38344f95f2afc8c92779664fc9b73",
+  "compilerVersion": "2.1.20",
+  "compilerSourcesSha256": "dc1ec1391e465b56d7e664fcf63d0ff4cfeb7274fc6e2b0dbd71335f8ce1dc11",
+  "stdlib": {
+    "file": "kotlin-stdlib-js-2.1.20.klib",
+    "sha256": "65a9831cceb606642693f9f3d798de86bbacf09b9588186e763e9e9f3c24d1a3"
+  },
+  "firstOrNullRun": "tests/klib/collection-first-or-null-common/.work/run-Ju5BON",
+  "officialBodies": [
+    {
+      "name": "firstOrNull()",
+      "inline": false,
+      "declaration": "common/src/generated/_Collections.kt:8031..8403",
+      "output": "_Collections.ets"
+    },
+    {
+      "name": "firstOrNull(predicate)",
+      "inline": true,
+      "declaration": "common/src/generated/_Collections.kt:8670..8831",
+      "output": "inlined into Consumer.ets"
+    }
+  ],
+  "selection": {
+    "canonicalSymbolsOnly": true,
+    "ordinaryTopLevelBodyMaterialized": true,
+    "unselectedDependencyDeclarationsEmitted": false,
+    "sourceJvmFirstOrNullHelperUsed": false,
+    "helperAbsent": "__etsListFirstOrNull"
+  },
+  "runtimeReplacements": [
+    "kotlin.collections.Iterable.iterator|iterator(){}[0]",
+    "kotlin.collections.Iterator.hasNext|hasNext(){}[0]",
+    "kotlin.collections.Iterator.next|next(){}[0]",
+    "kotlin.collections/List.isEmpty|isEmpty(){}[0]",
+    "kotlin.collections/List.get|get(kotlin.Int){}[0]"
+  ],
+  "runtime": {
+    "directRoots": [
+      "stdlib:__etsArrayIterator",
+      "stdlib:__etsIterator",
+      "stdlib:__etsListGet"
+    ],
+    "firstOrNullHelperAbsent": true,
+    "kotlinJsOutputAbsent": true
+  },
+  "positive": {
+    "expected": [
+      "null",
+      "4",
+      "0,null",
+      "2,2",
+      "3,null",
+      "1,1"
+    ],
+    "actual": [
+      "null",
+      "4",
+      "0,null",
+      "2,2",
+      "3,null",
+      "1,1"
+    ],
+    "strictHostTypecheck": true,
+    "producerSourcesAbsent": true,
+    "emptyInput": true,
+    "firstElement": true,
+    "predicateHitAndMiss": true,
+    "predicateCallbackCount": true,
+    "earlyReturn": true,
+    "nullableResult": true
+  },
+  "bodyRejection": {
+    "code": "UNSUPPORTED_KLIB_DEPENDENCY",
+    "signature": "kotlin.collections/firstOrNull|firstOrNull@kotlin.collections.Iterable<0:0>(){0§<kotlin.Any?>}[0]",
+    "library": "kotlin-stdlib-js-2.1.20.klib",
+    "declaration": "common/src/generated/_Collections.kt:8031..8403",
+    "callSite": "deleted producer/Consumer.kt:85..98",
+    "detail": "The source declaration has no function body.",
+    "targetOutputAbsent": true
+  },
+  "primitiveRejection": {
+    "code": "UNSUPPORTED_KLIB_DEPENDENCY",
+    "signature": "kotlin.collections/List.get|get(kotlin.Int){}[0]",
+    "library": "kotlin-stdlib-js-2.1.20.klib",
+    "declaration": "js/builtins/Collections.kt:5363..5408",
+    "callSite": "common/src/generated/_Collections.kt:8212..8219",
+    "targetOutputAbsent": true,
+    "silentNameFallback": false
+  },
+  "regressions": [
+    {
+      "suite": "filter-map-flatMap collection bodies",
+      "passed": true,
+      "runs": [
+        "tests/klib/collection-common/.work/run-oKvtOI/result.json",
+        "tests/klib/collection-map-common/.work/run-50Uvrj/result.json",
+        "tests/klib/collection-map-indexed-common/.work/run-hiQMYv/result.json",
+        "tests/klib/collection-flat-map-common/.work/run-760PzM/result.json"
+      ]
+    },
+    {
+      "suite": "klib-capabilities",
+      "passed": true,
+      "result": "tests/klib/capabilities/.work/run-ZyHh8a/result.json"
+    },
+    {
+      "suite": "klib-loader",
+      "passed": true,
+      "result": "tests/klib/.work/run-3bDmxE/result.json"
+    },
+    {
+      "suite": "portable-common",
+      "passed": true,
+      "result": "tests/klib/portable-common/.work/run-rvqL8L/result.json"
+    },
+    {
+      "suite": "typed-language",
+      "passed": true,
+      "run": "tests/language/.work/typed-jgtjii"
+    },
+    {
+      "suite": "official-lowering",
+      "passed": true,
+      "run": "tests/lowering/.work/run-cG3aFI"
+    },
+    {
+      "suite": "jvm-member-bodies",
+      "passed": true,
+      "result": "tests/binary-bodies/r2e/.work/run-lBYZHv/complete.json"
+    },
+    {
+      "suite": "jvm-member-replay",
+      "passed": true,
+      "result": "tests/binary-bodies/r2e/.work/run-lBYZHv/replay-QpPlS4/result.json"
+    }
+  ],
+  "production": [
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibSession.kt",
+      "sha256": "38c0198ee71542cc23dc38db122bd2c37b7d0508ed56ec8b5585dae579b67ebb"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibLowering.kt",
+      "sha256": "7901393745d2064a204ae558d82d07c85e9937e25f0c58ee77099c97a25239ee"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibCollectionRuntime.kt",
+      "sha256": "3815a6bcf4db84d3cb173779dceac8150a59d1803f26ad9322cfc43cb1f09eda"
+    },
+    {
+      "path": "tools/kotlin-ets/src/language/LanguageLowering.kt",
+      "sha256": "b0b0b745f9344fdfe5c575bc6bf1b3f0a4d9c1ec5dc161f5f1bb1cf9d7dc35fa"
+    },
+    {
+      "path": "tools/kotlin-ets/src/stdlib/StandardLibraryRules.kt",
+      "sha256": "871ed9733ebbd323e0dc262c62e8c177dfa46ca635c7c4b13e8a767213806573"
+    }
+  ],
+  "sdk": "not run",
+  "device": "not run"
+}

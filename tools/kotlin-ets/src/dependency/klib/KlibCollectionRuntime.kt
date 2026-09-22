@@ -16,10 +16,12 @@ import org.jetbrains.kotlin.types.Variance
 
 /** Canonical KLIB symbols for the residual collection boundary of an approved common body. */
 data class KlibCollectionRuntimeBindings(
-    val emptyListConstructor: IrConstructorSymbol,
+    val emptyListConstructor: IrConstructorSymbol? = null,
     val iterator: IrFunctionSymbol,
     val hasNext: IrFunctionSymbol,
     val next: IrFunctionSymbol,
+    val isEmpty: IrFunctionSymbol? = null,
+    val get: IrFunctionSymbol? = null,
     val append: IrFunctionSymbol? = null,
     val appendAll: IrFunctionSymbol? = null,
     val capacityListConstructor: IrConstructorSymbol? = null,
@@ -27,16 +29,15 @@ data class KlibCollectionRuntimeBindings(
     val checkIndexOverflow: IrFunctionSymbol? = null,
 ) {
     init {
-        require(listOfNotNull(emptyListConstructor, iterator, hasNext, next, append, appendAll, capacityListConstructor,
-            collectionSizeOrDefault, checkIndexOverflow).all { it.isBound }) {
+        require(listOfNotNull(emptyListConstructor, iterator, hasNext, next, isEmpty, get, append, appendAll,
+            capacityListConstructor, collectionSizeOrDefault, checkIndexOverflow).all { it.isBound }) {
             "Collection runtime bindings require canonical linked KLIB symbols"
         }
-        require(append != null || appendAll != null) { "A collection append primitive is required" }
-        require(emptyListConstructor.owner.parent is IrClass) {
+        require(emptyListConstructor == null || emptyListConstructor.owner.parent is IrClass) {
             "The empty-list constructor must belong to a linked KLIB class"
         }
         require(capacityListConstructor == null ||
-            capacityListConstructor.owner.parent === emptyListConstructor.owner.parent) {
+            capacityListConstructor.owner.parent === emptyListConstructor?.owner?.parent) {
             "Collection constructors must belong to the same linked KLIB class"
         }
     }
@@ -47,25 +48,27 @@ data class KlibCollectionRuntimeBindings(
  * Source API selection is by symbol identity only; helper names identify target runtime primitives.
  */
 class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindings) : CallRule {
-    private val listClass = bindings.emptyListConstructor.owner.parentAsClass.symbol
+    private val listClasses = listOfNotNull(bindings.emptyListConstructor?.owner?.parent as? IrClass).toSet()
     private val iterableClass = bindings.iterator.owner.parentAsClass.symbol
-    private val mutableCollectionClasses = listOfNotNull(bindings.append, bindings.appendAll)
+    private val collectionClasses = listOfNotNull(bindings.isEmpty, bindings.get, bindings.append, bindings.appendAll)
         .mapNotNull { it.collectionReceiverClass() }.toSet()
 
     override fun mapType(type: IrType, language: Language): EtsType? {
-        val element = type.collectionElement(setOf(listClass.owner, iterableClass.owner) + mutableCollectionClasses)
+        val element = type.collectionElement(listClasses + iterableClass.owner + collectionClasses)
             ?: return null
         return EtsNamedType("Array", listOf(language.type(element)))
     }
 
     override fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? {
+        val emptyConstructor = bindings.emptyListConstructor
         val capacity = when {
-            call.symbol === bindings.emptyListConstructor -> false
+            emptyConstructor != null && call.symbol === emptyConstructor -> false
             bindings.capacityListConstructor?.let { call.symbol === it } == true -> true
             else -> return null
         }
         if (call.valueArgumentsCount != (if (capacity) 1 else 0) ||
             call.dispatchReceiver != null || call.extensionReceiver != null) return null
+        val listClass = emptyConstructor?.owner?.parentAsClass?.symbol ?: return null
         val element = call.type.collectionElement(setOf(listClass.owner), invariant = true) ?: return null
         if (call.typeArgumentsCount != listClass.owner.typeParameters.size ||
             (0 until call.typeArgumentsCount).any { call.getTypeArgument(it) == null } ||
@@ -88,6 +91,8 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
             call.symbol === bindings.iterator -> Operation.ITERATOR
             call.symbol === bindings.hasNext -> Operation.HAS_NEXT
             call.symbol === bindings.next -> Operation.NEXT
+            bindings.isEmpty?.let { call.symbol === it } == true -> Operation.IS_EMPTY
+            bindings.get?.let { call.symbol === it } == true -> Operation.GET
             bindings.append?.let { call.symbol === it } == true -> Operation.APPEND
             bindings.appendAll?.let { call.symbol === it } == true -> Operation.APPEND_ALL
             bindings.collectionSizeOrDefault?.let { call.symbol === it } == true -> Operation.SIZE_OR_DEFAULT
@@ -140,6 +145,22 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
                 if (call.valueArgumentsCount != 0 || receiverType.iteratorElement() != result) return null
                 member(language.expression(receiverExpression, scope), "next")
             }
+            Operation.IS_EMPTY -> {
+                if (call.valueArgumentsCount != 0 || receiverType.arrayElement() == null || result != EtsTypes.BOOLEAN)
+                    return null
+                val receiver = language.expression(receiverExpression, scope)
+                val length = EtsMember(receiver, "length", EtsTypes.NUMBER, at)
+                EtsBinary("===", length, EtsLiteral(0, EtsTypes.NUMBER, at), EtsTypes.BOOLEAN, at)
+            }
+            Operation.GET -> {
+                if (call.valueArgumentsCount != 1) return null
+                val element = receiverType.arrayElement()?.takeIf { it == result } ?: return null
+                val indexExpression = call.getValueArgument(0) ?: return null
+                if (language.type(indexExpression.type) != EtsTypes.NUMBER) return null
+                val receiver = language.expression(receiverExpression, scope)
+                val index = language.expression(indexExpression, scope)
+                external("__etsListGet", listOf(receiver, index), result, at, listOf(element))
+            }
             Operation.APPEND -> {
                 if (call.valueArgumentsCount != 1 || result != EtsTypes.BOOLEAN) return null
                 val element = receiverType.arrayElement() ?: return null
@@ -187,7 +208,9 @@ class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindi
         EtsReference(EtsSymbol("stdlib:$name", name, EtsFunctionType(arguments.map { it.type }, result), at,
             external = true)), arguments, result, at, types)
 
-    private enum class Operation { ITERATOR, HAS_NEXT, NEXT, APPEND, APPEND_ALL, SIZE_OR_DEFAULT, CHECK_INDEX_OVERFLOW }
+    private enum class Operation {
+        ITERATOR, HAS_NEXT, NEXT, IS_EMPTY, GET, APPEND, APPEND_ALL, SIZE_OR_DEFAULT, CHECK_INDEX_OVERFLOW
+    }
 }
 
 private fun IrFunctionSymbol.collectionReceiverClass(): IrClass? =

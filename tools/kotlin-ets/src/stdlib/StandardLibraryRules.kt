@@ -247,7 +247,8 @@ class StandardLibraryRules : CallRule {
                         return EtsMember(receiverNode(), "length", EtsTypes.NUMBER, source)
                 "kotlin.collections.List.get", "kotlin.collections.MutableList.get" -> {
                     val element = receiver?.type.listElement() ?: return null
-                    if (args.size == 1 && args[0]?.type.isExactly("kotlin.Int") && call.type == element) {
+                    if (sourceFile(owner) == null && args.size == 1 &&
+                        args[0]?.type.isExactly("kotlin.Int") && call.type == element) {
                         val targetElement = language.type(element)
                         return external("__etsListGet", listOf(EtsNamedType("Array", listOf(targetElement)), EtsTypes.NUMBER),
                             targetElement, listOf(receiverNode(), arg(0)), listOf(targetElement))

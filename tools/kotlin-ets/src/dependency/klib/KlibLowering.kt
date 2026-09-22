@@ -5,7 +5,13 @@ import dev.ets.*
 import org.jetbrains.kotlin.backend.common.linkage.issues.checkNoUnboundSymbols
 import org.jetbrains.kotlin.backend.common.lower.ReturnableBlockTransformer
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
+import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.declarations.impl.IrFileImpl
+import org.jetbrains.kotlin.ir.declarations.impl.IrModuleFragmentImpl
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.symbols.impl.IrFileSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.util.ExternalDependenciesGenerator
 import org.jetbrains.kotlin.ir.util.fileOrNull
@@ -32,12 +38,12 @@ data class KlibLoweringResult(
 )
 
 /**
- * Consumes selected modules and explicitly approved inline bodies in one official symbol session.
+ * Consumes selected modules and explicitly approved dependency bodies in one official symbol session.
  * No JS lowering pipeline or JS runtime emission. A session must be lowered only once.
  */
 fun KlibSession.lowerToEts(
     rules: List<CallRule>,
-    approvedInlineBodies: Set<IrFunctionSymbol> = emptySet(),
+    approvedBodies: Set<IrFunctionSymbol> = emptySet(),
     report: (KlibDependencyDecision) -> Unit = {},
 ): KlibLoweringResult {
     beginLowering()
@@ -51,9 +57,10 @@ fun KlibSession.lowerToEts(
             libraryLocations[file?.module], callSite, detail)
         decisions.add(decision)
     }
-    val provider = bodies(approvedInlineBodies)
+    val provider = bodies(approvedBodies)
+    val selectedBodies = approvedBodies.associateWith(provider::resolve)
     val recordedBodies = FunctionBodies { symbol ->
-        provider.resolve(symbol).also { body ->
+        (selectedBodies[symbol] ?: provider.resolve(symbol)).also { body ->
             if (body is FunctionBody.Available) record(KlibDependencyDecision.Kind.REUSABLE_BODY, symbol, null,
                 "Official serialized KLIB body: ${body.origin}")
         }
@@ -71,14 +78,18 @@ fun KlibSession.lowerToEts(
     // Official jsCompiler.kt completes fake overrides after context-driven loading.
     linker.postProcess(inOrAfterLinkageStep = true)
     linker.checkNoUnboundSymbols(symbolTable, "before KLIB common inlining")
-    inlineAvailableFunctions(context, modules, recordedBodies)
-    modules.forEach {
+    approvedBodies.forEach(recordedBodies::resolve)
+    val ordinaryBodies = selectedBodies.values.filterIsInstance<FunctionBody.Available>()
+        .map { it.declaration }.filterNot { it.isInline }
+    val loweringModules = modules + materializeOrdinaryBodies(ordinaryBodies)
+    inlineAvailableFunctions(context, loweringModules, recordedBodies)
+    loweringModules.forEach {
         it.transformChildrenVoid(ReturnableBlockTransformer(context))
         it.patchDeclarationParents()
     }
     val observedRules = rules.map { rule -> object : CallRule by rule {
         override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
-            rule.lower(call, language, scope)?.also {
+            if (call.symbol in approvedBodies) null else rule.lower(call, language, scope)?.also {
                 record(KlibDependencyDecision.Kind.TARGET_REPLACEMENT, call.symbol, language.source(call),
                     "Typed target value supplied by ${rule.javaClass.name}")
             }
@@ -88,7 +99,7 @@ fun KlibSession.lowerToEts(
                     "Typed target constructor supplied by ${rule.javaClass.name}")
             }
         override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
-            rule.lowerStatement(call, language, scope)?.also {
+            if (call.symbol in approvedBodies) null else rule.lowerStatement(call, language, scope)?.also {
                 record(KlibDependencyDecision.Kind.TARGET_REPLACEMENT, call.symbol, language.source(call),
                     "Target statements supplied by ${rule.javaClass.name}")
             }
@@ -96,7 +107,7 @@ fun KlibSession.lowerToEts(
     fun guard(call: IrFunctionAccessExpression, language: Language) {
         val owner = call.symbol.owner
         val module = owner.fileOrNull?.module
-        if (!owner.isExternal && (module == null || module in modules)) return
+        if (!owner.isExternal && (module == null || module in loweringModules)) return
         val resolution = provider.resolve(call.symbol)
         val reason = (resolution as? FunctionBody.Unavailable)?.reason?.evidence
             ?: "The dependency call remains after common inlining and is not selected for emission."
@@ -118,7 +129,31 @@ fun KlibSession.lowerToEts(
             return null
         }
     }
-    val program = EtsBackend(DiagnosticSink(), observedRules + boundary).lower(modules)
+    val program = EtsBackend(DiagnosticSink(), observedRules + boundary).lower(loweringModules)
     decisions.forEach(report)
     return KlibLoweringResult(program, decisions.toList(), standardLibraryRuntimeSymbols(program))
+}
+
+private fun materializeOrdinaryBodies(declarations: List<org.jetbrains.kotlin.ir.declarations.IrFunction>):
+    List<IrModuleFragment> {
+    val functions = declarations.map { declaration ->
+        require(declaration is IrSimpleFunction && declaration.parent is IrFile) {
+            "Ordinary KLIB body reuse currently requires a top-level simple function"
+        }
+        declaration
+    }
+    return functions.groupBy { (it.parent as IrFile).module }.map { (sourceModule, moduleFunctions) ->
+        val targetModule = IrModuleFragmentImpl(sourceModule.descriptor)
+        moduleFunctions.groupBy { it.parent as IrFile }.forEach { (sourceFile, fileFunctions) ->
+            val targetFile = IrFileImpl(sourceFile.fileEntry, IrFileSymbolImpl(), sourceFile.packageFqName)
+            targetFile.module = targetModule
+            targetModule.files += targetFile
+            fileFunctions.forEach { function ->
+                check(sourceFile.declarations.remove(function)) { "Selected KLIB function is not owned by its source file" }
+                function.parent = targetFile
+                targetFile.declarations += function
+            }
+        }
+        targetModule
+    }
 }
