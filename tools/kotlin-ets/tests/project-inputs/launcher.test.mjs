@@ -59,6 +59,7 @@ test('project entry selects one module/variant and keeps paths with spaces intac
   const args = gradleArguments(options, '/tmp/working dir/inputs.json');
   assert.ok(args.includes('-PkotlinEtsModule=:feature:onboarding'));
   assert.ok(args.includes('-PkotlinEtsCompileTask=compileDemoDebugKotlin'));
+  assert.ok(args.includes('-PkotlinEtsVariant=demoDebug'));
   assert.ok(args.includes('-PkotlinEtsInputsOutput=/tmp/working dir/inputs.json'));
   assert.ok(args.includes('--offline'));
   assert.equal(args.at(-1), 'kotlinEtsCollectInputs');
@@ -69,6 +70,7 @@ test('explicit compile task supports non-Android modules, without variant guessi
   assert.equal(options.compileTask, 'compileKotlin');
   assert.equal(options.collectOnly, true);
   assert.ok(!gradleArguments(options, '/tmp/inputs.json').includes('--offline'));
+  assert.ok(!gradleArguments(options, '/tmp/inputs.json').some(argument => argument.startsWith('-PkotlinEtsVariant=')));
 });
 
 test('project entry retains the materialized image registry path', () => {
@@ -120,10 +122,14 @@ test('resolved manifest retains ordered transitive classpath and validates physi
   const jar = join(root, 'direct.jar');
   const transitive = join(root, 'transitive.jar');
   const classes = join(root, 'project classes');
+  const resources = join(root, 'src/main/res');
+  const symbols = join(root, 'R.txt');
   for (const file of [source, java, jar, transitive]) writeFileSync(file, 'fixture');
-  mkdirSync(classes);
+  mkdirSync(classes); mkdirSync(resources, { recursive: true }); writeFileSync(symbols, 'int drawable image 0x7f040001\n');
   const manifest = join(root, 'inputs.json');
-  const value = { schemaVersion: 1, sources: [source, java], classpath: [transitive, jar, classes] };
+  const value = { schemaVersion: 2, sources: [source, java], classpath: [transitive, jar, classes],
+    resourceInputs: { namespace: 'sample.app', variant: 'debug', symbols,
+      roots: [{ sourceSet: 'main', overlayPriority: 0, path: resources }] } };
   writeFileSync(manifest, JSON.stringify(value));
   assert.deepEqual(readInputs(manifest), value);
   writeFileSync(manifest, JSON.stringify({ ...value, classpath: [join(root, 'missing.jar')] }));
@@ -132,6 +138,9 @@ test('resolved manifest retains ordered transitive classpath and validates physi
   assert.throws(() => readInputs(manifest), /Kotlin/);
   writeFileSync(manifest, JSON.stringify({ ...value, sources: ['relative.kt'] }));
   assert.throws(() => readInputs(manifest), /absolute/);
+  writeFileSync(manifest, JSON.stringify({ ...value, resourceInputs: { ...value.resourceInputs,
+    roots: [{ sourceSet: 'debug', overlayPriority: -1, path: resources }] } }));
+  assert.throws(() => readInputs(manifest), /resource/);
   assert.equal(readFileSync(source, 'utf8'), 'fixture');
 });
 
@@ -183,6 +192,37 @@ test('incompatible project compiler version fails at the project boundary withou
   const diagnostic = JSON.parse(result.stdout);
   assert.equal(diagnostic.stage, 'compiler-environment');
   assert.match(diagnostic.message, /project 2\.2\.0, ETS frontend 2\.1\.20/);
+  assert.equal(existsSync(output), false);
+  assert.equal(existsSync(preflight), false);
+});
+
+test('same-priority project image definitions fail before compiler execution without ETS', () => {
+  const project = mkdtempSync(join(tmpdir(), 'kotlin-ets-duplicate-images-'));
+  const source = join(project, 'App.kt');
+  const jar = join(project, 'dependency.jar');
+  const first = join(project, 'first-res');
+  const second = join(project, 'second-res');
+  const symbols = join(project, 'R.txt');
+  writeFileSync(source, 'fun value() = 1\n'); writeFileSync(jar, 'fixture');
+  for (const root of [first, second]) {
+    mkdirSync(join(root, 'drawable'), { recursive: true });
+    writeFileSync(join(root, 'drawable/repeated.png'), 'fixture');
+  }
+  writeFileSync(symbols, 'int drawable repeated 0x7f040001\n');
+  const manifest = { schemaVersion: 2, sources: [source], classpath: [jar], compilerVersion: '2.1.20',
+    compilerArguments: [], resourceInputs: { namespace: 'sample', variant: 'debug', symbols, roots: [
+      { sourceSet: 'main', overlayPriority: 0, path: first },
+      { sourceSet: 'main', overlayPriority: 0, path: second },
+    ] } };
+  writeFileSync(join(project, 'gradlew'), `#!/usr/bin/env bash\nfor arg in "$@"; do\n  case "$arg" in\n    -PkotlinEtsInputsOutput=*) printf '%s' '${JSON.stringify(manifest)}' > "\${arg#*=}" ;;\n  esac\ndone\n`);
+  const output = join(project, 'out.ets');
+  const preflight = join(project, 'preflight.json');
+  const result = spawnSync('bash', [launcher, '--project', project, '--module', ':app', '--variant', 'debug',
+    '--entry', 'sample.Page', '--out', output, '--preflight-out', preflight], { encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  const diagnostic = JSON.parse(result.stdout);
+  assert.equal(diagnostic.stage, 'image-resources');
+  assert.match(diagnostic.message, /Ambiguous project image resource sample\.R\.drawable\.repeated/);
   assert.equal(existsSync(output), false);
   assert.equal(existsSync(preflight), false);
 });

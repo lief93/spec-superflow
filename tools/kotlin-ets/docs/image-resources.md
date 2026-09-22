@@ -49,9 +49,38 @@ collisions fail, rather than aliasing two symbols.
 
 Nine-patch files, arbitrary drawable XML (selectors, shapes, etc.), raw SVG input,
 unknown extensions, symlinks, malformed vectors and invalid resource names fail.
-Other resource types such as `mipmap/` and `values/` are not collected.
+The standalone `--res-dir` command does not collect other resource types such as
+`mipmap/` and `values/`; project mode adds bounded mipmap support below.
 Bitmap checks are file-signature checks, not a full production pixel decoder;
 the test fixtures additionally undergo independent decoding.
+
+## Automatic project materialization
+
+The formal `--project ... --variant ...` entry automatically uses the selected
+Android variant's declared resource inputs when `--image-resources` is omitted.
+The Gradle collector records the module namespace, AGP source-set order, existing
+resource roots and the process-resources task's declared runtime `R.txt` artifact.
+It does not search `build/`, parse source text or infer integer IDs.
+
+Project materialization supports unqualified or `-nodpi` `drawable` and `mipmap`
+PNG, JPEG, WebP and SVG files. Static unqualified Android VectorDrawable XML is
+converted through the same deterministic bridge. Later source sets override
+earlier ones; the winning source, numeric overlay priority and shadowed origins
+are recorded in `image-resource-origins.json`. Two definitions at the same
+priority fail as ambiguous. Density/theme/API-qualified inputs are not guessed.
+
+Selector, animated-vector, layer-list and other unsupported XML definitions are
+recorded against their resolved `namespace.R.type.name` and selected-build ID.
+They do not block an unrelated entry, but a selected source reference produces
+an exact source diagnostic and no ETS. A selected `R` symbol with no file in the
+collected module roots behaves the same way. Kotlin constant folding is handled
+with the real `R.txt` ID only after the symbol-to-file decision has been made.
+
+Successful target generation publishes used images under
+`<output>.resources/base/media/` and copies the provenance manifest to
+`<output>.resources/image-resource-origins.json`. Calls remain typed `Resource`
+values rendered as `$r('app.media.<deterministic-name>')`. An explicit
+`--image-resources` path remains an override for externally prepared assets.
 
 ## Direct Vector Reuse
 
@@ -108,10 +137,12 @@ The independent fixture decoder requires test-only Pillow. All bitmap inputs are
 fixed synthetic one-pixel assets; vector fixtures are authored local shapes.
 No company/user assets or network requests are involved.
 
-Final GREEN: `tests/resources/.work/run-2u2Bqf/complete.json`.
+Final GREEN: `tests/resources/.work/run-v6BLTo/complete.json`.
 It verifies PNG/JPG/JPEG/WebP exact bytes and actual pixel decoding, vector SVG
-geometry/color, deterministic names, namespace separation and 15 rejection
-boundaries, including failure after a valid asset has already been staged.
+geometry/color, deterministic names, namespace separation, project drawable and
+mipmap inputs, raw SVG, variant overlay provenance, unsupported XML/missing
+records and 15 direct-materializer rejection boundaries, including failure after
+a valid asset has already been staged.
 Production SHA-256:
 `991a2d5c9b7d07113a3d68a1466d49c70cb1b11f68bf526c28b78a813ec795bf`.
 

@@ -38,7 +38,7 @@ function run(label, directory, module, task, extra = [], failure) {
   }
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const data = JSON.parse(readFileSync(output));
-  assert.equal(data.schemaVersion, 1);
+  assert.equal(data.schemaVersion, 2);
   assert.equal(data.compilerVersion, '2.1.20');
   assert.ok(Array.isArray(data.compilerArguments));
   compilerEnvironment(data);
@@ -88,11 +88,17 @@ function sourceHashes(directory) {
   });
 }
 const before = sourceHashes(join(host, 'app/src'));
-const android = run('android', host, ':app', 'compileDebugKotlin', ['-Pandroid.useAndroidX=true']);
+const android = run('android', host, ':app', 'compileDebugKotlin', ['-Pandroid.useAndroidX=true', '-PkotlinEtsVariant=debug']);
 assert.ok(android.data.sources.some(path => path.endsWith('/Page.kt')));
 assert.ok(android.data.sources.some(path => path.endsWith('/MainActivity.kt')));
 assert.ok(android.data.classpath.some(path => path.endsWith('/platforms/android-35/android.jar')));
 assert.ok(android.data.classpath.some(path => /transforms\/.*\.jar$/.test(path)));
+assert.equal(android.data.resourceInputs.variant, 'debug');
+assert.match(android.data.resourceInputs.namespace, /^[A-Za-z_][A-Za-z0-9_.]*$/);
+assert.ok(android.data.resourceInputs.roots.every(root => isAbsolute(root.path) && statSync(root.path).isDirectory()));
+assert.ok(android.data.resourceInputs.roots.every((root, index, roots) =>
+  index === 0 || root.overlayPriority >= roots[index - 1].overlayPriority));
+assert.ok(android.data.resourceInputs.symbols.endsWith('/R.txt'));
 assert.deepEqual(sourceHashes(join(host, 'app/src')), before);
 writeFileSync(join(work, 'complete.json'), JSON.stringify({ jvmSources: jvm.data.sources.length,
   jvmClasspath: jvm.data.classpath.length, androidSources: android.data.sources.length,

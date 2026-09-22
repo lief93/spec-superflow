@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compilerEnvironment } from './compiler-environment.mjs';
+import { materializeProjectImages } from './image-resources.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const help = `Kotlin to ETS: Gradle project input
@@ -62,7 +63,7 @@ export function parseOptions(args) {
   const preflightOutput = get('preflight-out') ? resolve(get('preflight-out')) : undefined;
   if (preflightOutput && (preflightOutput === output || (get('out-dir') && preflightOutput.startsWith(output + '/'))))
     throw new Error(`Preflight report must be outside the target path: ${preflightOutput}`);
-  return { project: resolve(get('project')), module: get('module'), compileTask, mode, unsupportedPolicy,
+  return { project: resolve(get('project')), module: get('module'), variant, compileTask, mode, unsupportedPolicy,
     entry: get('entry'), output,
     outputFlag: get('out-dir') ? '--out-dir' : '--out', workDir: get('work-dir') ? resolve(get('work-dir')) : undefined,
     imageResources: get('image-resources') ? resolve(get('image-resources')) : undefined,
@@ -77,12 +78,13 @@ export function gradleArguments(options, manifest) {
   return [join(options.project, 'gradlew'), '--no-daemon', '--no-configuration-cache', '--console=plain',
     ...(options.offline ? ['--offline'] : []), '-I', join(root, 'project-inputs.gradle'),
     `-PkotlinEtsModule=${options.module}`, `-PkotlinEtsCompileTask=${options.compileTask}`,
+    ...(options.variant ? [`-PkotlinEtsVariant=${options.variant}`] : []),
     `-PkotlinEtsInputsOutput=${manifest}`, 'kotlinEtsCollectInputs'];
 }
 
 export function readInputs(path) {
   const inputs = JSON.parse(readFileSync(path, 'utf8'));
-  if (inputs.schemaVersion !== 1 || !Array.isArray(inputs.sources) || !Array.isArray(inputs.classpath)) throw new Error('Invalid Gradle input manifest');
+  if (![1, 2].includes(inputs.schemaVersion) || !Array.isArray(inputs.sources) || !Array.isArray(inputs.classpath)) throw new Error('Invalid Gradle input manifest');
   for (const [kind, paths] of [['sources', inputs.sources], ['classpath', inputs.classpath]]) {
     for (const item of paths) {
       if (typeof item !== 'string' || !isAbsolute(item) || /[\r\n]/.test(item)) throw new Error(`Expected absolute single-line ${kind} path`);
@@ -94,6 +96,23 @@ export function readInputs(path) {
   }
   if (!inputs.sources.some(path => path.endsWith('.kt'))) throw new Error('No Kotlin sources in selected compile task');
   if (!inputs.classpath.length) throw new Error('Selected compile task has no classpath');
+  if (inputs.resourceInputs !== undefined) {
+    const resources = inputs.resourceInputs;
+    if (inputs.schemaVersion !== 2 || !resources || typeof resources.namespace !== 'string' ||
+      !/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(resources.namespace) ||
+      typeof resources.variant !== 'string' || !Array.isArray(resources.roots) || !resources.roots.length ||
+      typeof resources.symbols !== 'string' || !isAbsolute(resources.symbols) || !statSync(resources.symbols).isFile()) {
+      throw new Error('Invalid selected-variant resource inputs');
+    }
+    let priority = -1;
+    for (const root of resources.roots) {
+      if (!root || typeof root.sourceSet !== 'string' || !Number.isInteger(root.overlayPriority) || root.overlayPriority < 0 || root.overlayPriority < priority ||
+        typeof root.path !== 'string' || !isAbsolute(root.path) || !statSync(root.path).isDirectory()) {
+        throw new Error('Invalid ordered project resource root');
+      }
+      priority = root.overlayPriority;
+    }
+  }
   return inputs;
 }
 
@@ -155,13 +174,22 @@ export function main(args) {
     const frontendArguments = join(workDir, 'frontend-arguments.txt');
     writeFileSync(frontendArguments, environment.arguments.join('\n') + '\n', { flag: 'wx' });
     writeFileSync(join(workDir, 'compiler-environment.json'), JSON.stringify(environment, null, 2), { flag: 'wx' });
+    let imageResources = options.imageResources;
+    if (!imageResources && inputs.resourceInputs) {
+      stage = 'image-resources';
+      const pack = materializeProjectImages({ resourceRoots: inputs.resourceInputs.roots,
+        namespace: inputs.resourceInputs.namespace, variant: inputs.resourceInputs.variant,
+        symbolsFile: inputs.resourceInputs.symbols, out: join(workDir, 'image-resources') });
+      imageResources = pack.properties;
+      writeFileSync(join(workDir, 'image-resources.json'), JSON.stringify(pack, null, 2), { flag: 'wx' });
+    }
     stage = 'compiler';
     const compilerArgs = [join(root, 'kotlin-ets'), '--mode', options.mode, options.outputFlag, options.output,
       '--unsupported-policy', options.unsupportedPolicy,
       '--project-compiler-version', environment.projectCompilerVersion,
       '--classpath-file', classpath, '--sources-file', sources, '--frontend-arguments-file', frontendArguments,
       ...(options.entry ? ['--entry', options.entry] : []),
-      ...(options.imageResources ? ['--image-resources', options.imageResources] : []),
+      ...(imageResources ? ['--image-resources', imageResources] : []),
       ...(options.stringResources ? ['--string-resources', options.stringResources] : []),
       ...(options.fontResources ? ['--font-resources', options.fontResources] : [])];
     if (options.preflightOutput) compilerArgs.push('--preflight-out', options.preflightOutput);

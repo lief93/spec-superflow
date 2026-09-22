@@ -2,13 +2,16 @@
 package dev.ets
 
 import java.io.File
+import java.util.Base64
 import java.util.Properties
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.types.*
 
 /** Resource names come from materialization, never from an integer R value or source spelling. */
 class ImageResources(private val resources: Map<String, String> = emptyMap(),
-    private val files: Map<String, File> = emptyMap(), private val ids: Map<String, Int> = emptyMap()) : CallRule {
+    private val files: Map<String, File> = emptyMap(), private val ids: Map<String, Int> = emptyMap(),
+    private val unavailable: Map<String, String> = emptyMap(), private val unavailableIds: Map<Int, String> = emptyMap(),
+    private val provenance: File? = null) : CallRule {
     private val used = linkedSetOf<String>()
     private var lookupUsed = false
     private val at = SourceSpan("EtsImageResources.kt", 0, 0)
@@ -52,18 +55,41 @@ class ImageResources(private val resources: Map<String, String> = emptyMap(),
                     number.toInt()
                 }.also { mapping -> require(mapping.values.toSet().size == mapping.size) { "Ambiguous Android image resource IDs" } }
             } else emptyMap()
-            return ImageResources(resources, media, ids)
+            val unsupportedFile = file.parentFile.resolve("unsupported-image-resources.properties")
+            val unavailable = if (unsupportedFile.isFile) {
+                val values = Properties()
+                unsupportedFile.inputStream().use(values::load)
+                values.stringPropertyNames().associateWith { symbol ->
+                    require(Regex("[A-Za-z_][A-Za-z0-9_.]*\\.R\\.(drawable|mipmap)\\.[A-Za-z_][A-Za-z0-9_]*").matches(symbol)) {
+                        "Invalid unsupported image resource symbol: $symbol"
+                    }
+                    String(Base64.getDecoder().decode(values.getProperty(symbol)), Charsets.UTF_8)
+                }
+            } else emptyMap()
+            require(resources.keys.intersect(unavailable.keys).isEmpty()) { "Image resource cannot be both materialized and unsupported" }
+            val unsupportedIdsFile = file.parentFile.resolve("unsupported-image-resource-ids.properties")
+            val unavailableIds = if (unsupportedIdsFile.isFile) {
+                val values = Properties()
+                unsupportedIdsFile.inputStream().use(values::load)
+                values.stringPropertyNames().associate { id ->
+                    val number = id.toLong().also { require(it in 1..Int.MAX_VALUE.toLong()) { "Invalid unsupported image resource ID: $id" } }.toInt()
+                    number to String(Base64.getDecoder().decode(values.getProperty(id)), Charsets.UTF_8)
+                }
+            } else emptyMap()
+            val provenance = file.parentFile.resolve("image-resource-origins.json").takeIf(File::isFile)
+            return ImageResources(resources, media, ids, unavailable, unavailableIds, provenance)
         }
     }
 
     fun artifacts(): Map<String, File> = used.associate { symbol ->
         "base/media/${files.getValue(symbol).name}" to files.getValue(symbol)
-    }
+    } + if (used.isNotEmpty() && provenance != null) mapOf("image-resource-origins.json" to provenance) else emptyMap()
 
     override fun lowerField(value: IrGetField, language: Language, scope: Scope): EtsExpression? {
         if (value.receiver != null) return null
         val symbol = symbolName(value.symbol.owner)
         if (!Regex(".+\\.R\\.(drawable|mipmap)\\.[A-Za-z_][A-Za-z0-9_]*").matches(symbol)) return null
+        unavailable[symbol]?.let { reject(value, language, "Unsupported Android image resource $symbol: $it") }
         val id = ids[symbol] ?: reject(value, language,
             "Image resource ID requires the selected build's R.txt metadata: $symbol; materialize with --symbols")
         used += symbol
@@ -96,16 +122,20 @@ class ImageResources(private val resources: Map<String, String> = emptyMap(),
     private fun resource(value: IrExpression, language: Language, scope: Scope): EtsExpression {
         if (value is IrGetValue && value.symbol !in scope.bindings)
             scope.aliases[value.symbol]?.let { return resource(it, language, scope) }
+        ((value as? IrConst)?.value as? Int)?.let { id ->
+            unavailableIds[id]?.let { reject(value, language, it) }
+        }
         if (value is IrWhen && value.branches.size == 2 && value.branches.last() is IrElseBranch) {
             return EtsConditional(language.expression(value.branches[0].condition, scope),
                 resource(value.branches[0].result, language, scope), resource(value.branches[1].result, language, scope),
                 RESOURCE, language.source(value))
         }
         val symbol = when (value) {
-            is IrGetField -> if (value.receiver == null) symbolName(value.symbol.owner) else null
+            is IrGetField -> symbolName(value.symbol.owner)
             else -> null
         }
-        if (symbol != null) {
+        if (symbol != null && Regex(".+\\.R\\.(drawable|mipmap)\\.[A-Za-z_][A-Za-z0-9_]*").matches(symbol)) {
+            unavailable[symbol]?.let { reject(value, language, "Unsupported Android image resource $symbol: $it") }
             if (symbol !in resources) reject(value, language, "Unmapped image resource: $symbol; supply materialized --image-resources")
             return targetResource(symbol, language.source(value))
         }

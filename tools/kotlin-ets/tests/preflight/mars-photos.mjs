@@ -47,11 +47,26 @@ try {
   assert.equal(existsSync(output), false);
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
+  assert.equal(inputs.schemaVersion, 2);
   assert.equal(inputs.compilerVersion, '2.1.0');
+  assert.equal(inputs.resourceInputs.namespace, 'com.example.marsphotos');
+  assert.equal(inputs.resourceInputs.variant, 'debug');
+  assert.ok(inputs.resourceInputs.roots.some(root => root.sourceSet === 'main' && root.path.endsWith('/app/src/main/res')));
+  assert.ok(inputs.resourceInputs.symbols.endsWith('/runtime_symbol_list/debug/processDebugResources/R.txt'));
   const environment = JSON.parse(readFileSync(join(projectRun, 'compiler-environment.json'), 'utf8'));
   assert.equal(environment.projectCompilerVersion, '2.1.0');
   assert.equal(environment.frontendCompilerVersion, '2.1.20');
   assert.equal(environment.compatibilityDecision, 'same_language_line_older_patch');
+  const imagePack = JSON.parse(readFileSync(join(projectRun, 'image-resources.json'), 'utf8'));
+  const imageProperties = readFileSync(imagePack.properties, 'utf8');
+  assert.match(imageProperties, /com\.example\.marsphotos\.R\.drawable\.loading_img = img_[0-9a-f]{64}/);
+  const imageOrigins = JSON.parse(readFileSync(imagePack.provenance, 'utf8'));
+  const loadingImage = imageOrigins.resources.find(resource =>
+    resource.symbol === 'com.example.marsphotos.R.drawable.loading_img');
+  assert.equal(loadingImage.status, 'materialized');
+  assert.equal(loadingImage.source.sourceSet, 'main');
+  assert.ok(existsSync(join(imagePack.output, loadingImage.output)));
+  assert.match(readFileSync(join(imagePack.output, loadingImage.output), 'utf8'), /^<svg/);
 
   const report = JSON.parse(readFileSync(reportPath, 'utf8'));
   assert.equal(report.schemaVersion, 2);
@@ -65,12 +80,16 @@ try {
   assert.equal(report.coverage.neutral_compose_widget.percentage, 100);
   assert.equal(report.coverage.modifier.percentage, 100);
   assert.equal(report.coverage.resources.percentage, 50);
-  assert.equal(report.firstUnsupportedNode.source.line, 73);
-  assert.equal(report.firstUnsupportedNode.source.column, 46);
+  const painter = report.calls.find(call => call.resolvedSymbol.startsWith('androidx.compose.ui.res.painterResource('));
+  assert.ok(painter);
+  assert.equal(painter.firstUnsupportedNode, null);
+  assert.equal(painter.expectedTargetType, 'Resource');
+  assert.equal(report.firstUnsupportedNode.source.line, 74);
+  assert.equal(report.firstUnsupportedNode.source.column, 54);
   assert.equal(report.firstUnsupportedNode.kind, 'unsupported_expression');
   assert.equal(report.firstUnsupportedNode.symbol, null);
-  assert.match(report.firstUnsupportedNode.message, /Dynamic painterResource ID/);
-  assert.match(report.firstUnsupportedNode.responsibleModule, /ImageResources/);
+  assert.match(report.firstUnsupportedNode.message, /Dynamic stringResource ID/);
+  assert.match(report.firstUnsupportedNode.responsibleModule, /StringResources/);
   for (const call of report.calls) {
     assert.ok(call.source.line > 0 && call.source.column > 0);
     assert.ok(call.finalRecognizedNode?.symbol);
@@ -85,14 +104,14 @@ try {
       compatibilityDecision: report.compatibilityDecision },
     coverage: report.coverage,
     p0Gaps: [
-      { category: 'resources', node: 'com.example.marsphotos.R.drawable.loading_img',
+      { category: 'resources', node: 'com.example.marsphotos.R.string.loading',
         responsibleModule: report.firstUnsupportedNode.responsibleModule, source: report.firstUnsupportedNode.source,
         detail: report.firstUnsupportedNode.message },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
-  console.log('PASS Mars Photos 8399c839: Kotlin 2.1.0 project enters the formal 2.1.20 frontend and Core Profile path');
-  console.log('PASS no target: first real resource gap remains explicit');
+  console.log('PASS Mars Photos 8399c839: variant-aware loading_img VectorDrawable materializes through the formal project path');
+  console.log('PASS no target: next real stringResource gap remains explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

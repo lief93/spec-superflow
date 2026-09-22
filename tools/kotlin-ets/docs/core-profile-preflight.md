@@ -110,12 +110,14 @@ The accepted baseline has two neutral widget calls at 100%, one Modifier call at
 100%, and two resource calls at 50%. Language semantics, standard library and
 project dependency have no calls in this selected entry and therefore report a
 `null` percentage. The first conversion gap is
-`R.drawable.loading_img` at line 73, column 46, owned by
-`ImageResources.kt`; no target is emitted. The public project pins Kotlin 2.1.0,
-which the production project launcher admits through its fixed 2.1.20 frontend
-as `same_language_line_older_patch`. The runner uses that single formal project
-path through collection, compatibility validation, FIR/FIR2IR and Core Profile;
-the resource reference is now the first real P0 gap.
+`R.string.loading` at line 74, column 54, owned by `StringResources.kt`; no target
+is emitted. The variant-aware project path now materializes `R.drawable.loading_img`
+from its module-owned VectorDrawable into deterministic SVG and recognizes
+`painterResource` as a typed `Resource`. The public project pins Kotlin 2.1.0,
+which the production launcher admits through its fixed 2.1.20 frontend as
+`same_language_line_older_patch`. The runner uses one formal path through Gradle
+collection, image materialization, compatibility validation, FIR/FIR2IR and Core
+Profile; string materialization is now the first real P0 gap.
 
 A second public-project baseline exercises a broader dependency graph:
 
@@ -163,12 +165,12 @@ Final verification evidence:
 | --- | --- | --- |
 | RED: option absent | `--preflight-out` rejected as unknown | `tests/preflight/.work/run-llBELG` |
 | RED: empty UI | empty `@Builder` was generated silently | `tests/preflight/.work/run-ZdiDg6` |
-| Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations, incompatible binary metadata and negative no-target cases | `tests/preflight/.work/run-lTlLnA` |
-| Mars Photos public baseline | Kotlin 2.1.0 enters the 2.1.20 frontend; widget 100%, Modifier 100%, resources 50%; one resource P0; no target | `tests/preflight/.work/mars-photos-VzU1a0` |
+| Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations, incompatible metadata, typed image output, unsupported/missing project images and negative no-target cases | `tests/preflight/.work/run-CwIMha` |
+| Mars Photos public baseline | Kotlin 2.1.0 enters the 2.1.20 frontend; loading image becomes SVG; next string resource P0 remains; no target | `tests/preflight/.work/mars-photos-W5Gw7W` |
 | Architecture Samples public baseline | Kotlin 2.1.10 enters the 2.1.20 frontend; 124 calls across all six groups; ten explicit unsupported calls; no target | `tests/preflight/.work/architecture-samples-35FMMz` |
 | Full language suite | pass | `tests/language/.work/run-01EAKd` |
 | Module suite | 44 JVM/module cases pass | `tests/modules/.work/run-KWHnWz` |
 | Typed backend suite | pass | `tests/preflight/.work/kotlin-ets-backend-tests.SCdkSg` |
-| Project launcher | 16 tests pass | `node --test tests/project-inputs/launcher.test.mjs` |
+| Project launcher | 17 tests pass | `node --test tests/project-inputs/launcher.test.mjs` |
 | CLI diagnostic integration | 6 tests pass | `python3 -m unittest tools.kotlin-ets.tests.integration.test_cli` |
 | Compose degradation regression | pass | `/var/folders/fj/rrz0bjhx6cq04j7yghy2qkxh0000gn/T/kotlin-ets-degradation-PJ4eY6` |

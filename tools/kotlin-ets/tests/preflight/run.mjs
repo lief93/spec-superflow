@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { materializeProjectImages } from '../../image-resources.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
@@ -128,6 +129,40 @@ assert.equal(coverage.report.coverage.resources.unsupported, 1);
 assert.equal(coverage.report.coverage.resources.percentage, 0);
 assert.match(coverage.report.firstUnsupportedNode.message, /Dynamic stringResource ID/);
 assert.equal(coverage.report.firstUnsupportedNode.kind, 'unsupported_expression');
+
+const projectImageRoot = join(work, 'project-image-res');
+mkdirSync(join(projectImageRoot, 'drawable'), { recursive: true });
+writeFileSync(join(projectImageRoot, 'drawable/selector.xml'), '<selector/>');
+const imageBits = JSON.parse(readFileSync(join(root, 'tests/resources/fixtures/bitmaps.json'), 'utf8'));
+writeFileSync(join(projectImageRoot, 'drawable/supported.png'), Buffer.from(imageBits.png, 'base64'));
+const projectImageSymbols = join(work, 'project-image-R.txt');
+writeFileSync(projectImageSymbols,
+  'int drawable selector 0x7f040001\nint drawable missing 0x7f040002\nint drawable supported 0x7f040003\n');
+const projectImages = materializeProjectImages({ namespace: 'preflightfixture', variant: 'debug',
+  resourceRoots: [{ sourceSet: 'main', overlayPriority: 0, path: projectImageRoot }],
+  symbolsFile: projectImageSymbols, out: join(work, 'project-images') });
+const selector = compile('unsupported-project-image', ['--mode', 'page', '--unsupported-policy', 'error',
+  '--entry', 'preflightfixture.UnsupportedProjectImage', '--image-resources', projectImages.properties],
+join(here, 'ProjectImageFailures.kt'), 2, composeClasspath);
+assert.match(JSON.parse(selector.result.stdout).message, /Unsupported Android image resource.*<selector>/);
+assert.equal(selector.report.firstUnsupportedNode.source.line, 17);
+assert.equal(existsSync(selector.output), false);
+const missingImage = compile('missing-project-image', ['--mode', 'page', '--unsupported-policy', 'error',
+  '--entry', 'preflightfixture.MissingProjectImage', '--image-resources', projectImages.properties],
+join(here, 'ProjectImageFailures.kt'), 2, composeClasspath);
+assert.match(JSON.parse(missingImage.result.stdout).message, /No .*R\.drawable\.missing file exists in collected module resource roots/);
+assert.equal(missingImage.report.firstUnsupportedNode.source.line, 22);
+assert.equal(existsSync(missingImage.output), false);
+const supportedImage = compile('supported-project-image', ['--mode', 'page', '--unsupported-policy', 'error',
+  '--entry', 'preflightfixture.SupportedProjectImage', '--image-resources', projectImages.properties],
+join(here, 'ProjectImageFailures.kt'), 0, composeClasspath);
+assert.equal(JSON.parse(supportedImage.result.stdout).ok, true);
+const supportedTarget = readFileSync(supportedImage.output, 'utf8');
+assert.match(supportedTarget, /\$r\(["']app\.media\.img_[0-9a-f]{64}["']\)/);
+const supportedName = /preflightfixture\.R\.drawable\.supported = ([a-z0-9_]+)/
+  .exec(readFileSync(projectImages.properties, 'utf8'))[1];
+assert.ok(existsSync(join(`${supportedImage.output}.resources`, 'base/media', `${supportedName}.png`)));
+assert.ok(existsSync(join(`${supportedImage.output}.resources`, 'image-resource-origins.json')));
 
 const empty = compile('empty-ui', ['--mode', 'page', '--unsupported-policy', 'error',
   '--entry', 'preflightfixture.EmptyPage'], join(here, 'EmptyUi.kt'), 2, composeClasspath);

@@ -27,6 +27,17 @@ gradle.projectsEvaluated {
     def type = compile.class
     while (type != null && type.name != 'org.jetbrains.kotlin.gradle.tasks.KotlinCompile') type = type.superclass
     if (type == null) throw new GradleException("Kotlin/ETS: ${compile.path} is not a supported JVM/Android KotlinCompile task (${compile.class.name})")
+    def requestedVariant = root.findProperty('kotlinEtsVariant')?.toString()
+    def android = project.extensions.findByName('android')
+    def selectedVariant = null
+    if (requestedVariant != null) {
+        if (android == null || !(project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library'))) {
+            throw new GradleException("Kotlin/ETS: --variant requires an Android application or library module")
+        }
+        def variants = project.plugins.hasPlugin('com.android.application') ? android.applicationVariants : android.libraryVariants
+        selectedVariant = variants.find { it.name == requestedVariant }
+        if (selectedVariant == null) throw new GradleException("Kotlin/ETS: Android variant not found: ${requestedVariant}")
+    }
     if (root.tasks.findByName('kotlinEtsCollectInputs') != null) {
         throw new GradleException('Kotlin/ETS: root task kotlinEtsCollectInputs already exists')
     }
@@ -76,15 +87,44 @@ gradle.projectsEvaluated {
             if (sources.isEmpty()) throw new GradleException("Kotlin/ETS: ${compile.path} has no Kotlin/Java source files")
             if (sourceFiles.any { !it.isFile() }) throw new GradleException("Kotlin/ETS: ${compile.path} source input is not a file")
             def libraries = new ArrayList<File>(compile.libraries.files)
-            def android = project.extensions.findByName('android')
             if (android != null && (project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library'))) {
                 libraries.addAll(android.bootClasspath)
             }
             def classpath = checked(libraries, 'classpath')
-            def manifest = [schemaVersion: 1, project: root.projectDir.absolutePath,
+            def resourceInputs = null
+            if (selectedVariant != null) {
+                def roots = []
+                selectedVariant.sourceSets.eachWithIndex { sourceSet, priority ->
+                    sourceSet.resDirectories.each { directory ->
+                        if (directory.exists()) {
+                            if (!directory.isDirectory() || !directory.canRead()) {
+                                throw new GradleException("Kotlin/ETS: resource root is not a readable directory: ${directory.absolutePath}")
+                            }
+                            roots.add([sourceSet: sourceSet.name, overlayPriority: priority,
+                                path: directory.toPath().toAbsolutePath().normalize().toString()])
+                        }
+                    }
+                }
+                def processResources = selectedVariant.outputs.collect { variantOutput ->
+                    variantOutput.hasProperty('processResourcesProvider') ? variantOutput.processResourcesProvider.get() : null
+                }.find { it != null && it.hasProperty('textSymbolOutputFile') }
+                if (processResources == null) {
+                    throw new GradleException("Kotlin/ETS: selected Android variant has no declared runtime symbol artifact")
+                }
+                def symbols = processResources.textSymbolOutputFile
+                if (!symbols.isFile() || !symbols.canRead()) {
+                    throw new GradleException("Kotlin/ETS: selected Android variant symbol artifact is missing: ${symbols.absolutePath}")
+                }
+                if (roots.isEmpty()) throw new GradleException("Kotlin/ETS: selected Android variant has no existing module resource roots")
+                if (!android.namespace) throw new GradleException("Kotlin/ETS: selected Android module has no namespace")
+                resourceInputs = [namespace: android.namespace, variant: selectedVariant.name,
+                    roots: roots, symbols: symbols.toPath().toAbsolutePath().normalize().toString()]
+            }
+            def manifest = [schemaVersion: 2, project: root.projectDir.absolutePath,
                 module: project.path, task: compile.path, sources: sources, classpath: classpath, omittedClasspath: omittedClasspath,
                 compilerVersion: compile.class.classLoader.loadClass('org.jetbrains.kotlin.config.KotlinCompilerVersion').getField('VERSION').get(null),
                 compilerArguments: compile.serializedCompilerArguments]
+            if (resourceInputs != null) manifest.resourceInputs = resourceInputs
             Files.createDirectories(output.toPath().parent)
             try {
                 Files.write(output.toPath(), (JsonOutput.prettyPrint(JsonOutput.toJson(manifest)) + '\n').getBytes('UTF-8'),

@@ -50,6 +50,8 @@ The run directory contains:
 
 - `inputs.json`: source/classpath paths, compiler version and the selected task's
   serialized compiler arguments (including plugin paths/options), with provenance.
+  Android variant runs also record the namespace, ordered module resource roots
+  and the declared runtime symbol artifact.
 - `compiler-environment.json`: forwarded arguments and every intentional exclusion
   when conversion is requested; `frontend-arguments.txt` is its internal launcher input.
 - `sources.txt`, `classpath.txt`: the exact lists passed to the backend.
@@ -60,6 +62,13 @@ These files remain local and can contain company paths, dependency names and
 compiler diagnostics. Treat them as internal data; nothing is uploaded.
 The manifest is a build-input inventory, not a serialized source-program IR or
 replacement for `version_json.json`.
+
+When an Android variant supplies resource inputs and no explicit
+`--image-resources` override is present, project mode materializes its drawable
+and mipmap images into the run directory before invoking the frontend. The same
+backend publishes only used media and keeps the overlay/source provenance. See
+[image resource materialization](image-resources.md). Unsupported or missing
+selected image definitions remain source-linked failures and never emit ETS.
 
 ## Collection semantics and limits
 
@@ -182,8 +191,9 @@ Do not report collection or generation as successful application installation.
   generation and function host execution still pass.
 - `node --test tools/kotlin-ets/tests/project-inputs/compiler-environment.test.mjs`:
   six compatibility, plugin and fail-closed policy tests pass.
-- `node --test tools/kotlin-ets/tests/project-inputs/launcher.test.mjs`: 16 tests
-  pass, including incompatible project compiler rejection with no report or ETS.
+- `node --test tools/kotlin-ets/tests/project-inputs/launcher.test.mjs`: 17 tests
+  pass, including incompatible compiler and same-priority image-overlay rejection
+  with no report or ETS.
 
 ## Earlier verification (2026-09-14)
 

@@ -31,12 +31,14 @@ Sources are the actual filtered Kotlin/Java file collections, sorted and
 deduplicated. Gradle's normal absence of optional source directories is not an
 error. Every enumerated path must exist and be readable; classpath order is
 preserved. Android application/library `bootClasspath` entries are appended
-only if absent. This does not collect compiler flags, plugins, friend paths,
-Kotlin/Native/JS or metadata compilation inputs.
+only if absent. The selected task's serialized compiler arguments are retained.
+This does not collect Kotlin/Native/JS or metadata compilation inputs.
 
-Manifest: `schemaVersion: 1`, absolute root `project`, selected Gradle `module`
-and full `task` path, absolute `sources` and `classpath` arrays. Output must be
-absolute and fresh; creation uses `CREATE_NEW` rather than overwriting.
+Manifest: `schemaVersion: 2`, absolute root `project`, selected Gradle `module`
+and full `task` path, absolute `sources` and `classpath` arrays. Android variant
+runs also include namespace, ordered module resource roots and the declared
+runtime symbol file. Output must be absolute and fresh; creation uses
+`CREATE_NEW` rather than overwriting.
 
 ## Evidence
 
