@@ -1,4 +1,11 @@
+@file:OptIn(org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI::class)
 package dev.ets.dependency.klib
+
+import dev.ets.*
+import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
+import org.jetbrains.kotlin.ir.util.fileOrNull
+
 
 import org.jetbrains.kotlin.backend.common.IrModuleInfo
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
@@ -15,9 +22,12 @@ class KlibSession internal constructor(
     val modules: List<IrModuleFragment>,
     val loaded: IrModuleInfo,
     val selection: KlibModuleSelection,
+    internal val configuration: CompilerConfiguration,
+    internal val libraryLocations: Map<IrModuleFragment, String>,
 ) {
     private var active = true
-    private fun checkActive() = check(active) { "KLIB session is closed" }
+    private var lowered = false
+    internal fun checkActive() = check(active) { "KLIB session is closed" }
 
     val linker: JsIrLinker get() {
         checkActive()
@@ -35,6 +45,40 @@ class KlibSession internal constructor(
     fun linkedModules(): List<IrModuleFragment> {
         checkActive()
         return modules
+    }
+
+    /** Only explicitly approved inline symbols may borrow bodies from dependency-only libraries. */
+    fun bodies(approvedInlineBodies: Set<IrFunctionSymbol> = emptySet()): FunctionBodies {
+        checkActive()
+        require(approvedInlineBodies.all { it.isBound && it.owner.isInline && !it.owner.isExternal &&
+            it.owner.fileOrNull?.module in libraryLocations }) { "Inline reuse requires canonical linked KLIB symbols" }
+        return FunctionBodies { symbol ->
+            checkActive()
+            when {
+                !symbol.isBound -> FunctionBody.Unavailable(FunctionBody.Reason.UNBOUND_SYMBOL)
+                symbol.owner.isExternal -> FunctionBody.Unavailable(FunctionBody.Reason.EXTERNAL_DECLARATION)
+                else -> {
+                    val function = symbol.owner
+                    val file = function.fileOrNull
+                    val location = libraryLocations[file?.module]
+                    when {
+                        location == null -> FunctionBody.Unavailable(FunctionBody.Reason.OUTSIDE_MODULE)
+                        file!!.module !in modules && symbol !in approvedInlineBodies ->
+                            FunctionBody.Unavailable(FunctionBody.Reason.NON_TRANSLATED_KLIB)
+                        function.body == null -> FunctionBody.Unavailable(FunctionBody.Reason.NO_BODY)
+                        else -> FunctionBody.Available(function, function.body!!,
+                            SourceSpan(file.fileEntry.name, function.startOffset, function.endOffset),
+                            FunctionBody.Origin.SerializedKlibIr(location, file.module.name.asString()))
+                    }
+                }
+            }
+        }
+    }
+
+    internal fun beginLowering() {
+        checkActive()
+        check(!lowered) { "KLIB session has already been lowered" }
+        lowered = true
     }
 
     internal fun close() {

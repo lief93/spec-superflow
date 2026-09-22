@@ -1,6 +1,8 @@
 # Dependency IR contract proposal
 
-Status: proposal only. `src/core/Contract.kt` and `src/core/Frontend.kt` stay frozen.
+Historical proposal. The [S1 implementation](klib-dependency-capabilities.md) now
+adds the KLIB body origin/provider and shares the official inliner invocation.
+`src/core/Contract.kt` remains unchanged; the JVM frontend pipeline is preserved.
 This does not add a public KLIB CLI, JS lowering pipeline, or JVM signature reader
 for KLIB files.
 
@@ -83,9 +85,9 @@ module ownership. The first productionization stage does **not** wire this into
 4. JVM serialized IR and KLIB serialized IR are different formats. Do not route
    `.klib` through `BinaryBodies` / `JvmIrDeserializerImpl`.
 
-## Why this file is not an implementation
+## Original ownership boundary (superseded by S1)
 
-`FunctionBody.Origin` lives in frozen `Frontend.kt`. Adding `SerializedKlibIr`
+At the time of the initial proof, `FunctionBody.Origin` lived in frozen `Frontend.kt`. Adding `SerializedKlibIr`
 requires the shared-contract owner. Independent KLIB infrastructure does not
 need that enum to load modules: `KlibSession.linkedModules()` already returns
 canonical IR. Closure inspection records signature identity and body presence

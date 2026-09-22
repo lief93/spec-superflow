@@ -57,7 +57,11 @@ object KlibLoader {
             val loaded = loadIr(structure, IrFactoryImpl)
             loaded.deserializer.checkNoUnboundSymbols(loaded.symbolTable, "before ETS lowering")
             val modules = selectTranslatedModules(structure, loaded.allDependencies, selection)
-            val created = KlibSession(modules, loaded, selection)
+            val locations = structure.allDependencies.associate { library ->
+                structure.getModuleDescriptor(library) to File(library.libraryFile.canonicalPath).canonicalPath
+            }
+            val created = KlibSession(modules, loaded, selection, configuration,
+                loaded.allDependencies.associateWith { locations.getValue(it.descriptor) })
             session = created
             return emit(created)
         } finally {

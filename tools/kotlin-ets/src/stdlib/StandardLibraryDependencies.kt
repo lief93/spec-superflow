@@ -6,9 +6,14 @@ object StandardLibraryRuntime : EtsRuntimeSupport {
 
 /** Collect from the complete emitted tree, not source IR or printed target text. */
 fun standardLibrarySupportLines(program: EtsProgram): List<String> {
+    return standardLibrarySupportLines(standardLibraryRuntimeSymbols(program))
+}
+
+/** Direct runtime roots from typed ETS; support emission expands their existing helper closure. */
+fun standardLibraryRuntimeSymbols(program: EtsProgram): Set<String> {
     val collector = StandardLibraryDependencies()
     program.files.forEach { file -> file.declarations.forEach(collector::visit) }
-    return standardLibrarySupportLines(collector.symbols)
+    return collector.symbols.toSet()
 }
 
 private class StandardLibraryDependencies {
