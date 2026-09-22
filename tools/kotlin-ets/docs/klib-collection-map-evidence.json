@@ -1,0 +1,153 @@
+{
+  "scope": "Official KLIB map/mapNotNull bodies over typed collection primitives",
+  "baseCommit": "a36a6f9689f21b033ffb14cb07332af69f4c06eb",
+  "compilerVersion": "2.1.20",
+  "compilerSourcesSha256": "dc1ec1391e465b56d7e664fcf63d0ff4cfeb7274fc6e2b0dbd71335f8ce1dc11",
+  "stdlib": {
+    "file": "kotlin-stdlib-js-2.1.20.klib",
+    "sha256": "65a9831cceb606642693f9f3d798de86bbacf09b9588186e763e9e9f3c24d1a3"
+  },
+  "mapRun": "tests/klib/collection-map-common/.work/run-bp30nx",
+  "officialBodies": [
+    {
+      "name": "map",
+      "declaration": "common/src/generated/_Collections.kt:51064..51209"
+    },
+    {
+      "name": "mapTo",
+      "declaration": "common/src/generated/_Collections.kt:54279..54481"
+    },
+    {
+      "name": "mapNotNull",
+      "declaration": "common/src/generated/_Collections.kt:53599..53738"
+    },
+    {
+      "name": "mapNotNullTo",
+      "declaration": "common/src/generated/_Collections.kt:53902..54129"
+    },
+    {
+      "name": "forEach",
+      "declaration": "common/src/generated/_Collections.kt:62559..62703"
+    },
+    {
+      "name": "let",
+      "declaration": "src/kotlin/util/Standard.kt:3486..3669"
+    }
+  ],
+  "runtimeReplacements": [
+    "kotlin.collections.ArrayList.<init>|<init>(){}[0]",
+    "kotlin.collections.ArrayList.<init>|<init>(kotlin.Int){}[0]",
+    "kotlin.collections.collectionSizeOrDefault|collectionSizeOrDefault@kotlin.collections.Iterable<0:0>(kotlin.Int){0§<kotlin.Any?>}[0]",
+    "kotlin.collections.Iterable.iterator|iterator(){}[0]",
+    "kotlin.collections.Iterator.hasNext|hasNext(){}[0]",
+    "kotlin.collections.Iterator.next|next(){}[0]",
+    "kotlin.collections.MutableCollection.add|add(1:0){}[0]"
+  ],
+  "runtime": {
+    "directRoots": [
+      "stdlib:__etsArrayIterator",
+      "stdlib:__etsIntDiv",
+      "stdlib:__etsIntRem",
+      "stdlib:__etsIterator",
+      "stdlib:__etsListAdd",
+      "stdlib:__etsThrowable"
+    ],
+    "forbiddenDirectMapHelperAbsent": true,
+    "kotlinJsOutputAbsent": true
+  },
+  "positive": {
+    "expected": [
+      "2,3,4,5|1,2",
+      "|",
+      "-2147483647,-2,-1,1,-2147483648|-1073741824,-1,0"
+    ],
+    "actual": [
+      "2,3,4,5|1,2",
+      "|",
+      "-2147483647,-2,-1,1,-2147483648|-1073741824,-1,0"
+    ],
+    "strictHostTypecheck": true,
+    "producerSourcesAbsent": true
+  },
+  "rejection": {
+    "code": "UNSUPPORTED_KLIB_DEPENDENCY",
+    "signature": "kotlin.collections.ArrayList.<init>|<init>(kotlin.Int){}[0]",
+    "library": "kotlin-stdlib-js-2.1.20.klib",
+    "declaration": "js/src/kotlin/collections/ArrayList.kt:1738..1902",
+    "callSite": "deleted producer/Consumer.kt:51154..51195",
+    "targetOutputAbsent": true,
+    "silentFallback": false
+  },
+  "regressions": [
+    {
+      "suite": "filter-common",
+      "passed": true,
+      "result": "tests/klib/collection-common/.work/run-4mHqxp/result.json"
+    },
+    {
+      "suite": "klib-capabilities",
+      "passed": true,
+      "result": "tests/klib/capabilities/.work/run-q7VMkA/result.json"
+    },
+    {
+      "suite": "klib-loader",
+      "passed": true,
+      "result": "tests/klib/.work/run-0r6NJt/result.json"
+    },
+    {
+      "suite": "portable-common",
+      "passed": true,
+      "result": "tests/klib/portable-common/.work/run-p5n1HZ/result.json"
+    },
+    {
+      "suite": "jvm-member-bodies",
+      "passed": true,
+      "result": "tests/binary-bodies/r2e/.work/run-BmBJGA/complete.json"
+    },
+    {
+      "suite": "jvm-member-replay",
+      "passed": true,
+      "result": "tests/binary-bodies/r2e/.work/run-BmBJGA/replay-57nsBN/result.json"
+    },
+    {
+      "suite": "source-filter",
+      "passed": true,
+      "cases": 34,
+      "result": "tests/stdlib/.build/filter.BSCudZ/result.json"
+    },
+    {
+      "suite": "source-iteration",
+      "passed": true,
+      "cases": 69,
+      "result": "tests/stdlib/.build/iteration.DiVHNC/result.json"
+    }
+  ],
+  "staleBaselineCheck": {
+    "suite": "check-public-cli.sh",
+    "semanticCasesPassed": 70,
+    "remainingAssertion": "The script still expects lowercase() rejection although the base commit already supports lowercase().",
+    "evidence": "tests/stdlib/.build/cli.SnEIa0"
+  },
+  "production": [
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibCollectionRuntime.kt",
+      "sha256": "a02630689fd642d118d0ceb953b9cf1703f761620e0d1c6a454f5f78f355465c"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibLowering.kt",
+      "sha256": "d0f53f5982c5b7713add08437e53daa05350981649304a8a6fe6a9e0c5d89e6d"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibSession.kt",
+      "sha256": "38a517f59713bf8f0b3c4cf634805c6e7e4645972dceae95fed25efc445eddba"
+    }
+  ],
+  "nextUncovered": [
+    "mapIndexed/mapIndexedTo",
+    "mapIndexedNotNull/mapIndexedNotNullTo",
+    "flatMap/flatMapTo",
+    "non-inline firstOrNull body admission"
+  ],
+  "sdk": "not run",
+  "device": "not run"
+}
