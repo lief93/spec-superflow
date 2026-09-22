@@ -20,7 +20,7 @@ fun main(args: Array<String>) {
             mapOf("widgetsfixture.R.drawable.logo" to 0x7f010001),
         )
         val language = EtsBackend(sink,
-            listOf(StandardLibraryRules(), ComposeDimensionRule(), imageResources)).language
+            listOf(StandardLibraryRules(), ComposeColorValueRule(), ComposeDimensionRule(), imageResources)).language
         val functions = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
         val page = functions.single { it.fqNameWhenAvailable?.asString() == "widgetsfixture.Page" }
         val scope = Scope()
@@ -50,6 +50,14 @@ fun main(args: Array<String>) {
         check(((column.children.widgets[2] as Widget.Text).text as EtsLiteral).value == "after")
         check((column.children.widgets[3] as Widget.Row).modifiers.map { it.javaClass.simpleName } == listOf("Padding", "Width"))
         check((column.children.widgets[4] as Widget.Box).children.widgets.isEmpty())
+        val styledText = column.children.widgets[5] as Widget.Text
+        check(styledText.modifiers.map { it.javaClass.simpleName } == listOf("Size", "Background", "Click", "Padding"))
+        val styledSize = styledText.modifiers[0] as WidgetModifier.Size
+        check((styledSize.width as EtsLiteral).value == 36.0 && (styledSize.height as EtsLiteral).value == 20.0)
+        check(((styledText.modifiers[1] as WidgetModifier.Background).color as EtsReference).symbol == parameters[6].symbol)
+        val styledClick = styledText.modifiers[2] as WidgetModifier.Click
+        check((styledClick.onClick as EtsReference).symbol == parameters[2].symbol)
+        check((styledClick.enabled as EtsReference).symbol == parameters[1].symbol)
         val resourceImage = column.children.widgets[6] as Widget.Image
         val resourceSource = resourceImage.image as ImageSource.Resource
         check((resourceSource.value as EtsCall).let {
@@ -57,6 +65,13 @@ fun main(args: Array<String>) {
                 (it.arguments.single() as EtsLiteral).value == "app.media.widget_logo"
         })
         check((resourceImage.contentDescription as EtsLiteral).value == "Local image")
+        check(resourceImage.modifiers.map { it.javaClass.simpleName } == listOf("Click", "Background", "Size"))
+        val imageClick = resourceImage.modifiers[0] as WidgetModifier.Click
+        check((imageClick.onClick as EtsReference).symbol == parameters[2].symbol)
+        check((imageClick.enabled as EtsReference).symbol == parameters[1].symbol)
+        check(((resourceImage.modifiers[1] as WidgetModifier.Background).color as EtsReference).symbol == parameters[6].symbol)
+        val imageSize = resourceImage.modifiers[2] as WidgetModifier.Size
+        check((imageSize.width as EtsLiteral).value == 24.0 && imageSize.width == imageSize.height)
         val urlImage = column.children.widgets[7] as Widget.Image
         val urlSource = urlImage.image as ImageSource.Url
         check((urlSource.value as EtsReference).symbol == parameters[3].symbol)
@@ -79,7 +94,8 @@ fun main(args: Array<String>) {
             EtsLambda(emptyList(), emptyList(), EtsTypes.VOID, at),
             EtsLiteral("https://example.invalid/widget.png", EtsTypes.STRING, at),
             EtsLiteral("input", EtsTypes.STRING, at),
-            EtsLambda(listOf(changed), emptyList(), EtsTypes.VOID, at)), EtsTypes.VOID, at))
+            EtsLambda(listOf(changed), emptyList(), EtsTypes.VOID, at),
+            EtsLiteral(0xFF112233L, EtsTypes.NUMBER, at)), EtsTypes.VOID, at))
         // The SDK requires an entry container. It is itself a semantic Box.
         val shell = HarmonyWidgetBackend().lower(Widget.Box(Children(emptyList()), emptyList(), at)).copy(children = listOf(content))
         val entry = EtsClass("WidgetPage", listOf(EtsFunction("build", emptyList(), EtsTypes.VOID,
@@ -108,6 +124,26 @@ fun main(args: Array<String>) {
                 field.attributes.single { (it.callee as EtsReference).symbol.name == "onChange" }
                     .arguments.single() == materialField.onValueChange
         })
+        fun modifierLayers(widget: Widget<EtsExpression, SourceSpan>): List<EtsUiElement> {
+            val result = mutableListOf<EtsUiElement>()
+            var current = HarmonyWidgetBackend().lower(widget)
+            repeat(widget.modifiers.size) {
+                result += current
+                current = current.children!!.single() as EtsUiElement
+            }
+            return result
+        }
+        fun attributes(element: EtsUiElement) = element.attributes.map { (it.callee as EtsReference).symbol.name }
+        val textLayers = modifierLayers(styledText)
+        check(textLayers.map(::attributes) == listOf(listOf("width", "height"), listOf("backgroundColor"),
+            listOf("enabled", "onClick"), listOf("padding")))
+        check(textLayers[2].attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
+            .arguments.single() == styledClick.onClick)
+        val imageLayers = modifierLayers(resourceImage)
+        check(imageLayers.map(::attributes) == listOf(listOf("enabled", "onClick"),
+            listOf("backgroundColor"), listOf("width", "height")))
+        check(imageLayers[0].attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
+            .arguments.single() == imageClick.onClick)
         val expected = linkedMapOf(
             "UnknownWidget" to "Unsupported resolved widget API", "UnknownModifier" to "Unsupported resolved widget Modifier API",
             "UnknownArgument" to "widget argument: fontSize", "Conditional" to "Unsupported widget children statement",
@@ -118,7 +154,13 @@ fun main(args: Array<String>) {
             "NonUrlImageModel" to "requires a String URL", "BadImageUrl" to "HTTP(S)",
             "RichTextField" to "rich text values", "DecorationTextField" to "widget argument: decorationBox",
             "MaterialDecoration" to "widget argument: label",
-            "TextFieldCallbackFactory" to "requires a lambda")
+            "TextFieldCallbackFactory" to "requires a lambda",
+            "BrushBackground" to "widget argument: brush",
+            "ShapedBackground" to "widget argument: shape",
+            "ClickSemantics" to "widget argument: onClickLabel",
+            "ClickFactory" to "clickable onClick requires a lambda",
+            "NegativeSize" to "finite and non-negative",
+            "EffectfulBackground" to "stable scalars")
         val diagnostics = expected.map { (name, message) ->
             val function = functions.single { it.name.asString() == name }
             val failure = try { adapter.lower(function); error("Accepted unsupported fixture $name") } catch (error: Unsupported) { error.diagnostic }

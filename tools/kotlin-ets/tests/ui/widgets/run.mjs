@@ -19,7 +19,7 @@ const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
 const implementation = identities([...sources(join(root, 'src')), ...fixtures, fileURLToPath(import.meta.url), uiClasspathFile]);
 for (const path of modelSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /import |\bEts[A-Z]|IrCall|androidx|harmony|arkui/);
 for (const path of backendSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /org\.jetbrains|androidx|IrCall|ComposeWidget|ArkUiCalls/);
-assert.doesNotMatch(readFileSync(adapter, 'utf8'), /Harmony|ArkUi|EtsUiElement|EtsUiAttribute|arkui:|"Stack"|"alignItems"|"fontColor"/);
+assert.doesNotMatch(readFileSync(adapter, 'utf8'), /Harmony|ArkUi|EtsUiElement|EtsUiAttribute|arkui:|"Stack"|"alignItems"|"fontColor"|"backgroundColor"/);
 function compile(name, inputs, classpath) {
   const jar = join(work, `${name}.jar`);
   run(`compile-${name}`, 'java', ['-cp', cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
@@ -44,7 +44,7 @@ console.log(run('resolved-structure', 'java', ['-cp', [cp, modelJar, compilerJar
 const output = join(work, 'output/WidgetPage.ets');
 assert.ok(existsSync(output));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
-assert.equal(diagnostics.length, 18);
+assert.equal(diagnostics.length, 24);
 assert.ok(diagnostics.every(line => line.includes('UNSUPPORTED') && line.includes('/Unsupported.kt')));
 assert.ok(implementation.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,

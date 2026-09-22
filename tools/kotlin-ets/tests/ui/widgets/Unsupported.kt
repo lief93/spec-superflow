@@ -2,6 +2,9 @@ package widgetsnegative
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
@@ -9,7 +12,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -44,3 +49,14 @@ fun inputCallbackFactory(): (String) -> Unit = {}
 @Composable fun TextFieldCallbackFactory() {
     BasicTextField("value", inputCallbackFactory())
 }
+@Composable fun BrushBackground() {
+    Text("x", Modifier.background(Brush.horizontalGradient(listOf(Color.Red, Color.Blue))))
+}
+@Composable fun ShapedBackground() { Text("x", Modifier.background(Color.Red, CircleShape)) }
+@Composable fun ClickSemantics() {
+    Text("x", Modifier.clickable(onClickLabel = "action", role = Role.Button) {})
+}
+@Composable fun ClickFactory() { Text("x", Modifier.clickable(onClick = callbackFactory())) }
+@Composable fun NegativeSize() { Text("x", Modifier.size((-1).dp)) }
+fun paintFactory(): Color = Color.Red
+@Composable fun EffectfulBackground() { Text("x", Modifier.background(paintFactory())) }

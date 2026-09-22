@@ -36,8 +36,13 @@ sealed interface ImageSource<V, S> {
 
 sealed interface WidgetModifier<V, S> {
     val source: S
+    data class Size<V, S>(val width: V, val height: V,
+        override val source: S) : WidgetModifier<V, S>
     data class Width<V, S>(val value: V, override val source: S) : WidgetModifier<V, S>
     data class Height<V, S>(val value: V, override val source: S) : WidgetModifier<V, S>
     data class Padding<V, S>(val start: V, val top: V, val end: V, val bottom: V,
+        override val source: S) : WidgetModifier<V, S>
+    data class Background<V, S>(val color: V, override val source: S) : WidgetModifier<V, S>
+    data class Click<V, S>(val onClick: V, val enabled: V?,
         override val source: S) : WidgetModifier<V, S>
 }

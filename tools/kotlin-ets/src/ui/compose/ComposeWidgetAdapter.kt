@@ -185,6 +185,13 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         }
         fun required(name: String) = argument(call, name) ?: diagnostics.unsupported(call, "$api requires $name")
         val operation = when (api) {
+            "androidx.compose.foundation.layout.size" -> {
+                checkArguments(call, setOf("size", "width", "height"))
+                val uniform = argument(call, "size")
+                WidgetModifier.Size(
+                    dimension(uniform ?: required("width")),
+                    dimension(uniform ?: required("height")), at)
+            }
             "androidx.compose.foundation.layout.width" -> {
                 checkArguments(call, setOf("width")); WidgetModifier.Width(dimension(required("width")), at)
             }
@@ -200,6 +207,23 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                     ?.let(::dimension) ?: EtsLiteral(0, EtsTypes.NUMBER, at)
                 WidgetModifier.Padding(side("start", "horizontal"), side("top", "vertical"),
                     side("end", "horizontal"), side("bottom", "vertical"), at)
+            }
+            "androidx.compose.foundation.background" -> {
+                checkArguments(call, setOf("color"))
+                val color = required("color")
+                val emitted = scalar(color, scope)
+                if (emitted.type != EtsTypes.NUMBER)
+                    diagnostics.unsupported(color, "Widget background requires a typed ARGB color")
+                WidgetModifier.Background(emitted, at)
+            }
+            "androidx.compose.foundation.clickable" -> {
+                checkArguments(call, setOf("onClick", "enabled"))
+                val enabled = argument(call, "enabled")?.let {
+                    if (!it.type.isBoolean()) diagnostics.unsupported(it, "Widget clickable enabled requires Boolean")
+                    scalar(it, scope)
+                }
+                WidgetModifier.Click(event(required("onClick"), scope,
+                    EtsFunctionType(emptyList(), EtsTypes.VOID), "clickable onClick"), enabled, at)
             }
             else -> diagnostics.unsupported(call, "Unsupported resolved widget Modifier API: $api")
         }

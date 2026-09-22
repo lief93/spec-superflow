@@ -1,4 +1,4 @@
-# S2.2: resolved Compose → widget semantics → Harmony
+# S2.4: resolved Compose → ordered modifiers → Harmony
 
 This is an opt-in production compiler interface for a closed static widget
 subset. The existing default `page` CLI remains unchanged; switching all of its
@@ -53,14 +53,25 @@ existing language compiler, not serialized strings or callback IDs.
 | Material 2/3 `TextField` / `OutlinedTextField` | the same `Widget.TextField` | the same native TextInput |
 | layout `Row` / `Column` | ordered `children` slot | corresponding native layout |
 | layout `Box` | children slot, including the content-free overload | native Stack |
+| scalar Dp `size` | one ordered `Size(width, height)` element | one wrapper with width and height |
 | `width`, `height` | distinct ordered elements | distinct size wrappers |
 | scalar Dp `padding` overloads | start/top/end/bottom | padding wrapper, LTR mapping |
+| solid-color `background` | typed ARGB `Background(color)` | backgroundColor wrapper |
+| `clickable(enabled, onClick)` | typed `Click(onClick, enabled)` | enabled/onClick wrapper |
 | `Modifier`, `then` | identity and ordered concatenation | no element erased or overwritten |
 
 Button content is never reduced to a text label: nested Row/Box/Text content
 remains a slot. Children after a slot stay siblings of the Button. Modifier
 lists retain duplicates and order; `width → padding → width` and
 `padding → width` have different target nesting.
+
+Size, background, click, and padding use the same model and backend operations
+for every widget. Each operation becomes one wrapper around the result of the
+next operation, so `size → background → click → padding` targets different
+layers than `click → background → size`. Uniform and two-axis `size` overloads
+both retain their width/height values. Background color, click callback, and
+click enabled state remain typed expressions; the adapter contains no native
+control or attribute choice.
 
 Image source kind crosses the semantic seam explicitly. A materialized
 `painterResource` stays a typed `Resource`; a Coil String model stays a typed
@@ -96,6 +107,12 @@ scoped weight/alignment, and arbitrary modifier functions are not implicitly
 expanded by this first interface. The legacy default path keeps those existing
 capabilities until they are deliberately migrated.
 
+The modifier subset does not yet model Brush or shaped backgrounds, click label,
+role, indication or interactionSource semantics, combined/double/long click,
+fill and range constraints, offset, clip, border, graphics transforms, weight,
+alignment, scroll, pointer input, or semantics modifiers. Explicit arguments
+from these categories fail with their source span; they are not discarded.
+
 ## Reproduce
 
 From the repository root:
@@ -103,9 +120,7 @@ From the repository root:
 ```sh
 node tools/kotlin-ets/tests/ui/widgets/run.mjs
 bash tools/kotlin-ets/tests/target/run.sh
-node tools/kotlin-ets/tests/resources/run.mjs
-node tools/kotlin-ets/tests/ui/images-cli.mjs /path/to/resources-run/res
-node tools/kotlin-ets/tests/ui/async-request/run.mjs /path/to/compose-classpath.txt
+node tools/kotlin-ets/tests/ui/modifier-arguments/run.mjs
 node tools/kotlin-ets/tests/ui/material-button/run.mjs
 node tools/kotlin-ets/tests/ui/forwarded-slots/run.mjs
 ```
@@ -129,40 +144,38 @@ ABC/HAP output. It does not install or run a device application.
 
 ## Acceptance evidence (five completion criteria)
 
-1. **Resolved-call structure.** `tests/ui/widgets/.work/run-L7Vnqi` compiles
+1. **Resolved-call structure.** `tests/ui/widgets/.work/run-2iMWe5` compiles
    against real AndroidX and Coil artifacts and asserts all seven widget kinds.
    Resource/URL source kinds, TextField value/event/enabled symbols, aliased Text,
    nested Button content, siblings, empty Box, Modifier identity/then, duplicate
-   widths, and both width/padding orders retain their structure. `model.txt`
-   records the result. The model compiles alone; the adapter compiles without
-   Harmony; the backend compiles and runs without compiler or Compose classes.
+   widths, and all size/background/click/padding values retain their structure.
+   It proves different ordered chains on Text and Image through the same model
+   and backend. `model.txt` records the result. The model compiles alone; the
+   adapter compiles without Harmony; the backend compiles and runs without
+   compiler or Compose classes.
 2. **Harmony → typed ETS.** The same run validates the actual `EtsProgram`, emits
-   two native Images and two native TextInputs, and copies
+   distinct ordered modifier wrappers around native controls and copies
    `WidgetPage.ets.resources/base/media/widget_logo.svg`. The unchanged generated
    file, SHA-256
-   `4a08da3b7ff935435d6e021641d1c2e39cd726f1143f211d4b2d2378561f1abb`,
+   `a0789d846d3d5f3dabc82c624f959a088a3b56873be2378ff4b9542f9a878c35`,
    passes the installed DevEco SDK in
-   `/private/tmp/kotlin-ets-basic-controls-sdk-cbFqSg`. The SDK copy contains the
+   `/private/tmp/kotlin-ets-basic-controls-sdk-9VTNE4`. The SDK copy contains the
    media file and produces ABC
-   `a4747093bdd75d5ab88127de2e056be6fe6ee508645411b30a4924b06a69980a`
+   `a2eeffa6abd98bc36987a00e45fff801de89dd3f22ea5bb2cc08fdae5ca71dac`
    plus `entry-default-unsigned.hap`. No generated ETS was edited.
-3. **Explicit rejection.** Eighteen source-linked failures are recorded in
-   `diagnostics.tsv`. The original ten cases remain, joined by arbitrary Painter,
-   rich Text, non-String image model, invalid literal URL, rich TextField value,
-   BasicTextField decoration, Material label, and TextField callback factory.
-   Empty UI is never used as a recovery value.
-4. **Existing regressions.** Target suite `kotlin-ets-target-tests.2rEkjV`,
-   resource suite `tests/resources/.work/run-nVizf6`, image CLI suite
-   `kotlin-ets-images-cli-St8um5`, Material Button suite
-   `kotlin-ets-material-button-VmaPbU`, async image suite
-   `kotlin-ets-async-request-YySVt7`, and forwarded slots suite
-   `kotlin-ets-forwarded-slots-kzHUeP` pass. The async image test had one stale
-   context-free Picture signature assertion; it now checks the existing explicit
-   Material context and URL Binding. No legacy UI implementation was changed.
+3. **Explicit rejection.** Twenty-four source-linked failures are recorded in
+   `diagnostics.tsv`. The S2.2 cases remain, joined by Brush background, shaped
+   background, click label/role semantics, dynamic click callback factory,
+   negative size, and effectful background factory. Empty UI is never used as a
+   recovery value.
+4. **Existing regressions.** Target suite `kotlin-ets-target-tests.zBcFI1`,
+   modifier argument suite `kotlin-ets-modifier-arguments-12wrqX`, Material
+   Button suite `kotlin-ets-material-button-4A8hhg`, and forwarded slots suite
+   `kotlin-ets-forwarded-slots-8gWb6z` pass. No legacy UI implementation changed.
 5. **Branch scope.** Changes are confined to the three semantic pipeline modules,
-   widget fixtures/harness, this report, and the corrected async image assertion.
-   Language lowering, KLIB loading, project adapters, shared target/core
-   contracts, and default CLI behavior are untouched.
+   widget fixtures/harness, and this report. Language lowering, KLIB loading,
+   project adapters, shared target/core contracts, and default CLI behavior are
+   untouched.
 
 The evidence proves the static semantic/compiler/SDK path. It does not establish
 recomposition, Material visual parity, device interaction, or permission to

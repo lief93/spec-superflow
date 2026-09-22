@@ -24,12 +24,41 @@ fun main() {
     val inner = padding.children!!.single() as EtsUiElement
     check(attribute(inner) == "width")
     check(name(inner.children!!.single() as EtsUiElement) == "Text")
+    val click = EtsLambda(emptyList(), emptyList(), EtsTypes.VOID, source)
+    val shared: List<WidgetModifier<EtsExpression, SourceSpan>> = listOf(
+        WidgetModifier.Size(number(48), number(32), source),
+        WidgetModifier.Background(number(7), source),
+        WidgetModifier.Click(click, EtsLiteral(false, EtsTypes.BOOLEAN, source), source),
+        WidgetModifier.Padding(number(1), number(1), number(1), number(1), source))
+    val styledText = backend.lower(Widget.Text(EtsLiteral("styled", EtsTypes.STRING, source), shared, source))
     val invalid = Widget.Text<EtsExpression, SourceSpan>(number(1), emptyList(), source)
     check(runCatching { backend.lower(invalid) }.exceptionOrNull() is IllegalArgumentException)
     val invalidButton = Widget.Button<EtsExpression, SourceSpan>(number(1), null, Children(emptyList()), emptyList(), source)
     check(runCatching { backend.lower(invalidButton) }.exceptionOrNull() is IllegalArgumentException)
     val resource = EtsReference(EtsSymbol("test:resource", "resource",
         EtsNamedType("Resource", external = true), source, external = true))
+    val styledImage = backend.lower(Widget.Image(ImageSource.Resource(resource, source),
+        EtsLiteral("Styled", EtsTypes.STRING, source), shared, source))
+    fun layers(root: EtsUiElement, count: Int): List<EtsUiElement> {
+        val result = mutableListOf<EtsUiElement>()
+        var current = root
+        repeat(count) {
+            result += current
+            current = current.children!!.single() as EtsUiElement
+        }
+        return result
+    }
+    fun attributes(element: EtsUiElement) = element.attributes.map { (it.callee as EtsReference).symbol.name }
+    for (styled in listOf(styledText, styledImage)) {
+        val ordered = layers(styled, shared.size)
+        check(ordered.map(::attributes) == listOf(
+            listOf("width", "height"), listOf("backgroundColor"),
+            listOf("enabled", "onClick"), listOf("padding")))
+        check(ordered[2].attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
+            .arguments.single() == click)
+    }
+    check(name(layers(styledText, shared.size).last().children!!.single() as EtsUiElement) == "Text")
+    check(name(layers(styledImage, shared.size).last().children!!.single() as EtsUiElement) == "Image")
     val resourceImage = backend.lower(Widget.Image(ImageSource.Resource(resource, source),
         EtsLiteral("Local", EtsTypes.STRING, source), emptyList(), source))
     val urlImage = backend.lower(Widget.Image(ImageSource.Url(EtsLiteral("https://example.invalid/a.png",
@@ -54,8 +83,19 @@ fun main() {
     val invalidField = Widget.TextField<EtsExpression, SourceSpan>(EtsLiteral("value", EtsTypes.STRING, source), number(1),
         null, emptyList(), source)
     check(runCatching { backend.lower(invalidField) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidSize = Widget.Text(EtsLiteral("x", EtsTypes.STRING, source),
+        listOf(WidgetModifier.Size<EtsExpression, SourceSpan>(number(1),
+            EtsLiteral("bad", EtsTypes.STRING, source), source)), source)
+    check(runCatching { backend.lower(invalidSize) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidBackground = Widget.Text(EtsLiteral("x", EtsTypes.STRING, source),
+        listOf(WidgetModifier.Background<EtsExpression, SourceSpan>(
+            EtsLiteral("bad", EtsTypes.STRING, source), source)), source)
+    check(runCatching { backend.lower(invalidBackground) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidClick = Widget.Text(EtsLiteral("x", EtsTypes.STRING, source),
+        listOf(WidgetModifier.Click<EtsExpression, SourceSpan>(number(1), null, source)), source)
+    check(runCatching { backend.lower(invalidClick) }.exceptionOrNull() is IllegalArgumentException)
     val fn = EtsFunction("view", emptyList(), EtsTypes.VOID,
-        listOf(element, resourceImage, urlImage, textField), source, builder = true)
+        listOf(element, styledText, styledImage, resourceImage, urlImage, textField), source, builder = true)
     EtsValidator().validate(EtsProgram(listOf(EtsFile("model-only", listOf(fn)))))
-    println("PASS backend without compiler/Compose; Text/Image/Button/TextField, ordered modifiers, typed rejection")
+    println("PASS backend without compiler/Compose; shared ordered size/background/click/padding modifiers and typed rejection")
 }

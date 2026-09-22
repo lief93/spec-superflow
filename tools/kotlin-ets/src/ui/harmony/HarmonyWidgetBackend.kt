@@ -70,24 +70,41 @@ class HarmonyWidgetBackend {
         // This preserves semantic structure, not Compose's complete measure policy.
         return widget.modifiers.asReversed().fold(element) { child, modifier ->
             val source = modifier.source
-            val attribute = when (modifier) {
+            val attributes = when (modifier) {
+                is WidgetModifier.Size -> {
+                    expect(modifier.width, EtsTypes.NUMBER, "Size.width", source)
+                    expect(modifier.height, EtsTypes.NUMBER, "Size.height", source)
+                    listOf(call("width", listOf(modifier.width), source),
+                        call("height", listOf(modifier.height), source))
+                }
                 is WidgetModifier.Width -> {
                     expect(modifier.value, EtsTypes.NUMBER, "Width.value", source)
-                    call("width", listOf(modifier.value), source)
+                    listOf(call("width", listOf(modifier.value), source))
                 }
                 is WidgetModifier.Height -> {
                     expect(modifier.value, EtsTypes.NUMBER, "Height.value", source)
-                    call("height", listOf(modifier.value), source)
+                    listOf(call("height", listOf(modifier.value), source))
                 }
                 is WidgetModifier.Padding -> {
                     val sides = linkedMapOf("left" to modifier.start, "top" to modifier.top,
                         "right" to modifier.end, "bottom" to modifier.bottom)
                     sides.forEach { (side, value) -> expect(value, EtsTypes.NUMBER, "Padding.$side", source) }
-                    call("padding", listOf(EtsObject(sides,
-                        EtsRecordType("Padding", sides.mapValues { EtsTypes.NUMBER }), source)), source)
+                    listOf(call("padding", listOf(EtsObject(sides,
+                        EtsRecordType("Padding", sides.mapValues { EtsTypes.NUMBER }), source)), source))
+                }
+                is WidgetModifier.Background -> {
+                    expect(modifier.color, EtsTypes.NUMBER, "Background.color", source)
+                    listOf(call("backgroundColor", listOf(modifier.color), source))
+                }
+                is WidgetModifier.Click -> {
+                    expect(modifier.onClick, EtsFunctionType(emptyList(), EtsTypes.VOID), "Click.onClick", source)
+                    val enabled = modifier.enabled ?: EtsLiteral(true, EtsTypes.BOOLEAN, source)
+                    expect(enabled, EtsTypes.BOOLEAN, "Click.enabled", source)
+                    listOf(call("enabled", listOf(enabled), source),
+                        call("onClick", listOf(modifier.onClick), source))
                 }
             }
-            EtsUiElement(call("Stack", listOf(stackOptions(source)), source), listOf(child), listOf(attribute))
+            EtsUiElement(call("Stack", listOf(stackOptions(source)), source), listOf(child), attributes)
         }
     }
 
