@@ -40,7 +40,7 @@ fun main(args: Array<String>) {
         }
         val language = EtsBackend(sink,
             listOf(projectTokens, StandardLibraryRules(), ComposeColorValueRule(), ComposeDimensionRule(),
-                ComposeFontRule(FontResources()), imageResources, strings)).language
+                ComposeFontRule(FontResources()), ComposeAlignmentRule(), imageResources, strings)).language
         val functions = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
         val page = functions.single { it.fqNameWhenAvailable?.asString() == "widgetsfixture.Page" }
         val scope = Scope()
@@ -52,9 +52,10 @@ fun main(args: Array<String>) {
         val adapter = ComposeWidgetAdapter(language, sink)
         val model = adapter.lower(page, scope)
         val column = model.widgets.single() as Widget.Column
-        check(column.modifiers.map { it.javaClass.simpleName } == listOf("Width", "Padding", "Width"))
+        check(column.modifiers.map { it.javaClass.simpleName } == listOf("Width", "Padding", "Width", "Fill"))
         check((column.modifiers[0] as WidgetModifier.Width).value.let { it as EtsLiteral }.value == 120.0)
         check((column.modifiers[2] as WidgetModifier.Width).value.let { it as EtsLiteral }.value == 80.0)
+        check(((column.modifiers[3] as WidgetModifier.Fill).fraction as EtsReference).symbol == parameters[8].symbol)
         check(column.children.widgets.size == 12)
         val title = column.children.widgets[0] as Widget.Text
         check(title.text.type == WidgetValueType.STRING)
@@ -74,6 +75,8 @@ fun main(args: Array<String>) {
         check(resourceTitle.style.lineHeight?.let { it.type == WidgetValueType.LINE_HEIGHT &&
             it.provenance == WidgetValueProvenance.Expression("lineHeight") &&
             (it.value as EtsReference).symbol == parameters[7].symbol } == true)
+        val titleFill = resourceTitle.modifiers.single() as WidgetModifier.Fill
+        check(titleFill.width && !titleFill.height && (titleFill.fraction as EtsLiteral).value == 0.5)
         val tokenTitle = column.children.widgets[2] as Widget.Text
         check(tokenTitle.text.provenance == WidgetValueProvenance.ThemeToken("widgetsfixture.KnownTokens.label"))
         check((tokenTitle.text.value as EtsLiteral).value == "Known label")
@@ -85,6 +88,8 @@ fun main(args: Array<String>) {
         check(buttonBackground.color.provenance == WidgetValueProvenance.ThemeToken("widgetsfixture.KnownTokens.brand"))
         check((buttonBackground.color.value as EtsLiteral).value == 0xFF336699L)
         val row = button.content.widgets.single() as Widget.Row
+        check(row.modifiers.map { it.javaClass.simpleName } == listOf("Weight", "Fill"))
+        check((row.modifiers[0] as WidgetModifier.Weight).parent == WidgetLayoutScope.ROW)
         check(row.children.widgets.size == 2)
         val buttonLabel = row.children.widgets[0] as Widget.Text
         check(buttonLabel.text.provenance == WidgetValueProvenance.Resource("widgetsfixture.R.string.action"))
@@ -95,13 +100,20 @@ fun main(args: Array<String>) {
         check((buttonLabel.style.fontFamily!!.value as EtsLiteral).value == "serif")
         val box = row.children.widgets[1] as Widget.Box
         check(box.children.widgets.single() is Widget.Text)
-        check(box.modifiers.map { it.javaClass.simpleName } == listOf("Height", "Width"))
+        check(box.modifiers.map { it.javaClass.simpleName } == listOf("Height", "Width", "Weight", "Fill"))
+        check((box.modifiers[2] as WidgetModifier.Weight).parent == WidgetLayoutScope.ROW)
+        check((box.modifiers[3] as WidgetModifier.Fill).let { !it.width && it.height })
+        val aligned = box.children.widgets.single() as Widget.Text
+        check((aligned.modifiers.single() as WidgetModifier.Align).let {
+            it.parent == WidgetLayoutScope.BOX && it.value.type == EtsNamedType("Alignment")
+        })
         val literalText = (column.children.widgets[4] as Widget.Text).text
         check(literalText.provenance == WidgetValueProvenance.Literal)
         check((literalText.value as EtsLiteral).value == "after")
         val coloredRow = column.children.widgets[5] as Widget.Row
-        check(coloredRow.modifiers.map { it.javaClass.simpleName } == listOf("Padding", "Width", "Background"))
-        val resourceColor = (coloredRow.modifiers[2] as WidgetModifier.Background).color
+        check(coloredRow.modifiers.map { it.javaClass.simpleName } == listOf("Weight", "Padding", "Width", "Background"))
+        check((coloredRow.modifiers[0] as WidgetModifier.Weight).parent == WidgetLayoutScope.COLUMN)
+        val resourceColor = (coloredRow.modifiers[3] as WidgetModifier.Background).color
         check(resourceColor.provenance == WidgetValueProvenance.Resource("androidx.compose.ui.graphics.Color.Companion.Red"))
         check(resourceColor.value.type == EtsTypes.NUMBER)
         val emptyBox = column.children.widgets[6] as Widget.Box
@@ -156,7 +168,7 @@ fun main(args: Array<String>) {
             EtsLiteral("input", EtsTypes.STRING, at),
             EtsLambda(listOf(changed), emptyList(), EtsTypes.VOID, at),
             EtsLiteral(0xFF112233L, EtsTypes.NUMBER, at),
-            EtsLiteral(24, EtsTypes.NUMBER, at)), EtsTypes.VOID, at))
+            EtsLiteral(24, EtsTypes.NUMBER, at), EtsLiteral(0.75, EtsTypes.NUMBER, at)), EtsTypes.VOID, at))
         // The SDK requires an entry container. It is itself a semantic Box.
         val shell = HarmonyWidgetBackend().lower(Widget.Box(Children(emptyList()), emptyList(), at)).copy(children = listOf(content))
         val entry = EtsClass("WidgetPage", listOf(EtsFunction("build", emptyList(), EtsTypes.VOID,
@@ -181,6 +193,12 @@ fun main(args: Array<String>) {
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Text" } == 8)
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Image" } == 2)
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "TextInput" } == 2)
+        val allAttributes = elements.flatMap { it.attributes }
+        check(allAttributes.count { (it.callee as? EtsReference)?.symbol?.name == "layoutWeight" } == 3)
+        check(allAttributes.any { attribute -> (attribute.callee as? EtsReference)?.symbol?.name == "align" &&
+            (attribute.arguments.singleOrNull() as? EtsMember)?.name == "BottomEnd" })
+        check(allAttributes.any { attribute -> (attribute.callee as? EtsReference)?.symbol?.name == "height" &&
+            (attribute.arguments.singleOrNull() as? EtsLiteral)?.value == "50.0%" })
         val nativeButton = elements.single { (it.call.callee as? EtsReference)?.symbol?.name == "Button" }
         check(nativeButton.children?.single() is EtsUiElement)
         check(nativeButton.attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }.arguments.single() == button.onClick)
@@ -236,7 +254,11 @@ fun main(args: Array<String>) {
             "EffectfulBackground" to "stable scalars",
             "UnknownStringToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.label",
             "UnknownColorToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.color",
-            "UnknownStyleToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.fontSize")
+            "UnknownStyleToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.fontSize",
+            "WeightWrongParent" to "weight requires a direct Row parent",
+            "AlignWrongParent" to "align requires a direct Box parent",
+            "WeightWithoutFill" to "weight requires fill=true",
+            "InvalidFillFraction" to "fill fraction must be finite and between zero and one")
         val diagnostics = expected.map { (name, message) ->
             val function = functions.single { it.name.asString() == name }
             val failure = try { adapter.lower(function); error("Accepted unsupported fixture $name") } catch (error: Unsupported) { error.diagnostic }

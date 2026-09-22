@@ -1,4 +1,4 @@
-# S2.5: typed widget values and text style → unified Harmony consumption
+# S2.5: typed values, scoped layout modifiers → unified Harmony consumption
 
 This is an opt-in production compiler interface for a closed static widget
 subset. The existing default `page` CLI remains unchanged; switching all of its
@@ -6,7 +6,8 @@ Material, state, scrolling, and project-adapter behavior is a separate migration
 No language lowering, KLIB loader, shared compiler contract, or project adapter
 is changed by this slice. S2.5 adds a typed neutral value seam for String,
 Color, font size, font weight, font family, and line height while retaining the
-S2.4 widget and ordered-modifier structure.
+S2.4 widget and ordered-modifier structure. It also adds fill, scoped weight,
+and Box child alignment without adding state or scrolling.
 
 Redwood remains the architecture/schema reference from
 [the spike](redwood-harmony-reference.md). The implementation does not link
@@ -29,7 +30,7 @@ lowerer, invokes `ComposeWidgetAdapter`, passes the neutral children to
 
 - `dev.ets.widgets`: `Widget<V, S>`, `WidgetValue<V, S>`, `WidgetTextStyle<V, S>`,
   `WidgetValueType`, `WidgetValueProvenance`, `ImageSource<V, S>`,
-  `WidgetModifier<V, S>`, and `Children<V, S>`.
+  `WidgetModifier<V, S>`, `WidgetLayoutScope`, and `Children<V, S>`.
   This module has no imports and compiles against Kotlin stdlib alone. Values
   and source locations are generic. There are no native control strings or
   compiler IR objects in the schema.
@@ -92,6 +93,9 @@ sample values or an entry component.
 | scalar Dp `size` | one ordered `Size(width, height)` element | one wrapper with width and height |
 | `width`, `height` | distinct ordered elements | distinct size wrappers |
 | scalar Dp `padding` overloads | start/top/end/bottom | padding wrapper, LTR mapping |
+| `fillMaxWidth/Height/Size(fraction)` | one ordered `Fill(axes, fraction)` | percentage width/height wrapper |
+| `RowScope.weight` / `ColumnScope.weight` | ordered `Weight(value, recorded parent)` | layoutWeight wrapper |
+| `BoxScope.align` | ordered `Align(value, BOX)` | typed Alignment wrapper |
 | solid-color `background` | `Background(WidgetValue(COLOR, ...))` | backgroundColor through the shared value consumer |
 | `clickable(enabled, onClick)` | typed `Click(onClick, enabled)` | enabled/onClick wrapper |
 | `Modifier`, `then` | identity and ordered concatenation | no element erased or overwritten |
@@ -101,8 +105,18 @@ remains a slot. Children after a slot stay siblings of the Button. Modifier
 lists retain duplicates and order; `width → padding → width` and
 `padding → width` have different target nesting.
 
-Size, background, click, and padding use the same model and backend operations
-for every widget. Each operation becomes one wrapper around the result of the
+Each children slot carries an explicit layout scope while adapting: Row and
+Button content use `ROW`, Column uses `COLUMN`, and Box uses `BOX`. Weight must
+match the resolved RowScope/ColumnScope API and its direct parent; align must be
+a direct Box child. The neutral modifier records that parent, and the Harmony
+backend validates it again against the actual neutral tree. Forwarding a scoped
+modifier through an alias into another parent therefore fails at the original
+modifier source instead of silently applying parent data to the wrong layout.
+Harmony hoists validated Weight/Align wrappers to the direct-child boundary;
+ordinary modifier order and the full neutral list remain unchanged.
+
+Size, fill, background, click, and padding use the same model and backend operations
+for every widget. Each ordinary operation becomes one wrapper around the result of the
 next operation, so `size → background → click → padding` targets different
 layers than `click → background → size`. Uniform and two-axis `size` overloads
 both retain their width/height values. Background color, click callback, and
@@ -163,14 +177,15 @@ supported events still belong to `Language`, not this adapter.
 Explicit empty children are valid; ignored behavior is not. Local Modifier
 aliases and the empty identity are accepted. Source composable helper calls,
 forwarded/dynamic content lambdas, state APIs, unsupported Material styling parameters,
-scoped weight/alignment, and arbitrary modifier functions are not implicitly
+and arbitrary modifier functions are not implicitly
 expanded by this first interface. The legacy default path keeps those existing
 capabilities until they are deliberately migrated.
 
 The modifier subset does not yet model Brush or shaped backgrounds, click label,
 role, indication or interactionSource semantics, combined/double/long click,
-fill and range constraints, offset, clip, border, graphics transforms, weight,
-alignment, scroll, pointer input, or semantics modifiers. Explicit arguments
+range constraints, offset, clip, border, graphics transforms, scroll, pointer
+input, or semantics modifiers. Weight with `fill=false` remains outside this
+subset because ArkUI layoutWeight cannot preserve that sizing contract. Explicit arguments
 from these categories fail with their source span; they are not discarded.
 
 ## Reproduce
@@ -181,6 +196,7 @@ From the repository root:
 node tools/kotlin-ets/tests/ui/widgets/run.mjs
 bash tools/kotlin-ets/tests/target/run.sh
 node tools/kotlin-ets/tests/ui/modifier-arguments/run.mjs
+node tools/kotlin-ets/tests/ui/weight/run.mjs
 node tools/kotlin-ets/tests/ui/material-button/run.mjs
 node tools/kotlin-ets/tests/ui/fonts/run.mjs
 node tools/kotlin-ets/tests/ui/typography/run.mjs
@@ -207,7 +223,7 @@ ABC/HAP output. It does not install or run a device application.
 
 ## Acceptance evidence (five completion criteria)
 
-1. **Resolved-call structure.** `tests/ui/widgets/.work/run-YWetub` compiles
+1. **Resolved-call structure.** `tests/ui/widgets/.work/run-HWLK7z` compiles
    against real AndroidX and Coil artifacts and asserts all seven widget kinds.
    Resource/URL source kinds, TextField value/event/enabled symbols, aliased Text,
    nested Button content, siblings, empty Box, Modifier identity/then, duplicate
@@ -215,7 +231,10 @@ ABC/HAP output. It does not install or run a device application.
    It also asserts String, Color, and text-style literals, resource references,
    mapped theme tokens, and bound expressions with their exact provenance and
    source. Direct Text and Text inside Button content share the same four
-   individually typed style attributes.
+   individually typed style attributes. Dynamic and literal fill fractions,
+   Row/Column weight (including Button's RowScope), Box alignment, recorded
+   parents, and ordered modifier positions are asserted in the neutral model.
+   The backend-only test rejects a forged parent mismatch.
    It proves different ordered chains on Text and Image through the same model
    and backend. `model.txt` records the result. The model compiles alone; the
    adapter compiles without Harmony; the backend compiles and runs without
@@ -224,26 +243,25 @@ ABC/HAP output. It does not install or run a device application.
    distinct ordered modifier wrappers around native controls and copies
    `WidgetPage.ets.resources/base/media/widget_logo.svg`. The unchanged generated
    file, SHA-256
-   `7a28c06025769a58ad9adf85f46ae87834cf47cdf5addf130a5368c49df8e36f`,
+   `43aff84f9010e3f0f5bfce6f63dfa6ebdc059fda96576d2dfa6ee63fa583273e`,
    passes the installed DevEco SDK in
-   `/private/tmp/kotlin-ets-basic-controls-sdk-uM0TGf`. The SDK copy contains the
+   `/private/tmp/kotlin-ets-basic-controls-sdk-59k8oS`. The SDK copy contains the
    media and string resources and produces ABC
-   `51f69b12face365f918358f0fbff0d51073fd878e8ecb0818e0f03b628da6e92`
+   `45032ba2957fd503c0eb9589b46e1015612c920a50ea61a8a73365feeb9d68d8`
    plus `entry-default-unsigned.hap`. The generated string artifact SHA-256 is
    `29d4d2d7319fbf428c148f50e936869382ebd078eb187d476098ba8a5ae678a4`.
    No generated ETS was edited.
-3. **Explicit rejection.** Twenty-seven source-linked failures are recorded in
+3. **Explicit rejection.** Thirty-one source-linked failures are recorded in
    `diagnostics.tsv`. The S2.2 cases remain, joined by Brush background, shaped
    background, click label/role semantics, dynamic click callback factory,
    negative size, effectful background factory, a whole custom TextStyle, and
-   unmapped String/Color/text-style project tokens. Empty UI is never used as a
-   recovery value.
-4. **Existing regressions.** Target suite `kotlin-ets-target-tests.uW9s2j`,
-   string-resource suite `kotlin-ets-strings-aeRD7t`, modifier argument suite
-   `kotlin-ets-modifier-arguments-hY9HB5`, Material Button suite
-   `kotlin-ets-material-button-vyz4tU`, font suite `kotlin-ets-font-values-MMgQGv`,
-   and typography suite `kotlin-ets-typography-dmeeJq` pass. No legacy UI
-   implementation changed.
+   unmapped String/Color/text-style project tokens, wrong Weight/Align parents,
+   weight `fill=false`, and an invalid fill fraction. Empty UI is never used as
+   a recovery value.
+4. **Existing regressions.** Target suite `kotlin-ets-target-tests.7RoQXe`,
+   weight suite `kotlin-ets-layout-weight-XQS9ap`, modifier argument suite
+   `kotlin-ets-modifier-arguments-A2qSZ2`, and Material Button suite
+   `kotlin-ets-material-button-ezRpE5` pass. No legacy UI implementation changed.
 5. **Branch scope.** Changes are confined to the three semantic pipeline modules,
    widget fixtures/harness, and this report. Language lowering, KLIB loading,
    project adapters, shared target/core contracts, and default CLI behavior are

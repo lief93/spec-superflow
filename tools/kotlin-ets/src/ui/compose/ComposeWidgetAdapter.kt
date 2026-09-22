@@ -26,45 +26,50 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 diagnostics.unsupported(parameter, "Widget entry parameter requires a binding: ${parameter.name}")
         }
         return body(function.body ?: diagnostics.unsupported(function, "Widget entry has no body"),
-            scope.fork(), function, handledStatements)
+            scope.fork(), function, handledStatements, null)
     }
 
     private fun body(body: IrBody, scope: Scope, owner: IrFunction,
-        handledStatements: Set<IrStatement> = emptySet()): Children<EtsExpression, SourceSpan> = when (body) {
-        is IrBlockBody -> Children(statements(body.statements, scope, owner, handledStatements = handledStatements))
-        is IrExpressionBody -> Children(statements(listOf(body.expression), scope, owner, handledStatements = handledStatements))
+        handledStatements: Set<IrStatement> = emptySet(), parent: WidgetLayoutScope?): Children<EtsExpression, SourceSpan> = when (body) {
+        is IrBlockBody -> Children(statements(body.statements, scope, owner,
+            handledStatements = handledStatements, parent = parent))
+        is IrExpressionBody -> Children(statements(listOf(body.expression), scope, owner,
+            handledStatements = handledStatements, parent = parent))
         else -> diagnostics.unsupported(body, "Unsupported widget body")
     }
 
     private fun statements(statements: List<IrStatement>, scope: Scope, owner: IrFunction, terminal: Boolean = true,
-        handledStatements: Set<IrStatement> = emptySet()): List<Widget<EtsExpression, SourceSpan>> =
+        handledStatements: Set<IrStatement> = emptySet(), parent: WidgetLayoutScope?): List<Widget<EtsExpression, SourceSpan>> =
         statements.flatMapIndexed { index, statement -> if (statement in handledStatements) emptyList() else when (statement) {
             is IrVariable -> {
                 val initial = statement.initializer ?: diagnostics.unsupported(statement, "Uninitialized widget local")
                 if (statement.isVar) diagnostics.unsupported(statement, "Mutable widget local is outside the static widget subset")
                 when {
-                    initial.type.classFqName?.asString() in setOf("androidx.compose.ui.Modifier", "androidx.compose.ui.Modifier.Companion") -> modifiers(initial, scope)
+                    initial.type.classFqName?.asString() in setOf("androidx.compose.ui.Modifier", "androidx.compose.ui.Modifier.Companion") ->
+                        modifiers(initial, scope, parent)
                     resolve(initial, scope) is IrFunctionExpression -> Unit
                     else -> scalar(initial, scope)
                 }
                 scope.aliases[statement.symbol] = initial
                 emptyList()
             }
-            is IrCall -> listOf(widget(statement, scope))
-            is IrWhen -> listOf(conditional(statement, scope, owner))
+            is IrCall -> listOf(widget(statement, scope, parent))
+            is IrWhen -> listOf(conditional(statement, scope, owner, parent))
             is IrBlock -> statements(statement.statements, scope.fork(), owner, terminal && index == statements.lastIndex,
-                handledStatements)
+                handledStatements, parent)
             is IrReturn -> {
                 if (statement.returnTargetSymbol.owner !== owner || !terminal || index != statements.lastIndex)
                     diagnostics.unsupported(statement, "Widget return must terminate its own children body")
-                statements(listOf(statement.value), scope, owner)
+                statements(listOf(statement.value), scope, owner,
+                    handledStatements = handledStatements, parent = parent)
             }
             is IrGetObjectValue -> if (statement.type.isUnit()) emptyList() else
                 diagnostics.unsupported(statement, "Unsupported object in widget children")
             else -> diagnostics.unsupported(statement, "Unsupported widget children statement: ${statement.javaClass.simpleName}")
         } }
 
-    private fun conditional(value: IrWhen, scope: Scope, owner: IrFunction): Widget.Conditional<EtsExpression, SourceSpan> {
+    private fun conditional(value: IrWhen, scope: Scope, owner: IrFunction,
+        parent: WidgetLayoutScope?): Widget.Conditional<EtsExpression, SourceSpan> {
         if (!value.type.isUnit()) diagnostics.unsupported(value, "Widget conditional must produce Unit children")
         val branches = value.branches.map { branch ->
             val condition = if (branch is IrElseBranch) null else {
@@ -73,13 +78,13 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 scalar(branch.condition, scope)
             }
             val nested = scope.fork()
-            val children = Children(statements(listOf(branch.result), nested, owner))
+            val children = Children(statements(listOf(branch.result), nested, owner, parent = parent))
             WidgetBranch(condition, children, language.source(branch.result))
         }
         return Widget.Conditional(branches, language.source(value))
     }
 
-    private fun widget(call: IrCall, scope: Scope): Widget<EtsExpression, SourceSpan> {
+    private fun widget(call: IrCall, scope: Scope, parent: WidgetLayoutScope?): Widget<EtsExpression, SourceSpan> {
         val api = symbolName(call.symbol.owner)
         if (sourceFile(call.symbol.owner) != null || !call.type.isUnit() || api !in supported)
             diagnostics.unsupported(call, "Unsupported resolved widget API: $api")
@@ -97,7 +102,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             else -> setOf("modifier", "content")
         })
         val source = language.source(call)
-        val modifier = modifiers(argument(call, "modifier"), scope)
+        val modifier = modifiers(argument(call, "modifier"), scope, parent)
         fun required(name: String) = argument(call, name)
             ?: diagnostics.unsupported(call, "$api requires $name")
         if (text) {
@@ -140,7 +145,13 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             val value = content ?: diagnostics.unsupported(call, "$api requires content")
             val lambda = resolve(value, scope) as? IrFunctionExpression
                 ?: diagnostics.unsupported(value, "Widget children require a statically resolved lambda")
-            body(lambda.function.body ?: diagnostics.unsupported(value, "Widget children have no body"), scope.fork(), lambda.function)
+            val childParent = when {
+                button || api.endsWith(".Row") -> WidgetLayoutScope.ROW
+                api.endsWith(".Column") -> WidgetLayoutScope.COLUMN
+                else -> WidgetLayoutScope.BOX
+            }
+            body(lambda.function.body ?: diagnostics.unsupported(value, "Widget children have no body"),
+                scope.fork(), lambda.function, parent = childParent)
         }
         return when {
             button -> Widget.Button(event(required("onClick"), scope,
@@ -193,7 +204,8 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         return emitted
     }
 
-    private fun modifiers(value: IrExpression?, scope: Scope): List<WidgetModifier<EtsExpression, SourceSpan>> {
+    private fun modifiers(value: IrExpression?, scope: Scope,
+        parent: WidgetLayoutScope?): List<WidgetModifier<EtsExpression, SourceSpan>> {
         val expression = value?.let { resolve(it, scope) } ?: return emptyList()
         if (expression is IrGetObjectValue && sourceFile(expression.symbol.owner) == null &&
             symbolName(expression.symbol.owner) == "androidx.compose.ui.Modifier.Companion") return emptyList()
@@ -202,10 +214,11 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val api = symbolName(call.symbol.owner)
         val receiver = call.extensionReceiver ?: call.dispatchReceiver
             ?: diagnostics.unsupported(call, "Widget Modifier requires a receiver")
-        val previous = modifiers(receiver, scope)
+        val previous = modifiers(receiver, scope, parent)
         if (api == "androidx.compose.ui.Modifier.then") {
             checkArguments(call, setOf("other"))
-            return previous + modifiers(argument(call, "other") ?: diagnostics.unsupported(call, "Modifier.then requires other"), scope)
+            return previous + modifiers(argument(call, "other") ?: diagnostics.unsupported(call, "Modifier.then requires other"),
+                scope, parent)
         }
         val at = language.source(call)
         fun dimension(value: IrExpression): EtsExpression {
@@ -232,6 +245,50 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             }
             "androidx.compose.foundation.layout.height" -> {
                 checkArguments(call, setOf("height")); WidgetModifier.Height(dimension(required("height")), at)
+            }
+            "androidx.compose.foundation.layout.fillMaxWidth",
+            "androidx.compose.foundation.layout.fillMaxHeight",
+            "androidx.compose.foundation.layout.fillMaxSize" -> {
+                checkArguments(call, setOf("fraction"))
+                val fraction = argument(call, "fraction")?.let { value ->
+                    val emitted = scalar(value, scope)
+                    if (emitted.type != EtsTypes.NUMBER)
+                        diagnostics.unsupported(value, "Widget fill fraction requires Float")
+                    val constant = (emitted as? EtsLiteral)?.value as? Number
+                    if (constant != null && (!constant.toDouble().isFinite() || constant.toDouble() !in 0.0..1.0))
+                        diagnostics.unsupported(value, "Widget fill fraction must be finite and between zero and one")
+                    emitted
+                } ?: EtsLiteral(1.0, EtsTypes.NUMBER, at)
+                WidgetModifier.Fill(api != "androidx.compose.foundation.layout.fillMaxHeight",
+                    api != "androidx.compose.foundation.layout.fillMaxWidth", fraction, at)
+            }
+            "androidx.compose.foundation.layout.RowScope.weight",
+            "androidx.compose.foundation.layout.ColumnScope.weight" -> {
+                checkArguments(call, setOf("weight", "fill"))
+                val requiredParent = if (api.contains("RowScope")) WidgetLayoutScope.ROW else WidgetLayoutScope.COLUMN
+                if (parent != requiredParent) diagnostics.unsupported(call,
+                    "Widget weight requires a direct ${requiredParent.name.lowercase().replaceFirstChar(Char::uppercase)} parent")
+                argument(call, "fill")?.let { fill ->
+                    if ((scalar(fill, scope) as? EtsLiteral)?.value != true)
+                        diagnostics.unsupported(fill, "Widget weight requires fill=true")
+                }
+                val value = required("weight")
+                val emitted = scalar(value, scope)
+                if (emitted.type != EtsTypes.NUMBER) diagnostics.unsupported(value, "Widget weight requires Float")
+                val constant = (emitted as? EtsLiteral)?.value as? Number
+                if (constant != null && (!constant.toDouble().isFinite() || constant.toDouble() <= 0.0))
+                    diagnostics.unsupported(value, "Widget weight must be finite and positive")
+                WidgetModifier.Weight(emitted, requiredParent, at)
+            }
+            "androidx.compose.foundation.layout.BoxScope.align" -> {
+                checkArguments(call, setOf("alignment"))
+                if (parent != WidgetLayoutScope.BOX)
+                    diagnostics.unsupported(call, "Widget align requires a direct Box parent")
+                val alignment = required("alignment")
+                val emitted = language.expression(resolve(alignment, scope), scope)
+                if (emitted.type != EtsNamedType("Alignment"))
+                    diagnostics.unsupported(alignment, "Widget align requires Alignment")
+                WidgetModifier.Align(emitted, WidgetLayoutScope.BOX, at)
             }
             "androidx.compose.foundation.layout.padding" -> {
                 checkArguments(call, setOf("all", "horizontal", "vertical", "start", "top", "end", "bottom"))

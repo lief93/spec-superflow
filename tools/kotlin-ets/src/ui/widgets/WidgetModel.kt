@@ -50,6 +50,8 @@ data class WidgetTextStyle<V, S>(val fontSize: WidgetValue<V, S>?,
 
 data class Children<V, S>(val widgets: List<Widget<V, S>>)
 
+enum class WidgetLayoutScope { ROW, COLUMN, BOX }
+
 /** The source kind survives the platform seam; no resource or URL is reduced to source text. */
 sealed interface ImageSource<V, S> {
     val value: V
@@ -65,6 +67,12 @@ sealed interface WidgetModifier<V, S> {
     data class Width<V, S>(val value: V, override val source: S) : WidgetModifier<V, S>
     data class Height<V, S>(val value: V, override val source: S) : WidgetModifier<V, S>
     data class Padding<V, S>(val start: V, val top: V, val end: V, val bottom: V,
+        override val source: S) : WidgetModifier<V, S>
+    data class Fill<V, S>(val width: Boolean, val height: Boolean, val fraction: V,
+        override val source: S) : WidgetModifier<V, S>
+    data class Weight<V, S>(val value: V, val parent: WidgetLayoutScope,
+        override val source: S) : WidgetModifier<V, S>
+    data class Align<V, S>(val value: V, val parent: WidgetLayoutScope,
         override val source: S) : WidgetModifier<V, S>
     data class Background<V, S>(val color: WidgetValue<V, S>, override val source: S) : WidgetModifier<V, S>
     data class Click<V, S>(val onClick: V, val enabled: V?,

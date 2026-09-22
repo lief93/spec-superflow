@@ -30,6 +30,40 @@ fun main() {
     val inner = padding.children!!.single() as EtsUiElement
     check(attribute(inner) == "width")
     check(name(inner.children!!.single() as EtsUiElement) == "Text")
+    val alignmentType = EtsNamedType("Alignment")
+    val alignment = EtsMember(EtsReference(EtsSymbol("arkui:Alignment", "Alignment", alignmentType,
+        source, external = true)), "BottomEnd", alignmentType, source)
+    val rowChild = Widget.Text(string("row child"), noStyle, listOf(
+        WidgetModifier.Fill<EtsExpression, SourceSpan>(true, false, EtsLiteral(0.5, EtsTypes.NUMBER, source), source),
+        WidgetModifier.Weight(number(2), WidgetLayoutScope.ROW, source)), source)
+    val rowLayout = backend.lower(Widget.Row(Children(listOf(rowChild)), emptyList(), source))
+    val weightLayer = rowLayout.children!!.single() as EtsUiElement
+    check(attribute(weightLayer) == "layoutWeight")
+    val fillLayer = weightLayer.children!!.single() as EtsUiElement
+    check(fillLayer.attributes.map { (it.callee as EtsReference).symbol.name } == listOf("width"))
+    check((fillLayer.attributes.single().arguments.single() as EtsLiteral).value == "50.0%")
+    val boxChild = Widget.Text(string("box child"), noStyle, listOf(
+        WidgetModifier.Align<EtsExpression, SourceSpan>(alignment, WidgetLayoutScope.BOX, source),
+        WidgetModifier.Fill(true, true, number(1), source)), source)
+    val boxLayout = backend.lower(Widget.Box(Children(listOf(boxChild)), emptyList(), source))
+    val alignLayer = boxLayout.children!!.single() as EtsUiElement
+    check(attribute(alignLayer) == "align" && alignLayer.attributes.single().arguments.single() == alignment)
+    check((alignLayer.children!!.single() as EtsUiElement).attributes.map {
+        (it.callee as EtsReference).symbol.name } == listOf("width", "height"))
+    val wrongParent = Widget.Column(Children(listOf(rowChild)), emptyList(), source)
+    check(runCatching { backend.lower(wrongParent) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidFill = Widget.Text(string("bad fill"), noStyle, listOf(
+        WidgetModifier.Fill<EtsExpression, SourceSpan>(true, false,
+            EtsLiteral("bad", EtsTypes.STRING, source), source)), source)
+    check(runCatching { backend.lower(invalidFill) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidFraction = Widget.Text(string("bad fraction"), noStyle, listOf(
+        WidgetModifier.Fill<EtsExpression, SourceSpan>(true, false,
+            EtsLiteral(2.0, EtsTypes.NUMBER, source), source)), source)
+    check(runCatching { backend.lower(invalidFraction) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidWeight = Widget.Row(Children(listOf(Widget.Text(string("bad weight"), noStyle,
+        listOf(WidgetModifier.Weight<EtsExpression, SourceSpan>(
+            EtsLiteral(-1, EtsTypes.NUMBER, source), WidgetLayoutScope.ROW, source)), source))), emptyList(), source)
+    check(runCatching { backend.lower(invalidWeight) }.exceptionOrNull() is IllegalArgumentException)
     val click = EtsLambda(emptyList(), emptyList(), EtsTypes.VOID, source)
     val sharedColor = color(7, WidgetValueProvenance.ThemeToken("sample.brand"))
     val shared: List<WidgetModifier<EtsExpression, SourceSpan>> = listOf(
@@ -147,8 +181,9 @@ fun main() {
         WidgetBranch(number(1), Children(emptyList()), source)), source)))
     check(runCatching { backend.lower(invalidConditional) }.exceptionOrNull() is IllegalArgumentException)
     val fn = EtsFunction("view", emptyList(), EtsTypes.VOID,
-        listOf(element, styledText, styledButton, styledImage, resourceImage, urlImage, textField, conditional),
+        listOf(element, rowLayout, boxLayout, styledText, styledButton, styledImage,
+            resourceImage, urlImage, textField, conditional),
         source, builder = true)
     EtsValidator().validate(EtsProgram(listOf(EtsFile("model-only", listOf(fn)))))
-    println("PASS backend without compiler/Compose; values, ordered modifiers, runtime branches and typed rejection")
+    println("PASS backend without compiler/Compose; shared values, scoped layout modifiers, runtime branches and typed rejection")
 }

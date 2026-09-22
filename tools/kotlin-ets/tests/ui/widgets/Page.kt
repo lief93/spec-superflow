@@ -10,6 +10,7 @@ import androidx.compose.material3.Text as Label
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -31,28 +32,31 @@ object KnownTokens {
 
 @Composable
 fun Page(title: String, enabled: Boolean, onAction: () -> Unit, imageUrl: String,
-    input: String, onInput: (String) -> Unit, surfaceColor: Color, lineHeight: TextUnit) {
+    input: String, onInput: (String) -> Unit, surfaceColor: Color, lineHeight: TextUnit,
+    fillFraction: Float) {
     val identity = Modifier
-    val frame = Modifier.width(120.dp).padding(4.dp).width(80.dp)
+    val frame = Modifier.width(120.dp).padding(4.dp).width(80.dp).fillMaxSize(fillFraction)
     Column(modifier = frame.then(identity)) {
         Label(title)
-        Label(stringResource(R.string.title), fontSize = 18.sp, fontWeight = FontWeight.Bold,
+        Label(stringResource(R.string.title), modifier = Modifier.fillMaxWidth(0.5f),
+            fontSize = 18.sp, fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace, lineHeight = lineHeight)
         Label(KnownTokens.label)
         Button(onClick = onAction, enabled = enabled,
             modifier = Modifier.background(KnownTokens.brand)
                 .padding(horizontal = 3.dp, vertical = 2.dp).height(40.dp)) {
-            Row {
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 Label(stringResource(R.string.action), fontSize = KnownTokens.titleSize,
                     fontWeight = KnownTokens.titleWeight, fontFamily = KnownTokens.titleFamily,
                     lineHeight = KnownTokens.titleLineHeight)
-                Box(modifier = Modifier.height(8.dp).then(Modifier.width(12.dp))) {
-                    Label("right")
+                Box(modifier = Modifier.height(8.dp).then(Modifier.width(12.dp)).weight(2f)
+                    .fillMaxHeight(0.5f)) {
+                    Label("right", Modifier.align(Alignment.BottomEnd))
                 }
             }
         }
         Label("after")
-        Row(Modifier.padding(2.dp).width(60.dp).background(Color.Red)) { Label("reverse") }
+        Row(Modifier.weight(1f).padding(2.dp).width(60.dp).background(Color.Red)) { Label("reverse") }
         Box(Modifier.height(2.dp).background(Color(0xFF102030)))
         Label("callback", Modifier.size(width = 36.dp, height = 20.dp).background(surfaceColor)
             .clickable(enabled = enabled, onClick = onAction)

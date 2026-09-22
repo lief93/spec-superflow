@@ -11,6 +11,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -30,7 +31,7 @@ object UnknownTokens {
 }
 
 @Composable fun UnknownWidget() { Checkbox(checked = true, onCheckedChange = {}) }
-@Composable fun UnknownModifier() { Text("x", Modifier.fillMaxWidth()) }
+@Composable fun UnknownModifier() { Text("x", Modifier.offset(1.dp)) }
 @Composable fun WholeTextStyle() { Text("x", style = TextStyle(fontSize = 20.sp)) }
 @Composable fun Conditional() { if (true) while (false) { } else Text("y") }
 @Composable fun Helper() { LocalText("x") }
@@ -71,3 +72,17 @@ fun paintFactory(): Color = Color.Red
 @Composable fun UnknownStringToken() { Text(UnknownTokens.label) }
 @Composable fun UnknownColorToken() { Text("x", Modifier.background(UnknownTokens.color)) }
 @Composable fun UnknownStyleToken() { Text("x", fontSize = UnknownTokens.fontSize) }
+@Composable fun WeightWrongParent() {
+    Row {
+        val weighted = Modifier.weight(1f)
+        Box { Text("x", weighted) }
+    }
+}
+@Composable fun AlignWrongParent() {
+    Box {
+        val aligned = Modifier.align(Alignment.BottomEnd)
+        Row { Text("x", aligned) }
+    }
+}
+@Composable fun WeightWithoutFill() { Column { Text("x", Modifier.weight(1f, fill = false)) } }
+@Composable fun InvalidFillFraction() { Text("x", Modifier.fillMaxWidth(2f)) }

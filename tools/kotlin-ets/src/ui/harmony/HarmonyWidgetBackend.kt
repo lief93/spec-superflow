@@ -5,17 +5,22 @@ import dev.ets.widgets.*
 
 /** Only this module selects native controls and interprets ordered widget modifiers. */
 class HarmonyWidgetBackend {
-    fun lower(children: Children<EtsExpression, SourceSpan>): List<EtsStatement> = children.widgets.map(::lowerStatement)
+    fun lower(children: Children<EtsExpression, SourceSpan>): List<EtsStatement> = lower(children, null)
 
-    private fun lowerStatement(widget: Widget<EtsExpression, SourceSpan>): EtsStatement = when (widget) {
+    private fun lower(children: Children<EtsExpression, SourceSpan>,
+        parent: WidgetLayoutScope?): List<EtsStatement> = children.widgets.map { lowerStatement(it, parent) }
+
+    private fun lowerStatement(widget: Widget<EtsExpression, SourceSpan>,
+        parent: WidgetLayoutScope?): EtsStatement = when (widget) {
         is Widget.Conditional -> EtsIf(widget.branches.map { branch ->
             branch.condition?.let { expect(it, EtsTypes.BOOLEAN, "Conditional.condition", branch.source) }
-            EtsBranch(branch.condition, lower(branch.children))
+            EtsBranch(branch.condition, lower(branch.children, parent))
         }, widget.source)
-        else -> lower(widget)
+        else -> lower(widget, parent)
     }
 
-    fun lower(widget: Widget<EtsExpression, SourceSpan>): EtsUiElement {
+    fun lower(widget: Widget<EtsExpression, SourceSpan>): EtsUiElement = lower(widget, null)
+    private fun lower(widget: Widget<EtsExpression, SourceSpan>, parent: WidgetLayoutScope?): EtsUiElement {
         val at = widget.source
         fun native(name: String, arguments: List<EtsExpression> = emptyList(), children: List<EtsStatement>? = null) =
             EtsUiElement(call(name, arguments, at), children)
@@ -54,7 +59,7 @@ class HarmonyWidgetBackend {
                 val enabled = widget.enabled ?: EtsLiteral(true, EtsTypes.BOOLEAN, at)
                 expect(enabled, EtsTypes.BOOLEAN, "Button.enabled", at)
                 expect(widget.onClick, EtsFunctionType(emptyList(), EtsTypes.VOID), "Button.onClick", at)
-                val content = native("Row", children = lower(widget.content)).copy(attributes = listOf(
+                val content = native("Row", children = lower(widget.content, WidgetLayoutScope.ROW)).copy(attributes = listOf(
                     call("alignItems", listOf(enumValue("VerticalAlign", "Center", at)), at),
                     call("justifyContent", listOf(enumValue("FlexAlign", "Center", at)), at)))
                 native("Button", children = listOf(content)).copy(attributes = listOf(
@@ -72,17 +77,19 @@ class HarmonyWidgetBackend {
                     call("enabled", listOf(enabled), at),
                     call("onChange", listOf(widget.onValueChange), at)))
             }
-            is Widget.Row -> native("Row", children = lower(widget.children)).copy(attributes = listOf(
+            is Widget.Row -> native("Row", children = lower(widget.children, WidgetLayoutScope.ROW)).copy(attributes = listOf(
                 call("alignItems", listOf(enumValue("VerticalAlign", "Top", at)), at)))
-            is Widget.Column -> native("Column", children = lower(widget.children)).copy(attributes = listOf(
+            is Widget.Column -> native("Column", children = lower(widget.children, WidgetLayoutScope.COLUMN)).copy(attributes = listOf(
                 call("alignItems", listOf(enumValue("HorizontalAlign", "Start", at)), at)))
-            is Widget.Box -> native("Stack", listOf(stackOptions(at)), lower(widget.children))
+            is Widget.Box -> native("Stack", listOf(stackOptions(at)), lower(widget.children, WidgetLayoutScope.BOX))
             is Widget.Conditional -> throw IllegalArgumentException(
                 "Conditional widgets require a children boundary at $at")
         }
-        // A distinct wrapper per operation retains its position and duplicates.
-        // This preserves semantic structure, not Compose's complete measure policy.
-        return widget.modifiers.asReversed().fold(element) { child, modifier ->
+        // Ordinary operations retain their positions and duplicates. Parent-data
+        // operations are hoisted afterward so Row/Column/Box sees them on its
+        // direct child, while their neutral-model order remains intact.
+        val ordinary = widget.modifiers.filterNot { it is WidgetModifier.Weight || it is WidgetModifier.Align }
+        val wrapped = ordinary.asReversed().fold(element) { child, modifier ->
             val source = modifier.source
             val attributes = when (modifier) {
                 is WidgetModifier.Size -> {
@@ -106,6 +113,24 @@ class HarmonyWidgetBackend {
                     listOf(call("padding", listOf(EtsObject(sides,
                         EtsRecordType("Padding", sides.mapValues { EtsTypes.NUMBER }), source)), source))
                 }
+                is WidgetModifier.Fill -> {
+                    expect(modifier.fraction, EtsTypes.NUMBER, "Fill.fraction", source)
+                    val constant = (modifier.fraction as? EtsLiteral)?.value as? Number
+                    require(constant == null || constant.toDouble().isFinite() && constant.toDouble() in 0.0..1.0) {
+                        "Fill.fraction must be finite and between zero and one at $source"
+                    }
+                    val length = percentage(modifier.fraction, source)
+                    buildList {
+                        if (modifier.width) add(call("width", listOf(length), source))
+                        if (modifier.height) add(call("height", listOf(length), source))
+                    }.also { require(it.isNotEmpty()) { "Fill requires at least one axis at $source" } }
+                }
+                is WidgetModifier.Weight -> {
+                    error("Scoped modifier remained in ordinary widget modifiers")
+                }
+                is WidgetModifier.Align -> {
+                    error("Scoped modifier remained in ordinary widget modifiers")
+                }
                 is WidgetModifier.Background -> {
                     val color = consume(modifier.color, WidgetValueType.COLOR)
                     listOf(call("backgroundColor", listOf(color), source))
@@ -120,6 +145,39 @@ class HarmonyWidgetBackend {
             }
             EtsUiElement(call("Stack", listOf(stackOptions(source)), source), listOf(child), attributes)
         }
+        return widget.modifiers.filter { it is WidgetModifier.Weight || it is WidgetModifier.Align }
+            .asReversed().fold(wrapped) { child, modifier ->
+                val source = modifier.source
+                val attributes = when (modifier) {
+                    is WidgetModifier.Weight -> {
+                        require(modifier.parent == parent && parent in setOf(WidgetLayoutScope.ROW, WidgetLayoutScope.COLUMN)) {
+                            "Weight requires its recorded Row or Column parent at $source; got $parent"
+                        }
+                        expect(modifier.value, EtsTypes.NUMBER, "Weight.value", source)
+                        val constant = (modifier.value as? EtsLiteral)?.value as? Number
+                        require(constant == null || constant.toDouble().isFinite() && constant.toDouble() > 0.0) {
+                            "Weight.value must be finite and positive at $source"
+                        }
+                        listOf(call("layoutWeight", listOf(modifier.value), source))
+                    }
+                    is WidgetModifier.Align -> {
+                        require(modifier.parent == WidgetLayoutScope.BOX && parent == WidgetLayoutScope.BOX) {
+                            "Align requires its recorded Box parent at $source; got $parent"
+                        }
+                        expect(modifier.value, EtsNamedType("Alignment"), "Align.value", source)
+                        listOf(call("align", listOf(modifier.value), source))
+                    }
+                    else -> error("Ordinary modifier entered scoped widget modifiers")
+                }
+                EtsUiElement(call("Stack", listOf(stackOptions(source)), source), listOf(child), attributes)
+            }
+    }
+
+    private fun percentage(fraction: EtsExpression, at: SourceSpan): EtsExpression {
+        val constant = (fraction as? EtsLiteral)?.value as? Number
+        if (constant != null) return EtsLiteral("${constant.toDouble() * 100}%", EtsTypes.STRING, at)
+        return EtsBinary("+", EtsBinary("*", fraction, EtsLiteral(100, EtsTypes.NUMBER, at),
+            EtsTypes.NUMBER, at), EtsLiteral("%", EtsTypes.STRING, at), EtsTypes.STRING, at)
     }
 
     /** The only target-type interpretation for semantic widget values. */
