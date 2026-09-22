@@ -7,6 +7,11 @@ generator remains authoritative and still fails closed. If generation rejects
 a node, the retained report is annotated with that first observed failure before
 the CLI returns it.
 
+The report also records `projectCompilerVersion`, `frontendCompilerVersion` and
+`compatibilityDecision`. Direct source input has no project compiler version and
+uses `direct_source_input`; compatible project input records the collected and
+fixed frontend versions plus the boundary decision.
+
 Pass `--preflight-out /fresh/path/core-profile.json` to retain the scan. The
 Gradle project entry accepts and forwards the same option. Existing report paths
 are rejected before compilation. The CLI always runs the scan; without the
@@ -72,6 +77,9 @@ appearing in the report.
   default, expected target types and exact 1-based locations;
 - `Platform.kt` and a separately compiled `Dependency.kt` prove project-
   dependency classification, source-linked failure and no target;
+- a real Kotlin 2.3.20 dependency compiled from the existing local cache proves
+  that the fixed 2.1.20 frontend emits an incompatible metadata diagnostic and
+  source resolution failure, with no preflight report or target;
 - the existing nontrivial `ComposableValues.kt` proves Compose classification
   with the real dependency classpath;
 - `Coverage.kt` proves neutral widget, Modifier and resource grouping and
@@ -102,11 +110,11 @@ The accepted baseline has two neutral widget calls at 100%, one Modifier call at
 project dependency have no calls in this selected entry and therefore report a
 `null` percentage. The first conversion gap is
 `R.drawable.loading_img` at line 73, column 46, owned by
-`ImageResources.kt`; no target is emitted. The public project pins Kotlin 2.1.0
-while the production project launcher requires 2.1.20, so the runner records
-that version mismatch as a separate P0 project-dependency gap and uses the fixed
-2.1.20 CLI only for the coverage attempt. It does not claim project generation
-compatibility.
+`ImageResources.kt`; no target is emitted. The public project pins Kotlin 2.1.0,
+which the production project launcher admits through its fixed 2.1.20 frontend
+as `same_language_line_older_patch`. The runner uses that single formal project
+path through collection, compatibility validation, FIR/FIR2IR and Core Profile;
+the resource reference is now the first real P0 gap.
 
 Final verification evidence:
 
@@ -114,11 +122,11 @@ Final verification evidence:
 | --- | --- | --- |
 | RED: option absent | `--preflight-out` rejected as unknown | `tests/preflight/.work/run-llBELG` |
 | RED: empty UI | empty `@Builder` was generated silently | `tests/preflight/.work/run-ZdiDg6` |
-| Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations and negative no-target cases | `tests/preflight/.work/run-gcipOx` |
-| Mars Photos public baseline | widget 100%, Modifier 100%, resources 50%; two explicit P0 gaps; no target | `tests/preflight/.work/mars-photos-Lh41tH` |
+| Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations, incompatible binary metadata and negative no-target cases | `tests/preflight/.work/run-lTlLnA` |
+| Mars Photos public baseline | Kotlin 2.1.0 enters the 2.1.20 frontend; widget 100%, Modifier 100%, resources 50%; one resource P0; no target | `tests/preflight/.work/mars-photos-VzU1a0` |
 | Full language suite | pass | `tests/language/.work/run-01EAKd` |
 | Module suite | 44 JVM/module cases pass | `tests/modules/.work/run-KWHnWz` |
 | Typed backend suite | pass | `tests/preflight/.work/kotlin-ets-backend-tests.SCdkSg` |
-| Project launcher | 15 tests pass | `node --test tests/project-inputs/launcher.test.mjs` |
+| Project launcher | 16 tests pass | `node --test tests/project-inputs/launcher.test.mjs` |
 | CLI diagnostic integration | 6 tests pass | `python3 -m unittest tools.kotlin-ets.tests.integration.test_cli` |
 | Compose degradation regression | pass | `/var/folders/fj/rrz0bjhx6cq04j7yghy2qkxh0000gn/T/kotlin-ets-degradation-PJ4eY6` |

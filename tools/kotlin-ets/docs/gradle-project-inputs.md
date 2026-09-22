@@ -105,30 +105,51 @@ Dependencies on classpath are available for resolution, not automatically copied
 or fully rewritten into ETS. Source ownership, binary-body coverage and framework
 support remain the backend's existing bounded contracts.
 
-### Compiler plugins (bounded to Kotlin 2.1.20)
+### Fixed frontend compatibility and compiler plugins
 
-Project mode now captures `serializedCompilerArguments` from the real task. It
-loads the captured serialization compiler plugin and forwards its `-P` options
-through the official configuration/FIR/FIR2IR phases. There is no custom plugin
-execution engine. Ordinary language/API version, opt-ins, JVM target/module name,
-JDK home and the supported semantic flags are forwarded by `compiler-environment.mjs`.
-No extra command option or manually supplied plugin JAR is required in project mode.
+Project mode captures `serializedCompilerArguments` from the real task. Compatible
+plugins and options are forwarded through the official configuration/FIR/FIR2IR
+phases; the exact 2.1.20 serialization plugin is one verified case. There is no
+custom plugin execution engine. Ordinary language/API version, opt-ins, JVM
+target/module name, JDK home and the supported semantic flags are forwarded by
+`compiler-environment.mjs`. No extra command option or manually supplied plugin
+JAR is required in project mode.
 
-The backend still uses its pinned compiler version; a different collected compiler
-version fails before compilation. Unknown compiler arguments still fail explicitly
-at `compiler-environment`. Plugin classpaths and options are forwarded to Kotlin's
-official loader: a classpath can contain both plugin implementations and helper
-JARs, so artifact filenames are not an implementation whitelist. Kotlin validates
-registration, option ownership and compatibility. Invalid plugins/options fail
-in official configuration/frontend phases, with compiler logs retained.
+The backend uses the pinned Kotlin 2.1.20 frontend. Project input is compatible
+when its compiler is a stable numeric version on the same `2.1` language line
+and its patch is no newer than 20. Thus 2.1.20 is exact and 2.1.0 enters the same
+formal frontend/lowering path; 2.0.x, 2.2.x, patches newer than 2.1.20,
+prereleases and a missing project compiler version fail before compilation.
+`compiler-environment.json` and every successful Core Profile report record
+`projectCompilerVersion`, `frontendCompilerVersion` and
+`compatibilityDecision`. Direct source input records a null project version and
+`direct_source_input`.
+
+This source/compiler decision does not bypass binary metadata validation. The
+real K2 frontend reads every dependency header. Incompatible metadata emits the
+official dependency diagnostic plus source resolution errors and produces no
+preflight report or ETS. `-Xallow-unstable-dependencies` is excluded and recorded;
+metadata compatibility-skip options are unsupported and fail closed. The
+compatibility boundary downloads no compiler and rewrites no project version.
+
+Unknown compiler arguments still fail explicitly at `compiler-environment`.
+Plugin classpaths and options are forwarded to Kotlin's official loader: a
+classpath can contain both plugin implementations and helper JARs, so artifact
+filenames are not an implementation whitelist. Kotlin validates registration,
+option ownership and compatibility. Invalid plugins/options fail in official
+configuration/frontend phases, with compiler logs retained.
 
 Gradle destination/classpath settings are replaced by the ETS entry's own paths.
 Known scripting registrar JARs are excluded because collection accepts only
 `.kt`/`.java`, not scripts; ordinary helper dependencies remain on the plugin
-classpath. The known Compose JVM plugin/options are recorded as target-owned
-exclusions: Compose is handled by the existing ArkUI adapter, not rewritten into
-JVM Composer calls before that adapter. This does not claim every Compose compiler
-option has an ArkUI equivalent. All exclusions are visible in the environment report.
+classpath. Compose JVM plugins/options are recorded as target-owned exclusions
+at every compatible patch because the existing ArkUI adapter owns UI lowering.
+For an older compatible patch, its serialization plugin and options are also
+excluded because compiler plugins are version-coupled and the 2.1.0 plugin cannot
+run in the 2.1.20 frontend. Serializer references must already resolve from source
+or dependencies; otherwise normal K2 analysis fails. Other version-coupled
+project compiler plugins from an older patch are rejected. Exact 2.1.20 plugin
+behavior remains forwarded. All exclusions are visible in the environment report.
 
 This reuses plugin loading, not arbitrary JVM backend execution. Plugin-generated
 declarations may still hit a source-linked backend limitation.
@@ -158,7 +179,11 @@ Do not report collection or generation as successful application installation.
 - `tests/project-inputs/collector/.work/run-Xdv3HN/complete.json`: real JVM/Android
   inputs and compiler-environment classification passed with six rejection cases.
 - `tests/project-inputs/.work/public-Pr1fhR/result.json`: plugin-free project
-  generation and function host execution still pass. Policy/launcher tests: 12 passed.
+  generation and function host execution still pass.
+- `node --test tools/kotlin-ets/tests/project-inputs/compiler-environment.test.mjs`:
+  six compatibility, plugin and fail-closed policy tests pass.
+- `node --test tools/kotlin-ets/tests/project-inputs/launcher.test.mjs`: 16 tests
+  pass, including incompatible project compiler rejection with no report or ETS.
 
 ## Earlier verification (2026-09-14)
 

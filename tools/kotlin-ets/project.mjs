@@ -158,6 +158,7 @@ export function main(args) {
     stage = 'compiler';
     const compilerArgs = [join(root, 'kotlin-ets'), '--mode', options.mode, options.outputFlag, options.output,
       '--unsupported-policy', options.unsupportedPolicy,
+      '--project-compiler-version', environment.projectCompilerVersion,
       '--classpath-file', classpath, '--sources-file', sources, '--frontend-arguments-file', frontendArguments,
       ...(options.entry ? ['--entry', options.entry] : []),
       ...(options.imageResources ? ['--image-resources', options.imageResources] : []),

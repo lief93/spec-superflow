@@ -36,24 +36,28 @@ run('detached-worktree', 'git', ['-C', seed, 'worktree', 'add', '--detach', proj
 try {
   const androidHome = process.env.ANDROID_HOME ?? join(process.env.HOME, 'Library/Android/sdk');
   assert.ok(existsSync(join(androidHome, 'platforms/android-35/android.jar')), `Android 35 SDK missing: ${androidHome}`);
-  const collected = join(evidence, 'project-inputs');
-  const collection = run('collect', 'node', [join(root, 'project.mjs'), '--project', project, '--module', ':app',
-    '--variant', 'debug', '--collect-only', '--work-dir', collected, '--offline'], { env: { ANDROID_HOME: androidHome } });
-  const collectionResult = JSON.parse(collection.stdout);
-  assert.equal(collectionResult.ok, true);
-  const inputs = JSON.parse(readFileSync(collectionResult.inputs, 'utf8'));
-  assert.equal(inputs.compilerVersion, '2.1.0');
-
+  const projectRun = join(evidence, 'project-run');
   const output = join(evidence, 'LoadingScreen.ets');
   const reportPath = join(evidence, 'core-profile.json');
-  const compilation = run('preflight', 'bash', [join(root, 'kotlin-ets'), '--mode', 'page',
-    '--unsupported-policy', 'error', '--entry', entry, '--classpath-file', join(collected, 'classpath.txt'),
-    '--sources-file', join(collected, 'sources.txt'), '--out', output, '--preflight-out', reportPath], {}, 2);
+  const compilation = run('project-preflight', 'node', [join(root, 'project.mjs'), '--project', project,
+    '--module', ':app', '--variant', 'debug', '--mode', 'page', '--unsupported-policy', 'error', '--entry', entry,
+    '--out', output, '--preflight-out', reportPath, '--work-dir', projectRun, '--offline'],
+  { env: { ANDROID_HOME: androidHome } }, 2);
   assert.equal(JSON.parse(compilation.stdout).code, 'UNSUPPORTED');
   assert.equal(existsSync(output), false);
 
+  const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
+  assert.equal(inputs.compilerVersion, '2.1.0');
+  const environment = JSON.parse(readFileSync(join(projectRun, 'compiler-environment.json'), 'utf8'));
+  assert.equal(environment.projectCompilerVersion, '2.1.0');
+  assert.equal(environment.frontendCompilerVersion, '2.1.20');
+  assert.equal(environment.compatibilityDecision, 'same_language_line_older_patch');
+
   const report = JSON.parse(readFileSync(reportPath, 'utf8'));
   assert.equal(report.schemaVersion, 2);
+  assert.equal(report.projectCompilerVersion, '2.1.0');
+  assert.equal(report.frontendCompilerVersion, '2.1.20');
+  assert.equal(report.compatibilityDecision, 'same_language_line_older_patch');
   assert.deepEqual(Object.keys(report.coverage), ['language_semantics', 'standard_library', 'neutral_compose_widget',
     'modifier', 'resources', 'project_dependencies']);
   assert.deepEqual(report.counts, { language_semantics: 0, standard_library: 0, neutral_compose_widget: 2,
@@ -77,19 +81,18 @@ try {
   const baseline = {
     schemaVersion: 1,
     project: { repository, revision, entry },
-    compiler: { project: inputs.compilerVersion, coverageFrontend: '2.1.20' },
+    compiler: { project: report.projectCompilerVersion, frontend: report.frontendCompilerVersion,
+      compatibilityDecision: report.compatibilityDecision },
     coverage: report.coverage,
     p0Gaps: [
-      { category: 'project_dependencies', node: 'compiler_environment', responsibleModule: 'tools/kotlin-ets/compiler-environment.mjs',
-        detail: 'The public project pins Kotlin 2.1.0; production project generation requires 2.1.20.' },
       { category: 'resources', node: 'com.example.marsphotos.R.drawable.loading_img',
         responsibleModule: report.firstUnsupportedNode.responsibleModule, source: report.firstUnsupportedNode.source,
         detail: report.firstUnsupportedNode.message },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
-  console.log('PASS Mars Photos 8399c839: production input collection and Core Profile coverage baseline');
-  console.log('PASS no target: compiler-version mismatch and first resource gap remain explicit P0 records');
+  console.log('PASS Mars Photos 8399c839: Kotlin 2.1.0 project enters the formal 2.1.20 frontend and Core Profile path');
+  console.log('PASS no target: first real resource gap remains explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -21,6 +21,14 @@ function run(label, command, args, expected = 0) {
 const cli = join(root, 'kotlin-ets');
 const compiler = join(root, 'tests/stdlib/compiler.sh');
 const compilerClasspath = run('classpath', 'bash', [compiler, '--classpath']).stdout.trim();
+function cachedJar(group, artifact, version) {
+  const directory = join(process.env.HOME, '.gradle/caches/modules-2/files-2.1', group, artifact, version);
+  for (const hash of readdirSync(directory).sort()) {
+    const candidate = join(directory, hash, `${artifact}-${version}.jar`);
+    if (existsSync(candidate)) return candidate;
+  }
+  assert.fail(`Required cached compiler artifact is absent: ${group}:${artifact}:${version}`);
+}
 function compile(label, modeArgs, source, expected = 0, classpath = compilerClasspath) {
   const output = join(work, `${label}.ets`);
   const preflight = join(work, `${label}.preflight.json`);
@@ -37,6 +45,9 @@ const positive = compile('core-profile', ['--mode', 'language'], join(here, 'Cor
 assert.equal(JSON.parse(positive.result.stdout).ok, true);
 assert.ok(existsSync(positive.output));
 assert.equal(positive.report.schemaVersion, 2);
+assert.equal(positive.report.projectCompilerVersion, null);
+assert.equal(positive.report.frontendCompilerVersion, '2.1.20');
+assert.equal(positive.report.compatibilityDecision, 'direct_source_input');
 assert.deepEqual(new Set(positive.report.calls.map(call => call.category)), new Set(['language_semantics', 'standard_library']));
 const local = entry(positive.report, 'preflightfixture.withSourceDefault(');
 assert.equal(local.expectedTargetType, 'string');
@@ -67,6 +78,32 @@ const dependency = compile('dependency', ['--mode', 'language'], join(here, 'Dep
 assert.equal(JSON.parse(dependency.result.stdout).code, 'UNSUPPORTED');
 assert.equal(entry(dependency.report, 'projectdependency.dependencyValue(').category, 'project_dependencies');
 assert.equal(existsSync(dependency.output), false);
+
+const newerCompilerClasspath = [
+  ['org.jetbrains.kotlin', 'kotlin-compiler-embeddable', '2.3.20'],
+  ['org.jetbrains.kotlin', 'kotlin-stdlib', '2.3.20'],
+  ['org.jetbrains.kotlin', 'kotlin-script-runtime', '2.3.20'],
+  ['org.jetbrains.kotlin', 'kotlin-reflect', '2.3.20'],
+  ['org.jetbrains.kotlin', 'kotlin-daemon-embeddable', '2.3.20'],
+  ['org.jetbrains.intellij.deps', 'trove4j', '1.0.20200330'],
+  ['org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm', '1.10.1'],
+  ['org.jetbrains', 'annotations', '13.0'],
+].map(coordinates => cachedJar(...coordinates)).join(':');
+const newerDependencyJar = join(work, 'newer-metadata.jar');
+run('newer-metadata-compile', 'java', ['-cp', newerCompilerClasspath,
+  'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler', '-no-stdlib', '-no-reflect',
+  '-classpath', newerCompilerClasspath, '-d', newerDependencyJar, join(here, 'NewerMetadata.kt')]);
+const incompatibleMetadataOutput = join(work, 'incompatible-metadata.ets');
+const incompatibleMetadataReport = join(work, 'incompatible-metadata.preflight.json');
+const incompatibleMetadata = run('incompatible-metadata', 'bash', [cli, '--mode', 'language',
+  '--preflight-out', incompatibleMetadataReport, '--classpath', `${compilerClasspath}:${newerDependencyJar}`,
+  '--out', incompatibleMetadataOutput, join(here, 'NewerMetadataConsumer.kt')], 1);
+assert.equal(JSON.parse(incompatibleMetadata.stdout).code, 'COMPILATION_REJECTED');
+assert.match(incompatibleMetadata.stderr,
+  /module was compiled with an incompatible version of Kotlin.*binary version of its metadata is 2\.3\.0, expected version is 2\.1\.0/);
+assert.match(incompatibleMetadata.stderr, /NewerMetadataConsumer\.kt:3:49: error: \[UNRESOLVED_REFERENCE\]/);
+assert.equal(existsSync(incompatibleMetadataReport), false);
+assert.equal(existsSync(incompatibleMetadataOutput), false);
 
 const probe = process.env.KOTLIN_ETS_PROBE ?? '/tmp/kotlin-official-frontend-probe-06';
 const composeClasspath = JSON.parse(readFileSync(join(probe, 'classpath.json'), 'utf8')).join(':');

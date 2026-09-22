@@ -25,7 +25,7 @@ fun main(arguments: Array<String>) {
         while (index < arguments.size) {
             val item = arguments[index++]
             if (item.startsWith("--")) {
-                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--string-resources", "--font-resources", "--frontend-arguments-file", "--unsupported-policy", "--preflight-out")) { "Unknown option $item" }
+                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--string-resources", "--font-resources", "--frontend-arguments-file", "--unsupported-policy", "--preflight-out", "--project-compiler-version")) { "Unknown option $item" }
                 require(index < arguments.size) { "Missing value for $item" }
                 options[item] = arguments[index++]
             } else sources.add(item)
@@ -63,6 +63,7 @@ fun main(arguments: Array<String>) {
             File(path).readLines().filter { it.isNotBlank() }.joinToString(File.pathSeparator)
         } ?: requireNotNull(System.getenv("KOTLIN_ETS_STDLIB")) { "Kotlin stdlib path missing" }
         val frontendArgs = options["--frontend-arguments-file"]?.let { File(it).readLines().filter(String::isNotBlank) }.orEmpty()
+        val compilerEnvironment = coreProfileCompilerEnvironment(options["--project-compiler-version"])
         val defaultJvmTarget = if (frontendArgs.any { it == "-jvm-target" || it.startsWith("-jvm-target=") ||
             it == "-Xjdk-release" || it.startsWith("-Xjdk-release=") }) emptyList() else listOf("-jvm-target", "17")
         val compilerArgs = defaultJvmTarget + frontendArgs +
@@ -83,7 +84,7 @@ fun main(arguments: Array<String>) {
         }) { frontend ->
             val module = frontend.module
             val backend = EtsBackend(diagnostics, rules, frontend.types)
-            preflight = coreProfilePreflight(module, backend.language, diagnostics)
+            preflight = coreProfilePreflight(module, backend.language, diagnostics, compilerEnvironment)
             fun publishPreflight() = preflightOutput?.let { file ->
                 Files.createDirectories(file.absoluteFile.parentFile.toPath())
                 Files.writeString(file.toPath(), coreProfileJson(requireNotNull(preflight)), CREATE_NEW)

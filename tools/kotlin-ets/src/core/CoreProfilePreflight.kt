@@ -20,6 +20,36 @@ enum class CoreProfileCategory(val jsonName: String, val responsibleModule: Stri
     PROJECT_DEPENDENCY("project_dependencies", "tools/kotlin-ets/src/adapters/AdapterModules.kt"),
 }
 
+private const val CORE_PROFILE_FRONTEND_COMPILER_VERSION = "2.1.20"
+
+data class CoreProfileCompilerEnvironment(
+    val projectCompilerVersion: String?,
+    val frontendCompilerVersion: String = CORE_PROFILE_FRONTEND_COMPILER_VERSION,
+    val compatibilityDecision: String,
+)
+
+fun coreProfileCompilerEnvironment(projectCompilerVersion: String?): CoreProfileCompilerEnvironment {
+    if (projectCompilerVersion == null) return CoreProfileCompilerEnvironment(null,
+        compatibilityDecision = "direct_source_input")
+    fun parse(value: String, label: String): List<Int> {
+        require(Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(value)) {
+            "$label must be a stable numeric Kotlin version (major.minor.patch): $value"
+        }
+        return value.split('.').map(String::toInt)
+    }
+    val project = parse(projectCompilerVersion, "Project compiler version")
+    val frontend = parse(CORE_PROFILE_FRONTEND_COMPILER_VERSION, "ETS frontend compiler version")
+    require(project.take(2) == frontend.take(2)) {
+        "Incompatible Kotlin compiler line: project $projectCompilerVersion, ETS frontend $CORE_PROFILE_FRONTEND_COMPILER_VERSION; " +
+            "the project major/minor must match the frontend"
+    }
+    require(project[2] <= frontend[2]) {
+        "Incompatible newer Kotlin patch: project $projectCompilerVersion, ETS frontend $CORE_PROFILE_FRONTEND_COMPILER_VERSION"
+    }
+    val decision = if (project[2] == frontend[2]) "exact_frontend_version" else "same_language_line_older_patch"
+    return CoreProfileCompilerEnvironment(projectCompilerVersion, compatibilityDecision = decision)
+}
+
 data class CoreProfileArgumentResolution(val parameter: String, val resolution: String)
 
 data class CoreProfileNode(val kind: String, val symbol: String, val source: SourceSpan)
@@ -45,6 +75,7 @@ data class CoreProfileCall(
 
 data class CoreProfileReport(
     val calls: List<CoreProfileCall>,
+    val compilerEnvironment: CoreProfileCompilerEnvironment,
     val firstUnsupportedNode: CoreProfileUnsupportedNode? = null,
     internal val recognizedNodes: List<CoreProfileNode> = emptyList(),
 ) {
@@ -114,7 +145,8 @@ private fun responsibleModule(call: IrCall, category: CoreProfileCategory): Stri
     else -> category.responsibleModule
 }
 
-fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnostics: DiagnosticSink): CoreProfileReport {
+fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnostics: DiagnosticSink,
+    compilerEnvironment: CoreProfileCompilerEnvironment = coreProfileCompilerEnvironment(null)): CoreProfileReport {
     val calls = mutableListOf<CoreProfileCall>()
     val recognizedNodes = mutableListOf<CoreProfileNode>()
     module.files.forEach { file ->
@@ -166,7 +198,7 @@ fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnosti
         })
     }
     val sorted = calls.sortedWith(compareBy({ it.source.file }, { it.source.start }, { it.resolvedSymbol }))
-    return CoreProfileReport(sorted, sorted.firstNotNullOfOrNull { it.firstUnsupportedNode }, recognizedNodes)
+    return CoreProfileReport(sorted, compilerEnvironment, sorted.firstNotNullOfOrNull { it.firstUnsupportedNode }, recognizedNodes)
 }
 
 internal fun coreProfileJson(report: CoreProfileReport): String {
@@ -196,7 +228,11 @@ internal fun coreProfileJson(report: CoreProfileReport): String {
         quote(category.jsonName) + ":{\"total\":" + values.size + ",\"recognized\":" + recognized +
             ",\"unsupported\":" + (values.size - recognized) + ",\"percentage\":" + percentage + "}"
     }
-    return "{\"schemaVersion\":2,\"counts\":{" + counts + "},\"coverage\":{" + coverage + "}" +
+    return "{\"schemaVersion\":2,\"projectCompilerVersion\":" +
+        (report.compilerEnvironment.projectCompilerVersion?.let(::quote) ?: "null") +
+        ",\"frontendCompilerVersion\":" + quote(report.compilerEnvironment.frontendCompilerVersion) +
+        ",\"compatibilityDecision\":" + quote(report.compilerEnvironment.compatibilityDecision) +
+        ",\"counts\":{" + counts + "},\"coverage\":{" + coverage + "}" +
         ",\"firstUnsupportedNode\":" + (report.firstUnsupportedNode?.let(::unsupported) ?: "null") +
         ",\"calls\":[\n" + report.calls.joinToString(",\n", transform = ::call) + "\n]}\n"
 }

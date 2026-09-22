@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -164,4 +164,25 @@ test('public launcher refuses existing targets before Gradle executes', () => {
   assert.equal(result.status, 1);
   assert.match(JSON.parse(result.stdout).message, /Refusing to overwrite/);
   assert.equal(readFileSync(output, 'utf8'), 'user code');
+});
+
+test('incompatible project compiler version fails at the project boundary without report or ETS', () => {
+  const project = mkdtempSync(join(tmpdir(), 'kotlin-ets-incompatible-version-'));
+  const source = join(project, 'App.kt');
+  const jar = join(project, 'dependency.jar');
+  writeFileSync(source, 'fun value() = 1\n');
+  writeFileSync(jar, 'fixture');
+  const manifest = { schemaVersion: 1, sources: [source], classpath: [jar], compilerVersion: '2.2.0',
+    compilerArguments: [] };
+  writeFileSync(join(project, 'gradlew'), `#!/usr/bin/env bash\nfor arg in "$@"; do\n  case "$arg" in\n    -PkotlinEtsInputsOutput=*) printf '%s' '${JSON.stringify(manifest)}' > "\${arg#*=}" ;;\n  esac\ndone\n`);
+  const output = join(project, 'out.ets');
+  const preflight = join(project, 'preflight.json');
+  const result = spawnSync('bash', [launcher, '--project', project, '--module', ':', '--compile-task', 'compileKotlin',
+    '--mode', 'language', '--out', output, '--preflight-out', preflight], { encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  const diagnostic = JSON.parse(result.stdout);
+  assert.equal(diagnostic.stage, 'compiler-environment');
+  assert.match(diagnostic.message, /project 2\.2\.0, ETS frontend 2\.1\.20/);
+  assert.equal(existsSync(output), false);
+  assert.equal(existsSync(preflight), false);
 });
