@@ -120,6 +120,26 @@ class HarmonyWidgetBackend {
         val ordinary = widget.modifiers.filterNot { it is WidgetModifier.Weight || it is WidgetModifier.Align }
         val wrapped = ordinary.asReversed().fold(element) { child, modifier ->
             val source = modifier.source
+            if (modifier is WidgetModifier.Scroll) {
+                expect(modifier.offset, EtsTypes.NUMBER, "Scroll.offset", source)
+                expect(modifier.enabled, EtsTypes.BOOLEAN, "Scroll.enabled", source)
+                expect(modifier.onScroll,
+                    EtsFunctionType(listOf(EtsTypes.NUMBER, EtsTypes.NUMBER), EtsTypes.VOID),
+                    "Scroll.onScroll", source)
+                val zero = EtsLiteral(0, EtsTypes.NUMBER, source)
+                val offsets = if (modifier.axis == WidgetScrollAxis.VERTICAL)
+                    linkedMapOf("xOffset" to zero, "yOffset" to modifier.offset)
+                else linkedMapOf("xOffset" to modifier.offset, "yOffset" to zero)
+                return@fold EtsUiElement(call("Scroll", emptyList(), source), listOf(child), listOf(
+                    call("scrollable", listOf(enumValue("ScrollDirection",
+                        if (modifier.axis == WidgetScrollAxis.VERTICAL) "Vertical" else "Horizontal", source)), source),
+                    call("initialOffset", listOf(EtsObject(offsets,
+                        EtsRecordType("OffsetOptions", offsets.mapValues { EtsTypes.NUMBER }), source)), source),
+                    call("scrollBar", listOf(enumValue("BarState", "Off", source)), source),
+                    call("enableScrollInteraction", listOf(modifier.enabled), source),
+                    call("align", listOf(enumValue("Alignment", "TopStart", source)), source),
+                    call("onScroll", listOf(modifier.onScroll), source)))
+            }
             val attributes = when (modifier) {
                 is WidgetModifier.Size -> {
                     expect(modifier.width, EtsTypes.NUMBER, "Size.width", source)
@@ -171,6 +191,7 @@ class HarmonyWidgetBackend {
                     listOf(call("enabled", listOf(enabled), source),
                         call("onClick", listOf(modifier.onClick), source))
                 }
+                is WidgetModifier.Scroll -> error("Scroll modifier bypassed its native wrapper")
             }
             EtsUiElement(call("Stack", listOf(stackOptions(source)), source), listOf(child), attributes)
         }

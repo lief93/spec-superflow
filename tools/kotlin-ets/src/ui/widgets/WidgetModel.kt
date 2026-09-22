@@ -58,6 +58,7 @@ data class Children<V, S>(val widgets: List<Widget<V, S>>)
 data class IndexedChildren<V, S>(val index: V, val children: Children<V, S>, val source: S)
 
 enum class WidgetLayoutScope { ROW, COLUMN, BOX }
+enum class WidgetScrollAxis { VERTICAL, HORIZONTAL }
 
 /** The source kind survives the platform seam; no resource or URL is reduced to source text. */
 sealed interface ImageSource<V, S> {
@@ -84,4 +85,6 @@ sealed interface WidgetModifier<V, S> {
     data class Background<V, S>(val color: WidgetValue<V, S>, override val source: S) : WidgetModifier<V, S>
     data class Click<V, S>(val onClick: V, val enabled: V?,
         override val source: S) : WidgetModifier<V, S>
+    data class Scroll<V, S>(val axis: WidgetScrollAxis, val offset: V, val onScroll: V,
+        val enabled: V, override val source: S) : WidgetModifier<V, S>
 }

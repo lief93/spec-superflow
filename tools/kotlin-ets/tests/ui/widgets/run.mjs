@@ -22,6 +22,7 @@ const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
   'BackendTest.kt', 'WidgetProbe.kt', 'CoreProfile.kt', 'CoreProfilePipelineProbe.kt',
   'StateProfile.kt', 'UnsupportedState.kt', 'StateJvmOracle.kt', 'StatePipelineProbe.kt',
   'PagerProfile.kt', 'PagerUnsupported.kt', 'PagerJvmOracle.kt', 'PagerPipelineProbe.kt',
+  'ScrollProfile.kt', 'ScrollUnsupported.kt', 'ScrollJvmOracle.kt', 'ScrollPipelineProbe.kt',
   'InputStateProfile.kt', 'InputStateUnsupported.kt', 'InputStateJvmOracle.kt', 'InputStatePipelineProbe.kt',
   'ReusableCard.kt', 'HelperEntry.kt', 'HelperUnsupported.kt', 'HelperJvmOracle.kt', 'HelperPipelineProbe.kt',
   'input-state-sdk.mjs', 'helper-sdk.mjs', 'PipelineSeamAgent.java'].map(name => join(here, name));
@@ -129,6 +130,39 @@ const pagerSemantics = join(work, 'pager-profile-output/pager-semantics.json');
 writeFileSync(pagerSemantics,
   JSON.stringify({ expected: expectedPager, actual: pagerContext.result }, null, 2) + '\n');
 console.log('PASS JVM/ETS Pager onChange transitions preserve currentPage state');
+const scrollProbeJar = compile('scroll-pipeline-probe', [join(here, 'ScrollPipelineProbe.kt')],
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
+console.log(run('scroll-profile-pipeline', 'java', ['-cp',
+  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar, scrollProbeJar].join(':'),
+  'dev.ets.widgettest.ScrollPipelineProbeKt', uiCp, join(work, 'scroll-profile-output'),
+  join(here, 'ScrollProfile.kt'), join(here, 'ScrollUnsupported.kt')]).trim());
+const scrollOracleJar = compile('scroll-jvm-oracle', [join(here, 'ScrollJvmOracle.kt')], cp);
+const expectedScroll = run('scroll-jvm', 'java', ['-cp', `${cp}:${scrollOracleJar}`, 'widgetscroll.ScrollJvmOracleKt'])
+  .trim().split('\n');
+const scrollOutput = join(work, 'scroll-profile-output/ScrollProfile.ets');
+const scrollCode = readFileSync(scrollOutput, 'utf8');
+const scrollCallbacks = [...scrollCode.matchAll(
+  /\.onScroll\(\(xOffset: number, yOffset: number\): void => \{([\s\S]*?)\n\s*\}\)/g)].map(match => match[1]);
+assert.equal(scrollCallbacks.length, 2, 'Expected vertical and horizontal typed onScroll callbacks');
+const scrollRuntimeSource = `class RuntimeScroll {
+  vertical_offset = 12;
+  horizontal_offset = 7;
+  vertical(xOffset, yOffset) {${scrollCallbacks[0]}\n  }
+  horizontal(xOffset, yOffset) {${scrollCallbacks[1]}\n  }
+  snapshot() { return this.vertical_offset + '|' + this.horizontal_offset; }
+}
+const scroll = new RuntimeScroll();
+result.push(scroll.snapshot());
+scroll.vertical(0, 20); result.push(scroll.snapshot());
+scroll.horizontal(14, 0); result.push(scroll.snapshot());
+scroll.vertical(0, 4); scroll.horizontal(3, 0); result.push(scroll.snapshot());`;
+const scrollContext = { result: [] };
+vm.runInNewContext(scrollRuntimeSource, scrollContext, { timeout: 1000 });
+assert.deepEqual(scrollContext.result, expectedScroll);
+const scrollSemantics = join(work, 'scroll-profile-output/scroll-semantics.json');
+writeFileSync(scrollSemantics,
+  JSON.stringify({ expected: expectedScroll, actual: scrollContext.result }, null, 2) + '\n');
+console.log('PASS JVM/ETS vertical and horizontal Scroll offset transitions match');
 const inputStateProbeJar = compile('input-state-pipeline-probe', [join(here, 'InputStatePipelineProbe.kt')],
   [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
 console.log(run('input-state-profile-pipeline', 'java', ['-cp',
@@ -214,6 +248,7 @@ assert.ok(existsSync(output));
 assert.ok(existsSync(coreProfileOutput));
 assert.ok(existsSync(stateOutput));
 assert.ok(existsSync(pagerOutput));
+assert.ok(existsSync(scrollOutput));
 assert.ok(existsSync(inputStateOutput));
 assert.ok(existsSync(helperOutput));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
@@ -223,6 +258,7 @@ assert.ok(implementation.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,
   outputs: identities([output, coreProfileOutput, stateOutput, stateSemantics,
     pagerOutput, pagerSemantics, join(work, 'pager-profile-output/pager-diagnostics.tsv'),
+    scrollOutput, scrollSemantics, join(work, 'scroll-profile-output/scroll-diagnostics.tsv'),
     inputStateOutput, inputStateSemantics, traceFile,
     helperOutput, helperSemantics,
     join(work, 'output/model.txt'), join(work, 'output/diagnostics.tsv'),
@@ -234,9 +270,10 @@ writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implemen
   independentModelCompilation: true, adapterWithoutHarmony: true, backendWithoutCompilerOrCompose: true,
   typedTargetValidation: true, coreProfileProductionPipeline: true, composeStateProductionPipeline: true,
   composeStateJvmEtsSemantics: true, pagerProductionPipeline: true, pagerJvmEtsSemantics: true,
+  scrollProductionPipeline: true, scrollJvmEtsSemantics: true,
   inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
   composeHelperProductionPipeline: true, composeHelperJvmEtsSemantics: true,
-  sourceLinkedRejections: diagnostics.length + 17,
+  sourceLinkedRejections: diagnostics.length + 24,
   sdk: 'separate SDK command required', nativeRendering: 'not run',
 }, null, 2));
 console.log('PASS Widget module isolation, resolved structure, typed ETS and explicit unsupported diagnostics');

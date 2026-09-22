@@ -18,10 +18,15 @@ import org.jetbrains.kotlin.name.FqName
  */
 class ComposeWidgetAdapter(private val language: Language, private val diagnostics: DiagnosticSink,
     private val sourceWidget: ((IrCall, Scope) -> EtsExpression?)? = null,
-    private val pagers: Map<IrValueSymbol, ComposeStateLowering.PagerStateBinding> = emptyMap()) {
+    private val pagers: Map<IrValueSymbol, ComposeStateLowering.PagerStateBinding> = emptyMap(),
+    private val scrolls: Map<IrValueSymbol, ComposeStateLowering.ScrollStateBinding> = emptyMap()) {
     constructor(language: Language, diagnostics: DiagnosticSink,
         pagers: Map<IrValueSymbol, ComposeStateLowering.PagerStateBinding>) :
-        this(language, diagnostics, null, pagers)
+        this(language, diagnostics, null, pagers, emptyMap())
+    constructor(language: Language, diagnostics: DiagnosticSink,
+        pagers: Map<IrValueSymbol, ComposeStateLowering.PagerStateBinding>,
+        scrolls: Map<IrValueSymbol, ComposeStateLowering.ScrollStateBinding>) :
+        this(language, diagnostics, null, pagers, scrolls)
     fun lower(function: IrSimpleFunction, scope: Scope = Scope(),
         handledStatements: Set<IrStatement> = emptySet()): Children<EtsExpression, SourceSpan> {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
@@ -362,6 +367,31 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 }
                 WidgetModifier.Click(event(required("onClick"), scope,
                     EtsFunctionType(emptyList(), EtsTypes.VOID), "clickable onClick"), enabled, at)
+            }
+            "androidx.compose.foundation.verticalScroll",
+            "androidx.compose.foundation.horizontalScroll" -> {
+                checkArguments(call, setOf("state", "enabled"))
+                val state = required("state")
+                val holder = (resolve(state, scope) as? IrGetValue)?.symbol
+                val binding = holder?.let(scrolls::get)
+                    ?: diagnostics.unsupported(state,
+                        "Scroll modifier state requires source remembered ScrollState")
+                val enabled = argument(call, "enabled")?.let { value ->
+                    if (!value.type.isBoolean())
+                        diagnostics.unsupported(value, "Scroll modifier enabled requires Boolean")
+                    scalar(value, scope)
+                } ?: EtsLiteral(true, EtsTypes.BOOLEAN, at)
+                val x = EtsSymbol("compose-scroll:${at.file}:${at.start}:x", "xOffset",
+                    EtsTypes.NUMBER, at)
+                val y = EtsSymbol("compose-scroll:${at.file}:${at.start}:y", "yOffset",
+                    EtsTypes.NUMBER, at)
+                val axis = if (api.endsWith("verticalScroll")) WidgetScrollAxis.VERTICAL
+                    else WidgetScrollAxis.HORIZONTAL
+                val value = EtsReference(if (axis == WidgetScrollAxis.VERTICAL) y else x)
+                val onScroll = EtsLambda(listOf(EtsParameter(x), EtsParameter(y)),
+                    listOf(EtsExpressionStatement(EtsAssignment(binding.offset, value, at))),
+                    EtsTypes.VOID, at)
+                WidgetModifier.Scroll(axis, binding.offset, onScroll, enabled, at)
             }
             else -> diagnostics.unsupported(call, "Unsupported resolved widget Modifier API: $api")
         }

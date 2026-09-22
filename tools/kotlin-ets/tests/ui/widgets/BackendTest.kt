@@ -167,6 +167,22 @@ fun main() {
     val pageLoop = pager.children!!.single() as EtsUiForEach
     check((pageLoop.items as EtsArray).elements.map { (it as EtsLiteral).value } == listOf(0, 1, 2))
     check(pageLoop.item.symbol == page.symbol)
+    val scrollOffset = EtsReference(EtsSymbol("test:scrollOffset", "scrollOffset", EtsTypes.NUMBER,
+        source, external = true))
+    val xOffset = EtsParameter(EtsSymbol("test:xOffset", "xOffset", EtsTypes.NUMBER, source))
+    val yOffset = EtsParameter(EtsSymbol("test:yOffset", "yOffset", EtsTypes.NUMBER, source))
+    val onScroll = EtsLambda(listOf(xOffset, yOffset), listOf(EtsExpressionStatement(
+        EtsAssignment(scrollOffset, EtsReference(yOffset.symbol), source))), EtsTypes.VOID, source)
+    val scroll = backend.lower(Widget.Text(string("scroll"), noStyle,
+        listOf(WidgetModifier.Scroll(WidgetScrollAxis.VERTICAL, scrollOffset, onScroll,
+            EtsLiteral(true, EtsTypes.BOOLEAN, source), source)), source))
+    check(name(scroll) == "Scroll")
+    check(scroll.children!!.single() is EtsUiElement)
+    check(attributes(scroll) ==
+        listOf("scrollable", "initialOffset", "scrollBar", "enableScrollInteraction", "align", "onScroll"))
+    val initialOffset = scroll.attributes.single { (it.callee as EtsReference).symbol.name == "initialOffset" }
+        .arguments.single() as EtsObject
+    check(initialOffset.fields == mapOf("xOffset" to number(0), "yOffset" to scrollOffset))
     val invalidUrl = Widget.Image<EtsExpression, SourceSpan>(ImageSource.Url(number(1), source),
         EtsLiteral(null, EtsTypes.NULL, source), emptyList(), source)
     check(runCatching { backend.lower(invalidUrl) }.exceptionOrNull() is IllegalArgumentException)
@@ -200,7 +216,7 @@ fun main() {
     check(runCatching { backend.lower(invalidConditional) }.exceptionOrNull() is IllegalArgumentException)
     val fn = EtsFunction("view", emptyList(), EtsTypes.VOID,
         listOf(element, rowLayout, boxLayout, styledText, styledButton, styledImage,
-            resourceImage, urlImage, textField, pager, conditional),
+            resourceImage, urlImage, textField, pager, scroll, conditional),
         source, builder = true)
     EtsValidator().validate(EtsProgram(listOf(EtsFile("model-only", listOf(fn)))))
     println("PASS backend without compiler/Compose; shared values, scoped layout modifiers, runtime branches and typed rejection")
