@@ -44,7 +44,9 @@ private fun textStyleFactory(): EtsFunction {
         EtsParameter(EtsSymbol("styleFactory:$name", name, type, at))
     } + EtsParameter(EtsSymbol("styleFactory:fallbackColor", "fallbackColor", EtsTypes.NUMBER, at))
     fun ref(name: String) = EtsReference(parameters.single { it.symbol.name == name }.symbol)
-    val overrides = EtsNew(textStyleType, textStyleFields.keys.map(::ref), at)
+    val overrides = EtsNew(textStyleType, textStyleFields.keys.map { name ->
+        if (name in textStyleArgumentOrder) ref(name) else EtsLiteral(null, EtsTypes.NULL, at)
+    }, at)
     val instance = EtsNew(textStyleModifierType, listOf(ref("style"), overrides, ref("fallbackColor"), ref("overflow"), ref("maxLines")), at)
     return EtsFunction("__etsTextStyleModifier", parameters, textStyleModifierType, listOf(EtsReturn(instance, at)), at, exported = true)
 }
@@ -87,12 +89,24 @@ private fun styleModifierClass(): EtsClass {
         EtsMember(EtsReference(instance), name, EtsFunctionType(listOf(value.type), instance.type), at), listOf(value), instance.type, at))
     val nativeStyle = EtsConditional(EtsBinary("===", field("fontStyle"), number(0), EtsTypes.BOOLEAN, at),
         nativeEnum("FontStyle", "Normal"), nativeEnum("FontStyle", "Italic"), EtsNamedType("FontStyle"), at)
+    val lineHeightStyle = EtsCast(field("lineHeightStyle"), lineHeightStyleType, at)
+    val supportedLineHeightStyle = EtsBinary("&&", EtsBinary("&&",
+        EtsBinary("===", EtsMember(lineHeightStyle, "alignment", lineHeightAlignmentType, at),
+            lineHeightAlignment("Center", at), EtsTypes.BOOLEAN, at),
+        EtsBinary("===", EtsMember(lineHeightStyle, "trim", lineHeightTrimType, at),
+            lineHeightTrim("None", at), EtsTypes.BOOLEAN, at), EtsTypes.BOOLEAN, at),
+        EtsBinary("===", EtsMember(lineHeightStyle, "mode", lineHeightModeType, at),
+            lineHeightMode("Fixed", at), EtsTypes.BOOLEAN, at), EtsTypes.BOOLEAN, at)
+    val applyHalfLeading = EtsIf(listOf(EtsBranch(EtsBinary("||",
+        EtsBinary("===", field("lineHeightStyle"), nil(), EtsTypes.BOOLEAN, at),
+        supportedLineHeightStyle, EtsTypes.BOOLEAN, at), listOf(apply("halfLeading",
+        EtsLiteral(true, EtsTypes.BOOLEAN, at))))), at)
     val overflowType = EtsRecordType("TextOverflowOptions", mapOf("overflow" to EtsNamedType("TextOverflow")))
     val applyBody = listOf(apply("fontColor", field("color")), apply("fontSize", field("fontSize")),
         apply("decoration", EtsObject(linkedMapOf("type" to field("textDecoration"), "color" to field("color")),
             EtsRecordType("DecorationStyleInterface", linkedMapOf("type" to textDecorationType, "color" to EtsTypes.NUMBER)), at)),
         apply("fontWeight", field("fontWeight")), apply("fontStyle", nativeStyle), apply("letterSpacing", field("letterSpacing")),
-        apply("textAlign", field("textAlign")), apply("halfLeading", EtsLiteral(true, EtsTypes.BOOLEAN, at)),
+        apply("textAlign", field("textAlign")), applyHalfLeading,
         apply("maxLines", field("maxLines")), apply("textOverflow", EtsObject(mapOf("overflow" to field("overflow")), overflowType, at)),
         apply("lineHeight", EtsBinary("??", field("lineHeight"), number(0), EtsTypes.NUMBER, at)),
         EtsIf(listOf(EtsBranch(EtsBinary("!==", field("fontFamily"), nil(), EtsTypes.BOOLEAN, at),

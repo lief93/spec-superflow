@@ -335,8 +335,8 @@ const ownershipRun = run('source-builder-modules', 'bash', [cli, '--mode', 'page
   '--classpath-file', classpathFile, '--out-dir', ownershipDirectory, ...ownershipSources]);
 assert.equal(ownershipRun.status, 0, ownershipRun.stdout + ownershipRun.stderr);
 assert.deepEqual(readdirSync(ownershipDirectory).sort(), [
-  'EtsButtonColors.ets', 'EtsFontSelection.ets', 'EtsFontValues.ets', 'EtsMaterialColorScheme.ets',
-  'EtsMaterialContext.ets', 'EtsPadding.ets', 'EtsShape.ets', 'EtsTextStyle.ets',
+  'EtsButtonColors.ets', 'EtsFontSelection.ets', 'EtsFontValues.ets', 'EtsLineHeightStyle.ets',
+  'EtsMaterialColorScheme.ets', 'EtsMaterialContext.ets', 'EtsPadding.ets', 'EtsShape.ets', 'EtsTextStyle.ets',
   'EtsTextStyleModifier.ets', 'EtsTypography.ets', 'Screen.ets', 'Services.ets', 'Widgets.ets',
 ]);
 const widgets = readFileSync(join(ownershipDirectory, 'Widgets.ets'), 'utf8');

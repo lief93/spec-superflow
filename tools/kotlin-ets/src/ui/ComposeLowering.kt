@@ -817,8 +817,10 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         return uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing content body"), child)
     }
 
-    private fun provideMaterialContext(context: EtsExpression, content: IrExpression, scope: Scope): List<EtsStatement> {
+    private fun provideMaterialContext(context: EtsExpression, content: IrExpression, scope: Scope,
+        semanticFlags: Set<String>): List<EtsStatement> {
         val child = scope.fork()
+        child.semanticFlags += semanticFlags
         val captures = capturedValues(listOf(content), scope)
         val captured = captures.map { capturedParameter(it, scope) }
         captures.zip(captured).forEach { (symbol, parameter) -> child.bindings[symbol] = EtsReference(parameter.symbol) }

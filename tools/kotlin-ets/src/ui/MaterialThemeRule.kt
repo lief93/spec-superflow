@@ -147,7 +147,7 @@ internal class ComposeMaterialThemeValueRule : CallRule {
 }
 
 internal class ComposeMaterialThemeRule(private val target: ArkUiCalls,
-    private val provide: (EtsExpression, IrExpression, Scope) -> List<EtsStatement>) : CallRule {
+    private val provide: (EtsExpression, IrExpression, Scope, Set<String>) -> List<EtsStatement>) : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
     override fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? {
         if (symbolName(call.symbol.owner) != "androidx.compose.material3.MaterialTheme") return null
@@ -156,10 +156,13 @@ internal class ComposeMaterialThemeRule(private val target: ArkUiCalls,
         val parent = materialContext(scope, at)
         val scheme = if (call.usesNativeProjectTheme == true) currentProjectColorScheme(at)
             else argument(call, "colorScheme")?.let { language.expression(it, scope) } ?: materialScheme(parent, at)
-        val typography = argument(call, "typography")?.let { language.expression(it, scope) } ?: materialTypography(parent, at)
+        val typographyArgument = argument(call, "typography")
+        val typography = typographyArgument?.let { language.expression(it, scope) } ?: materialTypography(parent, at)
         val shapes = argument(call, "shapes")?.let { language.expression(it, scope) } ?: materialShapes(parent, at)
         val content = argument(call, "content") ?: target.diagnostics.unsupported(call, "MaterialTheme requires content")
+        val flags = if (typographyArgument?.let { hasUnsupportedLineHeightStyle(it, scope) } == true)
+            setOf(LINE_HEIGHT_STYLE_CONTEXT) else emptySet()
         return provide(EtsNew(materialContextType, listOf(scheme, materialContentColor(parent, at), typography,
-            EtsLiteral(null, EtsTypes.NULL, at), shapes), at), content, scope)
+            EtsLiteral(null, EtsTypes.NULL, at), shapes), at), content, scope, flags)
     }
 }

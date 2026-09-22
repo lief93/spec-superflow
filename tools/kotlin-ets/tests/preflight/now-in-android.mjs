@@ -18,7 +18,7 @@ const categories = ['language_semantics', 'standard_library', 'neutral_compose_w
 const expectedCoverage = {
   language_semantics: { total: 109, recognized: 109, unsupported: 0, percentage: 100 },
   standard_library: { total: 15, recognized: 15, unsupported: 0, percentage: 100 },
-  neutral_compose_widget: { total: 191, recognized: 179, unsupported: 12, percentage: 93.71 },
+  neutral_compose_widget: { total: 191, recognized: 190, unsupported: 1, percentage: 99.47 },
   modifier: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   resources: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   project_dependencies: { total: 0, recognized: 0, unsupported: 0, percentage: null },
@@ -67,11 +67,11 @@ try {
     '--unsupported-policy', 'report', '--entry', entry, '--out', output, '--preflight-out', reportPath,
     '--work-dir', projectRun, '--offline'], { env: projectEnv }, 2);
   const backendBlocker = JSON.parse(compilation.stdout);
-  assert.equal(backendBlocker.code, 'UNSUPPORTED');
+  assert.equal(backendBlocker.code, 'INVALID_TARGET');
   assert.equal(backendBlocker.message,
-    'Unsupported language type: androidx.compose.ui.text.style.LineHeightStyle.Alignment.Companion');
-  assert.equal(backendBlocker.source.line, 67);
-  assert.equal(backendBlocker.source.column, 35);
+    'Target type mismatch: EtsNamedType(name=EtsTextStyle, arguments=[], symbolId=class:EtsTextStyle.kt:0:EtsTextStyle, external=false); expected EtsNamedType(name=EtsMaterialShapes, arguments=[], symbolId=class:EtsShape.kt:-1:EtsMaterialShapes, external=false)');
+  assert.equal(backendBlocker.source.line, 46);
+  assert.equal(backendBlocker.source.column, 9);
   assert.equal(existsSync(output), false);
   const diagnosis = JSON.parse(readFileSync(output + '.diagnosis.json', 'utf8'));
   assert.equal(diagnosis.status, 'blocked');
@@ -164,12 +164,12 @@ try {
   assert.equal(staticColorSchemes.length, 4);
   assert.ok(staticColorSchemes.every(call => call.expectedTargetType === 'EtsMaterialColorScheme' &&
     call.finalRecognizedNode.kind === 'typed_call' && call.firstUnsupportedNode === null));
-  assert.equal(report.firstUnsupportedNode.kind, 'target_type');
+  assert.equal(report.firstUnsupportedNode.kind, 'unsupported_call');
   assert.equal(report.firstUnsupportedNode.symbol,
-    'androidx.compose.ui.text.style.LineHeightStyle.Alignment.Companion.<get-Bottom>');
-  assert.match(report.firstUnsupportedNode.message, /Unsupported language type:.*LineHeightStyle\.Alignment/);
-  assert.equal(report.firstUnsupportedNode.source.line, 67);
-  assert.equal(report.firstUnsupportedNode.source.column, 35);
+    'androidx.compose.material3.TextButton');
+  assert.match(report.firstUnsupportedNode.message, /Target type mismatch:.*EtsTextStyle.*EtsMaterialShapes/);
+  assert.equal(report.firstUnsupportedNode.source.line, 46);
+  assert.equal(report.firstUnsupportedNode.source.column, 9);
   assertSource(report.firstUnsupportedNode.source);
 
   for (const call of report.calls) {
@@ -187,9 +187,9 @@ try {
   }
 
   const unsupportedCalls = report.calls.filter(call => call.firstUnsupportedNode !== null);
-  assert.equal(unsupportedCalls.length, 12);
-  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'target_type').length, 12);
-  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 0);
+  assert.equal(unsupportedCalls.length, 1);
+  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'target_type').length, 0);
+  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 1);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_field').length, 0);
   assert.ok(unsupportedCalls.every(call => call.category === 'neutral_compose_widget'));
 
@@ -206,18 +206,18 @@ try {
     unsupportedCalls,
     p0Gaps: [
       { category: 'neutral_compose_widget',
-        node: 'androidx.compose.ui.text.style.LineHeightStyle.Alignment.Companion',
+        node: 'androidx.compose.material3.TextButton',
         responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
       { category: 'neutral_compose_widget', node: 'unsupported_call_inventory',
         responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt',
-        counts: { target_type: 12, unsupported_call: 0, unsupported_field: 0 },
-        detail: 'Twelve source-linked calls remain unsupported; all records are preserved in unsupportedCalls.' },
+        counts: { target_type: 0, unsupported_call: 1, unsupported_field: 0 },
+        detail: 'All LineHeightStyle target-type records close; one source-linked TextButton target mismatch remains.' },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS Material3 light/dark ColorScheme factories bind resolved roles; all 12 remaining unsupported calls stay explicit');
+  console.log('PASS LineHeightStyle closes all 12 target-type records; the next TextButton target mismatch stays explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

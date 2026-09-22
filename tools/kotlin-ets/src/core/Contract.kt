@@ -45,7 +45,7 @@ class DiagnosticSink(var currentFile: String? = null, var reportUiDegradation: B
         // explicit framework projections approved for this migration may omit IR.
         if (!reportUiDegradation || action !in setOf("static_animation_value", "omitted_animation_effect",
                 "omitted_animation_modifier", "project_theme_replacement", "omitted_theme_effect",
-                "omitted_private_modifier", "platform_capability_fallback")) unsupported(element, message)
+                "omitted_private_modifier", "platform_capability_fallback", "line_height_style_fallback")) unsupported(element, message)
         omittedUiElements.addAll(discarded)
         degradations += UiDegradation(Diagnostic("UNSUPPORTED", message, sourceSpan(element, this)), capability, action, impact)
     }
@@ -74,8 +74,10 @@ class Scope(
     var callRule: CallRule? = null,
     val callRules: List<CallRule> = emptyList(),
     val ambientValues: MutableMap<String, EtsExpression> = linkedMapOf(),
+    val semanticFlags: MutableSet<String> = linkedSetOf(),
 ) {
-    fun fork() = Scope(LinkedHashMap(bindings), LinkedHashMap(aliases), callRule, callRules, LinkedHashMap(ambientValues))
+    fun fork() = Scope(LinkedHashMap(bindings), LinkedHashMap(aliases), callRule, callRules,
+        LinkedHashMap(ambientValues), LinkedHashSet(semanticFlags))
 }
 
 interface Language {

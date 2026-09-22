@@ -7,7 +7,8 @@ private val textStyleMerge = etsFunctionSymbol("__etsMergeTextStyle",
 internal val textStyleFields = linkedMapOf("color" to EtsTypes.NUMBER, "fontSize" to EtsTypes.NUMBER,
     "fontWeight" to EtsTypes.NUMBER, "fontStyle" to EtsTypes.NUMBER, "fontFamily" to fontFamilyType,
     "letterSpacing" to EtsTypes.NUMBER, "textDecoration" to textDecorationType,
-    "textAlign" to EtsNamedType("TextAlign"), "lineHeight" to EtsTypes.NUMBER)
+    "textAlign" to EtsNamedType("TextAlign"), "lineHeight" to EtsTypes.NUMBER,
+    "lineHeightStyle" to lineHeightStyleType)
 
 internal fun mergeTextStyles(inherited: EtsExpression, provided: EtsExpression, at: SourceSpan): EtsExpression =
     EtsCall(EtsReference(textStyleMerge, at), listOf(inherited, provided), textStyleType, at)

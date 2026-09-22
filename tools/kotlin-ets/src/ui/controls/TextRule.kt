@@ -16,6 +16,15 @@ internal class ComposeTextRule(
         target.checkArguments(call, setOf("text", "modifier") + textStyleArgumentOrder, setOf("softWrap", "minLines"))
         val text = argument(call, "text") ?: target.diagnostics.unsupported(call, "Text requires text")
         if (!text.type.isString()) target.diagnostics.unsupported(text, "AnnotatedString Text is not supported")
+        val styleArgument = argument(call, "style")
+        if (LINE_HEIGHT_STYLE_CONTEXT in scope.semanticFlags ||
+            styleArgument?.let { hasUnsupportedLineHeightStyle(it, scope) } == true) {
+            target.diagnostics.omitUi(call,
+                "LineHeightStyle is retained as typed metadata, but Harmony Text can only represent Center/None/Fixed through halfLeading; unsupported alignment, trim, or mode is not emulated",
+                "compose.text.line_height_style", "line_height_style_fallback",
+                "Numeric lineHeight is preserved; unsupported line-height distribution or first/last-line trimming may render differently",
+                discarded = emptyList())
+        }
         val ambient = scope.ambientValues[MATERIAL_CONTEXT]?.takeIf { api == "androidx.compose.material3.Text" }
         val at = language.source(call)
         fun fallbackColor() = ambient?.let { materialContentColor(it, at) } ?: target.literal(0xFF000000L, call)

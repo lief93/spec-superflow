@@ -35,6 +35,20 @@ internal class ComposeTextStyleRule : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
         val owner = call.symbol.owner
         if (sourceFile(owner) != null) return null
+        if (symbolName(owner) == "androidx.compose.ui.text.TextStyle.copy") {
+            val receiver = call.dispatchReceiver ?: reject(call, language, "TextStyle.copy requires a receiver")
+            owner.valueParameters.forEachIndexed { index, parameter ->
+                if (parameter.name.asString() !in textStyleFields && call.getValueArgument(index) != null)
+                    reject(call.getValueArgument(index)!!, language,
+                        "Unsupported TextStyle.copy argument: ${parameter.name}")
+            }
+            val at = language.source(call)
+            val inherited = language.expression(receiver, scope)
+            return EtsNew(textStyleType, textStyleFields.map { (name, type) ->
+                argument(call, name)?.let { language.expression(it, scope) }
+                    ?: EtsMember(inherited, name, EtsNullableType(type), at)
+            }, at)
+        }
         val property = owner.correspondingPropertySymbol?.owner ?: return null
         if (property.getter?.symbol != owner.symbol) return null
         val parent = property.parent as? IrClass ?: return null
@@ -50,7 +64,8 @@ internal class ComposeTextStyleRule : CallRule {
             val type = EtsNamedType(enums.first)
             return EtsMember(EtsReference(EtsSymbol("arkui:${enums.first}", enums.first, type, at, true)), target, type, at)
         }
-        if (symbolName(parent) == "androidx.compose.ui.text.TextStyle" && name in setOf("fontFamily", "fontWeight", "fontStyle", "textDecoration")) {
+        if (symbolName(parent) == "androidx.compose.ui.text.TextStyle" && name in
+            setOf("fontFamily", "fontWeight", "fontStyle", "textDecoration", "lineHeightStyle")) {
             return EtsMember(language.expression(call.dispatchReceiver ?: return null, scope), name,
                 EtsNullableType(textStyleFields.getValue(name)), at)
         }

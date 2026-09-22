@@ -280,7 +280,7 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
             }
         }
         val loweredScope = Scope(LinkedHashMap(scope.bindings), LinkedHashMap(scope.aliases), scope.callRule,
-            listOf(rule) + scope.callRules, LinkedHashMap(scope.ambientValues))
+            listOf(rule) + scope.callRules, LinkedHashMap(scope.ambientValues), LinkedHashSet(scope.semanticFlags))
         val imports = if (hasLazyListEffect && lazyListStates.isNotEmpty())
             listOf(EtsImport("@kit.ArkUI", "LengthMetrics")) else emptyList()
         return Plan(fields, loweredScope, handled, pagerBindings, scrollBindings, lazyListBindings, imports)

@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.types.isUnit
 
 internal class ComposeProvideTextStyleRule(private val target: ArkUiCalls,
-    private val provide: (EtsExpression, IrExpression, Scope) -> List<EtsStatement>) : CallRule {
+    private val provide: (EtsExpression, IrExpression, Scope, Set<String>) -> List<EtsStatement>) : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
 
     override fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? {
@@ -32,6 +32,7 @@ internal class ComposeProvideTextStyleRule(private val target: ArkUiCalls,
         val style = mergeTextStyles(model.context.inheritedStyle, model.context.providedStyle, model.source)
         val context = EtsNew(materialContextType, listOf(materialScheme(parent, at), materialContentColor(parent, at),
             materialTypography(parent, at), style, materialShapes(parent, at)), at)
-        return provide(context, model.content, scope)
+        val flags = if (hasUnsupportedLineHeightStyle(value, scope)) setOf(LINE_HEIGHT_STYLE_CONTEXT) else emptySet()
+        return provide(context, model.content, scope, flags)
     }
 }
