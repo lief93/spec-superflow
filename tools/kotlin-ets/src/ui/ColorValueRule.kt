@@ -10,6 +10,8 @@ private val optionalColorChannelType = EtsNullableType(EtsTypes.NUMBER)
 private val colorCopy = etsFunctionSymbol("__etsCopyColor", listOf(EtsTypes.NUMBER,
     optionalColorChannelType, optionalColorChannelType, optionalColorChannelType, optionalColorChannelType),
     EtsTypes.NUMBER, colorTransformSource)
+internal val surfaceColorAtElevation = etsFunctionSymbol("__etsSurfaceColorAtElevation",
+    listOf(materialColorSchemeType, EtsTypes.NUMBER), EtsTypes.NUMBER, colorTransformSource)
 
 /** sRGB Color values use the unsigned ARGB representation accepted by ArkUI. */
 internal class ComposeColorValueRule : CallRule {
@@ -64,11 +66,13 @@ internal class ComposeColorValueRule : CallRule {
     }
 
     override fun targetFiles(program: EtsProgram): List<EtsFile> {
-        var used = false
+        var copyUsed = false
+        var surfaceUsed = false
         program.files.forEach { file -> file.declarations.forEach { declaration -> walkEts(declaration) {
-            if (it is EtsReference && it.symbol.id == colorCopy.id) used = true
+            if (it is EtsReference && it.symbol.id == colorCopy.id) copyUsed = true
+            if (it is EtsReference && it.symbol.id == surfaceColorAtElevation.id) surfaceUsed = true
         } } }
-        return if (used) listOf(colorTransformFile()) else emptyList()
+        return if (copyUsed || surfaceUsed) listOf(colorTransformFile(surfaceUsed)) else emptyList()
     }
 
     override fun targetImports(program: EtsProgram): List<EtsImport> =
@@ -84,7 +88,7 @@ internal class ComposeColorValueRule : CallRule {
     }
 }
 
-private fun colorTransformFile(): EtsFile {
+private fun colorTransformFile(includeSurfaceElevation: Boolean): EtsFile {
     val at = colorTransformSource
     fun parameter(id: String, name: String, type: EtsType) =
         EtsParameter(EtsSymbol("color-transform:$id", name, type, at))
@@ -140,10 +144,79 @@ private fun colorTransformFile(): EtsFile {
         EtsVariable(outputGreen, selected(green, "green"), false),
         EtsVariable(outputBlue, selected(blue, "blue"), false),
         EtsVariable(result, rgba, false), EtsReturn(packed, at)), at, exported = true)
-    return EtsFile(at.file!!, listOf(channel, copy))
+    val declarations = mutableListOf<EtsDeclaration>(channel, copy)
+    if (includeSurfaceElevation) declarations += surfaceColorAtElevationFunction(::metricsCall, ::mathCall)
+    return EtsFile(at.file!!, declarations)
 }
 
-private const val colorType = "androidx.compose.ui.graphics.Color"
+private fun surfaceColorAtElevationFunction(
+    metricsCall: (String, List<EtsExpression>, List<EtsType>) -> EtsExpression,
+    mathCall: (String, List<EtsExpression>) -> EtsExpression,
+): EtsFunction {
+    val at = colorTransformSource
+    fun parameter(id: String, name: String, type: EtsType) =
+        EtsParameter(EtsSymbol("surface-elevation:$id", name, type, at))
+    val scheme = parameter("scheme", "scheme", materialColorSchemeType)
+    val elevation = parameter("elevation", "elevation", EtsTypes.NUMBER)
+    fun ref(parameter: EtsParameter) = EtsReference(parameter.symbol)
+    fun number(value: Number) = EtsLiteral(value, EtsTypes.NUMBER, at)
+    fun binary(operator: String, left: EtsExpression, right: EtsExpression) =
+        EtsBinary(operator, left, right, EtsTypes.NUMBER, at)
+    fun round(value: EtsExpression) = mathCall("fround", listOf(value))
+    fun float(operator: String, left: EtsExpression, right: EtsExpression) =
+        round(binary(operator, left, right))
+    fun schemeField(name: String) = EtsMember(ref(scheme), name, EtsTypes.NUMBER, at)
+    val alpha = EtsSymbol("surface-elevation:alpha", "alpha", EtsTypes.NUMBER, at)
+    val logarithm = round(mathCall("log", listOf(float("+", ref(elevation), number(1)))))
+    val alphaValue = float("/", float("+", float("*", number(4.5), logarithm), number(2)), number(100))
+    val tinted = EtsCall(EtsReference(colorCopy, at), listOf(schemeField("surfaceTint"), EtsReference(alpha),
+        EtsLiteral(null, EtsTypes.NULL, at), EtsLiteral(null, EtsTypes.NULL, at),
+        EtsLiteral(null, EtsTypes.NULL, at)), EtsTypes.NUMBER, at)
+    val metricsType = EtsNamedType("ColorMetrics", external = true)
+    val foreground = EtsSymbol("surface-elevation:foreground", "foreground", metricsType, at)
+    val background = EtsSymbol("surface-elevation:background", "background", metricsType, at)
+    fun metric(symbol: EtsSymbol, name: String) = EtsMember(EtsReference(symbol), name, EtsTypes.NUMBER, at)
+    fun normalized(symbol: EtsSymbol, name: String) = float("/", metric(symbol, name), number(255))
+    val foregroundAlpha = EtsSymbol("surface-elevation:foreground-alpha", "foregroundAlpha", EtsTypes.NUMBER, at)
+    val backgroundAlpha = EtsSymbol("surface-elevation:background-alpha", "backgroundAlpha", EtsTypes.NUMBER, at)
+    val inverseForegroundAlpha = EtsSymbol("surface-elevation:inverse-foreground-alpha",
+        "inverseForegroundAlpha", EtsTypes.NUMBER, at)
+    val outputAlpha = EtsSymbol("surface-elevation:output-alpha", "compositeAlpha", EtsTypes.NUMBER, at)
+    fun component(name: String): EtsExpression {
+        val foregroundTerm = float("*", normalized(foreground, name), EtsReference(foregroundAlpha))
+        val backgroundTerm = float("*", float("*", normalized(background, name),
+            EtsReference(backgroundAlpha)), EtsReference(inverseForegroundAlpha))
+        val divided = float("/", float("+", foregroundTerm, backgroundTerm), EtsReference(outputAlpha))
+        return EtsConditional(EtsBinary("===", EtsReference(outputAlpha), number(0), EtsTypes.BOOLEAN, at),
+            number(0), divided, EtsTypes.NUMBER, at)
+    }
+    val outputRed = EtsSymbol("surface-elevation:output-red", "compositeRed", EtsTypes.NUMBER, at)
+    val outputGreen = EtsSymbol("surface-elevation:output-green", "compositeGreen", EtsTypes.NUMBER, at)
+    val outputBlue = EtsSymbol("surface-elevation:output-blue", "compositeBlue", EtsTypes.NUMBER, at)
+    val copied = EtsCall(EtsReference(colorCopy, at), listOf(number(0), EtsReference(outputAlpha),
+        EtsReference(outputRed), EtsReference(outputGreen), EtsReference(outputBlue)), EtsTypes.NUMBER, at)
+    val positiveZero = EtsBinary("&&",
+        EtsBinary("===", ref(elevation), number(0), EtsTypes.BOOLEAN, at),
+        EtsBinary(">", binary("/", number(1), ref(elevation)), number(0), EtsTypes.BOOLEAN, at),
+        EtsTypes.BOOLEAN, at)
+    return EtsFunction(surfaceColorAtElevation.name, listOf(scheme, elevation), EtsTypes.NUMBER, listOf(
+        EtsIf(listOf(EtsBranch(positiveZero,
+            listOf(EtsReturn(schemeField("surface"), at)))), at),
+        EtsVariable(alpha, alphaValue, false),
+        EtsVariable(foreground, metricsCall("numeric", listOf(tinted), listOf(EtsTypes.NUMBER)), false),
+        EtsVariable(background, metricsCall("numeric", listOf(schemeField("surface")), listOf(EtsTypes.NUMBER)), false),
+        EtsVariable(foregroundAlpha, normalized(foreground, "alpha"), false),
+        EtsVariable(backgroundAlpha, normalized(background, "alpha"), false),
+        EtsVariable(inverseForegroundAlpha, float("-", number(1), EtsReference(foregroundAlpha)), false),
+        EtsVariable(outputAlpha, float("+", EtsReference(foregroundAlpha), float("*",
+            EtsReference(backgroundAlpha), EtsReference(inverseForegroundAlpha))), false),
+        EtsVariable(outputRed, component("red"), false),
+        EtsVariable(outputGreen, component("green"), false),
+        EtsVariable(outputBlue, component("blue"), false),
+        EtsReturn(copied, at)), at, exported = true)
+}
+
+internal const val colorType = "androidx.compose.ui.graphics.Color"
 private val colors = mapOf(
     "Black" to 0xFF000000L, "DarkGray" to 0xFF444444L, "Gray" to 0xFF888888L,
     "LightGray" to 0xFFCCCCCCL, "White" to 0xFFFFFFFFL, "Red" to 0xFFFF0000L,
