@@ -26,7 +26,7 @@ import org.jetbrains.kotlin.ir.util.isNullable
 import org.jetbrains.kotlin.ir.util.superTypes
 import org.jetbrains.kotlin.ir.visitors.*
 
-class LanguageLowering(val diagnostics: DiagnosticSink, rules: List<CallRule>, private val sourceTypes: SourceTypes? = null) : Language {
+class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<CallRule>, private val sourceTypes: SourceTypes? = null) : Language {
     override val callRules: List<CallRule> = rules
     private var nextTemporary = 0
     private val temporaryNames = IdentityHashMap<IrValueSymbol, String>()

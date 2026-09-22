@@ -25,7 +25,7 @@ fun main(arguments: Array<String>) {
         while (index < arguments.size) {
             val item = arguments[index++]
             if (item.startsWith("--")) {
-                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--string-resources", "--font-resources", "--frontend-arguments-file", "--unsupported-policy")) { "Unknown option $item" }
+                require(item in setOf("--mode", "--out", "--out-dir", "--entry", "--classpath-file", "--classpath", "--sources-file", "--image-resources", "--string-resources", "--font-resources", "--frontend-arguments-file", "--unsupported-policy", "--preflight-out")) { "Unknown option $item" }
                 require(index < arguments.size) { "Missing value for $item" }
                 options[item] = arguments[index++]
             } else sources.add(item)
@@ -34,7 +34,18 @@ fun main(arguments: Array<String>) {
         require(sources.isNotEmpty()) { "At least one Kotlin source path is required" }
         require(("--out" in options) != ("--out-dir" in options)) { "Specify exactly one of --out or --out-dir" }
         val output = File(options["--out"] ?: options.getValue("--out-dir"))
+        val preflightOutput = options["--preflight-out"]?.let(::File)
         require(!Files.exists(output.toPath(), NOFOLLOW_LINKS)) { "Refusing to overwrite existing target: $output" }
+        preflightOutput?.let { file ->
+            require(!Files.exists(file.toPath(), NOFOLLOW_LINKS)) {
+                "Refusing to overwrite existing preflight report: $file"
+            }
+            val targetPath = output.absoluteFile.normalize().toPath()
+            val reportPath = file.absoluteFile.normalize().toPath()
+            require(reportPath != targetPath && ("--out-dir" !in options || !reportPath.startsWith(targetPath))) {
+                "Preflight report must be outside the target path: $file"
+            }
+        }
         val mode = options["--mode"] ?: "page"
         require(mode in setOf("page", "language")) { "Mode must be page or language" }
         val policy = options["--unsupported-policy"] ?: if (mode == "page") "report" else "error"
@@ -66,21 +77,29 @@ fun main(arguments: Array<String>) {
         val adapters = AdapterModules.load()
         val stdlib = StandardLibraryRules()
         val rules = listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeProjectColorSchemeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposeDimensionRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeFlowRule(), ComposeShapeRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
+        var preflight: CoreProfileReport? = null
         val target = withKotlinFrontend(compilerArgs, entry, prepareDeclaration = { declaration ->
             if (mode == "page") rules.forEach { it.prepareSource(declaration, diagnostics) }
         }) { frontend ->
             val module = frontend.module
             val backend = EtsBackend(diagnostics, rules, frontend.types)
+            preflight = coreProfilePreflight(module, backend.language, diagnostics)
+            preflightOutput?.let { file ->
+                Files.createDirectories(file.absoluteFile.parentFile.toPath())
+                Files.writeString(file.toPath(), coreProfileJson(requireNotNull(preflight)), CREATE_NEW)
+            }
             if (mode == "page") {
                 backend.validateSource(module)
                 val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
                     requireNotNull(entry))
                 val targetModule = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
+                diagnostics.verifyNoSilentFallback(targetModule)
                 if ("--out-dir" in options) emitEtsModules(targetModule, ComposeRuntime(StandardLibraryRuntime))
                 else mapOf(output.name to emitEtsProgram(targetModule, ComposeRuntime(StandardLibraryRuntime)))
             } else {
                 val lowered = backend.lower(module)
                 val program = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
+                diagnostics.verifyNoSilentFallback(program)
                 if ("--out-dir" in options) emitEtsModules(program, StandardLibraryRuntime)
                 else mapOf(output.name to emitEtsProgram(program, StandardLibraryRuntime))
             }
@@ -109,6 +128,7 @@ fun main(arguments: Array<String>) {
         saveDiagnosis(status)
         println("{\"ok\":true,\"status\":" + quote(status) + ",\"diagnosis\":" + quote(diagnosisOutput?.path) +
             ",\"degradationCount\":" + diagnostics.degradations.size + ",\"frontend\":\"Kotlin-2.1.20-K2-FIR2IR\",\"output\":" + quote(output.path) +
+            ",\"preflight\":" + quote(preflightOutput?.path) + ",\"preflightCallCount\":" + requireNotNull(preflight).calls.size +
             ",\"resources\":" + (if (resources.isEmpty() && resourceFiles.isEmpty()) "null" else quote(resourceOutput.path)) + "}")
     } catch (failure: InvalidTarget) {
         saveDiagnosis("blocked", Diagnostic("INVALID_TARGET", failure.message ?: "Invalid target", failure.source))

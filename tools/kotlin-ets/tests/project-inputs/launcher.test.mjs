@@ -89,6 +89,20 @@ test('project entry retains the separate font registry path', () => {
   assert.equal(options.fontResources, '/tmp/font inputs/fonts.properties');
 });
 
+test('project entry retains the Core Profile preflight report path', () => {
+  const options = parseOptions(['--project', '/tmp/p', '--module', ':app', '--variant', 'debug',
+    '--entry', 'sample.Page', '--out', '/tmp/Page.ets', '--preflight-out', '/tmp/reports/core profile.json']);
+  assert.equal(options.preflightOutput, '/tmp/reports/core profile.json');
+});
+
+test('project entry rejects a Core Profile report inside the target path', () => {
+  const base = ['--project', '/tmp/p', '--module', ':app', '--variant', 'debug', '--entry', 'sample.Page'];
+  assert.throws(() => parseOptions([...base, '--out', '/tmp/Page.ets', '--preflight-out', '/tmp/Page.ets']),
+    /Preflight report must be outside the target path/);
+  assert.throws(() => parseOptions([...base, '--out-dir', '/tmp/generated', '--preflight-out', '/tmp/generated/profile.json']),
+    /Preflight report must be outside the target path/);
+});
+
 test('invalid or ambiguous project input is rejected before invoking Gradle', () => {
   const base = ['--project', '/tmp/p', '--module', ':app', '--variant', 'debug', '--entry', 'sample.Page', '--out', '/tmp/Page.ets'];
   for (const extra of [['--variant', 'release'], ['--classpath', 'other.jar'], ['--compile-task', 'compileKotlin'], ['--out-dir', '/tmp/modules']]) {

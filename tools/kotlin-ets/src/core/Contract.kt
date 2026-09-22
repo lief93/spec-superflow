@@ -44,6 +44,23 @@ class DiagnosticSink(var currentFile: String? = null, var reportUiDegradation: B
         omittedUiElements.addAll(discarded)
         degradations += UiDegradation(Diagnostic("UNSUPPORTED", message, sourceSpan(element, this)), capability, action, impact)
     }
+
+    fun verifyNoSilentFallback(program: EtsProgram) {
+        if (omittedUiElements.isNotEmpty() && degradations.isEmpty()) {
+            unsupported(omittedUiElements.first(), "Omitted UI requires an explicit degradation record")
+        }
+        fun explicitlyRecorded(function: EtsFunction) = degradations.any { degradation ->
+            val source = degradation.diagnostic.source
+            source.file == function.source.file && source.start >= function.source.start && source.end <= function.source.end
+        }
+        val declarations = program.files.flatMap { it.declarations }
+        (declarations.filterIsInstance<EtsFunction>() + declarations.filterIsInstance<EtsClass>()
+            .flatMap { it.members }.filterIsInstance<EtsFunction>())
+            .firstOrNull { (it.builder || it.build) && it.body.isEmpty() && !explicitlyRecorded(it) }?.let {
+                throw Unsupported(Diagnostic("UNSUPPORTED",
+                    "Empty UI builder requires an explicit degradation or unsupported record", it.source))
+            }
+    }
 }
 
 class Scope(
@@ -58,6 +75,7 @@ class Scope(
 
 interface Language {
     val callRules: List<CallRule> get() = emptyList()
+    val diagnostics: DiagnosticSink? get() = null
     fun source(element: IrElement): SourceSpan
     fun type(type: IrType): EtsType
     fun expression(expression: IrExpression, scope: Scope): EtsExpression
@@ -166,6 +184,9 @@ fun adaptField(value: IrGetField, language: Language, scope: Scope): EtsExpressi
 
 fun adaptCall(call: IrCall, language: Language, scope: Scope, context: CallContext): CallResult? {
     fun reject(message: String): Nothing = throw Unsupported(Diagnostic("UNSUPPORTED", message, language.source(call)))
+    fun explicitlyRecorded() = language.diagnostics?.degradations?.any {
+        it.diagnostic.source == language.source(call)
+    } == true
     fun checkedValue(expression: EtsExpression): CallResult.Value {
         return CallResult.Value(checkedAdapterValue(call, expression, language))
     }
@@ -173,11 +194,17 @@ fun adaptCall(call: IrCall, language: Language, scope: Scope, context: CallConte
         when (context) {
             CallContext.VALUE -> rule.lower(call, language, scope)?.let { return checkedValue(it) }
             CallContext.STATEMENT -> {
-                rule.lowerStatement(call, language, scope)?.let { return CallResult.Statements(it) }
+                rule.lowerStatement(call, language, scope)?.let {
+                    if (it.isEmpty() && !explicitlyRecorded())
+                        reject("Empty statement adapter result requires an explicit degradation or unsupported record")
+                    return CallResult.Statements(it)
+                }
                 rule.lower(call, language, scope)?.let { return checkedValue(it) }
             }
             CallContext.UI -> rule.lowerUi(call, language, scope)?.let {
                 if (!call.type.isUnit()) reject("UI call adapter requires kotlin.Unit: ${symbolName(call.symbol.owner)}")
+                if (it.isEmpty() && !explicitlyRecorded())
+                    reject("Empty UI adapter result requires an explicit degradation or unsupported record")
                 return CallResult.Ui(it)
             }
         }

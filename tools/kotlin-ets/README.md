@@ -108,6 +108,12 @@ describe the source project's actual dependencies, not replacement Compose stubs
 `--classpath` accepts the platform-separated equivalent. Additional positional
 arguments supply additional Kotlin source files.
 
+Add `--preflight-out /fresh/path/core-profile.json` to retain the resolved call
+inventory before generation. It records language, stdlib, Compose, platform and
+project-dependency calls with resolved signatures, expected ETS types and
+1-based source locations. The scan does not make unsupported calls acceptable;
+see [Core Profile preflight](docs/core-profile-preflight.md).
+
 Language mode accepts either `--out` or `--out-dir`, never both. The latter keeps
 source basenames in a flat directory and adds symbol-based relative imports.
 Existing destinations and colliding basenames are rejected, not overwritten or
