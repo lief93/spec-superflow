@@ -1,0 +1,100 @@
+{
+  "scope": "Capability-driven KLIB body closure admission for collection quantifiers",
+  "compilerVersion": "2.1.20",
+  "stdlib": {
+    "file": "kotlin-stdlib-js-2.1.20.klib",
+    "sha256": "65a9831cceb606642693f9f3d798de86bbacf09b9588186e763e9e9f3c24d1a3"
+  },
+  "run": "tests/klib/collection-quantifiers-common/.work/run-J36OfS",
+  "bodies": [
+    {
+      "name": "kotlin.collections.any()",
+      "kind": "ordinary",
+      "source": "common/src/generated/_Collections.kt:58489..58612"
+    },
+    {
+      "name": "kotlin.collections.none()",
+      "kind": "ordinary",
+      "source": "common/src/generated/_Collections.kt:91637..91761"
+    },
+    {
+      "name": "kotlin.collections.any(predicate)",
+      "kind": "inline",
+      "source": "common/src/generated/_Collections.kt:58770..58980"
+    },
+    {
+      "name": "kotlin.collections.all(predicate)",
+      "kind": "inline",
+      "source": "common/src/generated/_Collections.kt:58149..58359"
+    },
+    {
+      "name": "kotlin.collections.none(predicate)",
+      "kind": "inline",
+      "source": "common/src/generated/_Collections.kt:91909..92119"
+    }
+  ],
+  "expected": [
+    "false",
+    "true",
+    "true",
+    "false",
+    "0",
+    "21",
+    "1",
+    "20",
+    "21",
+    "1",
+    "20",
+    "21"
+  ],
+  "actual": [
+    "false",
+    "true",
+    "true",
+    "false",
+    "0",
+    "21",
+    "1",
+    "20",
+    "21",
+    "1",
+    "20",
+    "21"
+  ],
+  "runtimeSymbols": [
+    "stdlib:__etsArrayIterator",
+    "stdlib:__etsIterator",
+    "stdlib:__etsThrowable"
+  ],
+  "absentRuntimeSymbol": "stdlib:__etsListAny",
+  "negativeEvidence": {
+    "missingBody": {
+      "code": "UNSUPPORTED_KLIB_DEPENDENCY",
+      "signature": "kotlin.collections.any()",
+      "declaration": "common/src/generated/_Collections.kt:58489..58612",
+      "callSite": "Consumer.kt:91..96",
+      "targetFilesWritten": 0
+    },
+    "missingPrimitive": {
+      "code": "UNSUPPORTED_KLIB_DEPENDENCY",
+      "signature": "kotlin.collections.Iterator.hasNext()",
+      "declaration": "src/js-builtin-sources/libraries/stdlib/jvm/builtins/Iterator.kt:959..1004",
+      "callSite": "Consumer.kt:58920..58924",
+      "targetFilesWritten": 0
+    }
+  },
+  "verification": {
+    "producerSourcesAbsent": true,
+    "strictHostTypecheck": true,
+    "emptyIdentities": true,
+    "zeroEmptyCallbacks": true,
+    "shortCircuitCallbackCounts": true,
+    "sdk": "not run",
+    "device": "not run"
+  },
+  "productionSha256": {
+    "KlibLowering.kt": "86523db47ec1be88e336b4e7adfec28c1eb4875b2d2c36fde3c2e96cb1744f09",
+    "KlibSession.kt": "bfa5bfe7b695fbff23211037ab2657b89441a5c60d465c7db0f721fb84f1c1cb",
+    "KlibCollectionRuntime.kt": "f87cb99eca8595a9890b10a7edc1a380e8e8eb7b21c47086f70b0be1581ac6c3"
+  }
+}

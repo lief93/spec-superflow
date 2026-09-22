@@ -1484,9 +1484,7 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
 
     private fun identifier(value: IrDeclarationWithName): String {
         val name = value.name.asString()
-        if (name.isEmpty() || !(name.first().isLetter() || name.first() == '_' || name.first() == '$') ||
-            name.any { !(it.isLetterOrDigit() || it == '_' || it == '$') } ||
-            name in setOf("function", "class", "var", "let", "const", "new", "default", "delete", "export", "import")) {
+        if (!isTargetIdentifier(name)) {
             diagnostics.unsupported(value, "Name cannot be preserved as a target identifier: $name")
         }
         return name

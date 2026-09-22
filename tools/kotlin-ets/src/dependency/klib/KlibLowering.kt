@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.impl.IrFileImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrModuleFragmentImpl
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.IrFileSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.util.ExternalDependenciesGenerator
@@ -37,13 +38,17 @@ data class KlibLoweringResult(
     val runtimeSymbols: Set<String>,
 )
 
+/** Canonical dependency symbols that a typed rule owns as primitive boundaries. */
+interface KlibPrimitiveBoundary {
+    val klibPrimitiveSymbols: Set<IrFunctionSymbol>
+}
+
 /**
- * Consumes selected modules and explicitly approved dependency bodies in one official symbol session.
+ * Consumes selected modules and the satisfiable dependency-body closure in one official symbol session.
  * No JS lowering pipeline or JS runtime emission. A session must be lowered only once.
  */
 fun KlibSession.lowerToEts(
     rules: List<CallRule>,
-    approvedBodies: Set<IrFunctionSymbol> = emptySet(),
     report: (KlibDependencyDecision) -> Unit = {},
 ): KlibLoweringResult {
     beginLowering()
@@ -57,12 +62,21 @@ fun KlibSession.lowerToEts(
             libraryLocations[file?.module], callSite, detail)
         decisions.add(decision)
     }
-    val provider = bodies(approvedBodies)
-    val selectedBodies = approvedBodies.associateWith(provider::resolve)
+    val provider = bodies()
+    val context = JsIrBackendContext(loaded.module.descriptor, loaded.bultins, symbolTable,
+        emptySet(), emptySet(), configuration, null)
+    ExternalDependenciesGenerator(symbolTable, listOf(linker)).generateUnboundSymbolsAsDependencies()
+    // Official jsCompiler.kt completes fake overrides after context-driven loading.
+    linker.postProcess(inOrAfterLinkageStep = true)
+    linker.checkNoUnboundSymbols(symbolTable, "before KLIB common inlining")
+    val candidateBodies = dependencyBodyClosure(modules, provider, libraryLocations.keys, loaded.bultins.unitClass,
+        rules.filterIsInstance<KlibPrimitiveBoundary>().flatMapTo(linkedSetOf()) { it.klibPrimitiveSymbols })
     val recordedBodies = FunctionBodies { symbol ->
-        (selectedBodies[symbol] ?: provider.resolve(symbol)).also { body ->
-            if (body is FunctionBody.Available) record(KlibDependencyDecision.Kind.REUSABLE_BODY, symbol, null,
-                "Official serialized KLIB body: ${body.origin}")
+        val body = if (symbol.owner.fileOrNull?.module in modules || symbol in candidateBodies) provider.resolve(symbol)
+            else FunctionBody.Unavailable(FunctionBody.Reason.NON_TRANSLATED_KLIB)
+        body.also {
+            if (it is FunctionBody.Available) record(KlibDependencyDecision.Kind.REUSABLE_BODY, symbol, null,
+                "Official serialized KLIB body: ${it.origin}")
         }
     }
     // Include non-inline translated bodies in the audit as well as inliner requests.
@@ -72,14 +86,8 @@ fun KlibSession.lowerToEts(
             element.acceptChildrenVoid(this)
         }
     }) }
-    val context = JsIrBackendContext(loaded.module.descriptor, loaded.bultins, symbolTable,
-        emptySet(), emptySet(), configuration, null)
-    ExternalDependenciesGenerator(symbolTable, listOf(linker)).generateUnboundSymbolsAsDependencies()
-    // Official jsCompiler.kt completes fake overrides after context-driven loading.
-    linker.postProcess(inOrAfterLinkageStep = true)
-    linker.checkNoUnboundSymbols(symbolTable, "before KLIB common inlining")
-    approvedBodies.forEach(recordedBodies::resolve)
-    val ordinaryBodies = selectedBodies.values.filterIsInstance<FunctionBody.Available>()
+    candidateBodies.keys.forEach(recordedBodies::resolve)
+    val ordinaryBodies = candidateBodies.values
         .map { it.declaration }.filterNot { it.isInline }
     val loweringModules = modules + materializeOrdinaryBodies(ordinaryBodies)
     inlineAvailableFunctions(context, loweringModules, recordedBodies)
@@ -89,7 +97,7 @@ fun KlibSession.lowerToEts(
     }
     val observedRules = rules.map { rule -> object : CallRule by rule {
         override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
-            if (call.symbol in approvedBodies) null else rule.lower(call, language, scope)?.also {
+            if (call.symbol in candidateBodies) null else rule.lower(call, language, scope)?.also {
                 record(KlibDependencyDecision.Kind.TARGET_REPLACEMENT, call.symbol, language.source(call),
                     "Typed target value supplied by ${rule.javaClass.name}")
             }
@@ -99,7 +107,7 @@ fun KlibSession.lowerToEts(
                     "Typed target constructor supplied by ${rule.javaClass.name}")
             }
         override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
-            if (call.symbol in approvedBodies) null else rule.lowerStatement(call, language, scope)?.also {
+            if (call.symbol in candidateBodies) null else rule.lowerStatement(call, language, scope)?.also {
                 record(KlibDependencyDecision.Kind.TARGET_REPLACEMENT, call.symbol, language.source(call),
                     "Target statements supplied by ${rule.javaClass.name}")
             }
@@ -134,11 +142,97 @@ fun KlibSession.lowerToEts(
     return KlibLoweringResult(program, decisions.toList(), standardLibraryRuntimeSymbols(program))
 }
 
+private fun dependencyBodyClosure(
+    modules: List<IrModuleFragment>,
+    bodies: FunctionBodies,
+    linkedModules: Set<IrModuleFragment>,
+    unitClass: IrClassSymbol,
+    primitiveSymbols: Set<IrFunctionSymbol>,
+): LinkedHashMap<IrFunctionSymbol, FunctionBody.Available> {
+    val translated = modules.toSet()
+    val discovered = linkedMapOf<IrFunctionSymbol, FunctionBody.Available>()
+    val dependencies = linkedMapOf<IrFunctionSymbol, MutableList<IrFunctionSymbol>>()
+    val rejected = linkedSetOf<IrFunctionSymbol>()
+    val roots = mutableListOf<IrFunctionSymbol>()
+    fun dependency(symbol: IrFunctionSymbol): Boolean {
+        val module = symbol.owner.fileOrNull?.module
+        return module in linkedModules && module !in translated && symbol !in primitiveSymbols
+    }
+    lateinit var discover: (IrFunctionSymbol) -> Unit
+    discover = fun(symbol: IrFunctionSymbol) {
+        if (!dependency(symbol) || symbol in discovered || symbol in rejected) return
+        val body = bodies.resolve(symbol) as? FunctionBody.Available ?: return
+        if (!body.isLoadableCommonBody(unitClass)) {
+            rejected += symbol
+            return
+        }
+        discovered[symbol] = body
+        val children = dependencies.getOrPut(symbol) { mutableListOf() }
+        body.body.acceptChildrenVoid(object : org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid {
+            override fun visitElement(element: org.jetbrains.kotlin.ir.IrElement) {
+                if (element is IrFunctionAccessExpression && dependency(element.symbol)) {
+                    val child = bodies.resolve(element.symbol)
+                    if (child is FunctionBody.Available) {
+                        children += element.symbol
+                        discover(element.symbol)
+                    }
+                }
+                element.acceptChildrenVoid(this)
+            }
+        })
+    }
+    val rootVisitor = object : org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid {
+        override fun visitElement(element: org.jetbrains.kotlin.ir.IrElement) {
+            if (element is IrFunctionAccessExpression && dependency(element.symbol)) {
+                roots += element.symbol
+                discover(element.symbol)
+            }
+            element.acceptChildrenVoid(this)
+        }
+    }
+    modules.forEach { it.acceptChildrenVoid(rootVisitor) }
+    var changed: Boolean
+    do {
+        changed = false
+        dependencies.forEach { (symbol, children) ->
+            if (symbol !in rejected && children.any { it in rejected }) {
+                rejected += symbol
+                changed = true
+            }
+        }
+    } while (changed)
+    val admitted = linkedMapOf<IrFunctionSymbol, FunctionBody.Available>()
+    fun admit(symbol: IrFunctionSymbol) {
+        val body = discovered[symbol] ?: return
+        if (symbol in rejected || admitted.putIfAbsent(symbol, body) != null) return
+        dependencies[symbol].orEmpty().forEach(::admit)
+    }
+    roots.forEach(::admit)
+    return admitted
+}
+
+private fun FunctionBody.Available.isLoadableCommonBody(unitClass: IrClassSymbol): Boolean {
+    if (declaration.valueParameters.any { it.varargElementType != null || it.defaultValue != null ||
+            !isTargetIdentifier(it.name.asString()) } ||
+        !(declaration.isInline || declaration is IrSimpleFunction && declaration.parent is IrFile)) return false
+    var loadable = true
+    body.acceptChildrenVoid(object : org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid {
+        override fun visitElement(element: org.jetbrains.kotlin.ir.IrElement) {
+            if (element is IrGetObjectValue) {
+                val owner = element.symbol.owner
+                if (element.symbol !== unitClass && sourceFile(owner) != null) loadable = false
+            }
+            if (loadable) element.acceptChildrenVoid(this)
+        }
+    })
+    return loadable
+}
+
 private fun materializeOrdinaryBodies(declarations: List<org.jetbrains.kotlin.ir.declarations.IrFunction>):
     List<IrModuleFragment> {
     val functions = declarations.map { declaration ->
         require(declaration is IrSimpleFunction && declaration.parent is IrFile) {
-            "Ordinary KLIB body reuse currently requires a top-level simple function"
+            "Ordinary KLIB body reuse currently requires a top-level simple function: ${symbolName(declaration)}"
         }
         declaration
     }
@@ -149,7 +243,7 @@ private fun materializeOrdinaryBodies(declarations: List<org.jetbrains.kotlin.ir
             targetFile.module = targetModule
             targetModule.files += targetFile
             fileFunctions.forEach { function ->
-                check(sourceFile.declarations.remove(function)) { "Selected KLIB function is not owned by its source file" }
+                check(sourceFile.declarations.remove(function)) { "Admitted KLIB function is not owned by its source file" }
                 function.parent = targetFile
                 targetFile.declarations += function
             }

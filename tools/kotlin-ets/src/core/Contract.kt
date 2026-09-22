@@ -26,6 +26,11 @@ fun sourceFile(declaration: IrDeclaration): IrFile? {
 fun symbolName(declaration: IrDeclarationWithName): String =
     declaration.fqNameWhenAvailable?.asString() ?: declaration.name.asString()
 
+internal fun isTargetIdentifier(name: String): Boolean = name.isNotEmpty() &&
+    (name.first().isLetter() || name.first() == '_' || name.first() == '$') &&
+    name.all { it.isLetterOrDigit() || it == '_' || it == '$' } &&
+    name !in setOf("function", "class", "var", "let", "const", "new", "default", "delete", "export", "import")
+
 data class UiDegradation(val diagnostic: Diagnostic, val capability: String, val action: String, val impact: String)
 
 class DiagnosticSink(var currentFile: String? = null, var reportUiDegradation: Boolean = false) {

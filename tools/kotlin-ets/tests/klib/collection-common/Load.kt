@@ -60,13 +60,14 @@ fun main(args: Array<String>) {
         )
         val decisions = mutableListOf<KlibDependencyDecision>()
         val collectionRule = KlibCollectionRuntimeRule(bindings)
-        val selectedRule = if (!rejectAppend) collectionRule else object : CallRule by collectionRule {
+        val selectedRule = if (!rejectAppend) collectionRule else object : CallRule by collectionRule,
+            KlibPrimitiveBoundary by collectionRule {
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
                 if (call.symbol === bindings.append) null else collectionRule.lower(call, language, scope)
         }
         if (rejectAppend) {
             val failure = try {
-                session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), approved, decisions::add)
+                session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), decisions::add)
                 error("Missing append binding unexpectedly lowered")
             } catch (failure: Unsupported) {
                 failure
@@ -87,7 +88,7 @@ fun main(args: Array<String>) {
             println("PASS source-linked rejection when exact append primitive is absent")
             return@withKlibModules
         }
-        val result = session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), approved, decisions::add)
+        val result = session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), decisions::add)
         check(decisions.any { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY && it.signature == filter.signature.toString() })
         check(decisions.any { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY && it.signature == filterNot.signature.toString() })
         val collectionReplacements = decisions.filter { it.kind == KlibDependencyDecision.Kind.TARGET_REPLACEMENT &&

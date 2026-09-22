@@ -6,9 +6,10 @@ symbol-bound collection runtime seam. The same seam now carries `map` and
 `mapNotNull` plus indexed variants, including their official `*To`, traversal
 and `let` closure. Non-indexed `flatMap` and `flatMapTo` reuse their official
 bodies through the exact linked iterable `addAll` primitive; indexed flat-map
-variants remain outside the admitted closure. The same selection API now emits
-the explicitly approved ordinary `Iterable.firstOrNull()` body while the
-predicate overload continues through official common inlining.
+variants remain outside the admitted closure. Dependency admission now walks
+the canonical body graph automatically, so ordinary `firstOrNull`, `any` and
+`none` bodies can be emitted while their predicate overloads use official
+common inlining.
 
 Scope: loading/linking reusable Kotlin bodies and selecting existing minimal ETS
 runtime support. No Compose control, UI backend, public CLI, JVM bytecode
@@ -20,8 +21,8 @@ translation, JS backend phase pipeline or complete stdlib replacement is added.
 | --- | --- | --- |
 | JVM serialized IR | `BinaryBodies` deserializes checked inline JVM bodies; `LibraryInlining` runs the official common inliner | Keep format and admission policy; share only the official inliner invocation with the KLIB path |
 | Serialized KLIB | `KlibLoader` uses official `ModulesStructure`, `loadIr`, `JsIrLinker`; explicit translated vs dependency-only libraries | Preserve official descriptor/symbol identities and attach canonical library paths to loaded module identities |
-| Body availability | KLIB proofs inspected raw IR; shared body origins described source/JVM only | `KlibSession.bodies()` implements `FunctionBodies`, reports `SerializedKlibIr`, enforces borrowed lifetime, and admits dependency-only inline or ordinary bodies only by explicit canonical symbol approval |
-| Target compilation | Experiments directly invoked the backend | `KlibSession.lowerToEts()` shares the common inliner, materializes only selected ordinary top-level functions, then uses existing typed ETS lowering; it records successful replacements and rejects unresolved dependency boundaries before target output |
+| Body availability | KLIB proofs inspected raw IR; shared body origins described source/JVM only | `KlibSession.bodies()` implements `FunctionBodies`, reports `SerializedKlibIr`, and exposes linked body capability for canonical symbols while enforcing borrowed lifetime |
+| Target compilation | Experiments directly invoked the backend | `KlibSession.lowerToEts()` discovers the transitive dependency body graph, prunes bodies whose signatures or nested bodies cannot be loaded, preserves canonical typed primitive boundaries, materializes the remaining ordinary top-level functions, and commits decisions only after typed lowering succeeds |
 | Runtime | `StandardLibraryDependencies` collects from typed ETS and existing support emission expands dependencies | Expose the collector's direct roots for evidence; keep a single collector and the existing per-module runtime closure |
 
 Function FQNames/signatures in reports are display evidence. Production approval
@@ -30,12 +31,12 @@ identities, never a spelling-based list of stdlib APIs. KLIB is never sent throu
 `JvmIrDeserializerImpl` or treated as a JVM FIR session.
 
 A translated library's non-inline bodies remain in their original files and are
-emitted with existing symbol-based imports. Explicitly approved dependency-only
-inline bodies are copied into callers by the official Kotlin common inliner;
-explicitly approved ordinary top-level bodies retain their canonical symbols and
-source files in a minimal temporary output module. No other declaration from the
-dependency file or module is emitted. A body being present is not permission to
-compile an entire dependency or interpret JS-specific implementations as ETS.
+emitted with existing symbol-based imports. Dependency-only inline bodies in a
+satisfiable discovered closure are copied into callers by the official Kotlin
+common inliner. Ordinary top-level bodies retain their canonical symbols and
+source files in minimal temporary output modules. Primitive rules declare their
+canonical KLIB symbol boundaries, so a body-bearing primitive is not accidentally
+expanded. No other declaration from the dependency file or module is emitted.
 
 The KLIB compiler context is the pinned official `JsIrBackendContext`, consistent
 with its `JsIrLinker` symbol universe. This context resolves compiler symbols;
@@ -90,9 +91,10 @@ ArkVM/device evidence.
 ## Boundaries
 
 The three-way classification does not promise general Kotlin dependency support.
-Unapproved dependency-only bodies are not silently copied; platform/external
-calls need an existing typed replacement or fail. Approved inline and ordinary
-bodies can still expose unsupported residual operations, which must fail target lowering.
+Only loadable top-level or inline bodies whose transitive body closure is loadable
+enter lowering. Platform/external calls still need a typed replacement or fail.
+The complete body and primitive closure must lower successfully before admission
+is reported or any target output is written.
 Full JS collections and coroutine implementations remain outside the admitted
 runtime. This increment does not delete existing stdlib adapters or claim that
 portable common source equivalents are identical to official JS collection
@@ -104,21 +106,22 @@ representations. In particular, `ArrayList` construction may reach `kotlin.js.js
 pinned compiler/stdlib hashes, body and replacement provenance, typed runtime
 selection, JVM/ETS results, rejection diagnostics and production source hashes.
 
-1. **Source/selection:** `capabilities/.work/run-XX3AHU` records official
-   `kotlin.let` from `src/kotlin/util/Standard.kt`, the selected dependency body,
-   and the actual Int remainder replacement. Without explicit approval the
-   dependency-only inline body remains unavailable. Emitted support is exactly
+1. **Source/selection:** the current `capabilities` run records official
+   `kotlin.let` from `src/kotlin/util/Standard.kt`, the automatically discovered
+   dependency body, and the actual Int remainder replacement. The same body is
+   reused when its KLIB is dependency-only. Emitted support is exactly
    `__etsIntRem` plus its `__etsThrowable` dependency, with none in Library.ets.
 2. **Positive link/typed output:** that run preserves Library/Consumer imports,
    strict host typing and four JVM/ETS outcomes (`2`, `0`, `0`, `-1`), after
    deleting producer sources.
-3. **Explicit rejection:** external no-body and non-selected non-inline body
-   cases report library, declaration and call-site spans, with no ETS output.
-4. **Regressions:** loader `run-vEVvEa` passes four host/JVM outcomes and missing
-   transitive dependency rejection; portable-common `run-6oCL0H` passes 36 value
+3. **Explicit rejection:** an external no-body case reports library, declaration
+   and call-site spans, with no ETS output. Focused collection fixtures also
+   inject missing bodies and exact primitives.
+4. **Regressions:** loader `run-w1etNI` passes four host/JVM outcomes and missing
+   transitive dependency rejection; portable-common `run-Qiqnxa` passes 36 value
    cases, nine exhaustion cases and callback exception identity; current JVM
-   member-inline `run-PWQ1Zr` passes 26 official inline blocks and seven refusal
-   boundaries, and `replay-dbkLpR` passes three JVM/typed-ETS host pairs plus
+   member-inline `run-lLUdQT` passes 26 official inline blocks and seven refusal
+   boundaries, and `replay-9kDbtZ` passes three JVM/typed-ETS host pairs plus
    unmapped-type and invalid-bound rejection.
 5. **Scope:** only this branch's dependency/inliner/runtime-selection code,
    focused tests and documentation are changed. No production UI files changed.

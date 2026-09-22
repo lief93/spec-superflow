@@ -47,7 +47,11 @@ data class KlibCollectionRuntimeBindings(
  * Typed target representation for the collection operations left after common-body inlining.
  * Source API selection is by symbol identity only; helper names identify target runtime primitives.
  */
-class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindings) : CallRule {
+class KlibCollectionRuntimeRule(private val bindings: KlibCollectionRuntimeBindings) : CallRule, KlibPrimitiveBoundary {
+    override val klibPrimitiveSymbols: Set<IrFunctionSymbol> = setOfNotNull(bindings.emptyListConstructor,
+        bindings.iterator, bindings.hasNext, bindings.next, bindings.isEmpty, bindings.get, bindings.append,
+        bindings.appendAll, bindings.capacityListConstructor, bindings.collectionSizeOrDefault,
+        bindings.checkIndexOverflow)
     private val listClasses = listOfNotNull(bindings.emptyListConstructor?.owner?.parent as? IrClass).toSet()
     private val iterableClass = bindings.iterator.owner.parentAsClass.symbol
     private val collectionClasses = listOfNotNull(bindings.isEmpty, bindings.get, bindings.append, bindings.appendAll)

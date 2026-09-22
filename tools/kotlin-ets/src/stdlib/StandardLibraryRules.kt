@@ -265,7 +265,7 @@ class StandardLibraryRules : CallRule {
                 }
             }
         }
-        if (name == "kotlin.collections.firstOrNull") {
+        if (name == "kotlin.collections.firstOrNull" && sourceFile(owner) == null) {
             val element = receiver?.type.invariantArguments("kotlin.collections.List", "kotlin.collections.MutableList",
                 "kotlin.collections.Iterable", "kotlin.collections.Collection")?.singleOrNull() ?: return null
             val targetElement = language.type(element)

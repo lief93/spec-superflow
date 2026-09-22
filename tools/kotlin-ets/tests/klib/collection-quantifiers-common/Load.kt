@@ -1,5 +1,5 @@
 @file:OptIn(org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI::class)
-package dev.ets.collectionfirstornullcommontest
+package dev.ets.collectionquantifierscommontest
 
 import dev.ets.*
 import dev.ets.dependency.klib.*
@@ -28,33 +28,37 @@ fun main(args: Array<String>) {
     val stdlib = File(args[2])
     val mode = args.getOrNull(3) ?: "positive"
     KlibLoader.withKlibModules(KlibModuleSelection(consumer, listOf(consumer), listOf(stdlib))) { session ->
-        val module = session.linkedModules().single()
-        val entries = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
-        val overloads = entries.flatMap { it.calls() }.map { it.symbol }.distinct().filter {
-            it.owner.fqNameWhenAvailable?.asString() == "kotlin.collections.firstOrNull"
+        val entries = session.linkedModules().single().files.flatMap { it.declarations }
+            .filterIsInstance<IrSimpleFunction>()
+        val names = setOf("kotlin.collections.any", "kotlin.collections.all", "kotlin.collections.none")
+        val quantifiers = entries.flatMap { it.calls() }.map { it.symbol }.distinct()
+            .filter { it.owner.fqNameWhenAvailable?.asString() in names }
+        val ordinaryAny = quantifiers.single {
+            it.owner.fqNameWhenAvailable?.asString() == "kotlin.collections.any" && it.owner.valueParameters.isEmpty()
         }
-        val ordinary = overloads.single { it.owner.valueParameters.isEmpty() }
-        val predicate = overloads.single { it.owner.valueParameters.size == 1 }
-        check(!ordinary.owner.isInline && ordinary.owner.body != null)
-        check(predicate.owner.isInline && predicate.owner.body != null)
-        val approved = setOf(ordinary, predicate)
-        val residual = approved.flatMap { it.owner.body!!.calls() }.map { it.symbol }.filter { it !in approved }.toSet()
+        val ordinaryNone = quantifiers.single {
+            it.owner.fqNameWhenAvailable?.asString() == "kotlin.collections.none" && it.owner.valueParameters.isEmpty()
+        }
+        check(!ordinaryAny.owner.isInline && !ordinaryNone.owner.isInline)
+        val predicates = quantifiers - setOf(ordinaryAny, ordinaryNone)
+        check(predicates.size == 3 && predicates.all { it.owner.isInline }) { predicates.map { symbolName(it.owner) } }
+        check(quantifiers.all { it.owner.body != null })
+        val residual = quantifiers.flatMap { it.owner.body!!.calls() }.map { it.symbol }
+            .filter { it !in quantifiers }.toSet()
         fun symbol(name: String) = residual.single { it.owner.fqNameWhenAvailable?.asString() == name }
-        val iterator = symbol("kotlin.collections.Iterable.iterator")
+        val hasNext = symbol("kotlin.collections.Iterator.hasNext")
         val bindings = KlibCollectionRuntimeBindings(
-            iterator = iterator,
-            hasNext = symbol("kotlin.collections.Iterator.hasNext"),
+            iterator = symbol("kotlin.collections.Iterable.iterator"),
+            hasNext = hasNext,
             next = symbol("kotlin.collections.Iterator.next"),
-            isEmpty = symbol("kotlin.collections.List.isEmpty"),
-            get = symbol("kotlin.collections.List.get"),
+            isEmpty = symbol("kotlin.collections.Collection.isEmpty"),
         )
-        if (mode == "reject-body") ordinary.owner.body = null
+        if (mode == "reject-body") ordinaryAny.owner.body = null
         val collectionRule = KlibCollectionRuntimeRule(bindings)
-        val rejectedPrimitive = checkNotNull(bindings.get)
-        val selectedRule = if (mode != "reject-get") collectionRule else object : CallRule by collectionRule,
+        val selectedRule = if (mode != "reject-has-next") collectionRule else object : CallRule by collectionRule,
             KlibPrimitiveBoundary by collectionRule {
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
-                if (call.symbol === rejectedPrimitive) null else collectionRule.lower(call, language, scope)
+                if (call.symbol === hasNext) null else collectionRule.lower(call, language, scope)
         }
         val decisions = mutableListOf<KlibDependencyDecision>()
         if (mode != "positive") {
@@ -65,7 +69,7 @@ fun main(args: Array<String>) {
                 failure
             }
             val rejection = decisions.single { it.kind == KlibDependencyDecision.Kind.REJECTED }
-            val expected = if (mode == "reject-body") ordinary else rejectedPrimitive
+            val expected = if (mode == "reject-body") ordinaryAny else hasNext
             check(failure.diagnostic.code == "UNSUPPORTED_KLIB_DEPENDENCY") { failure.diagnostic }
             check(rejection.signature == expected.signature.toString() && failure.diagnostic.source == rejection.callSite &&
                 rejection.callSite?.isSourceLinked() == true) { rejection }
@@ -74,8 +78,8 @@ fun main(args: Array<String>) {
                 check(rejection.detail.contains("no function body", ignoreCase = true)) { rejection }
                 check(rejection.callSite?.file?.endsWith("Consumer.kt") == true) { rejection }
             } else {
-                check(rejection.declaration.file?.endsWith("Collections.kt") == true) { rejection }
-                check(rejection.callSite?.file?.endsWith("_Collections.kt") == true) { rejection }
+                check(rejection.declaration.file?.endsWith("Iterator.kt") == true) { rejection }
+                check(rejection.callSite?.file?.endsWith(".kt") == true) { rejection }
             }
             check(output.listFiles().orEmpty().none { it.extension == "ets" })
             File(output, "rejection.tsv").writeText(
@@ -87,29 +91,26 @@ fun main(args: Array<String>) {
         val result = session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), decisions::add)
         val reused = decisions.filter { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY }
             .map { it.signature }.toSet()
-        check(setOf(ordinary, predicate).all { it.signature.toString() in reused }) { reused }
+        check(quantifiers.all { it.signature.toString() in reused }) { reused }
         val replacements = decisions.filter { it.kind == KlibDependencyDecision.Kind.TARGET_REPLACEMENT &&
             it.detail.contains("KlibCollectionRuntimeRule") }.map { it.signature }.toSet()
-        check(replacements == setOf(bindings.iterator, bindings.hasNext, bindings.next,
-            checkNotNull(bindings.isEmpty), checkNotNull(bindings.get))
+        check(replacements == setOf(bindings.iterator, bindings.hasNext, bindings.next, checkNotNull(bindings.isEmpty))
             .map { it.signature.toString() }.toSet()) { replacements }
-        check(result.runtimeSymbols == setOf("stdlib:__etsIterator", "stdlib:__etsArrayIterator",
-            "stdlib:__etsListGet")) {
+        check(result.runtimeSymbols == setOf("stdlib:__etsThrowable", "stdlib:__etsIterator",
+            "stdlib:__etsArrayIterator")) {
             result.runtimeSymbols
         }
         val emitted = emitEtsModules(result.program, StandardLibraryRuntime)
         check(emitted.keys == setOf("Consumer.ets", "_Collections.ets")) { emitted.keys }
         val bodyCode = emitted.getValue("_Collections.ets")
-        check("function firstOrNull" in bodyCode && "return iterator.next()" in bodyCode)
-        check("function first(" in emitted.getValue("Consumer.ets") &&
-            "function firstMatching(" in emitted.getValue("Consumer.ets"))
-        check(emitted.values.none { "__etsListFirstOrNull" in it })
+        check("function any" in bodyCode && "function none" in bodyCode)
+        check(emitted.values.none { "__etsListAny" in it })
         emitted.forEach { (name, code) -> File(output, name).writeText(code) }
         File(output, "decisions.tsv").writeText(decisions.joinToString("\n") {
             "${it.kind}\t${it.signature}\t${it.library}\t${it.declaration}\t${it.callSite}\t${it.detail}"
         })
         File(output, "runtime-symbols.txt").writeText(result.runtimeSymbols.sorted().joinToString("\n"))
-        println("PASS ordinary firstOrNull body plus inline predicate overload")
+        println("PASS ordinary and predicate quantifier bodies")
     }
 }
 

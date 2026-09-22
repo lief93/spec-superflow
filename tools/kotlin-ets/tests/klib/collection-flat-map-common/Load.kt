@@ -66,13 +66,14 @@ fun main(args: Array<String>) {
         )
         val decisions = mutableListOf<KlibDependencyDecision>()
         val collectionRule = KlibCollectionRuntimeRule(bindings)
-        val selectedRule = if (!rejectAppendAll) collectionRule else object : CallRule by collectionRule {
+        val selectedRule = if (!rejectAppendAll) collectionRule else object : CallRule by collectionRule,
+            KlibPrimitiveBoundary by collectionRule {
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
                 if (call.symbol === appendAll) null else collectionRule.lower(call, language, scope)
         }
         if (rejectAppendAll) {
             val failure = try {
-                session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), approved, decisions::add)
+                session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), decisions::add)
                 error("Missing appendAll primitive unexpectedly lowered")
             } catch (failure: Unsupported) {
                 failure
@@ -92,7 +93,7 @@ fun main(args: Array<String>) {
             println("PASS source-linked rejection when appendAll primitive is absent")
             return@withKlibModules
         }
-        val result = session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), approved, decisions::add)
+        val result = session.lowerToEts(listOf(selectedRule, StandardLibraryRules()), decisions::add)
         check(decisions.any { it.kind == KlibDependencyDecision.Kind.REUSABLE_BODY &&
             it.signature == flatMap.signature.toString() })
         val replacements = decisions.filter { it.kind == KlibDependencyDecision.Kind.TARGET_REPLACEMENT &&
