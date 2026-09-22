@@ -41,8 +41,7 @@ internal fun requiresMaterialContext(element: IrElement): Boolean {
                     "androidx.compose.material3.ButtonDefaults.textButtonColors") ||
                 owner.correspondingPropertySymbol?.owner?.let(::symbolName) in setOf("androidx.compose.material3.MaterialTheme.colorScheme", "androidx.compose.material3.MaterialTheme.typography", "androidx.compose.material3.MaterialTheme.shapes") ||
                 api == "androidx.compose.material3.contentColorFor" ||
-                api == "androidx.compose.material3.Surface" &&
-                (argument(expression, "color") == null || argument(expression, "contentColor") == null))) required = true
+                api == "androidx.compose.material3.Surface")) required = true
             expression.acceptChildrenVoid(this)
         }
     })
@@ -59,7 +58,7 @@ private val contentRoles = linkedMapOf("primary" to "onPrimary", "secondary" to 
     "surfaceContainerHighest" to "onSurface", "surfaceContainerLow" to "onSurface", "surfaceContainerLowest" to "onSurface")
 
 internal fun materialContentColorFor(context: EtsExpression, background: EtsExpression, at: SourceSpan): EtsExpression =
-    EtsCall(EtsMember(context, "contentColorFor", EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.NUMBER), at),
+    EtsCall(EtsMember(context, "contentColorFor", EtsFunctionType(listOf(composeColorType), EtsTypes.NUMBER), at),
         listOf(background), EtsTypes.NUMBER, at)
 
 internal class ComposeMaterialThemeValueRule : CallRule {
@@ -133,7 +132,7 @@ internal class ComposeMaterialThemeValueRule : CallRule {
             EtsExpressionStatement(EtsAssignment(EtsMember(self, field.symbol.name, field.symbol.type, at, field.symbol.id),
                 EtsReference(parameter.symbol), at))
         }, at, kind = EtsFunctionKind.CONSTRUCTOR)
-        val background = EtsParameter(EtsSymbol("material:context:background", "background", EtsTypes.NUMBER, at))
+        val background = EtsParameter(EtsSymbol("material:context:background", "background", composeColorType, at))
         val scheme = materialScheme(self, at)
         val match = contentRoles.entries.toList().asReversed().fold(materialContentColor(self, at) as EtsExpression) { fallback, (role, onRole) ->
             EtsConditional(EtsBinary("===", EtsReference(background.symbol), EtsMember(scheme, role, EtsTypes.NUMBER, at), EtsTypes.BOOLEAN, at),

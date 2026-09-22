@@ -7,12 +7,13 @@ import ts from '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony
 // exclude build(), whose Stack DSL belongs to the actual SDK test.
 export function verifyEffects(path) {
   const source = readFileSync(path, 'utf8');
-  const parsed = ts.createSourceFile('effects.ts', source.replace('export struct EffectPage', 'export class EffectPage'),
+  const parsed = ts.createSourceFile('effects.ts', source.replaceAll('@Builder\n', '')
+    .replace('export struct EffectPage', 'export class EffectPage'),
     ts.ScriptTarget.ES2022, true);
   const page = parsed.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'EffectPage');
   assert.ok(page);
   const members = page.members.filter(node => node.name?.getText(parsed) !== 'build');
-  assert.ok(members.length >= 2);
+  assert.ok(members.length >= 1);
   const ordinary = parsed.statements.filter(node => node !== page && !ts.isImportDeclaration(node))
     .map(node => node.getFullText(parsed)).join('\n');
   const executable = ordinary + '\nexport class EffectPage {\n' +

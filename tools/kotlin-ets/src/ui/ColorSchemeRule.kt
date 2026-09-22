@@ -75,9 +75,12 @@ internal class ComposeColorSchemeRule : CallRule {
                 throw Unsupported(Diagnostic("UNSUPPORTED", "Unsupported Material3 ColorScheme factory signature", at))
             val dark = api == "androidx.compose.material3.darkColorScheme"
             val values = materialColorSchemeDefaults.entries.mapIndexed { index, (name, defaults) ->
-                call.getValueArgument(index)?.let { language.expression(it, scope) }
-                    ?: if (name == "surfaceTint") EtsLiteral(null, EtsTypes.NULL, at)
-                    else EtsLiteral(if (dark) defaults.second else defaults.first, EtsTypes.NUMBER, at)
+                val fallback = EtsLiteral(if (dark) defaults.second else defaults.first, EtsTypes.NUMBER, at)
+                call.getValueArgument(index)?.let { value ->
+                    val lowered = language.expression(value, scope)
+                    if (name == "surfaceTint") lowered
+                    else resolveComposeColor(lowered, fallback, language.source(value))
+                } ?: if (name == "surfaceTint") EtsLiteral(null, EtsTypes.NULL, at) else fallback
             }
             return EtsCast(EtsNew(materialColorValuesType, values, at), materialColorSchemeType, at)
         }

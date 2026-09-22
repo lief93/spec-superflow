@@ -38,8 +38,14 @@ internal class ComposeSurfaceRule(
             if (!stableColor(it)) target.diagnostics.unsupported(value,
                 "Surface requires a stable color value; bind effectful calls or mutable reads to a source val first")
         }
-        val background = color?.let(::colorValue) ?: EtsMember(materialScheme(materialContext(scope, at), at), "surface", EtsTypes.NUMBER, at)
-        val foreground = contentColor?.let(::colorValue) ?: materialContentColorFor(materialContext(scope, at), background, at)
+        val contextValue = materialContext(scope, at)
+        val defaultBackground = EtsMember(materialScheme(contextValue, at), "surface", EtsTypes.NUMBER, at)
+        val background = color?.let { resolveComposeColor(colorValue(it), defaultBackground, language.source(it)) }
+            ?: defaultBackground
+        val defaultForeground = materialContentColorFor(contextValue, background, at)
+        val foreground = contentColor?.let {
+            resolveComposeColor(colorValue(it), defaultForeground, language.source(it))
+        } ?: defaultForeground
         val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "Surface requires content")
         return emit(call, language, scope, background, foreground, body, argument(call, "modifier"), false, emptyList())
     }

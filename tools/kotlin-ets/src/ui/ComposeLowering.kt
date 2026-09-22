@@ -189,7 +189,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeProvideTextStyleRule(target, ::provideMaterialContext),
             ComposeSurfaceRule(target, ::surfaceContent, { content, scope -> surfaceContent(content, scope, "height") }, ::modifiers),
             ComposeSpacerRule(target, ::modifiers),
-            ComposeTextRule(target, ::colorValue, ::dimension,
+            ComposeTextRule(target, ::dimension,
                 { usesMaterialTypography = true }, ::modifiers),
             ComposeButtonRule(target, ::uiLambdaBody, ::callback, ::modifiers),
             ComposeBasicTextRule(target, ::modifiers),
@@ -1021,7 +1021,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     }
 
     private fun colorValue(expression: IrExpression, scope: Scope): EtsExpression {
-        return language.expression(expression, scope)
+        return requireSpecifiedColor(language.expression(expression, scope), language.source(expression),
+            "Compose color consumer")
     }
 
     // Structural aliases are safe only when their construction has no user effects.
@@ -1304,7 +1305,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     }
                     "androidx.compose.foundation.background" -> {
                         checkArguments(call, setOf("color", "shape"))
-                        attributes["backgroundColor"] = colorValue(argument(call, "color") ?: diagnostics.unsupported(call, "Missing background color"), scope)
+                        val color = argument(call, "color") ?: diagnostics.unsupported(call, "Missing background color")
+                        attributes["backgroundColor"] = requireSpecifiedColor(language.expression(color, scope),
+                            language.source(color), "Modifier.background")
                         argument(call, "shape")?.let { attributes["borderRadius"] =
                             shapes.borderRadius(it, language, scope, diagnostics) }
                     }

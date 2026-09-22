@@ -69,9 +69,9 @@ try {
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'UNSUPPORTED');
   assert.equal(backendBlocker.message,
-    'Color.Unspecified requires inherited/default color selection; it is not an ARGB value');
-  assert.equal(backendBlocker.source.line, 29);
-  assert.equal(backendBlocker.source.column, 30);
+    'Unsupported dimension value: androidx.compose.ui.unit.Dp.Companion.Unspecified');
+  assert.equal(backendBlocker.source.line, 30);
+  assert.equal(backendBlocker.source.column, 33);
   assert.equal(existsSync(output), false);
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
@@ -102,7 +102,7 @@ try {
   const colorCopies = report.calls.filter(call =>
     call.finalRecognizedNode.symbol === 'androidx.compose.ui.graphics.Color.copy');
   assert.equal(colorCopies.length, 2);
-  assert.ok(colorCopies.every(call => call.expectedTargetType === 'number' &&
+  assert.ok(colorCopies.every(call => call.expectedTargetType === 'number | null' &&
     call.finalRecognizedNode.kind === 'typed_call' && call.firstUnsupportedNode === null));
   assert.ok(colorCopies.every(call => JSON.stringify(call.argumentResolutions) === JSON.stringify([
     { parameter: 'red', resolution: 'source_default' },
@@ -118,7 +118,7 @@ try {
   assert.equal(textStyleProvider?.source.column, 13);
   const surfaceColor = report.calls.find(call =>
     call.finalRecognizedNode.symbol === 'androidx.compose.material3.surfaceColorAtElevation');
-  assert.equal(surfaceColor?.expectedTargetType, 'number');
+  assert.equal(surfaceColor?.expectedTargetType, 'number | null');
   assert.equal(surfaceColor?.finalRecognizedNode.kind, 'typed_call');
   assert.equal(surfaceColor?.firstUnsupportedNode, null);
   assert.equal(surfaceColor?.source.line, 210);
@@ -139,6 +139,11 @@ try {
   ]);
   assert.ok(providedValues.every(call => call.finalRecognizedNode.kind === 'typed_call' &&
     call.firstUnsupportedNode === null));
+  const unspecifiedColors = report.calls.filter(call =>
+    call.finalRecognizedNode.symbol === 'androidx.compose.ui.graphics.Color.Companion.<get-Unspecified>');
+  assert.equal(unspecifiedColors.length, 5);
+  assert.ok(unspecifiedColors.every(call => call.expectedTargetType === 'number | null' &&
+    call.finalRecognizedNode.kind === 'typed_call' && call.firstUnsupportedNode === null));
   assert.equal(report.firstUnsupportedNode.kind, 'target_type');
   assert.equal(report.firstUnsupportedNode.symbol,
     'androidx.compose.ui.text.style.LineHeightStyle.Alignment.Companion.<get-Bottom>');
@@ -179,8 +184,8 @@ try {
     backendBlocker,
     unsupportedCalls,
     p0Gaps: [
-      { category: 'neutral_compose_widget', node: 'androidx.compose.ui.graphics.Color.Unspecified',
-        responsibleModule: 'tools/kotlin-ets/src/ui/ColorValueRule.kt', source: backendBlocker.source,
+      { category: 'neutral_compose_widget', node: 'androidx.compose.ui.unit.Dp.Unspecified',
+        responsibleModule: 'tools/kotlin-ets/src/ui/DimensionRule.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
       { category: 'neutral_compose_widget', node: 'unsupported_call_inventory',
         responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt',
@@ -190,7 +195,7 @@ try {
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS typed CompositionLocalProvider and provides calls advance the backend to Color.Unspecified; all 13 unsupported Compose calls remain explicit');
+  console.log('PASS typed optional Color.Unspecified values advance the backend to Dp.Unspecified; all 13 unsupported Compose calls remain explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

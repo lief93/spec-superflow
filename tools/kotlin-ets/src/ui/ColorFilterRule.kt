@@ -26,7 +26,7 @@ internal class ComposeColorFilterRule : CallRule {
             throw Unsupported(Diagnostic("UNSUPPORTED",
                 "ColorFilter.tint currently requires the default SrcIn blend", language.source(it)))
         }
-        val value = language.expression(color, scope)
+        val value = requireSpecifiedColor(language.expression(color, scope), language.source(color), "ColorFilter.tint")
         return EtsCall(EtsReference(EtsSymbol("compose:imageTint", "__etsImageTint",
             EtsFunctionType(listOf(EtsTypes.NUMBER), colorFilterType), at, true), at),
             listOf(value), colorFilterType, at)

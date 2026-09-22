@@ -29,10 +29,10 @@ function compile(entry, source, expectedStatus = 0) {
 const code = compile('Page', 'Page.kt');
 assert.match(code, /EtsComposeSurface\(\{ content:/);
 assert.match(code, /WithTheme\(\{ theme: \{ colors: \{ fontPrimary: 4294967295/);
-assert.match(code, /Text\("Override"\)\.align\(Alignment.TopStart\)\.fontColor\(4294901760\)/);
+assert.match(code, /Text\("Override"\)\.align\(Alignment.TopStart\)\.attributeModifier\(__etsTextStyleModifier\(4294901760,/);
 assert.match(code, /fixedWidth: true, fixedHeight: true/);
 assert.match(code, /\.clip\(true\)\.hitTestBehavior\(HitTestMode.Default\)\.width\(80(?:\.0)?\)\.height\(40(?:\.0)?\)/);
-assert.match(code, /Text\("Outside"\)\.align\(Alignment.TopStart\)\.fontColor\(4278190080\)/);
+assert.match(code, /Text\("Outside"\)\.align\(Alignment.TopStart\)\.attributeModifier\(__etsTextStyleModifier\(4278190080,/);
 assert.match(code, /Text\("Basic"\)\.fontColor\(4278190080\)\.fontSize\(14\)\.align\(Alignment.TopStart\)/);
 
 // Execute the exact emitted layout callbacks, not a separate copy of their algorithm.

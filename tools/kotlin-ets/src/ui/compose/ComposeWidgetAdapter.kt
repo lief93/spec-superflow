@@ -668,8 +668,8 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         }
         val expected = when (type) {
             WidgetValueType.STRING, WidgetValueType.FONT_FAMILY -> EtsTypes.STRING
-            WidgetValueType.COLOR, WidgetValueType.FONT_SIZE, WidgetValueType.FONT_WEIGHT,
-                WidgetValueType.LINE_HEIGHT -> EtsTypes.NUMBER
+            WidgetValueType.COLOR -> EtsNullableType(EtsTypes.NUMBER)
+            WidgetValueType.FONT_SIZE, WidgetValueType.FONT_WEIGHT, WidgetValueType.LINE_HEIGHT -> EtsTypes.NUMBER
         }
         val emitted = if (type == WidgetValueType.FONT_FAMILY && systemFontFamily != null) {
             EtsLiteral(systemFontFamily, EtsTypes.STRING, language.source(resolved))
@@ -679,9 +679,11 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 "Unmapped project widget token $propertyName; provide a project adapter mapping")
         } else if (provenance is WidgetValueProvenance.Expression) scalar(resolved, scope)
         else language.expression(resolved, scope)
-        if (emitted.type != expected) diagnostics.unsupported(value,
+        if (!etsAssignable(emitted.type, expected)) diagnostics.unsupported(value,
             "Widget ${type.name.lowercase()} requires target type $expected; got ${emitted.type}")
-        return WidgetValue(type, emitted, provenance, language.source(resolved))
+        val consumed = if (type == WidgetValueType.COLOR)
+            requireSpecifiedColor(emitted, language.source(resolved), "Modifier.background") else emitted
+        return WidgetValue(type, consumed, provenance, language.source(resolved))
     }
 
     private fun scalar(value: IrExpression, scope: Scope): EtsExpression {

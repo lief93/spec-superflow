@@ -43,7 +43,10 @@ internal class ComposeButtonColorsRule : CallRule {
         if (sourceFile(owner) != null || symbolName(owner) != "androidx.compose.material3.ButtonColors") return null
         if (call.symbol.owner.valueParameters.map { it.name.asString() } != colorFields)
             throw Unsupported(Diagnostic("UNSUPPORTED", "Unsupported ButtonColors constructor signature", language.source(call)))
-        return EtsNew(buttonColorsType, colorFields.map { language.expression(argument(call, it)!!, scope) }, language.source(call))
+        return EtsNew(buttonColorsType, colorFields.map { name ->
+            val value = argument(call, name)!!
+            requireSpecifiedColor(language.expression(value, scope), language.source(value), "ButtonColors.$name")
+        }, language.source(call))
     }
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
         val owner = call.symbol.owner
@@ -58,7 +61,8 @@ internal class ComposeButtonColorsRule : CallRule {
                 throw Unsupported(Diagnostic("UNSUPPORTED", "Unsupported ButtonDefaults color factory signature", at))
             val defaults = defaultButtonColors(scope, at, api.endsWith("textButtonColors")) as EtsNew
             return EtsNew(buttonColorsType, colorFields.mapIndexed { index, name ->
-                argument(call, name)?.let { language.expression(it, scope) } ?: defaults.arguments[index]
+                argument(call, name)?.let { value -> resolveComposeColor(language.expression(value, scope),
+                    defaults.arguments[index], language.source(value)) } ?: defaults.arguments[index]
             }, at)
         }
         val property = owner.correspondingPropertySymbol?.owner ?: return null

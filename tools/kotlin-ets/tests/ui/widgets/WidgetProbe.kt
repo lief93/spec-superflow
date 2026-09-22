@@ -49,6 +49,12 @@ fun main(args: Array<String>) {
             scope.bindings[parameter.symbol] = EtsReference(symbol)
             EtsParameter(symbol)
         }
+        fun guardedColor(value: EtsExpression): EtsReference {
+            val call = value as EtsCall
+            check(call.type == EtsTypes.NUMBER && call.arguments.size == 1)
+            check((call.callee as EtsLambda).body.any { it is EtsIf })
+            return call.arguments.single() as EtsReference
+        }
         val adapter = ComposeWidgetAdapter(language, sink)
         val model = adapter.lower(page, scope)
         val column = model.widgets.single() as Widget.Column
@@ -126,7 +132,7 @@ fun main(args: Array<String>) {
         check((styledSize.width as EtsLiteral).value == 36.0 && (styledSize.height as EtsLiteral).value == 20.0)
         val expressionColor = (styledText.modifiers[1] as WidgetModifier.Background).color
         check(expressionColor.provenance == WidgetValueProvenance.Expression("surfaceColor"))
-        check((expressionColor.value as EtsReference).symbol == parameters[6].symbol)
+        check(guardedColor(expressionColor.value).symbol == parameters[6].symbol)
         val styledClick = styledText.modifiers[2] as WidgetModifier.Click
         check((styledClick.onClick as EtsReference).symbol == parameters[2].symbol)
         check((styledClick.enabled as EtsReference).symbol == parameters[1].symbol)
@@ -141,7 +147,7 @@ fun main(args: Array<String>) {
         val imageClick = resourceImage.modifiers[0] as WidgetModifier.Click
         check((imageClick.onClick as EtsReference).symbol == parameters[2].symbol)
         check((imageClick.enabled as EtsReference).symbol == parameters[1].symbol)
-        check((((resourceImage.modifiers[1] as WidgetModifier.Background).color.value) as EtsReference).symbol == parameters[6].symbol)
+        check(guardedColor((resourceImage.modifiers[1] as WidgetModifier.Background).color.value).symbol == parameters[6].symbol)
         val imageSize = resourceImage.modifiers[2] as WidgetModifier.Size
         check((imageSize.width as EtsLiteral).value == 24.0 && imageSize.width == imageSize.height)
         val urlImage = column.children.widgets[9] as Widget.Image

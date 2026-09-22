@@ -31,7 +31,7 @@ function compile(label, mode, sources, entry, expected = 0) {
 }
 
 const code = compile('models', 'language', ['Models.kt']);
-assert.match(code, /export function elevated\(surface: number, surfaceTint: number, elevation: number\): number/);
+assert.match(code, /export function elevated\(surface: number \| null, surfaceTint: number \| null, elevation: number\): number \| null/);
 assert.match(code, /as EtsMaterialColorScheme, elevation\);/);
 assert.match(code, /if \(elevation === 0 && 1 \/ elevation > 0\) \{\s*return scheme\.surface;/);
 assert.ok(code.indexOf('if (elevation === 0') < code.indexOf('Math.log'), 'positive zero must return before logarithm');

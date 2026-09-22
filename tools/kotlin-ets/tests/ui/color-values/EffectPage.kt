@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 class ColorCounter(var count: Int = 0) {
-    fun nextColor(): Color { count++; return Color.Red }
+    fun nextColor(): Color { count++; return Color.Unspecified }
     fun label(): String = count.toString()
 }
 

@@ -37,9 +37,11 @@ const code = compile('page', 'colorcopy.Page', 'Page.kt');
 assert.match(code, /import \{ ColorMetrics \} from "@ohos\.arkui\.node";/);
 assert.match(code, /ColorMetrics\.numeric\(color\)/);
 assert.match(code, /ColorMetrics\.rgba\(outputRed, outputGreen, outputBlue, outputAlpha \/ 255\)/);
-assert.match(code, /__etsCopyColor\(color, alpha, null, null, null\)/);
-assert.match(code, /__etsCopyColor\(color, alpha, red, green, blue\)/);
-assert.match(code, /__etsCopyColor\(color, null, null, null, null\)/);
+assert.match(code, /export function unchanged\(color: number \| null\): number \| null/);
+assert.match(code, /Color\.copy received Color\.Unspecified/);
+assert.match(code, /\)\(color\), alpha, null, null, null\)/);
+assert.match(code, /\)\(color\), alpha, red, green, blue\)/);
+assert.match(code, /\)\(color\), null, null, null, null\)/);
 
 const parsed = ts.createSourceFile('page.ts', code.replace('export struct Page', 'export class Page'),
   ts.ScriptTarget.ES2022, true);

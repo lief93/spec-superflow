@@ -7,17 +7,47 @@ import org.jetbrains.kotlin.ir.types.*
 
 private val colorTransformSource = SourceSpan("EtsColorTransform.kt", 0, 0)
 private val optionalColorChannelType = EtsNullableType(EtsTypes.NUMBER)
+internal val composeColorType = EtsNullableType(EtsTypes.NUMBER)
 private val colorCopy = etsFunctionSymbol("__etsCopyColor", listOf(EtsTypes.NUMBER,
     optionalColorChannelType, optionalColorChannelType, optionalColorChannelType, optionalColorChannelType),
     EtsTypes.NUMBER, colorTransformSource)
 internal val surfaceColorAtElevation = etsFunctionSymbol("__etsSurfaceColorAtElevation",
     listOf(materialColorSchemeType, EtsTypes.NUMBER), EtsTypes.NUMBER, colorTransformSource)
 
+/** Resolves Compose's Unspecified sentinel at a consumer-owned default or inheritance boundary. */
+internal fun resolveComposeColor(value: EtsExpression, fallback: EtsExpression, at: SourceSpan): EtsExpression {
+    require(fallback.type == EtsTypes.NUMBER) { "Color fallback requires number at $at; got ${fallback.type}" }
+    return when (value.type) {
+        EtsTypes.NUMBER -> value
+        EtsTypes.NULL -> fallback
+        composeColorType -> EtsBinary("??", value, fallback, EtsTypes.NUMBER, at)
+        else -> throw Unsupported(Diagnostic("UNSUPPORTED", "Color value has invalid target type: ${value.type}", at))
+    }
+}
+
+/** Produces an ARGB number once or fails at the source operation that requires one. */
+internal fun requireSpecifiedColor(value: EtsExpression, at: SourceSpan, consumer: String): EtsExpression {
+    if (value.type == EtsTypes.NULL || value is EtsLiteral && value.value == null)
+        throw Unsupported(Diagnostic("UNSUPPORTED", "$consumer requires a specified ARGB color", at))
+    if (value.type == EtsTypes.NUMBER) return value
+    if (value.type != composeColorType)
+        throw Unsupported(Diagnostic("UNSUPPORTED", "$consumer requires a Color value; got ${value.type}", at))
+    val parameter = EtsParameter(EtsSymbol("compose:requiredColor:${at.file}:${at.start}", "color", composeColorType, at))
+    val reference = EtsReference(parameter.symbol)
+    val message = EtsLiteral("$consumer received Color.Unspecified at ${at.file ?: "<unknown>"}:${at.start}",
+        EtsTypes.STRING, at)
+    return EtsCall(EtsLambda(listOf(parameter), listOf(
+        EtsIf(listOf(EtsBranch(EtsBinary("===", reference, EtsLiteral(null, EtsTypes.NULL, at),
+            EtsTypes.BOOLEAN, at), listOf(EtsThrow(namedTargetFailure("UnspecifiedColor", at, message), at)))), at),
+        EtsReturn(EtsCast(reference, EtsTypes.NUMBER, at), at)), EtsTypes.NUMBER, at),
+        listOf(value), EtsTypes.NUMBER, at)
+}
+
 /** sRGB Color values use the unsigned ARGB representation accepted by ArkUI. */
 internal class ComposeColorValueRule : CallRule {
     override fun mapType(type: IrType, language: Language): EtsType? {
         val owner = type.classOrNull?.owner ?: return null
-        return if (symbolName(owner) == colorType && sourceFile(owner) == null) EtsTypes.NUMBER else null
+        return if (symbolName(owner) == colorType && sourceFile(owner) == null) composeColorType else null
     }
 
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
@@ -26,12 +56,18 @@ internal class ComposeColorValueRule : CallRule {
         val name = symbolName(owner)
         val at = language.source(call)
         fun number(value: Long) = EtsLiteral(value, EtsTypes.NUMBER, at)
+        if (name == "kotlin.internal.ir.EQEQ" && call.valueArgumentsCount == 2) {
+            val left = call.getValueArgument(0) ?: return null
+            val right = call.getValueArgument(1) ?: return null
+            if (listOf(left, right).all { it.type.classOrNull?.owner?.let(::symbolName) == colorType })
+                return EtsBinary("===", language.expression(left, scope), language.expression(right, scope),
+                    EtsTypes.BOOLEAN, at)
+        }
         val property = owner.correspondingPropertySymbol?.owner?.let(::symbolName)
         colors.entries.firstOrNull { property == "$colorType.Companion.${it.key}" }?.let {
             return number(it.value)
         }
-        if (property == "$colorType.Companion.Unspecified") throw Unsupported(Diagnostic(
-            "UNSUPPORTED", "Color.Unspecified requires inherited/default color selection; it is not an ARGB value", at))
+        if (property == "$colorType.Companion.Unspecified") return EtsLiteral(null, EtsTypes.NULL, at)
         if (name == colorType && owner.valueParameters.size == 1) {
             val value = call.getValueArgument(0) ?: return null
             return when (owner.valueParameters.single().type.classOrNull?.owner?.let(::symbolName)) {
@@ -47,7 +83,8 @@ internal class ComposeColorValueRule : CallRule {
         if (name == "androidx.compose.ui.graphics.toArgb" && owner.valueParameters.isEmpty()) {
             val receiver = call.extensionReceiver ?: return null
             if (receiver.type.classOrNull?.owner?.let(::symbolName) != colorType) return null
-            return EtsBinary("|", language.expression(receiver, scope), number(0), EtsTypes.NUMBER, at)
+            return EtsBinary("|", requireSpecifiedColor(language.expression(receiver, scope), at, "Color.toArgb"),
+                number(0), EtsTypes.NUMBER, at)
         }
         if (name == "$colorType.copy") {
             val parameters = owner.valueParameters
@@ -83,7 +120,8 @@ internal class ComposeColorValueRule : CallRule {
         fun channel(value: IrExpression?) = value?.let { language.expression(it, scope) }
             ?: EtsLiteral(null, EtsTypes.NULL, transform.source)
         return EtsCall(EtsReference(colorCopy, transform.source), listOf(
-            language.expression(transform.input, scope), channel(transform.alpha), channel(transform.red),
+            requireSpecifiedColor(language.expression(transform.input, scope), transform.source, "Color.copy"),
+            channel(transform.alpha), channel(transform.red),
             channel(transform.green), channel(transform.blue)), EtsTypes.NUMBER, transform.source)
     }
 }

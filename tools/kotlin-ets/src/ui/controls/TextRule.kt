@@ -6,7 +6,6 @@ import org.jetbrains.kotlin.ir.types.isString
 
 internal class ComposeTextRule(
     private val target: ArkUiCalls,
-    private val color: (IrExpression, Scope) -> EtsExpression,
     private val dimension: (IrExpression, Scope, String) -> EtsExpression,
     private val useMaterialTypography: () -> Unit,
     decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,
@@ -18,10 +17,11 @@ internal class ComposeTextRule(
         val text = argument(call, "text") ?: target.diagnostics.unsupported(call, "Text requires text")
         if (!text.type.isString()) target.diagnostics.unsupported(text, "AnnotatedString Text is not supported")
         val ambient = scope.ambientValues[MATERIAL_CONTEXT]?.takeIf { api == "androidx.compose.material3.Text" }
+        val at = language.source(call)
+        fun fallbackColor() = ambient?.let { materialContentColor(it, at) } ?: target.literal(0xFF000000L, call)
         if (ambient != null || (textStyleArgumentOrder - setOf("color", "fontSize")).any { argument(call, it) != null }) {
             if (api == "androidx.compose.material.Text" && argument(call, "style") == null)
                 target.diagnostics.unsupported(call, "Material 2 LocalTextStyle requires an explicit style")
-            val at = language.source(call)
             val inherited = if (api == "androidx.compose.material3.Text")
                 ambient?.let { materialCurrentTextStyle(it, at) } ?: defaultTypographyRole("bodyLarge", at)
             else EtsNew(textStyleType, textStyleFields.keys.map { EtsLiteral(null, EtsTypes.NULL, at) }, at)
@@ -37,9 +37,7 @@ internal class ComposeTextRule(
                     else -> EtsLiteral(null, EtsTypes.NULL, at)
                 }
             }
-            val fallback = scope.ambientValues[MATERIAL_CONTEXT]?.takeIf { api == "androidx.compose.material3.Text" }
-                ?.let { materialContentColor(it, at) } ?: target.literal(0xFF000000L, call)
-            val modifier = textStyleModifier(values + fallback, at)
+            val modifier = textStyleModifier(values + fallbackColor(), at)
             val attributes = listOf(target.attribute("align", listOf(target.enumValue("Alignment", "TopStart", call)), call),
                 target.attribute("attributeModifier", listOf(modifier), call))
             return ComposeElement(target.native("Text", listOf(language.expression(text, scope)), call).copy(attributes = attributes),
@@ -47,7 +45,8 @@ internal class ComposeTextRule(
         }
         val attrs = buildList {
             add(target.attribute("align", listOf(target.enumValue("Alignment", "TopStart", call)), call))
-            argument(call, "color")?.let { add(target.attribute("fontColor", listOf(color(it, scope)), call)) }
+            argument(call, "color")?.let { value -> add(target.attribute("fontColor", listOf(
+                resolveComposeColor(language.expression(value, scope), fallbackColor(), language.source(value))), call)) }
                 ?: scope.ambientValues[MATERIAL_CONTEXT]?.takeIf { api == "androidx.compose.material3.Text" }?.let {
                     add(target.attribute("fontColor", listOf(materialContentColor(it, language.source(call))), call))
                 }

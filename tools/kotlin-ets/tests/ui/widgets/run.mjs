@@ -33,10 +33,10 @@ for (const path of backendSources) assert.doesNotMatch(readFileSync(path, 'utf8'
 assert.doesNotMatch(readFileSync(adapter, 'utf8'), /Harmony|ArkUi|EtsUiElement|EtsUiAttribute|arkui:|"Stack"|"alignItems"|"fontColor"|"backgroundColor"/);
 assert.doesNotMatch(readFileSync(pipeline, 'utf8'), /UiTextModule|ComposeLowering|PageText|TextModule/);
 assert.doesNotMatch(readFileSync(pipelineProbe, 'utf8'), /\bEtsProgram\s*\(|\bWidget\s*[.(]|\bChildren\s*\(/);
-function compile(name, inputs, classpath) {
+function compile(name, inputs, classpath, options = []) {
   const jar = join(work, `${name}.jar`);
   run(`compile-${name}`, 'java', ['-cp', cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
-    '-no-stdlib', '-no-reflect', '-classpath', classpath, ...inputs, '-d', jar]);
+    '-no-stdlib', '-no-reflect', '-classpath', classpath, ...options, ...inputs, '-d', jar]);
   return jar;
 }
 const modelJar = compile('model', modelSources, stdlib);
@@ -46,8 +46,9 @@ console.log(run('backend-isolation', 'java', ['-cp', [stdlib, modelJar, targetJa
 // Adapter and compiler build without any Harmony implementation on their classpath.
 const compilerSources = sources(join(root, 'src')).filter(path =>
   !modelSources.includes(path) && !backendSources.includes(path) && path !== adapter && path !== helper && path !== pipeline);
-const compilerJar = compile('compiler', compilerSources, cp);
-const adapterJar = compile('adapter', [adapter, helper], `${cp}:${modelJar}:${compilerJar}`);
+const compilerJar = compile('compiler', compilerSources, `${cp}:${modelJar}`);
+const adapterJar = compile('adapter', [adapter, helper], `${cp}:${modelJar}:${compilerJar}`,
+  [`-Xfriend-paths=${compilerJar}`]);
 const pipelineJar = compile('pipeline', [pipeline], [cp, modelJar, compilerJar, backendJar, adapterJar].join(':'));
 const probeJar = join(work, 'probe.jar');
 run('compile-probe', 'java', ['-cp', cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler', '-no-stdlib', '-no-reflect',

@@ -16,9 +16,9 @@ const cp = JSON.parse(readFileSync(join(probe, 'classpath.json'), 'utf8')).filte
 const cpFile = join(work, 'classpath.txt');
 writeFileSync(cpFile, cp.join('\n'));
 console.log(`Evidence: ${work}`);
-function run(label, command, args, expectedStatus = 0) {
+function run(label, command, args, expectedStatus = 0, environment = {}) {
   const result = spawnSync(command, args, { encoding: 'utf8', timeout: 600000,
-    env: { ...process.env, JAVA_TOOL_OPTIONS: '-XX:ActiveProcessorCount=2 -XX:+UseSerialGC' } });
+    env: { ...process.env, JAVA_TOOL_OPTIONS: '-XX:ActiveProcessorCount=2 -XX:+UseSerialGC', ...environment } });
   writeFileSync(join(work, `${label}.json`), JSON.stringify({ args, ...result }, null, 2));
   assert.equal(result.status, expectedStatus, result.stdout + result.stderr);
   return result.stdout;
@@ -38,22 +38,41 @@ vm.runInContext(ts.transpileModule(code, { compilerOptions: {
 const actual = Array.from(context.exports.observations());
 assert.deepEqual(actual, expected);
 writeFileSync(join(work, 'parity.json'), JSON.stringify({ expected, actual }, null, 2));
+assert.match(code, /foreground: number \| null/);
+assert.match(code, /foreground: number \| null = null/);
+assert.match(code, /color: number \| null = null/);
+assert.match(code, /color === null/);
 run('page', 'bash', [join(root, 'kotlin-ets'), '--entry', 'colorvalues.Page', '--classpath-file', cpFile,
   '--out', join(work, 'Page.ets'), join(here, 'Models.kt'), join(here, 'Page.kt')]);
 const page = readFileSync(join(work, 'Page.ets'), 'utf8');
-assert.match(page, /Label\(value: number\)/);
-assert.match(page, /\.fontColor\(value\)/);
-assert.match(page, /\.backgroundColor\(selectColor\(/);
+assert.match(page, /Label\(value: number \| null = null\)/);
+assert.match(page, /\.fontColor\(value \?\? 4278190080\)/);
+assert.match(page, /\.fontColor\(4278190080\)/);
+assert.match(page, /\.backgroundColor\([\s\S]*selectColor\(/);
+assert.equal(page.split('selectColor(1, 4294967295, 4278190080)').length - 1, 1);
 const effects = join(work, 'EffectPage.ets');
 run('effect-page', 'bash', [join(root, 'kotlin-ets'), '--entry', 'colorvalues.EffectPage', '--classpath-file', cpFile,
   '--out', effects, join(here, 'EffectPage.kt')]);
 verifyEffects(effects);
 const unsupported = run('unsupported', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--classpath-file', cpFile,
   '--out', join(work, 'Unsupported.ets'), join(here, 'Unsupported.kt')], 2);
-assert.match(unsupported, /Unspecified/);
+const unsupportedFailure = JSON.parse(unsupported.trim().split('\n').at(-1));
+assert.match(unsupportedFailure.message, /Color\.toArgb requires a specified ARGB color/);
+assert.equal(unsupportedFailure.source.line, 6);
 assert.equal(existsSync(join(work, 'Unsupported.ets')), false);
+const background = run('unsupported-background', 'bash', [join(root, 'kotlin-ets'), '--entry',
+  'colorvalues.UnsupportedBackground', '--classpath-file', cpFile, '--out', join(work, 'UnsupportedBackground.ets'),
+  join(here, 'Models.kt'), join(here, 'Page.kt')], 2);
+const backgroundFailure = JSON.parse(background.trim().split('\n').at(-1));
+assert.match(backgroundFailure.message, /Modifier\.background requires a specified ARGB color/);
+assert.equal(backgroundFailure.source.line, 27);
+assert.equal(existsSync(join(work, 'UnsupportedBackground.ets')), false);
 const longExpression = run('long-expression', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language',
   '--classpath-file', cpFile, '--out', join(work, 'LongExpression.ets'), join(here, 'LongExpression.kt')], 2);
 assert.match(longExpression, /Unsupported external call: androidx.compose.ui.graphics.Color/);
 assert.equal(existsSync(join(work, 'LongExpression.ets')), false);
-console.log('PASS Color values through methods, arguments, properties, conditions and native attributes; JVM parity');
+const sdk = run('sdk', process.execPath, [join(here, '../basic-controls-sdk.mjs'), join(work, 'Page.ets')], 0, {
+  KOTLIN_ETS_SDK_SEED: process.env.KOTLIN_ETS_SDK_SEED ?? '/private/tmp/kotlin-ets-basic-controls-sdk-bZjYXV/harmony',
+});
+process.stdout.write(sdk);
+console.log('PASS optional Color defaults, explicit Unspecified, conditions, inherited Text, checked backgrounds, effects, JVM parity and SDK');
