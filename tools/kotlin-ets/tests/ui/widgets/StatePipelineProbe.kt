@@ -17,7 +17,17 @@ fun main(args: Array<String>) {
         val entry = functions.single { it.fqNameWhenAvailable?.asString() == "widgetsstate.StateProfile" }
         val sink = DiagnosticSink()
         val backend = EtsBackend(sink, listOf(StandardLibraryRules()))
-        val plan = ComposeStateLowering(backend.language, sink).lower(entry, Scope(), "StateProfile")
+        val entryScope = Scope()
+        val parameters = backend.parameters(entry, entryScope)
+        check(parameters.take(4).map { it.symbol.name to it.symbol.type } == listOf(
+            "title" to EtsTypes.STRING,
+            "step" to EtsTypes.NUMBER,
+            "onState" to EtsFunctionType(listOf(EtsTypes.STRING), EtsTypes.VOID),
+            "subtitle" to EtsNullableType(EtsTypes.STRING)))
+        check(parameters[4].symbol.name == "model" &&
+            (parameters[4].symbol.type as EtsNamedType).name == "StateModel")
+        check(parameters.map { it.defaultValue != null } == listOf(false, true, false, true, false))
+        val plan = ComposeStateLowering(backend.language, sink).lower(entry, entryScope, "StateProfile")
         check(plan.fields.map { it.symbol.name to it.symbol.type } == listOf(
             "__etsState_enabled" to EtsTypes.BOOLEAN, "__etsState_count" to EtsTypes.NUMBER,
             "__etsState_label" to EtsTypes.STRING))
@@ -36,25 +46,42 @@ fun main(args: Array<String>) {
         val conditional = nodes.filterIsInstance<EtsConditional>()
             .single { it.type == EtsTypes.STRING && (it.whenFalse as? EtsLiteral)?.value == "disabled" }
         check((conditional.condition as EtsMember).name == "__etsState_enabled")
-        check((conditional.whenTrue as EtsMember).name == "__etsState_label")
+        val conditionalNodes = mutableListOf<EtsNode>()
+        walkEts(conditional, conditionalNodes::add)
+        check(conditionalNodes.filterIsInstance<EtsMember>().map { it.name }.toSet().containsAll(
+            setOf("__etsState_enabled", "__etsState_label", "name")))
+        check(conditionalNodes.filterIsInstance<EtsReference>().map { it.symbol.name }.toSet().containsAll(
+            setOf("title", "model")))
 
         val code = ComposeWidgetPipeline(backend, StandardLibraryRuntime)
             .compile(module, "widgetsstate.StateProfile")
         File(output, "StateProfile.ets").writeText(code)
-        check("@Entry" in code && "@Component" in code && "export struct StateProfile" in code)
+        check("@Entry" !in code && "@Component" in code && "export struct StateProfile" in code)
+        check("export interface StateModel" in code)
+        check("@Require @Prop title: string;" in code)
+        check("@Prop step: number = 2;" in code)
+        check("@Require @BuilderParam onState: ((" in code && ": string) => void);" in code)
+        check("@Prop subtitle: string | null = null;" in code)
+        check("@Require @Prop model: StateModel;" in code)
         check("@State private __etsState_enabled: boolean = false;" in code)
         check("@State private __etsState_count: number = 0;" in code)
         check("@State private __etsState_label: string = \"ready\";" in code)
         check("this.__etsState_enabled = ! this.__etsState_enabled;" in code)
-        check("this.__etsState_count = this.__etsState_count + 1 | 0;" in code)
+        check("this.__etsState_count = this.__etsState_count + this.step | 0;" in code)
         check("this.__etsState_label = this.__etsState_enabled ? \"on\" : \"off\";" in code)
-        check("Text(this.__etsState_enabled ? this.__etsState_label : \"disabled\")" in code)
+        check("this.onState(this.__etsState_label);" in code)
+        check("this.__etsState_enabled ?" in code && "this.title" in code &&
+            "(this.model as StateModel).name" in code)
+        check("Text(this.subtitle === null ? \"none\" : this.subtitle as string)" in code)
         check(listOf("remember", "mutableStateOf", "androidx.compose.runtime").none(code::contains))
         val expected = linkedMapOf(
             "SaveableState" to "rememberSaveable is outside",
             "DerivedState" to "supports only mutableStateOf",
             "UnsupportedStateType" to "only direct Boolean, Int, and String",
             "IndirectStateInitializer" to "only direct Boolean, Int, and String",
+            "SharedLazyListState" to "Observed or shared LazyListState",
+            "SharedPagerState" to "Observed or shared PagerState",
+            "SharedScrollState" to "Observed or shared ScrollState",
         )
         val diagnostics = expected.map { (name, message) ->
             val failure = try {

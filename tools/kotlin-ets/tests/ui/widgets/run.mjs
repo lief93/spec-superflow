@@ -26,7 +26,7 @@ const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
   'LazyListProfile.kt', 'LazyListUnsupported.kt', 'LazyListJvmOracle.kt', 'LazyListPipelineProbe.kt',
   'InputStateProfile.kt', 'InputStateUnsupported.kt', 'InputStateJvmOracle.kt', 'InputStatePipelineProbe.kt',
   'ReusableCard.kt', 'HelperEntry.kt', 'HelperUnsupported.kt', 'HelperJvmOracle.kt', 'HelperPipelineProbe.kt',
-  'input-state-sdk.mjs', 'helper-sdk.mjs', 'PipelineSeamAgent.java'].map(name => join(here, name));
+  'input-state-sdk.mjs', 'helper-sdk.mjs', 'stateful-props-sdk.mjs', 'PipelineSeamAgent.java'].map(name => join(here, name));
 const implementation = identities([...sources(join(root, 'src')), ...fixtures, fileURLToPath(import.meta.url), uiClasspathFile]);
 for (const path of modelSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /import |\bEts[A-Z]|IrCall|androidx|harmony|arkui/);
 for (const path of backendSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /org\.jetbrains|androidx|IrCall|ComposeWidget|ArkUiCalls/);
@@ -88,12 +88,23 @@ const stateCode = readFileSync(stateOutput, 'utf8');
 const fields = [...stateCode.matchAll(/@State private (\w+): (?:boolean|number|string) = ([^;]+);/g)];
 assert.deepEqual(fields.map(match => match[1]), ['__etsState_enabled', '__etsState_count', '__etsState_label']);
 const callback = stateCode.match(/\.onClick\(\(\): void => \{([\s\S]*?)\n\s*\}\)/)?.[1];
-const rendered = stateCode.match(/Text\((this\.__etsState_enabled \? this\.__etsState_label : "disabled")\)/)?.[1];
-assert.ok(callback && rendered, 'Expected executable callback and runtime conditional in generated ETS');
+const rendered = stateCode.match(/Text\((this\.__etsState_enabled \? [^\n]+ : "disabled")\)/)?.[1]
+  ?.replace('(this.model as StateModel)', 'this.model');
+const nullableRendered = stateCode.match(/Text\((this\.subtitle === null \? "none" : this\.subtitle as string)\)/)?.[1]
+  ?.replace('this.subtitle as string', 'this.subtitle');
+assert.ok(callback && rendered && nullableRendered,
+  'Expected executable callback, props and runtime conditional in generated ETS');
 const runtimeSource = `class RuntimeState {
+  title = 'Profile';
+  step = 2;
+  subtitle = null;
+  model = { name: 'model' };
+  actions = [];
+  onState = value => this.actions.push(value);
 ${fields.map(match => `  ${match[1]} = ${match[2]};`).join('\n')}
   click() {${callback}\n  }
-  snapshot() { return [this.${fields[0][1]}, this.${fields[1][1]}, this.${fields[2][1]}, ${rendered}].join('|'); }
+  snapshot() { return [this.${fields[0][1]}, this.${fields[1][1]}, this.${fields[2][1]},
+    ${rendered}, ${nullableRendered}, this.actions.join(',')].join('|'); }
 }
 const state = new RuntimeState();
 result.push(state.snapshot());
@@ -358,7 +369,7 @@ writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implemen
   lazyListProductionPipeline: true, lazyListJvmEtsSemantics: true,
   inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
   composeHelperProductionPipeline: true, composeHelperJvmEtsSemantics: true,
-  sourceLinkedRejections: diagnostics.length + 39,
+  sourceLinkedRejections: diagnostics.length + 42,
   sdk: 'separate SDK command required', nativeRendering: 'not run',
 }, null, 2));
 console.log('PASS Widget module isolation, resolved structure, typed ETS and explicit unsupported diagnostics');

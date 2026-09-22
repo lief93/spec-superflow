@@ -1,5 +1,8 @@
 package widgetsstate
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -30,4 +33,19 @@ fun UnsupportedStateType() {
 fun IndirectStateInitializer(seed: Int) {
     val count = remember { mutableStateOf(seed) }
     Text(count.value.toString())
+}
+
+@Composable
+fun SharedLazyListState(state: LazyListState) {
+    Text(state.firstVisibleItemIndex.toString())
+}
+
+@Composable
+fun SharedPagerState(state: PagerState) {
+    Text(state.currentPage.toString())
+}
+
+@Composable
+fun SharedScrollState(state: ScrollState) {
+    Text(state.value.toString())
 }
