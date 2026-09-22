@@ -1,11 +1,12 @@
 package dev.ets
 
-/** Material Surface's Box propagates parent minima to every content root. */
+/** Material Surface/Card containers propagate parent minima to their content root. */
 internal val surfaceLayoutSupport = """
 @Component
 struct EtsComposeSurface {
   @Builder private emptyContent() {}
   @BuilderParam content: () => void = this.emptyContent;
+  @Prop column: boolean = false;
   @Prop fixedWidth: boolean = false;
   @Prop fixedHeight: boolean = false;
 
@@ -33,7 +34,13 @@ struct EtsComposeSurface {
   }
 
   build() {
-    this.content()
+    if (this.column) {
+      Column() {
+        this.content()
+      }
+    } else {
+      this.content()
+    }
   }
 }
 """.trimIndent().lines()

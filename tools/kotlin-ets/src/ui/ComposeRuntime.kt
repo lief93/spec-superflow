@@ -23,7 +23,8 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
                     "compose:surface" -> node is EtsReference && node.symbol.name == "EtsComposeSurface" &&
                         node.type == EtsFunctionType(listOf(EtsRecordType("SurfaceOptions",
                             mapOf("content" to EtsFunctionType(emptyList(), EtsTypes.VOID),
-                                "fixedWidth" to EtsTypes.BOOLEAN, "fixedHeight" to EtsTypes.BOOLEAN))), EtsTypes.VOID)
+                                "column" to EtsTypes.BOOLEAN, "fixedWidth" to EtsTypes.BOOLEAN,
+                                "fixedHeight" to EtsTypes.BOOLEAN))), EtsTypes.VOID)
                     "compose:imageTint" -> node is EtsReference && node.symbol.name == "__etsImageTint" &&
                         node.type == EtsFunctionType(listOf(EtsTypes.NUMBER), EtsNamedType("ColorFilter"))
                     "compose:nearestTouch" -> node is EtsReference && node.symbol.name == "__etsNearestTouch" &&

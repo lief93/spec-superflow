@@ -178,7 +178,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
             ComposeBoxWithConstraintsRule(target, ::constraintsContent, ::modifiers),
             ComposeMaterialThemeRule(target, ::provideMaterialContext),
-            ComposeSurfaceRule(target, ::surfaceContent, ::modifiers),
+            ComposeSurfaceRule(target, ::surfaceContent, { content, scope -> surfaceContent(content, scope, "height") }, ::modifiers),
             ComposeSpacerRule(target, ::modifiers),
             ComposeTextRule(target, ::colorValue, ::dimension,
                 { usesMaterialTypography = true; textContext }, ::modifiers),
@@ -694,7 +694,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             result = EtsNamedType("Array", listOf(EtsTypes.NUMBER)), receiver = array)
     }
 
-    private fun uiLambda(expression: IrExpression, scope: Scope, sourceName: String): EtsExpression {
+    private fun uiLambda(expression: IrExpression, scope: Scope, sourceName: String, axis: String? = null): EtsExpression {
         slotReceiver(expression, scope)?.let { return expression(it, scope) }
         val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected source content lambda")
         val captures = capturedValues(listOf(fn.body ?: diagnostics.unsupported(fn, "Missing slot body")), scope)
@@ -703,7 +703,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val child = scope.fork()
         captures.zip(captured).forEach { (symbol, parameter) -> child.bindings[symbol] = EtsReference(parameter.symbol) }
         val context = contextParameters(child, fn)
-        val body = uiLambdaBody(expression, child)
+        val body = uiLambdaBodyWithAxis(expression, child, axis)
         // ArkUI only transforms UI DSL in builders/native slots, not arbitrary function arguments.
         val bridge = EtsFunction(name, context + captured, EtsTypes.VOID, body, language.source(fn), kind = EtsFunctionKind.METHOD, builder = true)
         slotMethods += bridge
@@ -803,8 +803,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         return name
     }
 
-    private fun surfaceContent(content: IrExpression, scope: Scope): EtsExpression {
-        val slot = uiLambda(content, scope, "SurfaceContent")
+    private fun surfaceContent(content: IrExpression, scope: Scope, axis: String? = null): EtsExpression {
+        val slot = uiLambda(content, scope, "SurfaceContent", axis)
         val at = language.source(content)
         val args = contextArguments(scope)
         val member = EtsMember(slot, "builder", EtsFunctionType(args.map { it.type }, EtsTypes.VOID), at)

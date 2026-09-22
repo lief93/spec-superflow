@@ -107,6 +107,13 @@ internal class ComposeShapeRule : CallRule {
         return arkBorderRadius(language.expression(source, scope), source, diagnostics, kind)
     }
 
+    fun themeBorderRadius(name: String, context: EtsExpression, owner: IrElement,
+        diagnostics: DiagnosticSink): EtsExpression {
+        val at = sourceSpan(owner, diagnostics)
+        val value = EtsMember(materialShapes(context, at), name, shapeType, at)
+        return arkBorderRadius(value, owner, diagnostics, slot(selectedShapes(at), name).kind)
+    }
+
     fun cutClip(source: IrExpression, width: EtsExpression?, height: EtsExpression?,
         diagnostics: DiagnosticSink): EtsExpression? {
         if (sourceKind(source, diagnostics) != CornerShapeKind.CUT) return null

@@ -30,7 +30,8 @@ internal fun requiresMaterialContext(element: IrElement): Boolean {
             val api = symbolName(owner)
             if (sourceFile(owner) == null && (api == "androidx.compose.material3.MaterialTheme" ||
                 api in setOf("androidx.compose.material3.Button", "androidx.compose.material3.TextButton",
-                    "androidx.compose.material3.ButtonDefaults.buttonColors", "androidx.compose.material3.ButtonDefaults.textButtonColors") ||
+                    "androidx.compose.material3.Card", "androidx.compose.material3.ButtonDefaults.buttonColors",
+                    "androidx.compose.material3.ButtonDefaults.textButtonColors") ||
                 owner.correspondingPropertySymbol?.owner?.let(::symbolName) in setOf("androidx.compose.material3.MaterialTheme.colorScheme", "androidx.compose.material3.MaterialTheme.typography", "androidx.compose.material3.MaterialTheme.shapes") ||
                 api == "androidx.compose.material3.contentColorFor" ||
                 api == "androidx.compose.material3.Surface" &&

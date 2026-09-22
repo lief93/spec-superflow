@@ -50,6 +50,8 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
                 it is EtsRecordType && it.name == "BorderRadiuses" && it.fields.keys ==
                     setOf("topLeft", "topRight", "bottomRight", "bottomLeft") &&
                     it.fields.values.all { field -> field == EtsTypes.NUMBER } }
+            "shadow" -> value.type.takeIf { it is EtsRecordType && it.name == "ShadowOptions" &&
+                it.fields.keys == setOf("radius") && it.fields.values.single() == EtsTypes.NUMBER }
             "offset" -> value.type.takeIf { it is EtsRecordType && it.name == "Position" &&
                 it.fields.keys.all { field -> field in setOf("x", "y") } && it.fields.values.all { it == EtsTypes.NUMBER } }
             "rotate" -> value.type.takeIf { it is EtsRecordType && it.name == "RotateOptions" &&
