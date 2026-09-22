@@ -66,9 +66,10 @@ try {
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'UNSUPPORTED');
   assert.equal(backendBlocker.message, 'External inline call has no loaded IR body: ' +
-    'androidx.hilt.navigation.compose.hiltViewModel. Provide explicit dependency source or a supported serialized ' +
-    'dependency; this call has no usable binary IR body. JVM binary metadata contains no serialized IR. ' +
-    'Unsupported external call: androidx.hilt.navigation.compose.hiltViewModel');
+    'androidx.hilt.navigation.compose.hiltViewModel. Provide explicit dependency source, a supported serialized ' +
+    'dependency, or a declared typed adapter; this call has no usable binary IR body. ' +
+    'JVM binary metadata contains no serialized IR. Unsupported external call: ' +
+    'androidx.hilt.navigation.compose.hiltViewModel. Missing dependency body or declared typed adapter');
   assert.equal(backendBlocker.source.line, 47);
   assert.equal(backendBlocker.source.column, 38);
   assert.equal(existsSync(output), false);

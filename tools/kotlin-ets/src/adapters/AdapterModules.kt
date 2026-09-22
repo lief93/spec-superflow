@@ -5,6 +5,7 @@ import java.util.ServiceConfigurationError
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetObjectValue
 import org.jetbrains.kotlin.ir.expressions.IrGetField
 import org.jetbrains.kotlin.ir.types.IrType
@@ -96,6 +97,10 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
                 if (ui == null && module.id in used) delegate.targetContracts(program) else emptyList()
 
             private fun claimed(call: IrCall) = symbolName(call.symbol.owner) in module.sourceCalls
+            private fun reusableSourceBody(call: IrFunctionAccessExpression): Boolean {
+                val owner = call.symbol.owner
+                return sourceFile(owner) != null && !owner.isExternal && owner.body != null
+            }
             private fun <T> track(value: T?): T? = value.also { if (it != null) used.add(module.id) }
 
             override fun mapType(type: IrType, language: Language): EtsType? =
@@ -103,10 +108,11 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
                     track(delegate.mapType(type, language)) else null
 
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
-                if (ui == null && claimed(call)) track(delegate.lower(call, language, scope)) else null
+                if (ui == null && claimed(call) && !reusableSourceBody(call))
+                    track(delegate.lower(call, language, scope)) else null
 
             override fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? =
-                if (ui == null && symbolName(call.symbol.owner) in module.sourceCalls)
+                if (ui == null && symbolName(call.symbol.owner) in module.sourceCalls && !reusableSourceBody(call))
                     track(delegate.lowerConstructor(call, language, scope)) else null
 
             override fun lowerObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? =
@@ -118,7 +124,8 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
                     track(delegate.lowerField(value, language, scope)) else null
 
             override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
-                if (ui == null && claimed(call)) track(delegate.lowerStatement(call, language, scope)) else null
+                if (ui == null && claimed(call) && !reusableSourceBody(call))
+                    track(delegate.lowerStatement(call, language, scope)) else null
 
             override fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
                 if (ui != null && claimed(call)) track(delegate.lowerUi(call, language, scope)) else null

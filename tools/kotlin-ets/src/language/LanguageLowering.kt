@@ -315,7 +315,8 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
             return EtsCall(expression(receiver, scope), arguments(call, scope), type(call.type), source(call))
         }
         if (sourceFile(owner) == null || owner.isExternal) {
-            diagnostics.unsupported(call, "Unsupported external call: ${symbolName(owner)}")
+            diagnostics.unsupported(call, "Unsupported external call: ${symbolName(owner)}. " +
+                "Missing dependency body or declared typed adapter")
         }
         val property = owner.correspondingPropertySymbol?.owner
         if (topLevelAccessorName(owner) != null) {

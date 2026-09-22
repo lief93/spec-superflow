@@ -149,7 +149,7 @@ The report's designated first type gap remains `remember` returning
 `SnackbarHostState` at line 48, column 44. The actual backend attempt stops
 earlier at `hiltViewModel` on line 47, column 38: the inline JVM dependency has
 no loaded IR body and JVM metadata contains no serialized IR. Generation fails
-closed there and emits no ETS target.
+closed there because no typed adapter declares the call, and emits no ETS target.
 
 This project pins Kotlin 2.1.10. The production project launcher admits it
 through the fixed 2.1.20 frontend as `same_language_line_older_patch`, then runs

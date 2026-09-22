@@ -66,6 +66,14 @@ path without inventing a return value. Returning a `void` expression from `lower
 cannot satisfy a value position. Wrong types, void-as-value and empty unrecorded
 effects fail with the source call span before target emission.
 
+For ordinary value and effect calls, an available source body takes precedence
+over an `AdapterModule` claim. Serialized inline bodies are reused by the common
+inliner before adapter dispatch; source-owned ordinary functions stay in the
+normal declaration and linking path. A binary signature without a reusable body
+may reach a declared adapter. If no adapter accepts it, generation fails with the
+source call span and names both missing options; JVM bytecode is not decompiled
+and no default value is fabricated.
+
 ### Factory lifecycle
 
 SPI instantiates providers once per compiler process. A registry calls
@@ -80,9 +88,10 @@ reuse one scope's services in another.
 
 `ui.content(expression, scope)` delegates content conversion and
 `ui.decorate(modifier, scope, element, boundaries)` delegates existing modifier
-semantics. An explicit source call claim gets an opportunity before structural
-business-component conversion and built-in controls. Returning `null` means the
-rule did not handle the call; it is not an empty UI substitute.
+semantics. An explicit UI source call claim gets an opportunity before structural
+business-component conversion and built-in controls. This UI projection is
+separate from the ordinary dependency body-first decision above. Returning
+`null` means the rule did not handle the call; it is not an empty UI substitute.
 
 ### Initialization and imports
 
