@@ -1,0 +1,30 @@
+package widgetsfixture
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text as Label
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun Page(title: String, enabled: Boolean, onAction: () -> Unit) {
+    val identity = Modifier
+    val frame = Modifier.width(120.dp).padding(4.dp).width(80.dp)
+    Column(modifier = frame.then(identity)) {
+        Label(title)
+        Button(onClick = onAction, enabled = enabled,
+            modifier = Modifier.padding(horizontal = 3.dp, vertical = 2.dp).height(40.dp)) {
+            Row {
+                Label("left")
+                Box(modifier = Modifier.height(8.dp).then(Modifier.width(12.dp))) {
+                    Label("right")
+                }
+            }
+        }
+        Label("after")
+        Row(Modifier.padding(2.dp).width(60.dp)) { Label("reverse") }
+        Box(Modifier.height(2.dp))
+        Label("callback", Modifier.padding(start = 1.dp, top = 2.dp, end = 3.dp, bottom = 4.dp))
+    }
+}

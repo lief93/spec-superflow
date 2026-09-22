@@ -19,10 +19,15 @@ const result = spawnSync('bash', args, { encoding: 'utf8', timeout: 600000,
 writeFileSync(join(work, 'result.json'), JSON.stringify({ args, ...result }, null, 2));
 assert.equal(result.status, 0, result.stdout + result.stderr);
 const ets = readFileSync(output, 'utf8');
-for (const name of ['Frame', 'Relay', 'Outer']) assert.match(ets, new RegExp(`${name}\\(content: WrappedBuilder`));
-for (const [label, typography] of [['Forwarded label', '14, 20, 500, 0.1'], ['Body restored', '16, 24, 400, 0.5']]) {
+// Material context is now an explicit parameter; keep checking both the slot
+// signature and its forwarding, rather than the obsolete context-free spelling.
+for (const name of ['Frame', 'Relay', 'Outer']) assert.match(ets,
+  new RegExp(`${name}\\(__etsMaterialContext: EtsMaterialContext, content: WrappedBuilder<\\[EtsMaterialContext\\]>`));
+assert.match(ets, /Frame\(__etsMaterialContext, content\)/);
+assert.match(ets, /Relay\(__etsMaterialContext, content\)/);
+for (const [label, typography] of [['Forwarded label', 'labelLarge'], ['Body restored', 'bodyLarge']]) {
   const line = ets.split('\n').find(line => line.includes(`Text("${label}")`));
-  assert.ok(line?.includes(`__etsMaterialTypography(${typography})`), line);
+  assert.ok(line?.includes(`__etsMaterialContext.typography.${typography}`) && line.includes("__etsTextStyleModifier("), line);
 }
 console.log('PASS multi-hop source slots preserve invocation typography and builder boundaries');
 const externalOutput = join(work, 'External.ets');
