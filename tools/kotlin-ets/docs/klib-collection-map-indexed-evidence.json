@@ -1,0 +1,148 @@
+{
+  "scope": "Official KLIB mapIndexed/mapIndexedNotNull bodies over typed collection and index primitives",
+  "baseCommit": "5a81545b5c54ff26b294aa11beca3e827cc87755",
+  "compilerVersion": "2.1.20",
+  "compilerSourcesSha256": "dc1ec1391e465b56d7e664fcf63d0ff4cfeb7274fc6e2b0dbd71335f8ce1dc11",
+  "stdlib": {
+    "file": "kotlin-stdlib-js-2.1.20.klib",
+    "sha256": "65a9831cceb606642693f9f3d798de86bbacf09b9588186e763e9e9f3c24d1a3"
+  },
+  "indexedMapRun": "tests/klib/collection-map-indexed-common/.work/run-VaA8Ls",
+  "officialBodies": [
+    {
+      "name": "mapIndexed",
+      "declaration": "common/src/generated/_Collections.kt:51520..51691"
+    },
+    {
+      "name": "mapIndexedTo",
+      "declaration": "common/src/generated/_Collections.kt:53102..53370"
+    },
+    {
+      "name": "mapIndexedNotNull",
+      "declaration": "common/src/generated/_Collections.kt:52016..52181"
+    },
+    {
+      "name": "mapIndexedNotNullTo",
+      "declaration": "common/src/generated/_Collections.kt:52515..52782"
+    },
+    {
+      "name": "forEachIndexed",
+      "declaration": "common/src/generated/_Collections.kt:62935..63109"
+    },
+    {
+      "name": "let",
+      "declaration": "src/kotlin/util/Standard.kt:3486..3669"
+    }
+  ],
+  "runtimeReplacements": [
+    "kotlin.collections.ArrayList.<init>|<init>(){}[0]",
+    "kotlin.collections.ArrayList.<init>|<init>(kotlin.Int){}[0]",
+    "kotlin.collections.collectionSizeOrDefault|collectionSizeOrDefault@kotlin.collections.Iterable<0:0>(kotlin.Int){0§<kotlin.Any?>}[0]",
+    "kotlin.collections.checkIndexOverflow|checkIndexOverflow(kotlin.Int){}[0]",
+    "kotlin.collections.Iterable.iterator|iterator(){}[0]",
+    "kotlin.collections.Iterator.hasNext|hasNext(){}[0]",
+    "kotlin.collections.Iterator.next|next(){}[0]",
+    "kotlin.collections.MutableCollection.add|add(1:0){}[0]"
+  ],
+  "indexSemantics": {
+    "initialValue": 0,
+    "increment": "shared Int32 lowering: index + 1 | 0",
+    "overflowCheck": "wrapped negative index throws ArithmeticException",
+    "message": "Index overflow has happened.",
+    "indexedMapSpecificHelper": false
+  },
+  "runtime": {
+    "directRoots": [
+      "stdlib:__etsArrayIterator",
+      "stdlib:__etsIntRem",
+      "stdlib:__etsIterator",
+      "stdlib:__etsListAdd",
+      "stdlib:__etsThrowable"
+    ],
+    "forbiddenDirectMapHelperAbsent": true,
+    "kotlinJsOutputAbsent": true
+  },
+  "positive": {
+    "expected": [
+      "1,3,5,7|-1,-1",
+      "|",
+      "-2147483648,-2,0,3,-2147483645|-2147483648,4,3"
+    ],
+    "actual": [
+      "1,3,5,7|-1,-1",
+      "|",
+      "-2147483648,-2,0,3,-2147483645|-2147483648,4,3"
+    ],
+    "strictHostTypecheck": true,
+    "producerSourcesAbsent": true,
+    "intIndexWrapAndOverflowCheck": true,
+    "faultInjectedOverflowBranch": true
+  },
+  "rejection": {
+    "code": "UNSUPPORTED_KLIB_DEPENDENCY",
+    "signature": "kotlin.collections/checkIndexOverflow|checkIndexOverflow(kotlin.Int){}[0]",
+    "library": "kotlin-stdlib-js-2.1.20.klib",
+    "declaration": "js/src/kotlin/collectionJs.kt:7127..7273",
+    "callSite": "deleted producer/Consumer.kt:53310..53337",
+    "targetOutputAbsent": true,
+    "silentFallback": false
+  },
+  "regressions": [
+    {
+      "suite": "map-common",
+      "passed": true,
+      "result": "tests/klib/collection-map-common/.work/run-LgXeVu/result.json"
+    },
+    {
+      "suite": "filter-common",
+      "passed": true,
+      "result": "tests/klib/collection-common/.work/run-WWNA54/result.json"
+    },
+    {
+      "suite": "klib-capabilities",
+      "passed": true,
+      "result": "tests/klib/capabilities/.work/run-SZeHnp/result.json"
+    },
+    {
+      "suite": "klib-loader",
+      "passed": true,
+      "result": "tests/klib/.work/run-opkh5b/result.json"
+    },
+    {
+      "suite": "portable-common",
+      "passed": true,
+      "result": "tests/klib/portable-common/.work/run-1XNUiw/result.json"
+    },
+    {
+      "suite": "jvm-member-bodies",
+      "passed": true,
+      "result": "tests/binary-bodies/r2e/.work/run-OMKkdj/complete.json"
+    },
+    {
+      "suite": "jvm-member-replay",
+      "passed": true,
+      "result": "tests/binary-bodies/r2e/.work/run-OMKkdj/replay-G67BiD/result.json"
+    }
+  ],
+  "production": [
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibCollectionRuntime.kt",
+      "sha256": "c99700aadc4d28d37f63fb1e41bb41e9a59f67d28e070b4718b2cbd95dcd4d3b"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibLowering.kt",
+      "sha256": "d0f53f5982c5b7713add08437e53daa05350981649304a8a6fe6a9e0c5d89e6d"
+    },
+    {
+      "path": "tools/kotlin-ets/src/dependency/klib/KlibSession.kt",
+      "sha256": "38a517f59713bf8f0b3c4cf634805c6e7e4645972dceae95fed25efc445eddba"
+    }
+  ],
+  "nextUncovered": [
+    "flatMap/flatMapTo",
+    "flatMapIndexed/flatMapIndexedTo",
+    "non-inline firstOrNull body admission"
+  ],
+  "sdk": "not run",
+  "device": "not run"
+}
