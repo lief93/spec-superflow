@@ -37,9 +37,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private lateinit var pageReceiver: EtsSymbol
     private var usesMaterialTypography = false
     private var usesMaterialContext = false
+    private var usesCompositionContext = false
     private var usesFocusManager = false
     private val touchBoxes = linkedMapOf<IrCall, TouchTargets>()
     private val shapes by lazy { language.callRules.filterIsInstance<ComposeShapeRule>().single() }
+    private val compositionLocals by lazy {
+        language.callRules.filterIsInstance<ComposeCompositionLocalRule>().single()
+    }
 
     fun lower(module: IrModuleFragment, entryName: String): EtsProgram {
         fields.clear(); states.clear(); pagers.clear(); coroutineScopes.clear()
@@ -50,6 +54,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         builderSymbols.clear()
         modifierSpecializations.clear(); activeSpecializations.clear()
         initializedBuilderFiles.clear()
+        compositionLocals.prepareForLowering(module, language)
+        usesCompositionContext = compositionLocals.contextRequired
         usesMaterialContext = requiresMaterialContext(module)
         usesFocusManager = requiresFocusManager(module)
         val declarations = module.files.flatMap { it.declarations }
@@ -60,6 +66,10 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         pageReceiver = EtsSymbol("ui:this", "this", etsClassSymbol(root.name.asString(), language.source(root)).type, language.source(root), external = true)
         if (!isUiBuilder(root)) diagnostics.unsupported(root, "UI entry must be @Composable and return Unit")
         val rootScope = scope()
+        if (usesCompositionContext) {
+            val at = language.source(root)
+            rootScope.ambientValues[COMPOSITION_CONTEXT] = compositionLocals.defaultContext(language, rootScope, at)
+        }
         if (usesMaterialContext) {
             val at = language.source(root)
             rootScope.ambientValues[MATERIAL_CONTEXT] = defaultMaterialContext(at, shapes.initialShapes(at))
@@ -174,6 +184,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeRowRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "width") }, touchBoxes, ::modifiers),
             ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
             ComposeBoxWithConstraintsRule(target, ::constraintsContent, ::modifiers),
+            ComposeCompositionLocalProviderRule(compositionLocals, diagnostics, ::provideCompositionContext),
             ComposeMaterialThemeRule(target, ::provideMaterialContext),
             ComposeProvideTextStyleRule(target, ::provideMaterialContext),
             ComposeSurfaceRule(target, ::surfaceContent, { content, scope -> surfaceContent(content, scope, "height") }, ::modifiers),
@@ -211,9 +222,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         receiver: EtsExpression? = null, identity: String = "arkui:$name"): EtsCall =
         target.call(name, args, owner, types, result, receiver, identity)
 
+    private fun contextTypes(): List<EtsType> = buildList {
+        if (usesCompositionContext) add(compositionContextType)
+        if (usesMaterialContext) add(materialContextType)
+    }
+
     private fun builderSymbol(function: IrSimpleFunction): EtsSymbol = builderSymbols.getOrPut(function) {
         val source = SourceSpan(sourceFile(function)?.fileEntry?.name, function.startOffset, function.endOffset)
-        etsFunctionSymbol(function.name.asString(), (if (usesMaterialContext) listOf(materialContextType) else emptyList()) + function.valueParameters.map {
+        etsFunctionSymbol(function.name.asString(), contextTypes() + function.valueParameters.map {
             if (it.type.hasAnnotation(COMPOSABLE)) slotType(it.type) else language.type(it.type)
         }, EtsTypes.VOID, source)
     }
@@ -241,8 +257,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         return EtsMember(receiver, name, type, source)
     }
 
-    private fun bindingWrappedBuilder() = EtsNamedType("WrappedBuilder", listOf(EtsTupleType(
-        if (usesMaterialContext) listOf(materialContextType) else emptyList())))
+    private fun bindingWrappedBuilder() = EtsNamedType("WrappedBuilder", listOf(EtsTupleType(contextTypes())))
 
     private fun slotType(type: IrType): EtsType {
         val wrapped = bindingWrappedBuilder()
@@ -250,15 +265,37 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             EtsNullableType(wrapped) else wrapped
     }
 
-    private fun contextArguments(scope: Scope): List<EtsExpression> =
-        if (usesMaterialContext) listOf(materialContext(scope, language.source(root))) else emptyList()
+    private fun contextArguments(scope: Scope): List<EtsExpression> = buildList {
+        val at = language.source(root)
+        if (usesCompositionContext) add(compositionContext(scope, at))
+        if (usesMaterialContext) add(materialContext(scope, at))
+    }
+
+    private fun contextArguments(scope: Scope, replacement: Pair<String, EtsExpression>): List<EtsExpression> =
+        buildList {
+            val at = language.source(root)
+            if (usesCompositionContext) add(if (replacement.first == COMPOSITION_CONTEXT) replacement.second
+                else compositionContext(scope, at))
+            if (usesMaterialContext) add(if (replacement.first == MATERIAL_CONTEXT) replacement.second
+                else materialContext(scope, at))
+        }
 
     private fun contextParameters(scope: Scope, owner: IrElement): List<EtsParameter> {
-        if (!usesMaterialContext) return emptyList()
         val at = language.source(owner)
-        val symbol = EtsSymbol("ui:materialContext:${at.file}:${at.start}", "__etsMaterialContext", materialContextType, at)
-        scope.ambientValues[MATERIAL_CONTEXT] = EtsReference(symbol)
-        return listOf(EtsParameter(symbol))
+        return buildList {
+            if (usesCompositionContext) {
+                val symbol = EtsSymbol("ui:compositionContext:${at.file}:${at.start}", "__etsCompositionContext",
+                    compositionContextType, at)
+                scope.ambientValues[COMPOSITION_CONTEXT] = EtsReference(symbol)
+                add(EtsParameter(symbol))
+            }
+            if (usesMaterialContext) {
+                val symbol = EtsSymbol("ui:materialContext:${at.file}:${at.start}", "__etsMaterialContext",
+                    materialContextType, at)
+                scope.ambientValues[MATERIAL_CONTEXT] = EtsReference(symbol)
+                add(EtsParameter(symbol))
+            }
+        }
     }
 
     private fun isUiBuilder(function: IrSimpleFunction): Boolean =
@@ -785,7 +822,30 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val bridge = EtsFunction(slotMethodName("MaterialThemeContent_${at.start}"), parameters, EtsTypes.VOID,
             uiLambdaBody(content, child), at, kind = EtsFunctionKind.METHOD, builder = true)
         slotMethods += bridge
-        return listOf(EtsUiElement(methodCall(bridge.symbol, listOf(context) + captures.map { scope.bindings.getValue(it) }, content)))
+        return listOf(EtsUiElement(methodCall(bridge.symbol,
+            contextArguments(scope, MATERIAL_CONTEXT to context) + captures.map { scope.bindings.getValue(it) }, content)))
+    }
+
+    private fun provideCompositionContext(values: List<Pair<ComposeCompositionLocalRule.Definition, EtsExpression>>,
+        content: IrExpression, scope: Scope): List<EtsStatement> {
+        val child = scope.fork()
+        val captures = capturedValues(listOf(content), scope)
+        val captured = captures.map { capturedParameter(it, scope) }
+        captures.zip(captured).forEach { (symbol, parameter) -> child.bindings[symbol] = EtsReference(parameter.symbol) }
+        val at = language.source(content)
+        val context = contextParameters(child, content)
+        val provided = values.mapIndexed { index, (_, value) -> EtsParameter(EtsSymbol(
+            "compose:provided:${at.file}:${at.start}:$index", "__etsProvidedValue$index", value.type, at)) }
+        val overrides = linkedMapOf<ComposeCompositionLocalRule.Definition, EtsExpression>()
+        values.zip(provided).forEach { (value, parameter) -> overrides[value.first] = EtsReference(parameter.symbol) }
+        child.ambientValues[COMPOSITION_CONTEXT] = compositionLocals.overriddenContext(
+            compositionContext(child, at), overrides, at)
+        val parameters = context + provided + captured
+        val bridge = EtsFunction(slotMethodName("CompositionLocalContent_${at.start}"), parameters, EtsTypes.VOID,
+            uiLambdaBody(content, child), at, kind = EtsFunctionKind.METHOD, builder = true)
+        slotMethods += bridge
+        val arguments = contextArguments(scope) + values.map { it.second } + captures.map { scope.bindings.getValue(it) }
+        return listOf(EtsUiElement(methodCall(bridge.symbol, arguments, content)))
     }
 
     private fun slotMethodName(stem: String): String {

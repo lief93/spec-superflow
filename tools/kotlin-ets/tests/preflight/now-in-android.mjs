@@ -18,7 +18,7 @@ const categories = ['language_semantics', 'standard_library', 'neutral_compose_w
 const expectedCoverage = {
   language_semantics: { total: 112, recognized: 112, unsupported: 0, percentage: 100 },
   standard_library: { total: 16, recognized: 16, unsupported: 0, percentage: 100 },
-  neutral_compose_widget: { total: 191, recognized: 175, unsupported: 16, percentage: 91.62 },
+  neutral_compose_widget: { total: 191, recognized: 178, unsupported: 13, percentage: 93.19 },
   modifier: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   resources: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   project_dependencies: { total: 0, recognized: 0, unsupported: 0, percentage: null },
@@ -68,9 +68,10 @@ try {
     '--work-dir', projectRun, '--offline'], { env: projectEnv }, 2);
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'UNSUPPORTED');
-  assert.match(backendBlocker.message, /Unsupported resolved UI API: androidx\.compose\.runtime\.CompositionLocalProvider/);
-  assert.equal(backendBlocker.source.line, 236);
-  assert.equal(backendBlocker.source.column, 5);
+  assert.equal(backendBlocker.message,
+    'Color.Unspecified requires inherited/default color selection; it is not an ARGB value');
+  assert.equal(backendBlocker.source.line, 29);
+  assert.equal(backendBlocker.source.column, 30);
   assert.equal(existsSync(output), false);
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
@@ -122,11 +123,28 @@ try {
   assert.equal(surfaceColor?.firstUnsupportedNode, null);
   assert.equal(surfaceColor?.source.line, 210);
   assert.equal(surfaceColor?.source.column, 70);
+  const compositionLocalProvider = report.calls.find(call =>
+    call.finalRecognizedNode.symbol === 'androidx.compose.runtime.CompositionLocalProvider');
+  assert.equal(compositionLocalProvider?.expectedTargetType, 'void');
+  assert.equal(compositionLocalProvider?.finalRecognizedNode.kind, 'typed_call');
+  assert.equal(compositionLocalProvider?.firstUnsupportedNode, null);
+  assert.equal(compositionLocalProvider?.source.line, 236);
+  assert.equal(compositionLocalProvider?.source.column, 5);
+  const providedValues = report.calls.filter(call =>
+    call.finalRecognizedNode.symbol === 'androidx.compose.runtime.ProvidableCompositionLocal.provides');
+  assert.deepEqual(providedValues.map(call => call.expectedTargetType), [
+    'EtsProvidedValue<GradientColors>',
+    'EtsProvidedValue<BackgroundTheme>',
+    'EtsProvidedValue<TintTheme>',
+  ]);
+  assert.ok(providedValues.every(call => call.finalRecognizedNode.kind === 'typed_call' &&
+    call.firstUnsupportedNode === null));
   assert.equal(report.firstUnsupportedNode.kind, 'target_type');
-  assert.equal(report.firstUnsupportedNode.symbol, 'androidx.compose.runtime.ProvidableCompositionLocal.provides');
-  assert.match(report.firstUnsupportedNode.message, /ProvidedValue.*GradientColors/);
-  assert.equal(report.firstUnsupportedNode.source.line, 237);
-  assert.equal(report.firstUnsupportedNode.source.column, 9);
+  assert.equal(report.firstUnsupportedNode.symbol,
+    'androidx.compose.ui.text.style.LineHeightStyle.Alignment.Companion.<get-Bottom>');
+  assert.match(report.firstUnsupportedNode.message, /Unsupported language type:.*LineHeightStyle\.Alignment/);
+  assert.equal(report.firstUnsupportedNode.source.line, 67);
+  assert.equal(report.firstUnsupportedNode.source.column, 35);
   assertSource(report.firstUnsupportedNode.source);
 
   for (const call of report.calls) {
@@ -144,8 +162,8 @@ try {
   }
 
   const unsupportedCalls = report.calls.filter(call => call.firstUnsupportedNode !== null);
-  assert.equal(unsupportedCalls.length, 16);
-  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'target_type').length, 15);
+  assert.equal(unsupportedCalls.length, 13);
+  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'target_type').length, 12);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 1);
   assert.ok(unsupportedCalls.every(call => call.category === 'neutral_compose_widget'));
 
@@ -161,18 +179,18 @@ try {
     backendBlocker,
     unsupportedCalls,
     p0Gaps: [
-      { category: 'neutral_compose_widget', node: 'androidx.compose.runtime.CompositionLocalProvider',
-        responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt', source: backendBlocker.source,
+      { category: 'neutral_compose_widget', node: 'androidx.compose.ui.graphics.Color.Unspecified',
+        responsibleModule: 'tools/kotlin-ets/src/ui/ColorValueRule.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
       { category: 'neutral_compose_widget', node: 'unsupported_call_inventory',
         responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt',
-        counts: { target_type: 15, unsupported_call: 1 },
-        detail: 'Sixteen source-linked Compose calls remain unsupported; all records are preserved in unsupportedCalls.' },
+        counts: { target_type: 12, unsupported_call: 1 },
+        detail: 'Thirteen source-linked Compose calls remain unsupported; all records are preserved in unsupportedCalls.' },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS typed Color.copy, ProvideTextStyle and surfaceColorAtElevation lowering advance the backend to CompositionLocalProvider; all 16 unsupported Compose calls remain explicit');
+  console.log('PASS typed CompositionLocalProvider and provides calls advance the backend to Color.Unspecified; all 13 unsupported Compose calls remain explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

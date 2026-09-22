@@ -7,7 +7,6 @@ import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
 
 internal val nativeHostContextType = EtsNamedType("Context", external = true)
-internal val compositionLocalType = EtsNamedType("EtsCompositionLocal", symbolId = "compose:compositionLocal", external = true)
 private val localContextMarker = EtsSymbol("compose:localContext", "__etsLocalContext", compositionLocalType,
     SourceSpan("EtsLocalContext.kt", 0, 0), external = true)
 
