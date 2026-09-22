@@ -47,11 +47,11 @@ class KlibSession internal constructor(
         return modules
     }
 
-    /** Only explicitly approved inline symbols may borrow bodies from dependency-only libraries. */
-    fun bodies(approvedInlineBodies: Set<IrFunctionSymbol> = emptySet()): FunctionBodies {
+    /** Only explicitly approved canonical symbols may borrow bodies from dependency-only libraries. */
+    fun bodies(approvedBodies: Set<IrFunctionSymbol> = emptySet()): FunctionBodies {
         checkActive()
-        require(approvedInlineBodies.all { it.isBound && it.owner.isInline && !it.owner.isExternal &&
-            it.owner.fileOrNull?.module in libraryLocations }) { "Inline reuse requires canonical linked KLIB symbols" }
+        require(approvedBodies.all { it.isBound && !it.owner.isExternal &&
+            it.owner.fileOrNull?.module in libraryLocations }) { "Body reuse requires canonical linked KLIB symbols" }
         return FunctionBodies { symbol ->
             checkActive()
             when {
@@ -63,7 +63,7 @@ class KlibSession internal constructor(
                     val location = libraryLocations[file?.module]
                     when {
                         location == null -> FunctionBody.Unavailable(FunctionBody.Reason.OUTSIDE_MODULE)
-                        file!!.module !in modules && symbol !in approvedInlineBodies ->
+                        file!!.module !in modules && symbol !in approvedBodies ->
                             FunctionBody.Unavailable(FunctionBody.Reason.NON_TRANSLATED_KLIB)
                         function.body == null -> FunctionBody.Unavailable(FunctionBody.Reason.NO_BODY)
                         else -> FunctionBody.Available(function, function.body!!,

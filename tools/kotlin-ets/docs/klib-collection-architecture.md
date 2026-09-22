@@ -2,8 +2,8 @@
 
 This increment audits the collection paths that previously mixed common Kotlin
 algorithms, target representations and compiler intrinsics. It moves the KLIB
-`Iterable.filter`, map and non-indexed flat-map paths through official serialized
-common bodies and one symbol-bound collection runtime seam. Source/JVM
+`Iterable.filter`, map, non-indexed flat-map and `firstOrNull` paths through
+official serialized common bodies and one symbol-bound collection runtime seam. Source/JVM
 compatibility adapters remain because the public source compiler does not yet
 enter a `KlibSession`.
 
@@ -19,6 +19,7 @@ enter a `KlibSession`.
 | `mapNotNull` / `mapNotNullTo` | Official common body reuse | The linked closure also reuses official `forEach` and `let` bodies. Null filtering stays in common IR; the target seam only allocates, traverses and appends. |
 | `mapIndexed` / `mapIndexedTo` / nullable-result variants | Official common body reuse | Common IR owns the index variable, callback order and null filtering. The exact linked `checkIndexOverflow` symbol supplies the language-level negative-index guard after ordinary Int32 increment wrapping. |
 | `flatMap` / `flatMapTo` | Official common body reuse | Common IR owns callback invocation and outer traversal. The exact linked `kotlin.collections.addAll` extension crosses one typed iterable append boundary, preserving nested empties and element order. Indexed flat-map variants are outside this increment. |
+| `firstOrNull()` / `firstOrNull(predicate)` | Official common body reuse | The ordinary no-argument body is emitted as a selected dependency declaration with its canonical symbol; the inline predicate overload uses the official common inliner. Exact `List.isEmpty`, `List.get` and iterator symbols cross the typed collection seam. |
 | empty predicates (`isEmpty`, `isNotEmpty`) | Unified Kotlin-compatible ETS representation primitive | The array-backed collection representation supplies a typed length comparison. There is no need to interpret a platform collection implementation. |
 | `repeat` | Official common inline body candidate | General KLIB lowering has no completed repeat closure in this increment. Existing UI-specific handling stays isolated; no new name rule or runtime claim is added. |
 | `let` | Official common body reuse | S1 already proves explicit canonical approval and official inlining of `kotlin.let`. The source/JVM `LetRule` remains as the compatibility path. |
@@ -101,9 +102,24 @@ iterable, stable nested element order and exactly one callback per outer
 element. A second run declines the exact `addAll` symbol and requires a
 source-linked `UNSUPPORTED_KLIB_DEPENDENCY` from
 `src/kotlin/collections/MutableCollections.kt`, with no ETS file. Indexed
-flat-map variants remain outside this increment. The non-inline `firstOrNull`
-body also still needs an explicit dependency-body admission path or a retained
-representation primitive.
+flat-map variants remain outside this increment.
+
+`tests/klib/collection-first-or-null-common/run.mjs` proves ordinary dependency
+body admission. The exact no-argument `Iterable.firstOrNull` declaration is
+materialized as the sole declaration from its dependency file and lowered into
+`_Collections.ets`; the predicate overload remains inline. Calls to either
+approved symbol bypass source/JVM compatibility adapters, so the existing
+name-based `__etsListFirstOrNull` helper is absent. The official no-argument
+body keeps its `List` fast path and iterator fallback. Because `Iterable<T>` and
+`List<T>` share the supported `Array<T>` representation, the body’s runtime
+type test resolves through that shared typed representation.
+
+The JVM/typed-ETS oracle covers empty input, first-element selection, predicate
+hit and miss, and exact predicate callback counts. Removing the selected
+ordinary body reports its `_Collections.kt` declaration and consumer call site.
+Removing the exact `List.get` primitive reports both its builtins declaration
+and the call site inside the selected official body. Both cases raise
+`UNSUPPORTED_KLIB_DEPENDENCY` before any ETS file is written.
 
 ## Reproduction and frozen evidence
 
@@ -114,6 +130,7 @@ node tests/klib/collection-common/run.mjs
 node tests/klib/collection-map-common/run.mjs
 node tests/klib/collection-map-indexed-common/run.mjs
 node tests/klib/collection-flat-map-common/run.mjs
+node tests/klib/collection-first-or-null-common/run.mjs
 node tests/klib/capabilities/run.mjs
 node tests/klib/run.mjs
 node tests/klib/portable-common/run.mjs
@@ -126,8 +143,9 @@ node tests/stdlib/check-iteration.mjs
 The checked-in [evidence record](klib-collection-architecture-evidence.json)
 plus the [map evidence](klib-collection-map-evidence.json) and
 [indexed-map evidence](klib-collection-map-indexed-evidence.json) and
-[flat-map evidence](klib-collection-flat-map-evidence.json) contain the pinned
-hashes, provenance, results and completed run directories.
+[flat-map evidence](klib-collection-flat-map-evidence.json) and
+[first-or-null evidence](klib-collection-first-or-null-evidence.json) contain
+the pinned hashes, provenance, results and completed run directories.
 Only the dependency KLIB seam, its focused fixture and these documents change
 across these collection increments. Compose, UI and project adapter files are
 untouched.

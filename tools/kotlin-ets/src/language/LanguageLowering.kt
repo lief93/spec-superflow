@@ -590,12 +590,23 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
                 val nullValue = EtsLiteral(null, EtsTypes.NULL, source(value))
                 fun scalar(name: String) = binary("===", EtsUnary("typeof", reference, EtsTypes.STRING, source(value)),
                     EtsLiteral(name, EtsTypes.STRING, source(value)))
+                val mappedTarget = type(value.typeOperand.makeNotNull())
+                val representationCheck = if (value.operator in setOf(IrTypeOperator.INSTANCEOF,
+                        IrTypeOperator.NOT_INSTANCEOF)) when {
+                    operand.type == mappedTarget -> EtsLiteral(true, EtsTypes.BOOLEAN, source(value))
+                    (operand.type as? EtsNullableType)?.inner == mappedTarget ->
+                        if (value.typeOperand.isNullable()) EtsLiteral(true, EtsTypes.BOOLEAN, source(value))
+                        else binary("!==", reference, nullValue)
+                    else -> null
+                } else null
                 val target = value.typeOperand.classOrNull?.owner
                 if (target?.kind == ClassKind.INTERFACE && sourceFile(target) == null) {
                     diagnostics.unsupported(value, "Runtime interface discrimination is not supported")
                 }
                 val targetName = target?.fqNameWhenAvailable?.asString()
-                val check = exceptionCategory(target)?.let { exceptionCheck(reference, it, source(value)) } ?: when (targetName) {
+                val check = representationCheck ?: exceptionCategory(target)?.let {
+                    exceptionCheck(reference, it, source(value))
+                } ?: when (targetName) {
                     "kotlin.String" -> scalar("string")
                     "kotlin.Boolean" -> scalar("boolean")
                     "kotlin.Int", "kotlin.Short", "kotlin.Byte", "kotlin.Char", "kotlin.Float", "kotlin.Double" ->
@@ -609,7 +620,8 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
                     } else if (target != null && sourceFile(target) != null) binary("instanceof", reference, classReference(target, value))
                         else diagnostics.unsupported(value, "Unsupported runtime type check: ${value.typeOperand.render()}")
                 }
-                val condition = if (value.typeOperand.isNullable()) binary("||", binary("===", reference, nullValue), check) else check
+                val condition = if (representationCheck == null && value.typeOperand.isNullable())
+                    binary("||", binary("===", reference, nullValue), check) else check
                 val cast = EtsCast(EtsCast(reference, EtsNullableType(EtsTypes.OBJECT), source(value)), type(value.typeOperand), source(value))
                 val result = when (value.operator) {
                     IrTypeOperator.INSTANCEOF -> listOf(EtsReturn(condition, source(value)))

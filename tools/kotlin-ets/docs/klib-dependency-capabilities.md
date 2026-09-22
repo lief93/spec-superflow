@@ -6,7 +6,9 @@ symbol-bound collection runtime seam. The same seam now carries `map` and
 `mapNotNull` plus indexed variants, including their official `*To`, traversal
 and `let` closure. Non-indexed `flatMap` and `flatMapTo` reuse their official
 bodies through the exact linked iterable `addAll` primitive; indexed flat-map
-variants remain outside the admitted closure.
+variants remain outside the admitted closure. The same selection API now emits
+the explicitly approved ordinary `Iterable.firstOrNull()` body while the
+predicate overload continues through official common inlining.
 
 Scope: loading/linking reusable Kotlin bodies and selecting existing minimal ETS
 runtime support. No Compose control, UI backend, public CLI, JVM bytecode
@@ -18,8 +20,8 @@ translation, JS backend phase pipeline or complete stdlib replacement is added.
 | --- | --- | --- |
 | JVM serialized IR | `BinaryBodies` deserializes checked inline JVM bodies; `LibraryInlining` runs the official common inliner | Keep format and admission policy; share only the official inliner invocation with the KLIB path |
 | Serialized KLIB | `KlibLoader` uses official `ModulesStructure`, `loadIr`, `JsIrLinker`; explicit translated vs dependency-only libraries | Preserve official descriptor/symbol identities and attach canonical library paths to loaded module identities |
-| Body availability | KLIB proofs inspected raw IR; shared body origins described source/JVM only | `KlibSession.bodies()` implements `FunctionBodies`, reports `SerializedKlibIr`, enforces borrowed lifetime, and admits dependency-only inline bodies only by explicit canonical symbol approval |
-| Target compilation | Experiments directly invoked the backend | `KlibSession.lowerToEts()` shares the common inliner, then existing typed ETS lowering; records successful replacements and rejects unresolved dependency boundaries before target output |
+| Body availability | KLIB proofs inspected raw IR; shared body origins described source/JVM only | `KlibSession.bodies()` implements `FunctionBodies`, reports `SerializedKlibIr`, enforces borrowed lifetime, and admits dependency-only inline or ordinary bodies only by explicit canonical symbol approval |
+| Target compilation | Experiments directly invoked the backend | `KlibSession.lowerToEts()` shares the common inliner, materializes only selected ordinary top-level functions, then uses existing typed ETS lowering; it records successful replacements and rejects unresolved dependency boundaries before target output |
 | Runtime | `StandardLibraryDependencies` collects from typed ETS and existing support emission expands dependencies | Expose the collector's direct roots for evidence; keep a single collector and the existing per-module runtime closure |
 
 Function FQNames/signatures in reports are display evidence. Production approval
@@ -30,8 +32,10 @@ identities, never a spelling-based list of stdlib APIs. KLIB is never sent throu
 A translated library's non-inline bodies remain in their original files and are
 emitted with existing symbol-based imports. Explicitly approved dependency-only
 inline bodies are copied into callers by the official Kotlin common inliner;
-the dependency's module is not emitted. A body being present is not permission
-to compile an entire dependency or interpret JS-specific implementations as ETS.
+explicitly approved ordinary top-level bodies retain their canonical symbols and
+source files in a minimal temporary output module. No other declaration from the
+dependency file or module is emitted. A body being present is not permission to
+compile an entire dependency or interpret JS-specific implementations as ETS.
 
 The KLIB compiler context is the pinned official `JsIrBackendContext`, consistent
 with its `JsIrLinker` symbol universe. This context resolves compiler symbols;
@@ -87,8 +91,8 @@ ArkVM/device evidence.
 
 The three-way classification does not promise general Kotlin dependency support.
 Unapproved dependency-only bodies are not silently copied; platform/external
-calls need an existing typed replacement or fail. Approved inline bodies can
-still expose unsupported residual operations, which must fail target lowering.
+calls need an existing typed replacement or fail. Approved inline and ordinary
+bodies can still expose unsupported residual operations, which must fail target lowering.
 Full JS collections and coroutine implementations remain outside the admitted
 runtime. This increment does not delete existing stdlib adapters or claim that
 portable common source equivalents are identical to official JS collection
