@@ -227,6 +227,7 @@ AI coding sessions fail in one of two ways:
 | 11 | `spec-merger` | Syncing | Delta spec → main spec merge with conflict detection |
 | 12 | `grill-me` | Decision clarification | After evidence is exhausted, Primary asks one user-owned decision at a time with a recommendation and trade-off |
 | 13 | `test-quality` | Planning and execution | Map every AC clause to controlled setup, real action, and observable assertions; reject false coverage |
+| 14 | `business-behavior-contract` | Behavior analysis | Extract and validate source-anchored business behavior contracts from Kotlin/Java without generating target UI or implementation code |
 
 ---
 

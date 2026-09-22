@@ -27,6 +27,7 @@ Current version: v0.15.0.
 - code-reviewer: Structured review with Critical / Important / Minor severity
 - release-archivist: Verification-before-completion, archiving, risk summary
 - spec-merger: Merges delta specs into main specs with conflict detection
+- business-behavior-contract: Extracts and validates source-anchored Kotlin/Java business behavior without generating target code
 
 ## Templates And Skill Resources
 - skills/project-init/references/: Copilot instruction and project guideline templates
@@ -37,6 +38,7 @@ Current version: v0.15.0.
 - skills/contract-builder/references/execution-contract.md: Bridge artifact template
 - skills/release-archivist/references/pr-summary.md: Delivery, verification, exceptions, and known risks
 - skills/workflow-start/references/abandonment-summary.md: Abandoned-change summary template
+- skills/business-behavior-contract/references/: Behavior contract formats and semantic transcription review guidance
 
 ## Examples (in docs/examples/)
 - add-dark-mode: New UI feature example (dark mode)

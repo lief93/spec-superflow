@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "behavior-scenario-evidence.v1",
+  "type": "object",
+  "required": ["schema_version", "scenario_id", "source_revision", "target_revision", "scope_id", "execution_status", "verdict"],
+  "properties": {
+    "schema_version": {"const": "behavior-scenario-evidence.v1"},
+    "scenario_id": {"type": "string", "minLength": 1},
+    "source_revision": {"type": "string", "minLength": 1},
+    "target_revision": {"type": "string", "minLength": 1},
+    "scope_id": {"type": "string", "minLength": 1},
+    "execution_status": {"const": "executed"},
+    "verdict": {"const": "pass"}
+  }
+}

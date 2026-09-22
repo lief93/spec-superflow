@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "behavior-collection.v1",
+  "title": "Categorized source collection companion embedded in behavior-contract.v2",
+  "type": "object",
+  "required": ["schema_version", "status", "source_revision", "categories", "entities", "relationships", "facts", "anchors"],
+  "properties": {
+    "schema_version": {"const": "behavior-collection.v1"},
+    "status": {"enum": ["pending", "reviewed"]},
+    "source_revision": {"type": "string", "minLength": 1},
+    "inventory_ids": {"type": "array", "items": {"type": "string"}},
+    "categories": {"type": "array", "minItems": 6, "maxItems": 6, "items": {
+      "type": "object", "required": ["family", "disposition", "rationale", "anchor_ids", "record_ids"],
+      "properties": {
+        "family": {"enum": ["ownership", "events_state_navigation", "data", "async_lifecycle", "validation_security", "scenarios_evidence"]},
+        "disposition": {"enum": ["applicable", "not_applicable", "unresolved"]},
+        "rationale": {"type": "string"}, "anchor_ids": {"$ref": "#/$defs/refs"}, "record_ids": {"$ref": "#/$defs/refs"}
+      }
+    }},
+    "anchors": {"type": "array", "items": {
+      "type": "object", "required": ["id", "kind", "path", "start_line", "end_line", "file_sha256", "span_sha256"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1}, "kind": {"enum": ["source", "test"]},
+        "path": {"type": "string", "minLength": 1}, "start_line": {"type": "integer", "minimum": 1},
+        "end_line": {"type": "integer", "minimum": 1}, "file_sha256": {"$ref": "#/$defs/hash"},
+        "span_sha256": {"$ref": "#/$defs/hash"}, "symbol": {"type": "string", "minLength": 1}
+      }
+    }},
+    "entities": {"type": "array", "items": {"type": "object", "required": ["id", "kind", "owner_id", "anchor_ids", "source_inventory_ids"], "properties": {"definition_anchor_id": {"type": "string", "minLength": 1, "description": "Primary source identity for a definition/dependency; required when its anchors span multiple files."}}}},
+    "relationships": {"type": "array", "items": {"type": "object", "required": ["id", "from_id", "to_id", "bindings", "anchor_ids", "source_inventory_ids"]}},
+    "facts": {"type": "array", "items": {"type": "object", "required": ["id", "kind", "owner_id", "anchor_ids", "source_inventory_ids"]}}
+  },
+  "$defs": {
+    "refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$comment": "Pending scaffolds are schema-shaped but cannot pass normal validation. collect_behavior_rules.validate_collection enforces kind-specific fields, references and source proof."
+}

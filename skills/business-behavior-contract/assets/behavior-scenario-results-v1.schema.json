@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "behavior-scenario-results.v1",
+  "type": "object",
+  "required": ["schema_version", "contract_id", "source_revision", "target_revision", "scenarios"],
+  "properties": {
+    "schema_version": {"const": "behavior-scenario-results.v1"},
+    "contract_id": {"type": "string", "minLength": 1},
+    "source_revision": {"type": "string", "minLength": 1},
+    "target_revision": {"type": "string", "minLength": 1},
+    "scenarios": {"type": "array", "minItems": 1, "items": {
+      "type": "object",
+      "required": ["id", "verdict", "evidence"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "verdict": {"enum": ["pass", "fail"]},
+        "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    }}
+  }
+}
