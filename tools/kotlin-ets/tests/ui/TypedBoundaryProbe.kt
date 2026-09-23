@@ -54,7 +54,7 @@ fun main(args: Array<String>) {
         val diagnostics = DiagnosticSink()
         val backend = EtsBackend(diagnostics, listOf(StandardLibraryRules(), ComposeColorValueRule(),
             ComposeColorSchemeRule(), ComposeMaterialThemeValueRule(), ComposeTypographyRule(),
-            ComposeFontRule(FontResources()), ComposeTextStyleRule(), ComposeDimensionRule(),
+            ComposeFontRule(FontResources()), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeDimensionRule(),
             ComposeCompositionLocalRule(diagnostics), ComposeShapeRule(), ComposeButtonColorsRule()))
         backend.validateSource(module)
         val observed = ObservedLanguage(backend.language)

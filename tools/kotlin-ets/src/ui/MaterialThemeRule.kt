@@ -12,20 +12,72 @@ internal val materialContextType = etsClassSymbol("EtsMaterialContext", material
 private val materialThemeType = etsClassSymbol("EtsMaterialTheme", materialContextSource).type as EtsNamedType
 private val materialThemeObject = EtsSymbol("material:theme:singleton", "__etsMaterialTheme", materialThemeType, materialContextSource)
 
+internal enum class MaterialContextField(val targetName: String) {
+    COLOR_SCHEME("colorScheme"),
+    CONTENT_COLOR("contentColor"),
+    TYPOGRAPHY("typography"),
+    TEXT_STYLE("textStyle"),
+    SHAPES("shapes"),
+}
+
+internal fun materialContextFieldType(field: MaterialContextField): EtsType = when (field) {
+    MaterialContextField.COLOR_SCHEME -> materialColorSchemeType
+    MaterialContextField.CONTENT_COLOR -> EtsTypes.NUMBER
+    MaterialContextField.TYPOGRAPHY -> typographyType
+    MaterialContextField.TEXT_STYLE -> EtsNullableType(textStyleType)
+    MaterialContextField.SHAPES -> materialShapesType
+}
+
+internal fun materialContextMember(context: EtsExpression, field: MaterialContextField, at: SourceSpan): EtsExpression {
+    if (context is EtsNew && context.classType == materialContextType) {
+        if (context.arguments.size != MaterialContextField.entries.size) throw InvalidTarget(at,
+            "Material context constructor has ${context.arguments.size} values; expected ${MaterialContextField.entries.size}")
+        return MaterialContextField.entries.zip(context.arguments).toMap().getValue(field)
+    }
+    return EtsMember(context, field.targetName, materialContextFieldType(field), at)
+}
+
+internal fun newMaterialContext(at: SourceSpan,
+    vararg bindings: Pair<MaterialContextField, EtsExpression>): EtsNew {
+    val values = linkedMapOf<MaterialContextField, EtsExpression>()
+    bindings.forEach { (field, value) ->
+        if (values.put(field, value) != null) throw InvalidTarget(at,
+            "Duplicate material context binding: ${field.targetName}")
+    }
+    val missing = MaterialContextField.entries.filter { it !in values }
+    if (missing.isNotEmpty()) throw InvalidTarget(at,
+        "Missing material context binding: ${missing.joinToString { it.targetName }}")
+    val arguments = MaterialContextField.entries.map { field ->
+        val value = values.getValue(field)
+        val expected = materialContextFieldType(field)
+        val assignable = etsAssignable(value.type, expected) ||
+            field == MaterialContextField.COLOR_SCHEME && value.type == materialColorValuesType
+        if (!assignable) throw InvalidTarget(at,
+            "Material context ${field.targetName} has target type ${value.type}; expected $expected")
+        value
+    }
+    return EtsNew(materialContextType, arguments, at)
+}
+
 internal fun materialContext(scope: Scope, at: SourceSpan): EtsExpression = scope.ambientValues[MATERIAL_CONTEXT]
     ?: throw Unsupported(Diagnostic("UNSUPPORTED", "Material theme read requires a composition invocation context", at))
-internal fun materialScheme(context: EtsExpression, at: SourceSpan) = EtsMember(context, "colorScheme", materialColorSchemeType, at)
-internal fun materialContentColor(context: EtsExpression, at: SourceSpan) = EtsMember(context, "contentColor", EtsTypes.NUMBER, at)
+internal fun materialScheme(context: EtsExpression, at: SourceSpan) =
+    materialContextMember(context, MaterialContextField.COLOR_SCHEME, at)
+internal fun materialContentColor(context: EtsExpression, at: SourceSpan) =
+    materialContextMember(context, MaterialContextField.CONTENT_COLOR, at)
 internal fun materialTextStyleOverride(context: EtsExpression, at: SourceSpan) =
-    EtsMember(context, "textStyle", EtsNullableType(textStyleType), at)
+    materialContextMember(context, MaterialContextField.TEXT_STYLE, at)
 internal fun materialCurrentTextStyle(context: EtsExpression, at: SourceSpan): EtsExpression =
     EtsBinary("??", materialTextStyleOverride(context, at),
         EtsMember(materialTypography(context, at), "bodyLarge", textStyleType, at), textStyleType, at)
-internal fun defaultMaterialContext(at: SourceSpan, shapes: EtsExpression): EtsExpression = EtsNew(materialContextType, listOf(
-    EtsNew(materialColorValuesType, materialColorSchemeDefaults.map { (name, defaults) ->
+internal fun defaultMaterialContext(at: SourceSpan, shapes: EtsExpression): EtsExpression = newMaterialContext(at,
+    MaterialContextField.COLOR_SCHEME to EtsNew(materialColorValuesType, materialColorSchemeDefaults.map { (name, defaults) ->
         if (name == "surfaceTint") EtsLiteral(null, EtsTypes.NULL, at) else EtsLiteral(defaults.first, EtsTypes.NUMBER, at)
-    }, at), EtsLiteral(0xFF000000L, EtsTypes.NUMBER, at), defaultTypography(at),
-    EtsLiteral(null, EtsTypes.NULL, at), shapes), at)
+    }, at),
+    MaterialContextField.CONTENT_COLOR to EtsLiteral(0xFF000000L, EtsTypes.NUMBER, at),
+    MaterialContextField.TYPOGRAPHY to defaultTypography(at),
+    MaterialContextField.TEXT_STYLE to EtsLiteral(null, EtsTypes.NULL, at),
+    MaterialContextField.SHAPES to shapes)
 
 internal fun requiresMaterialContext(element: IrElement): Boolean {
     var required = false
@@ -127,8 +179,7 @@ internal class ComposeMaterialThemeValueRule : CallRule {
         if (!used) return if (marker.isEmpty()) emptyList() else listOf(EtsFile(materialContextSource.file!!, marker))
         val at = materialContextSource
         val self = EtsReference(EtsSymbol("material:context:this", "this", materialContextType, at, external = true))
-        val values = linkedMapOf("colorScheme" to materialColorSchemeType, "contentColor" to EtsTypes.NUMBER,
-            "typography" to typographyType, "textStyle" to EtsNullableType(textStyleType), "shapes" to materialShapesType)
+        val values = MaterialContextField.entries.associate { it.targetName to materialContextFieldType(it) }
         val parameters = values.map { (name, type) -> EtsParameter(EtsSymbol("material:context:parameter:$name", name, type, at)) }
         val fields = values.map { (name, type) -> EtsField(EtsSymbol("material:context:field:$name", name, type, at), readonly = true) }
         val constructor = EtsFunction("constructor", parameters, EtsTypes.VOID, fields.zip(parameters).map { (field, parameter) ->
@@ -162,7 +213,11 @@ internal class ComposeMaterialThemeRule(private val target: ArkUiCalls,
         val content = argument(call, "content") ?: target.diagnostics.unsupported(call, "MaterialTheme requires content")
         val flags = if (typographyArgument?.let { hasUnsupportedLineHeightStyle(it, scope) } == true)
             setOf(LINE_HEIGHT_STYLE_CONTEXT) else emptySet()
-        return provide(EtsNew(materialContextType, listOf(scheme, materialContentColor(parent, at), typography,
-            EtsLiteral(null, EtsTypes.NULL, at), shapes), at), content, scope, flags)
+        return provide(newMaterialContext(at,
+            MaterialContextField.COLOR_SCHEME to scheme,
+            MaterialContextField.CONTENT_COLOR to materialContentColor(parent, at),
+            MaterialContextField.TYPOGRAPHY to typography,
+            MaterialContextField.TEXT_STYLE to EtsLiteral(null, EtsTypes.NULL, at),
+            MaterialContextField.SHAPES to shapes), content, scope, flags)
     }
 }

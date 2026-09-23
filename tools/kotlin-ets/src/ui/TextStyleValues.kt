@@ -23,7 +23,8 @@ internal fun textStyleFile(): EtsFile {
     val body = fields.zip(parameters).map { (field, parameter) -> EtsExpressionStatement(EtsAssignment(
         EtsMember(receiver, field.symbol.name, field.symbol.type, at, field.symbol.id), EtsReference(parameter.symbol), at)) }
     val type = EtsClass(textStyleType.name, fields + EtsFunction("constructor",
-        parameters, EtsTypes.VOID, body, at, kind = EtsFunctionKind.CONSTRUCTOR), at, exported = true)
+        parameters, EtsTypes.VOID, body, at, kind = EtsFunctionKind.CONSTRUCTOR), at,
+        exported = true, valueSnapshot = true)
     val inherited = EtsParameter(EtsSymbol("textStyle:merge:inherited", "inherited", textStyleType, at))
     val provided = EtsParameter(EtsSymbol("textStyle:merge:provided", "provided", textStyleType, at))
     val merged = EtsNew(textStyleType, fields.map { field ->

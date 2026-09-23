@@ -13,6 +13,23 @@ import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.ir.visitors.acceptVoid
 import org.jetbrains.kotlin.name.FqName
 
+internal data class ImplicitContextContract(val identity: String, val parameterName: String, val type: EtsType)
+
+internal fun bindImplicitContextArguments(contracts: List<ImplicitContextContract>,
+    ambientValues: Map<String, EtsExpression>, replacements: Map<String, EtsExpression>, at: SourceSpan): List<EtsExpression> {
+    val unknown = replacements.keys - contracts.map { it.identity }.toSet()
+    if (unknown.isNotEmpty()) throw InvalidTarget(at,
+        "Unknown implicit context replacement: ${unknown.sorted().joinToString()}")
+    return contracts.map { contract ->
+        val value = replacements[contract.identity] ?: ambientValues[contract.identity]
+            ?: throw InvalidTarget(at,
+                "Missing implicit context ${contract.identity}; expected ${contract.type}")
+        if (!etsAssignable(value.type, contract.type)) throw InvalidTarget(at,
+            "Implicit context ${contract.identity} has target type ${value.type}; expected ${contract.type}")
+        value
+    }
+}
+
 /** Consumes resolved, pre-Compose-lowering IR. No source spelling is used for API dispatch. */
 class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val adapters: AdapterModules = AdapterModules()) {
@@ -44,6 +61,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val compositionLocals by lazy {
         language.callRules.filterIsInstance<ComposeCompositionLocalRule>().single()
     }
+
+    private data class ContextParameter(val contract: ImplicitContextContract, val parameter: EtsParameter)
 
     fun lower(module: IrModuleFragment, entryName: String): EtsProgram {
         fields.clear(); states.clear(); pagers.clear(); coroutineScopes.clear()
@@ -149,7 +168,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         diagnostics.currentFile = sourceFile(root)?.fileEntry?.name
         val name = root.name.asString()
         val entryBody = native("Stack", listOf(stackOptions(root)), root,
-            listOf(EtsUiElement(methodCall(builderSymbol(root), contextArguments(rootScope) + rootArguments, root)))).copy(attributes = listOf(
+            listOf(EtsUiElement(methodCall(builderSymbol(root), contextArguments(rootScope, root) + rootArguments, root)))).copy(attributes = listOf(
                 attribute("width", listOf(literal("100%", root)), root),
                 attribute("height", listOf(literal("100%", root)), root)))
         val build = EtsFunction("build", emptyList(), EtsTypes.VOID, listOf(entryBody), language.source(root),
@@ -227,10 +246,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         receiver: EtsExpression? = null, identity: String = "arkui:$name"): EtsCall =
         target.call(name, args, owner, types, result, receiver, identity)
 
-    private fun contextTypes(): List<EtsType> = buildList {
-        if (usesCompositionContext) add(compositionContextType)
-        if (usesMaterialContext) add(materialContextType)
+    private fun contextContracts(): List<ImplicitContextContract> = buildList {
+        if (usesCompositionContext) add(ImplicitContextContract(COMPOSITION_CONTEXT,
+            "__etsCompositionContext", compositionContextType))
+        if (usesMaterialContext) add(ImplicitContextContract(MATERIAL_CONTEXT,
+            "__etsMaterialContext", materialContextType))
     }
+
+    private fun contextTypes(): List<EtsType> = contextContracts().map { it.type }
 
     private fun builderSymbol(function: IrSimpleFunction): EtsSymbol = builderSymbols.getOrPut(function) {
         val source = SourceSpan(sourceFile(function)?.fileEntry?.name, function.startOffset, function.endOffset)
@@ -270,38 +293,24 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             EtsNullableType(wrapped) else wrapped
     }
 
-    private fun contextArguments(scope: Scope): List<EtsExpression> = buildList {
-        val at = language.source(root)
-        if (usesCompositionContext) add(compositionContext(scope, at))
-        if (usesMaterialContext) add(materialContext(scope, at))
-    }
-
-    private fun contextArguments(scope: Scope, replacement: Pair<String, EtsExpression>): List<EtsExpression> =
-        buildList {
-            val at = language.source(root)
-            if (usesCompositionContext) add(if (replacement.first == COMPOSITION_CONTEXT) replacement.second
-                else compositionContext(scope, at))
-            if (usesMaterialContext) add(if (replacement.first == MATERIAL_CONTEXT) replacement.second
-                else materialContext(scope, at))
-        }
-
-    private fun contextParameters(scope: Scope, owner: IrElement): List<EtsParameter> {
+    private fun contextArguments(scope: Scope, owner: IrElement,
+        replacements: Map<String, EtsExpression> = emptyMap()): List<EtsExpression> {
         val at = language.source(owner)
-        return buildList {
-            if (usesCompositionContext) {
-                val symbol = EtsSymbol("ui:compositionContext:${at.file}:${at.start}", "__etsCompositionContext",
-                    compositionContextType, at)
-                scope.ambientValues[COMPOSITION_CONTEXT] = EtsReference(symbol)
-                add(EtsParameter(symbol))
-            }
-            if (usesMaterialContext) {
-                val symbol = EtsSymbol("ui:materialContext:${at.file}:${at.start}", "__etsMaterialContext",
-                    materialContextType, at)
-                scope.ambientValues[MATERIAL_CONTEXT] = EtsReference(symbol)
-                add(EtsParameter(symbol))
-            }
+        return bindImplicitContextArguments(contextContracts(), scope.ambientValues, replacements, at)
+    }
+
+    private fun boundContextParameters(scope: Scope, owner: IrElement): List<ContextParameter> {
+        val at = language.source(owner)
+        return contextContracts().map { contract ->
+            val symbol = EtsSymbol("ui:${contract.identity}:${at.file}:${at.start}", contract.parameterName,
+                contract.type, at)
+            scope.ambientValues[contract.identity] = EtsReference(symbol)
+            ContextParameter(contract, EtsParameter(symbol))
         }
     }
+
+    private fun contextParameters(scope: Scope, owner: IrElement): List<EtsParameter> =
+        boundContextParameters(scope, owner).map { it.parameter }
 
     private fun isUiBuilder(function: IrSimpleFunction): Boolean =
         function.hasAnnotation(COMPOSABLE) && function.returnType.isUnit()
@@ -443,7 +452,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 // A builder parameter evaluates a source val once; textual aliasing would duplicate calls.
                 val bridge = EtsFunction(methodName, parameters, EtsTypes.VOID, body, language.source(statement), kind = EtsFunctionKind.METHOD, builder = true)
                 slotMethods += bridge
-                lines += EtsUiElement(methodCall(bridge.symbol, contextArguments(scope) + listOf(requireNotNull(value)) + captures.map { scope.bindings.getValue(it) }, statement))
+                lines += EtsUiElement(methodCall(bridge.symbol, contextArguments(scope, statement) + listOf(requireNotNull(value)) + captures.map { scope.bindings.getValue(it) }, statement))
                 return lines
             }
         }
@@ -603,13 +612,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 if (!isLayoutScopeReceiver(value) && !isLayoutScopeType(value.type))
                     diagnostics.unsupported(value, "Content slot invoke currently requires a layout-scope identity")
             }
-            return listOf(EtsUiElement(call("builder", contextArguments(scope), call, receiver = expression(slot, scope))))
+            return listOf(EtsUiElement(call("builder", contextArguments(scope, call), call, receiver = expression(slot, scope))))
         }
         if (isUiBuilder(function) && sourceFile(function) != null && !function.isExternal) {
             specializeModifierCall(call, scope)?.let { return it }
             builders += function
             return listOf(EtsUiElement(methodCall(builderSymbol(function),
-                contextArguments(scope) + builderArguments(function, call, scope), call)))
+                contextArguments(scope, call) + builderArguments(function, call, scope), call)))
         }
         return null
     }
@@ -665,7 +674,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         }
         val specialized = inputs.map { it.first }.toSet()
         val args = builderArguments(function, call, scope, skip = specialized)
-        return listOf(EtsUiElement(methodCall(method.symbol, contextArguments(scope) + args, call)))
+        return listOf(EtsUiElement(methodCall(method.symbol, contextArguments(scope, call) + args, call)))
     }
 
     private fun builderArguments(function: IrSimpleFunction, call: IrCall, scope: Scope,
@@ -805,7 +814,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private fun uiLambdaBodyWithAxis(expression: IrExpression, scope: Scope, axis: String?): List<EtsStatement> {
         val slot = slotReceiver(expression, scope)
         if (slot != null)
-            return listOf(EtsUiElement(call("builder", contextArguments(scope), expression, receiver = expression(slot, scope))))
+            return listOf(EtsUiElement(call("builder", contextArguments(scope, expression), expression, receiver = expression(slot, scope))))
         val resolved = dereference(expression, scope)
         val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected composable content lambda")
         val extras = fn.valueParameters.filterNot { isLayoutScopeType(it.type) }
@@ -830,7 +839,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             uiLambdaBody(content, child), at, kind = EtsFunctionKind.METHOD, builder = true)
         slotMethods += bridge
         return listOf(EtsUiElement(methodCall(bridge.symbol,
-            contextArguments(scope, MATERIAL_CONTEXT to context) + captures.map { scope.bindings.getValue(it) }, content)))
+            contextArguments(scope, content, mapOf(MATERIAL_CONTEXT to context)) + captures.map { scope.bindings.getValue(it) }, content)))
     }
 
     private fun provideCompositionContext(values: List<Pair<ComposeCompositionLocalRule.Definition, EtsExpression>>,
@@ -851,7 +860,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val bridge = EtsFunction(slotMethodName("CompositionLocalContent_${at.start}"), parameters, EtsTypes.VOID,
             uiLambdaBody(content, child), at, kind = EtsFunctionKind.METHOD, builder = true)
         slotMethods += bridge
-        val arguments = contextArguments(scope) + values.map { it.second } + captures.map { scope.bindings.getValue(it) }
+        val arguments = contextArguments(scope, content) + values.map { it.second } + captures.map { scope.bindings.getValue(it) }
         return listOf(EtsUiElement(methodCall(bridge.symbol, arguments, content)))
     }
 
@@ -865,7 +874,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private fun surfaceContent(content: IrExpression, scope: Scope, axis: String? = null): EtsExpression {
         val slot = uiLambda(content, scope, "SurfaceContent", axis)
         val at = language.source(content)
-        val args = contextArguments(scope)
+        val args = contextArguments(scope, content)
         val member = EtsMember(slot, "builder", EtsFunctionType(args.map { it.type }, EtsTypes.VOID), at)
         return if (args.isEmpty()) member else EtsLambda(emptyList(),
             listOf(EtsExpressionStatement(EtsCall(member, args, EtsTypes.VOID, at))), EtsTypes.VOID, at)
@@ -879,9 +888,10 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val child = scope.fork()
         child.ambientValues.remove(LAYOUT_AXIS)
         val captures = capturedValues(listOf(fn.body!!), scope).filter { it != receiver.symbol }
-        val context = contextParameters(child, fn)
-        val values = (context.map { it.symbol } + captures.map { capturedParameter(it, scope).symbol })
-            .zip(contextArguments(scope) + captures.map { scope.bindings.getValue(it) })
+        val context = boundContextParameters(child, fn)
+        val captureParameters = captures.map { capturedParameter(it, scope) }
+        val values = (context.map { it.parameter.symbol } + captureParameters.map { it.symbol })
+            .zip(contextArguments(scope, content) + captures.map { scope.bindings.getValue(it) })
         val bindings = values.mapIndexed { index, (_, value) -> "value$index" to value }.toMap()
         val dataName = slotMethodName("ConstraintData_${at.start}")
         val dataType = etsClassSymbol(dataName, at).type as EtsNamedType
@@ -900,7 +910,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val dataRead = EtsCast(EtsMember(args, "data", EtsTypes.OBJECT, at), dataType, at)
         values.forEachIndexed { index, (symbol, _) ->
             val value = EtsMember(dataRead, "value$index", symbol.type, at)
-            if (index < context.size) child.ambientValues.entries.firstOrNull { it.value == EtsReference(symbol) }?.setValue(value)
+            if (index < context.size) child.ambientValues[context[index].contract.identity] = value
             else child.bindings[captures[index - context.size]] = value
         }
         val body = uiBody(fn.body!!, child)

@@ -16,9 +16,9 @@ const entry = 'com.google.samples.apps.nowinandroid.core.designsystem.component.
 const categories = ['language_semantics', 'standard_library', 'neutral_compose_widget', 'modifier', 'resources',
   'project_dependencies'];
 const expectedCoverage = {
-  language_semantics: { total: 109, recognized: 109, unsupported: 0, percentage: 100 },
+  language_semantics: { total: 109, recognized: 108, unsupported: 1, percentage: 99.08 },
   standard_library: { total: 15, recognized: 15, unsupported: 0, percentage: 100 },
-  neutral_compose_widget: { total: 191, recognized: 190, unsupported: 1, percentage: 99.47 },
+  neutral_compose_widget: { total: 191, recognized: 191, unsupported: 0, percentage: 100 },
   modifier: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   resources: { total: 0, recognized: 0, unsupported: 0, percentage: null },
   project_dependencies: { total: 0, recognized: 0, unsupported: 0, percentage: null },
@@ -68,10 +68,9 @@ try {
     '--work-dir', projectRun, '--offline'], { env: projectEnv }, 2);
   const backendBlocker = JSON.parse(compilation.stdout);
   assert.equal(backendBlocker.code, 'INVALID_TARGET');
-  assert.equal(backendBlocker.message,
-    'Target type mismatch: EtsNamedType(name=EtsTextStyle, arguments=[], symbolId=class:EtsTextStyle.kt:0:EtsTextStyle, external=false); expected EtsNamedType(name=EtsMaterialShapes, arguments=[], symbolId=class:EtsShape.kt:-1:EtsMaterialShapes, external=false)');
-  assert.equal(backendBlocker.source.line, 46);
-  assert.equal(backendBlocker.source.column, 9);
+  assert.equal(backendBlocker.message, 'Conflicting target parameter');
+  assert.equal(backendBlocker.source.line, 192);
+  assert.equal(backendBlocker.source.column, 1);
   assert.equal(existsSync(output), false);
   const diagnosis = JSON.parse(readFileSync(output + '.diagnosis.json', 'utf8'));
   assert.equal(diagnosis.status, 'blocked');
@@ -125,6 +124,13 @@ try {
   assert.equal(textStyleProvider?.firstUnsupportedNode, null);
   assert.equal(textStyleProvider?.source.line, 57);
   assert.equal(textStyleProvider?.source.column, 13);
+  const textButton = report.calls.find(call =>
+    call.finalRecognizedNode.symbol === 'androidx.compose.material3.TextButton');
+  assert.equal(textButton?.expectedTargetType, 'void');
+  assert.equal(textButton?.finalRecognizedNode.kind, 'typed_call');
+  assert.equal(textButton?.firstUnsupportedNode, null);
+  assert.equal(textButton?.source.line, 46);
+  assert.equal(textButton?.source.column, 9);
   const surfaceColor = report.calls.find(call =>
     call.finalRecognizedNode.symbol === 'androidx.compose.material3.surfaceColorAtElevation');
   assert.equal(surfaceColor?.expectedTargetType, 'number | null');
@@ -165,11 +171,10 @@ try {
   assert.ok(staticColorSchemes.every(call => call.expectedTargetType === 'EtsMaterialColorScheme' &&
     call.finalRecognizedNode.kind === 'typed_call' && call.firstUnsupportedNode === null));
   assert.equal(report.firstUnsupportedNode.kind, 'unsupported_call');
-  assert.equal(report.firstUnsupportedNode.symbol,
-    'androidx.compose.material3.TextButton');
-  assert.match(report.firstUnsupportedNode.message, /Target type mismatch:.*EtsTextStyle.*EtsMaterialShapes/);
-  assert.equal(report.firstUnsupportedNode.source.line, 46);
-  assert.equal(report.firstUnsupportedNode.source.column, 9);
+  assert.equal(report.firstUnsupportedNode.symbol, 'kotlin.Boolean.not');
+  assert.equal(report.firstUnsupportedNode.message, 'Conflicting target parameter');
+  assert.equal(report.firstUnsupportedNode.source.line, 192);
+  assert.equal(report.firstUnsupportedNode.source.column, 1);
   assertSource(report.firstUnsupportedNode.source);
 
   for (const call of report.calls) {
@@ -191,7 +196,7 @@ try {
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'target_type').length, 0);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 1);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_field').length, 0);
-  assert.ok(unsupportedCalls.every(call => call.category === 'neutral_compose_widget'));
+  assert.ok(unsupportedCalls.every(call => call.category === 'language_semantics'));
 
   const baseline = {
     schemaVersion: 1,
@@ -205,19 +210,19 @@ try {
     backendBlocker,
     unsupportedCalls,
     p0Gaps: [
-      { category: 'neutral_compose_widget',
-        node: 'androidx.compose.material3.TextButton',
-        responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt', source: backendBlocker.source,
+      { category: 'language_semantics',
+        node: 'com.google.samples.apps.nowinandroid.core.designsystem.theme.NiaTheme',
+        responsibleModule: 'tools/kotlin-ets/src/language/LanguageLowering.kt', source: backendBlocker.source,
         detail: backendBlocker.message },
-      { category: 'neutral_compose_widget', node: 'unsupported_call_inventory',
-        responsibleModule: 'tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt',
+      { category: 'language_semantics', node: 'unsupported_call_inventory',
+        responsibleModule: 'tools/kotlin-ets/src/language/LanguageLowering.kt',
         counts: { target_type: 0, unsupported_call: 1, unsupported_field: 0 },
-        detail: 'All LineHeightStyle target-type records close; one source-linked TextButton target mismatch remains.' },
+        detail: 'All neutral Compose widgets close; one source-linked NiaTheme parameter conflict remains.' },
     ],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS LineHeightStyle closes all 12 target-type records; the next TextButton target mismatch stays explicit');
+  console.log('PASS TextButton closes neutral Compose coverage at 191/191; the next NiaTheme language blocker stays explicit');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }
