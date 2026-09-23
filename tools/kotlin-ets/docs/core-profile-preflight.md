@@ -52,6 +52,13 @@ Category precedence is source ownership first, then resource and Modifier
 semantics, Compose widgets, external Kotlin declarations, and other project or
 platform dependencies. Classification does not imply support.
 
+Project adapter failures retain their compiler source span and use explicit
+`firstUnsupportedNode.kind` values: `project_adapter_missing`,
+`project_adapter_void_result`, `project_adapter_return_type`,
+`project_adapter_arguments`, and `project_adapter_scope`. This distinguishes a
+missing concrete generic binding from an adapter that returned an invalid
+target expression.
+
 ## No-silent-fallback gate
 
 The existing `DiagnosticSink.omitUi` remains the only approved omission route:
