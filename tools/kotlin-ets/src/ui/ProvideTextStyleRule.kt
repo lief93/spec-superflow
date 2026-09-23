@@ -30,8 +30,12 @@ internal class ComposeProvideTextStyleRule(private val target: ArkUiCalls,
         val model = TypographySlot(TypographyContext(materialCurrentTextStyle(parent, at),
             language.expression(value, scope), at), content, at)
         val style = mergeTextStyles(model.context.inheritedStyle, model.context.providedStyle, model.source)
-        val context = EtsNew(materialContextType, listOf(materialScheme(parent, at), materialContentColor(parent, at),
-            materialTypography(parent, at), style, materialShapes(parent, at)), at)
+        val context = newMaterialContext(at,
+            MaterialContextField.COLOR_SCHEME to materialScheme(parent, at),
+            MaterialContextField.CONTENT_COLOR to materialContentColor(parent, at),
+            MaterialContextField.TYPOGRAPHY to materialTypography(parent, at),
+            MaterialContextField.TEXT_STYLE to style,
+            MaterialContextField.SHAPES to materialShapes(parent, at))
         val flags = if (hasUnsupportedLineHeightStyle(value, scope)) setOf(LINE_HEIGHT_STYLE_CONTEXT) else emptySet()
         return provide(context, model.content, scope, flags)
     }

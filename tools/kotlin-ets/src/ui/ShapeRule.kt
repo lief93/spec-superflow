@@ -30,11 +30,8 @@ private fun shapesValue(value: ThemeShapes<Double, SourceSpan>, at: SourceSpan):
     EtsNew(materialShapesType, listOf(value.extraSmall, value.small, value.medium, value.large, value.extraLarge)
         .map { shapeValue(it, at) }, at)
 
-internal fun materialShapes(context: EtsExpression, at: SourceSpan): EtsExpression {
-    if (context is EtsNew && context.classType == materialContextType && context.arguments.size >= 4)
-        return context.arguments[3]
-    return EtsMember(context, "shapes", materialShapesType, at)
-}
+internal fun materialShapes(context: EtsExpression, at: SourceSpan): EtsExpression =
+    materialContextMember(context, MaterialContextField.SHAPES, at)
 
 /** Converts a proven rounded/circle Shape into ArkUI's legal radius parameter. */
 private fun arkBorderRadius(value: EtsExpression, owner: IrElement, diagnostics: DiagnosticSink,

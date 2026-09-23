@@ -25,7 +25,8 @@ internal fun defaultTypographyRole(name: String, at: SourceSpan): EtsExpression 
     }, at)
 }
 internal fun defaultTypography(at: SourceSpan) = EtsNew(typographyType, typographyDefaults.keys.map { defaultTypographyRole(it, at) }, at)
-internal fun materialTypography(context: EtsExpression, at: SourceSpan) = EtsMember(context, "typography", typographyType, at)
+internal fun materialTypography(context: EtsExpression, at: SourceSpan) =
+    materialContextMember(context, MaterialContextField.TYPOGRAPHY, at)
 
 internal class ComposeTypographyRule : CallRule {
     override fun mapType(type: IrType, language: Language): EtsType? = type.classOrNull?.owner?.let {

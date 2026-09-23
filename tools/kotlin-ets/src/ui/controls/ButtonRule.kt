@@ -85,9 +85,12 @@ internal class ComposeButtonRule(
             EtsMember(palette, name, EtsTypes.NUMBER, at),
             EtsMember(palette, "disabled" + name.replaceFirstChar { it.uppercaseChar() }, EtsTypes.NUMBER, at), EtsTypes.NUMBER, at)
         val child = scope.fork()
-        child.ambientValues[MATERIAL_CONTEXT] = EtsNew(materialContextType, listOf(materialScheme(context, at),
-            selected("contentColor"), materialTypography(context, at),
-            EtsMember(materialTypography(context, at), "labelLarge", textStyleType, at), materialShapes(context, at)), at)
+        child.ambientValues[MATERIAL_CONTEXT] = newMaterialContext(at,
+            MaterialContextField.COLOR_SCHEME to materialScheme(context, at),
+            MaterialContextField.CONTENT_COLOR to selected("contentColor"),
+            MaterialContextField.TYPOGRAPHY to materialTypography(context, at),
+            MaterialContextField.TEXT_STYLE to EtsMember(materialTypography(context, at), "labelLarge", textStyleType, at),
+            MaterialContextField.SHAPES to materialShapes(context, at))
         val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "Button requires content")
         val click = argument(call, "onClick") ?: target.diagnostics.unsupported(call, "Button requires callback")
         val padding = argument(call, "contentPadding")?.let { language.expression(it, scope) }
