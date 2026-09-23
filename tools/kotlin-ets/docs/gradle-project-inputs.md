@@ -31,6 +31,10 @@ the project's configured repositories and caches. Add `--offline` when all
 necessary artifacts are cached; it cannot supply absent dependencies. The Gradle
 wrapper distribution must also be available locally for fully offline use.
 
+For a single offline command that also produces a machine-readable summary,
+one `diagnosis.md`, and a path-redacted return-package boundary, use
+[Offline project preflight and evidence return](offline-preflight-evidence.md).
+
 ## Collect and diagnose first
 
 ```sh
