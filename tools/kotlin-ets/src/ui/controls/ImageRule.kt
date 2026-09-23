@@ -15,7 +15,14 @@ internal class ComposeImageRule(
         val scale = argument(call, "contentScale")?.let { language.expression(it, scope) } ?: target.enumValue("ImageFit", "Contain", call)
         attrs += target.attribute("objectFit", listOf(scale), call)
         argument(call, "alpha")?.let { attrs += target.attribute("opacity", listOf(language.expression(it, scope)), call) }
-        argument(call, "colorFilter")?.let { attrs += target.attribute("colorFilter", listOf(language.expression(it, scope)), call) }
+        argument(call, "colorFilter")?.let { source ->
+            val value = language.expression(source, scope)
+            val filter = if (value.type == EtsNullableType(EtsNamedType("ColorFilter")))
+                target.call("__etsOptionalImageFilter", listOf(value), call,
+                    listOf(value.type), EtsNamedType("ColorFilter"), identity = "compose:optionalImageFilter")
+            else value
+            attrs += target.attribute("colorFilter", listOf(filter), call)
+        }
         return ComposeElement(target.native("Image", listOf(language.expression(painter, scope)), call).copy(attributes = attrs))
     }
 }

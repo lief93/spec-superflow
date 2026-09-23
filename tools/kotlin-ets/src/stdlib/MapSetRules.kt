@@ -109,7 +109,7 @@ internal object MapSetRules : CallRule {
     }
 }
 
-private fun keyStrategy(type: IrType, language: Language, scope: Scope, at: SourceSpan, includeHash: Boolean = true): List<EtsExpression> {
+internal fun keyStrategy(type: IrType, language: Language, scope: Scope, at: SourceSpan, includeHash: Boolean = true): List<EtsExpression> {
     val target = language.type(type)
     val left = EtsSymbol("key:${at.file}:${at.start}:left", "left", target, at)
     val right = EtsSymbol("key:${at.file}:${at.start}:right", "right", target, at)
@@ -122,7 +122,12 @@ private fun keyStrategy(type: IrType, language: Language, scope: Scope, at: Sour
         val owner = type.classOrNull?.owner
         val function = owner?.declarations?.filterIsInstance<IrSimpleFunction>()?.singleOrNull {
             it.name.asString() == methodName && it.valueParameters.size == if (methodName == "equals") 1 else 0
-        } ?: throw Unsupported(Diagnostic("UNSUPPORTED", "Collection key requires resolved $methodName: ${type.render()}", at))
+        }
+        if (function == null && methodName == "equals" && owner?.let(::sourceFile) != null) return same(lhs, rhs)
+        if (function == null)
+            throw Unsupported(Diagnostic("UNSUPPORTED", "Collection key requires resolved $methodName: ${type.render()}", at))
+        val implementation = if (function.isFakeOverride) function.collectRealOverrides().singleOrNull() else function
+        if (methodName == "equals" && implementation?.let(::symbolName) == "kotlin.Any.equals") return same(lhs, rhs)
         val receiver = function.dispatchReceiverParameter!!
         val nested = scope.fork()
         nested.bindings[receiver.symbol] = EtsCast(lhs, language.type(plain), at)

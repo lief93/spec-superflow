@@ -9,6 +9,8 @@ import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.visitors.*
 import org.jetbrains.kotlin.name.FqName
+import java.util.Collections
+import java.util.IdentityHashMap
 
 internal var IrCall.usesNativeProjectTheme: Boolean? by irAttribute(followAttributeOwner = true)
 
@@ -41,14 +43,25 @@ private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
                 val colors = if (index >= 0) element.getValueArgument(index) else null
                 val predicates = colors?.let(::androidVersionPredicates).orEmpty()
                 if (colors != null && predicates.isNotEmpty()) {
-                    predicates.forEach {
-                        it.platformCapabilityDecision = PlatformCapabilityDecision.TargetMapping("project.material.color_scheme")
+                    if (hasStaticMaterialFallback(colors)) {
+                        predicates.forEach {
+                            it.platformCapabilityDecision = PlatformCapabilityDecision.Fallback("android.platform.version")
+                            diagnostics.omitUi(it,
+                                "Android SDK_INT theme guard selected the source static palette fallback",
+                                "android.platform.version", "platform_capability_fallback",
+                                "The target does not expose an Android SDK level. The dynamic Android palette branch is unavailable; the source static ColorScheme fallback is retained.",
+                                discarded = listOf(it))
+                        }
+                    } else {
+                        predicates.forEach {
+                            it.platformCapabilityDecision = PlatformCapabilityDecision.TargetMapping("project.material.color_scheme")
+                        }
+                        diagnostics.omitUi(colors, "Android-version-dependent theme selection replaced with the native project palette",
+                            "androidx.compose.material3.MaterialTheme.colorScheme", "project_theme_replacement",
+                            "Android color selection and its private local dependencies are not evaluated; configure kotlin_ets_material_* colors in the target project. Content and typography are retained.")
+                        element.putValueArgument(index, null)
+                        element.usesNativeProjectTheme = true
                     }
-                    diagnostics.omitUi(colors, "Android-version-dependent theme selection replaced with the native project palette",
-                        "androidx.compose.material3.MaterialTheme.colorScheme", "project_theme_replacement",
-                        "Android color selection and its private local dependencies are not evaluated; configure kotlin_ets_material_* colors in the target project. Content and typography are retained.")
-                    element.putValueArgument(index, null)
-                    element.usesNativeProjectTheme = true
                     projected = true
                 }
             }
@@ -126,4 +139,47 @@ private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
     // Only prune locals that became unused because of this projection, not arbitrary
     // unused declarations or file initializers (which may have observable effects).
     pruneProjectedLocals(body, originalReads, diagnostics)
+}
+
+private fun hasStaticMaterialFallback(expression: IrExpression): Boolean {
+    val visiting = Collections.newSetFromMap(IdentityHashMap<IrDeclaration, Boolean>())
+    fun inspect(value: IrExpression): Boolean = when (value) {
+        is IrGetValue -> {
+            val variable = value.symbol.owner as? IrVariable
+            variable?.initializer?.let(::inspect) == true
+        }
+        is IrGetField -> value.symbol.owner.initializer?.expression?.let(::inspect) == true
+        is IrTypeOperatorCall -> inspect(value.argument)
+        is IrContainerExpression -> (value.statements.lastOrNull() as? IrExpression)?.let(::inspect) == true
+        is IrWhen -> {
+            val available = value.branches.filter { branch ->
+                branch is IrElseBranch || androidVersionPredicates(branch.condition).isEmpty()
+            }
+            available.isNotEmpty() && available.all { inspect(it.result) }
+        }
+        is IrCall -> {
+            val owner = value.symbol.owner
+            when (symbolName(owner)) {
+                "androidx.compose.material3.lightColorScheme", "androidx.compose.material3.darkColorScheme" -> true
+                else -> {
+                    val property = owner.correspondingPropertySymbol?.owner
+                    val initializer = property?.backingField?.initializer?.expression
+                    when {
+                        initializer != null && visiting.add(property) -> inspect(initializer).also { visiting.remove(property) }
+                        sourceFile(owner) != null && visiting.add(owner) -> {
+                            val returned = when (val sourceBody = owner.body) {
+                                is IrExpressionBody -> sourceBody.expression
+                                is IrBlockBody -> (sourceBody.statements.singleOrNull() as? IrReturn)?.value
+                                else -> null
+                            }
+                            (returned?.let(::inspect) == true).also { visiting.remove(owner) }
+                        }
+                        else -> false
+                    }
+                }
+            }
+        }
+        else -> false
+    }
+    return inspect(expression)
 }

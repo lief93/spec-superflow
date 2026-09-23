@@ -29,6 +29,7 @@ assert.match(page, /\.scrollable\(ScrollDirection.Vertical\)/);
 assert.match(page, /\.scrollable\(ScrollDirection.Horizontal\)/);
 assert.match(page, /\.scrollBar\(BarState.Off\)/);
 assert.match(page, /Text\("Last"\)/);
+assert.match(page, /Row\(\) \{[\s\S]*?Text\("Right"\)[\s\S]*?\.width\("100%"\)[\s\S]*?\.scrollable\(ScrollDirection\.Horizontal\)/);
 assert.match(compile('Disabled'), /\.enableScrollInteraction\(false\)/);
 assert.match(compile('Nonzero', 2), /zero initial offset/);
 assert.match(compile('Observed', 2), /ScrollState|scroll.*state/i);

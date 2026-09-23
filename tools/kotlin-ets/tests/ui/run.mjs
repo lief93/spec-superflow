@@ -182,6 +182,10 @@ assert.match(materialTopAppBar, /Text\("Statistics"\)[\s\S]*Text\("Action"\)[\s\
   'TopAppBar retains title, action slot, and explicit expanded height');
 assert.match(materialTopAppBar, /\.onClick\(onMenu\)/,
   'TopAppBar navigation content retains its source callback');
+assert.match(materialTopAppBar, /\.onClick\(onMenu\)\.type\(ButtonType\.Circle\)\.backgroundColor\(0\)\.width\(48\)\.height\(48\)/,
+  'Material IconButton uses the source transparent 48dp touch container instead of ArkUI button chrome');
+assert.match(materialTopAppBar, /\.height\(72\.0\)\.alignContent\(Alignment\.CenterStart\)/,
+  'TopAppBar title is vertically centered in its source bar height');
 assert.match(generate('unsupported-material-icon', join(here, 'MaterialTopAppBar.kt'),
   'materialtopappbar.UnsupportedMaterialIcon', false).message,
   /Unsupported language type: androidx\.compose\.material\.icons\.Icons\.Filled/,
@@ -198,10 +202,10 @@ assert.match(materialScaffoldState, /@Require @Prop snackbarHostState: EtsSnackb
   'remembered root SnackbarHostState construction becomes a required host prop');
 assert.match(materialScaffoldState, /Text\(state\.value\.title\)/,
   'delegated lifecycle StateFlow reads bind to the typed snapshot value');
-assert.match(materialScaffoldState, /Stack\(\{ alignContent: Alignment\.TopStart \}\)[\s\S]*Text\("Top"\)[\s\S]*Text\(state\.value\.title\)[\s\S]*Stack\(\{ alignContent: Alignment\.TopStart \}\) \{\}/,
+assert.match(materialScaffoldState, /Stack\(\{ alignContent: Alignment\.TopStart \}\)[\s\S]*Text\(state\.value\.title\)[\s\S]*Text\("Top"\)[\s\S]*Stack\(\{ alignContent: Alignment\.TopStart \}\) \{\}/,
   'Scaffold retains top bar, snackbar layer, and content');
-assert.match(materialScaffoldState, /Text\(state\.value\.title\)[^\n]*\.padding\(__etsUniformPadding\(0\)\)/,
-  'mapped Scaffold PaddingValues survive through a shared local Modifier chain');
+assert.match(materialScaffoldState, /Text\(state\.value\.title\)[^\n]*\.padding\(__etsEdgePadding\(0, 64, 0, 0\)\)/,
+  'mapped Scaffold PaddingValues retain the Material top bar inset');
 const providedText = generate('provided-text', join(here, 'UnsupportedTextProvider.kt'), 'negative.UnknownPage');
 assert.match(providedText, /__etsMergeTextStyle\(__etsMaterialContext\.textStyle \?\? __etsMaterialContext\.typography\.bodyLarge, new EtsTextStyle/);
 const invocationText = generate('invocation-text-contexts', join(here, 'UnsupportedTextContexts.kt'), 'negative.UnknownPage');
@@ -300,6 +304,9 @@ assert.match(generate('supported-text-argument', join(here, 'UnsupportedTextArgu
 assert.ok(generate('supported-layout-argument', join(here, 'UnsupportedLayoutArgument.kt'), 'negative.UnknownPage')
   .includes('Column({ space: new EtsArrangement(3.0).space })'), 'Column spacing is preserved');
 assert.match(generate('unsupported-pager-count', join(here, 'UnsupportedPagerCount.kt'), 'negative.UnknownPage', false).message, /pageCount/);
+const timedCallback = generate('timed-callback', join(here, 'UnsupportedCoroutine.kt'), 'negative.TimerPage');
+assert.match(timedCallback, /setTimeout\(\(\): void => \{/);
+assert.match(timedCallback, /Number\(delayMillis\)/);
 assert.match(generate('unsupported-coroutine', join(here, 'UnsupportedCoroutine.kt'), 'negative.UnknownPage', false).message, /coroutine/);
 assert.match(generate('unsupported-launch-value', join(here, 'UnsupportedLaunchValue.kt'), 'negative.UnknownPage', false).message,
   /Unsupported resolved platform expression: kotlinx.coroutines.launch/, 'effect-only pager adapter must never fabricate a Job value');

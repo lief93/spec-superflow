@@ -87,13 +87,13 @@ fun Page(base: Int = 12, extra: Int = 4) {
                     )
                 }
             }
-            Text("Page " + (pagerState.currentPage + 1) + " of 4", color = Color.Black)
+            Text("Page " + (pagerState.currentPage + 1) + " of " + pagerState.pageCount, color = Color.Black)
             Text("Callback " + callbackCount.value, Modifier.testTag("callback-value"), color = Color.Black)
             Button(
                 onClick = {
                     callbackCount.value = callbackCount.value + 1
                     scope.launch {
-                        pagerState.animateScrollToPage((pagerState.currentPage + 1) % 4)
+                        pagerState.animateScrollToPage((pagerState.currentPage + 1) % pagerState.pageCount)
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(48.dp).testTag("action-button")

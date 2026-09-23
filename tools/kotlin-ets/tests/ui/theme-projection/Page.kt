@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -18,6 +19,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 
 fun androidPalette(): ColorScheme = error("Android-only fallback must not be linked")
+
+private val StaticLightPalette = lightColorScheme(primary = androidx.compose.ui.graphics.Color(0xFF123456))
+private val StaticDarkPalette = darkColorScheme(primary = androidx.compose.ui.graphics.Color(0xFF654321))
 
 @Composable
 fun AppAppearance(dark: Boolean, content: @Composable () -> Unit) {
@@ -48,6 +52,19 @@ fun AppAppearance(dark: Boolean, content: @Composable () -> Unit) {
     val colors = if (sdk >= 31) dynamicLightColorScheme(LocalContext.current) else lightColorScheme()
     MaterialTheme(colorScheme = colors) { Text("Content") }
     Text(sdk.toString())
+}
+
+@Composable fun StaticFallback(dark: Boolean, content: @Composable () -> Unit) {
+    val colors = when {
+        supportsDynamicTheming() -> dynamicLightColorScheme(LocalContext.current)
+        dark -> StaticDarkPalette
+        else -> StaticLightPalette
+    }
+    MaterialTheme(colorScheme = colors, content = content)
+}
+
+@Composable fun StaticFallbackPage() {
+    StaticFallback(false) { Text("Static source palette", color = MaterialTheme.colorScheme.primary) }
 }
 
 @Composable fun RequiredCondition() {

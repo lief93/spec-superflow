@@ -27,6 +27,9 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
                                 "fixedHeight" to EtsTypes.BOOLEAN))), EtsTypes.VOID)
                     "compose:imageTint" -> node is EtsReference && node.symbol.name == "__etsImageTint" &&
                         node.type == EtsFunctionType(listOf(EtsTypes.NUMBER), EtsNamedType("ColorFilter"))
+                    "compose:optionalImageFilter" -> node is EtsReference && node.symbol.name == "__etsOptionalImageFilter" &&
+                        node.type == EtsFunctionType(listOf(EtsNullableType(EtsNamedType("ColorFilter"))),
+                            EtsNamedType("ColorFilter"))
                     "compose:nearestTouch" -> node is EtsReference && node.symbol.name == "__etsNearestTouch" &&
                         node.type == EtsFunctionType(listOf(EtsNamedType("Array", listOf(EtsNamedType("TouchTestInfo"))),
                             EtsTypes.NUMBER, EtsTypes.NUMBER, EtsTypes.NUMBER), EtsNamedType("TouchResult"))
@@ -47,7 +50,8 @@ class ComposeRuntime(private val languageRuntime: EtsRuntimeSupport) : EtsRuntim
             (if ("compose:formatPlural" in required) pluralFormatSupport else emptyList()) +
             (if ("compose:boxConstraints" in required) constraintsLayoutSupport else emptyList()) +
             (if ("compose:surface" in required) surfaceLayoutSupport else emptyList()) +
-            (if ("compose:imageTint" in required) imageTintSupport else emptyList()) +
+            (if ("compose:imageTint" in required || "compose:optionalImageFilter" in required)
+                imageTintSupport else emptyList()) +
             (if ("compose:materialTypography" in required) materialTypographySupport else emptyList()) +
             (if ("compose:nearestTouch" in required) touchTargetSupport else emptyList()) +
             (if ("compose:clearFocus" in required || "compose:activeUIContext" in required) focusSupport else emptyList())

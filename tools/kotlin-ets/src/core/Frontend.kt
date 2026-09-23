@@ -110,6 +110,8 @@ fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
     prepareDeclaration: (org.jetbrains.kotlin.ir.declarations.IrDeclaration) -> Unit = {},
     externalSourceType: (org.jetbrains.kotlin.ir.types.IrType) -> Boolean = { false },
     externalSourceCall: (org.jetbrains.kotlin.ir.declarations.IrSimpleFunction) -> Boolean = { false },
+    retainUnreferencedFileInitializer: (org.jetbrains.kotlin.ir.declarations.IrProperty) -> Boolean = { true },
+    omitUnreferencedFileInitializer: (org.jetbrains.kotlin.ir.declarations.IrProperty) -> Unit = {},
     emit: (KotlinFrontendSession) -> T): T {
     val disposable = Disposer.newDisposable()
     var session: KotlinFrontendSession? = null
@@ -138,7 +140,9 @@ fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
         session = frontend
         prepareModule(frontend.module)
         entry?.let { System.err.println(selectSourceDeclarations(frontend.module, it, prepareDeclaration,
-            externalSourceType = externalSourceType, externalSourceCall = externalSourceCall)) }
+            externalSourceType = externalSourceType, externalSourceCall = externalSourceCall,
+            retainUnreferencedFileInitializer = retainUnreferencedFileInitializer,
+            omitUnreferencedFileInitializer = omitUnreferencedFileInitializer)) }
         val lowering = EtsLoweringPhases.run(translated, frontend.bodies, frontend::rebindInlinedCaptures)
         check(!translated.diagnosticCollector.hasErrors && !messages.hasErrors()) {
             "Kotlin lowering diagnostics prohibit target output"

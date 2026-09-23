@@ -42,14 +42,40 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
         } } }
     } while (count != bound.size + nativeBound.size)
     if (bound.isEmpty()) return program
-    val parameters = builders.values.flatMap { it.parameters }.map { it.symbol.id }.toSet()
+    val parameters = mutableSetOf<String>()
+    program.files.forEach { file -> file.declarations.forEach { declaration -> walkEts(declaration) { node ->
+        when (node) {
+            is EtsFunction -> parameters += node.parameters.map { it.symbol.id }
+            is EtsLambda -> parameters += node.parameters.map { it.symbol.id }
+            is EtsUiForEach -> parameters += node.item.symbol.id
+            is EtsUiLazyForEach -> parameters += listOf(node.item.symbol.id, node.index.symbol.id)
+            else -> Unit
+        }
+    } } }
     val fields = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>().flatMap { owner ->
         owner.members.filterIsInstance<EtsField>().map { (owner.symbol.id to it.symbol.name) to it }
     }.toMap()
     val snapshots = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>()
         .filter { it.valueSnapshot && snapshotConstructor(it) }.map { it.symbol.id }.toSet()
+    fun initializationGuard(statement: EtsStatement): Boolean {
+        val call = (statement as? EtsExpressionStatement)?.expression as? EtsCall ?: return false
+        val callee = call.callee as? EtsReference ?: return false
+        return call.arguments.isEmpty() && call.type == EtsTypes.VOID && callee.symbol.name.startsWith("__etsInitialize_")
+    }
+    fun returnedValue(function: EtsFunction): EtsExpression? = (function.body.lastOrNull() as? EtsReturn)?.value
+    fun initializedTopLevelGetter(function: EtsFunction): Boolean {
+        if (!function.symbol.name.startsWith("__etsGet_") || function.parameters.isNotEmpty() || function.body.size != 2 ||
+            !initializationGuard(function.body.first())) return false
+        fun storage(value: EtsExpression): EtsReference? = when (value) {
+            is EtsReference -> value
+            is EtsCast -> storage(value.value)
+            else -> null
+        }
+        return returnedValue(function)?.let(::storage)?.symbol?.id?.startsWith("global:") == true
+    }
     val valueFunctions = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>()
-        .filter { !it.builder && it.body.singleOrNull() is EtsReturn }.associateBy { it.symbol.id }
+        .filter { !it.builder && (it.body.singleOrNull() is EtsReturn || initializedTopLevelGetter(it)) }
+        .associateBy { it.symbol.id }
     val valueParameters = mutableSetOf<String>()
     val checkingFunctions = mutableSetOf<String>()
     val constants = program.files.flatMap { it.declarations }.filterIsInstance<EtsGlobal>()
@@ -58,7 +84,8 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
     // not make calls or allocations safe to defer across a composition boundary.
     fun repeatable(value: EtsExpression): Boolean = when (value) {
         is EtsLiteral, is EtsUndefined, is EtsLambda -> true
-        is EtsReference -> value.symbol.id in parameters || value.symbol.id in valueParameters || value.symbol.id in constants
+        is EtsReference -> value.symbol.id in parameters || value.symbol.id in reactiveInputs ||
+            value.symbol.id in valueParameters || value.symbol.id in constants
         is EtsMember -> {
             val field = fields[(value.receiver.type as? EtsNamedType)?.symbolId to value.name]
             val native = (value.receiver as? EtsReference)?.symbol
@@ -95,7 +122,7 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
                 val ids = function.parameters.map { it.symbol.id }
                 valueParameters.addAll(ids)
                 try {
-                    (function.body.single() as EtsReturn).value?.let(::repeatable) == true
+                    initializedTopLevelGetter(function) || returnedValue(function)?.let(::repeatable) == true
                 } finally {
                     valueParameters.removeAll(ids.toSet())
                     checkingFunctions.remove(function.symbol.id)
@@ -114,38 +141,22 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
             }
         }
     } } }
-    // A WrappedBuilder bridge forwards a Binding; it does not execute its getter.
-    // Ordinary callbacks/loops still cannot defer a source argument this way.
-    val forwardingSlots = mutableSetOf<EtsLambda>()
-    program.files.forEach { file -> file.declarations.forEach { declaration -> walkEts(declaration) { node ->
-        if (node is EtsNew && node.classType.name == "WrappedBuilder") {
-            val lambda = node.arguments.singleOrNull() as? EtsLambda
-            val statement = lambda?.body?.singleOrNull() as? EtsExpressionStatement
-            val call = statement?.expression as? EtsCall
-            if (lambda != null && call != null && id(call) in builders && call.arguments.all(::repeatable)) forwardingSlots += lambda
-        }
-    } } }
-    // Do not turn a once-evaluated source argument into multiple lazy executions.
+    // Calls were proven repeatable above before becoming Binding getters. Reading
+    // such a Binding from a loop or callback is what preserves current UI state;
+    // only multiple immediate consumers still change source evaluation count.
+    val bindingSnapshots = linkedMapOf<String, EtsSymbol>()
     builders.values.forEach { builder -> builder.parameters.filter { it.symbol.id in bound }.forEach { parameter ->
         var reads = 0
-        var repeated = false
         builder.body.forEach { statement -> walkEts(statement) { node ->
             if (node is EtsReference && node.symbol.id == parameter.symbol.id) reads++
-            val delayed = when (node) {
-                is EtsUiForEach -> node.body
-                is EtsUiLazyForEach -> node.body
-                is EtsLoop -> node.body
-                is EtsLambda -> if (node in forwardingSlots) emptyList() else node.body
-                else -> emptyList()
-            }
-            delayed.forEach { body -> walkEts(body) { if (it is EtsReference && it.symbol.id == parameter.symbol.id) repeated = true } }
         } }
         // Native builder inputs are immutable snapshots for one update. Their
         // repeatable projections may feed several immediate UI attributes.
-        if ((reads != 1 && parameter.symbol.id !in nativeBound) || repeated) throw Unsupported(Diagnostic("UNSUPPORTED",
-            "Reactive builder parameter requires a single immediate consumer; shared/repeated evaluation needs a composition boundary: ${parameter.symbol.name}", parameter.symbol.source))
+        if (reads > 1 && parameter.symbol.id !in nativeBound) bindingSnapshots[parameter.symbol.id] = EtsSymbol(
+            "${parameter.symbol.id}:snapshot", "__ets_${parameter.symbol.name}", parameter.symbol.type,
+            parameter.symbol.source)
     } }
-    val rewrite = ReactiveBuilderRewriter(builders, bound)
+    val rewrite = ReactiveBuilderRewriter(builders, bound, bindingSnapshots)
     return program.copy(files = program.files.map { it.copy(declarations = it.declarations.map(rewrite::declaration)) },
         imports = (program.imports + listOf(EtsImport("@kit.ArkUI", "Binding"), EtsImport("@kit.ArkUI", "UIUtils"))).distinct())
 }
@@ -170,21 +181,23 @@ private fun snapshotConstructor(owner: EtsClass): Boolean {
     }
 }
 
-private class ReactiveBuilderRewriter(private val builders: Map<String, EtsFunction>, private val bound: Map<String, EtsParameter>) {
+private class ReactiveBuilderRewriter(private val builders: Map<String, EtsFunction>,
+    private val bound: Map<String, EtsParameter>, private val snapshots: Map<String, EtsSymbol>) {
     private fun binding(type: EtsType) = EtsNamedType("Binding", listOf(type), external = true)
     private fun parameter(value: EtsParameter) = if (value.symbol.id in bound)
         value.copy(symbol = value.symbol.copy(type = binding(value.symbol.type)), defaultValue = null) else value
     private fun functionType(value: EtsFunction) = EtsFunctionType(value.parameters.map { parameter(it).symbol.type }, value.returnType, value.typeParameters)
-    private fun expression(value: EtsExpression): EtsExpression = when (value) {
-        is EtsReference -> if (value.symbol.id in bound) EtsMember(
+    private fun expression(value: EtsExpression, locals: Map<String, EtsSymbol> = emptyMap()): EtsExpression = when (value) {
+        is EtsReference -> if (value.symbol.id in locals) EtsReference(locals.getValue(value.symbol.id), value.source)
+            else if (value.symbol.id in bound) EtsMember(
             EtsReference(parameter(bound.getValue(value.symbol.id)).symbol, value.source), "value", value.type, value.source)
             else builders[value.symbol.id]?.let { value.copy(symbol = value.symbol.copy(type = functionType(it))) } ?: value
-        is EtsMember -> value.copy(receiver = expression(value.receiver), type = builders[value.symbolId]?.let(::functionType) ?: value.type)
+        is EtsMember -> value.copy(receiver = expression(value.receiver, locals), type = builders[value.symbolId]?.let(::functionType) ?: value.type)
         is EtsCall -> {
             val id = when (val callee = value.callee) { is EtsReference -> callee.symbol.id; is EtsMember -> callee.symbolId; else -> null }
             val builder = builders[id]
-            value.copy(callee = expression(value.callee), arguments = value.arguments.mapIndexed { index, argument ->
-                val emitted = expression(argument)
+            value.copy(callee = expression(value.callee, locals), arguments = value.arguments.mapIndexed { index, argument ->
+                val emitted = expression(argument, locals)
                 if (builder?.parameters?.getOrNull(index)?.symbol?.id !in bound) emitted else {
                     val lambda = EtsLambda(emptyList(), listOf(EtsReturn(emitted, argument.source)), emitted.type, argument.source)
                     val target = EtsReference(EtsSymbol("arkui:UIUtils", "UIUtils", EtsNamedType("UIUtils", external = true), argument.source, true))
@@ -193,18 +206,32 @@ private class ReactiveBuilderRewriter(private val builders: Map<String, EtsFunct
                 }
             })
         }
-        is EtsNew -> value.copy(arguments = value.arguments.map(::expression))
-        is EtsBinary -> value.copy(left = expression(value.left), right = expression(value.right))
-        is EtsUnary -> value.copy(operand = expression(value.operand))
-        is EtsConditional -> value.copy(condition = expression(value.condition), whenTrue = expression(value.whenTrue), whenFalse = expression(value.whenFalse))
-        is EtsAssignment -> value.copy(target = expression(value.target), value = expression(value.value))
-        is EtsCast -> value.copy(value = expression(value.value))
-        is EtsArray -> value.copy(elements = value.elements.map(::expression))
-        is EtsObject -> value.copy(fields = value.fields.mapValues { expression(it.value) })
-        is EtsLambda -> value.copy(body = value.body.map(::statement))
+        is EtsNew -> value.copy(arguments = value.arguments.map { expression(it, locals) })
+        is EtsBinary -> value.copy(left = expression(value.left, locals), right = expression(value.right, locals))
+        is EtsUnary -> value.copy(operand = expression(value.operand, locals))
+        is EtsConditional -> value.copy(condition = expression(value.condition, locals),
+            whenTrue = expression(value.whenTrue, locals), whenFalse = expression(value.whenFalse, locals))
+        is EtsAssignment -> value.copy(target = expression(value.target, locals), value = expression(value.value, locals))
+        is EtsCast -> value.copy(value = expression(value.value, locals))
+        is EtsArray -> value.copy(elements = value.elements.map { expression(it, locals) })
+        is EtsObject -> value.copy(fields = value.fields.mapValues { expression(it.value, locals) })
+        is EtsLambda -> value.copy(body = value.body.map { statement(it, locals) })
         is EtsSuper, is EtsLiteral, is EtsUndefined -> value
     }
-    private fun function(value: EtsFunction) = value.copy(parameters = value.parameters.map(::parameter), body = value.body.map(::statement))
+    private fun function(value: EtsFunction): EtsFunction {
+        val captured = value.parameters.mapNotNull { original -> snapshots[original.symbol.id]?.let { snapshot ->
+            Triple(original, parameter(original), snapshot)
+        } }
+        val locals = captured.associate { (original, _, snapshot) -> original.symbol.id to snapshot }
+        var body = value.body.map { statement(it, locals) }
+        captured.asReversed().forEach { (original, input, snapshot) ->
+            val read = EtsMember(EtsReference(input.symbol, original.symbol.source), "value",
+                original.symbol.type, original.symbol.source)
+            body = listOf(EtsUiForEach(EtsArray(listOf(read), original.symbol.type, original.symbol.source),
+                EtsParameter(snapshot), body, original.symbol.source))
+        }
+        return value.copy(parameters = value.parameters.map(::parameter), body = body)
+    }
     fun declaration(value: EtsDeclaration): EtsDeclaration = when (value) {
         is EtsFunction -> function(value)
         is EtsGlobal -> value.copy(initializer = expression(value.initializer))
@@ -213,22 +240,28 @@ private class ReactiveBuilderRewriter(private val builders: Map<String, EtsFunct
             is EtsField -> it.copy(initializer = it.initializer?.let(::expression))
         } })
     }
-    private fun statement(value: EtsStatement): EtsStatement = when (value) {
-        is EtsVariable -> value.copy(initializer = value.initializer?.let(::expression))
-        is EtsExpressionStatement -> value.copy(expression = expression(value.expression))
-        is EtsReturn -> value.copy(value = value.value?.let(::expression))
-        is EtsThrow -> value.copy(value = expression(value.value))
-        is EtsTry -> value.copy(body = value.body.map(::statement), handler = value.handler?.let { it.copy(body = it.body.map(::statement)) }, finallyBody = value.finallyBody?.map(::statement))
-        is EtsSuperConstructorCall -> value.copy(arguments = value.arguments.map(::expression))
-        is EtsBlock -> value.copy(statements = value.statements.map(::statement))
-        is EtsIf -> value.copy(branches = value.branches.map { it.copy(condition = it.condition?.let(::expression), body = it.body.map(::statement)) })
-        is EtsLoop -> value.copy(condition = expression(value.condition), body = value.body.map(::statement))
-        is EtsUiElement -> value.copy(call = expression(value.call) as EtsCall, children = value.children?.map(::statement), attributes = value.attributes.map { expression(it) as EtsCall })
-        is EtsUiComponent -> value.copy(properties = value.properties.mapValues { expression(it.value) })
-        is EtsUiForEach -> value.copy(items = expression(value.items), body = value.body.map(::statement),
-            key = value.key?.let(::expression) as? EtsLambda)
-        is EtsUiLazyForEach -> value.copy(dataSource = expression(value.dataSource),
-            body = value.body.map(::statement), key = value.key?.let(::expression) as? EtsLambda)
+    private fun statement(value: EtsStatement, locals: Map<String, EtsSymbol> = emptyMap()): EtsStatement = when (value) {
+        is EtsVariable -> value.copy(initializer = value.initializer?.let { expression(it, locals) })
+        is EtsExpressionStatement -> value.copy(expression = expression(value.expression, locals))
+        is EtsReturn -> value.copy(value = value.value?.let { expression(it, locals) })
+        is EtsThrow -> value.copy(value = expression(value.value, locals))
+        is EtsTry -> value.copy(body = value.body.map { statement(it, locals) },
+            handler = value.handler?.let { it.copy(body = it.body.map { body -> statement(body, locals) }) },
+            finallyBody = value.finallyBody?.map { statement(it, locals) })
+        is EtsSuperConstructorCall -> value.copy(arguments = value.arguments.map { expression(it, locals) })
+        is EtsBlock -> value.copy(statements = value.statements.map { statement(it, locals) })
+        is EtsIf -> value.copy(branches = value.branches.map { branch -> branch.copy(
+            condition = branch.condition?.let { expression(it, locals) },
+            body = branch.body.map { statement(it, locals) }) })
+        is EtsLoop -> value.copy(condition = expression(value.condition, locals), body = value.body.map { statement(it, locals) })
+        is EtsUiElement -> value.copy(call = expression(value.call, locals) as EtsCall,
+            children = value.children?.map { statement(it, locals) },
+            attributes = value.attributes.map { expression(it, locals) as EtsCall })
+        is EtsUiComponent -> value.copy(properties = value.properties.mapValues { expression(it.value, locals) })
+        is EtsUiForEach -> value.copy(items = expression(value.items, locals), body = value.body.map { statement(it, locals) },
+            key = value.key?.let { expression(it, locals) } as? EtsLambda)
+        is EtsUiLazyForEach -> value.copy(dataSource = expression(value.dataSource, locals),
+            body = value.body.map { statement(it, locals) }, key = value.key?.let { expression(it, locals) } as? EtsLambda)
         is EtsFunction -> function(value)
         is EtsJump -> value
     }

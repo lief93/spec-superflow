@@ -43,6 +43,28 @@ internal class ComposeDimensionRule : CallRule {
         if (sourceFile(owner) != null) return null
         val api = symbolName(owner)
         val at = language.source(call)
+        if (api in setOf("androidx.compose.ui.unit.Dp.plus", "androidx.compose.ui.unit.Dp.minus",
+                "androidx.compose.ui.unit.Dp.times", "androidx.compose.ui.unit.Dp.div") &&
+            call.type.classOrNull?.owner?.let(::symbolName) == "androidx.compose.ui.unit.Dp") {
+            val receiverSource = call.dispatchReceiver ?: call.extensionReceiver ?: return null
+            val operandSource = call.getValueArgument(0) ?: return null
+            val receiver = requireSpecifiedDp(language.expression(receiverSource, scope), language.source(receiverSource), api)
+            val operand = if (operandSource.type.classOrNull?.owner?.let(::symbolName) == "androidx.compose.ui.unit.Dp")
+                requireSpecifiedDp(language.expression(operandSource, scope), language.source(operandSource), api)
+            else language.expression(operandSource, scope)
+            if (operand.type != EtsTypes.NUMBER) throw Unsupported(Diagnostic("UNSUPPORTED",
+                "$api requires a numeric or Dp operand", language.source(operandSource)))
+            val operator = mapOf(
+                "androidx.compose.ui.unit.Dp.plus" to "+",
+                "androidx.compose.ui.unit.Dp.minus" to "-",
+                "androidx.compose.ui.unit.Dp.times" to "*",
+                "androidx.compose.ui.unit.Dp.div" to "/",
+            ).getValue(api)
+            val value = EtsBinary(operator, receiver, operand, EtsTypes.NUMBER, at)
+            val math = EtsReference(EtsSymbol("stdlib:Math", "Math", EtsNamedType("Math"), at, true))
+            return EtsCall(EtsMember(math, "fround", EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.NUMBER), at),
+                listOf(value), EtsTypes.NUMBER, at)
+        }
         if (api == "kotlin.internal.ir.EQEQ" && call.valueArgumentsCount == 2) {
             val left = call.getValueArgument(0) ?: return null
             val right = call.getValueArgument(1) ?: return null

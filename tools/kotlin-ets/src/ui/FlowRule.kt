@@ -119,18 +119,31 @@ internal class ComposeFlowRule : CallRule {
 }
 
 internal fun collectedStateFlowSnapshot(call: IrCall, language: Language, scope: Scope): EtsExpression? {
-    val api = symbolName(call.symbol.owner)
+    val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+    val collection = if (property in setOf("androidx.compose.runtime.State.value",
+            "androidx.compose.runtime.MutableState.value"))
+        call.dispatchReceiver as? IrCall ?: call.extensionReceiver as? IrCall ?: return null
+    else call
+    val api = symbolName(collection.symbol.owner)
     if (api !in collectionApis && !api.endsWith(".collectAsStateWithLifecycle") && !api.endsWith(".collectAsState"))
         return null
-    call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
-        if (call.getValueArgument(index) != null)
+    collection.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
+        if (collection.getValueArgument(index) != null && parameter.name.asString() != "initialValue")
             throw Unsupported(Diagnostic("UNSUPPORTED",
                 "Flow snapshot collection does not support explicit ${parameter.name} configuration",
-                language.source(call.getValueArgument(index)!!)))
+                language.source(collection.getValueArgument(index)!!)))
     }
-    val receiverSource = call.extensionReceiver ?: call.dispatchReceiver ?: return null
+    argument(collection, "initialValue")?.let { initial ->
+        language.diagnostics?.omitUi(collection,
+            "Flow collection uses its explicit initialValue in the static target projection", api,
+            "platform_capability_fallback",
+            "The first rendered value is preserved; subsequent Flow emissions require a project state adapter.",
+            discarded = emptyList())
+        return language.expression(initial, scope)
+    }
+    val receiverSource = collection.extensionReceiver ?: collection.dispatchReceiver ?: return null
     val receiver = language.expression(receiverSource, scope)
     val type = receiver.type as? EtsNamedType ?: return null
     if (type.symbolId != stateFlowClass.id || type.arguments.size != 1) return null
-    return EtsMember(receiver, "value", type.arguments.single(), language.source(call), "compose:state-flow:value")
+    return EtsMember(receiver, "value", type.arguments.single(), language.source(collection), "compose:state-flow:value")
 }

@@ -33,6 +33,7 @@ class EtsValidator {
     private var globalOwners = emptyMap<String, String>()
     private var currentFile: String? = null
     private var currentClass: EtsClass? = null
+    private var currentFunction: EtsFunction? = null
     private var allowedSuper = emptyList<EtsSuperConstructorCall>()
     private var initializingClass: EtsClass? = null
     private fun reject(node: EtsNode, message: String): Nothing = throw InvalidTarget(node.source, message)
@@ -551,6 +552,9 @@ class EtsValidator {
     }
 
     private fun function(function: EtsFunction, outer: Map<String, EtsSymbol>) {
+        val previousFunction = currentFunction
+        currentFunction = function
+        try {
         if (function.typeParameters.any { it.variance != EtsVariance.INVARIANT })
             reject(function, "Function type parameters cannot declare variance")
         if (function.visibility != EtsVisibility.PUBLIC && (currentClass == null || function.exported))
@@ -593,6 +597,9 @@ class EtsValidator {
             bindingName(function.name, function.source); type(function.returnType, function.source)
             statements(function.body, parameters(function.parameters, outer), function.returnType, emptySet(), function.parameters.map { it.symbol.name }.toSet(), function.builder || function.build)
         } } finally { allowedSuper = previousSuper; initializingClass = previousInitializer }
+        } finally {
+            currentFunction = previousFunction
+        }
     }
 
     /** Track native allocation on every normal path, independently of ordinary type validation. */
@@ -782,7 +789,9 @@ class EtsValidator {
             is EtsReference -> {
                 name(value.symbol.name, value.source)
                 if (value.symbol.name == "this" && currentClass == null) reject(value, "Target this requires an owning class")
-                if (!value.symbol.external && scope[value.symbol.id] != value.symbol) reject(value, "Unbound target symbol: ${value.symbol.name}")
+                if (!value.symbol.external && scope[value.symbol.id] != value.symbol) reject(value,
+                    "Unbound target symbol: ${value.symbol.name}" +
+                        (currentFunction?.let { " in ${it.name}" } ?: ""))
             }
             is EtsLiteral -> when (value.value) {
                 null -> if (value.type != EtsTypes.NULL && value.type !is EtsNullableType) reject(value, "Null target literal has non-null type")

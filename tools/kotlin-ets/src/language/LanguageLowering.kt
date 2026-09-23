@@ -380,13 +380,16 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
     override fun statements(body: IrBody, scope: Scope): List<EtsStatement> {
         reserveNames(body)
         return when (body) {
-            is IrBlockBody -> body.statements.flatMap { statement(it, scope) }
+            is IrBlockBody -> statements(body.statements, scope)
             is IrExpressionBody -> if (body.expression.type.isUnit())
                 statement(body.expression, scope) + EtsReturn(null, source(body))
             else listOf(EtsReturn(expression(body.expression, scope), source(body)))
             else -> diagnostics.unsupported(body, "Unsupported language body: ${body.javaClass.simpleName}")
         }
     }
+
+    override fun statements(statements: List<IrStatement>, scope: Scope): List<EtsStatement> =
+        statements.flatMap { statement(it, scope) }
 
     private fun statement(value: IrStatement, scope: Scope): List<EtsStatement> = withElement(value) { when (value) {
         is IrDelegatingConstructorCall, is IrInstanceInitializerCall -> constructorStatement(value, scope)
@@ -777,7 +780,7 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         }
         val base = parentClasses.filter { it.kind != ClassKind.INTERFACE }.singleOrNull()
         if (parentClasses.count { it.kind != ClassKind.INTERFACE } > 1 ||
-            (isInterface && base != null) || (singleton && base != null)) {
+            (isInterface && base != null)) {
             diagnostics.unsupported(declaration, "Unsupported class inheritance shape")
         }
         val baseType = parents.singleOrNull { it.classOrNull?.owner == base }?.let { type(it) as EtsNamedType }

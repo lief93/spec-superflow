@@ -13,7 +13,8 @@ internal class ComposeTextRule(
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         val api = symbolName(call.symbol.owner)
         if (api !in setOf("androidx.compose.material3.Text", "androidx.compose.material.Text")) return null
-        target.checkArguments(call, setOf("text", "modifier") + textStyleArgumentOrder, setOf("softWrap", "minLines"))
+        target.checkArguments(call, setOf("text", "modifier", "minLines") + textStyleArgumentOrder,
+            setOf("softWrap"))
         val text = argument(call, "text") ?: target.diagnostics.unsupported(call, "Text requires text")
         if (!text.type.isString()) target.diagnostics.unsupported(text, "AnnotatedString Text is not supported")
         val styleArgument = argument(call, "style")
@@ -28,7 +29,8 @@ internal class ComposeTextRule(
         val ambient = scope.ambientValues[MATERIAL_CONTEXT]?.takeIf { api == "androidx.compose.material3.Text" }
         val at = language.source(call)
         fun fallbackColor() = ambient?.let { materialContentColor(it, at) } ?: target.literal(0xFF000000L, call)
-        if (ambient != null || (textStyleArgumentOrder - setOf("color", "fontSize")).any { argument(call, it) != null }) {
+        if (ambient != null || argument(call, "minLines") != null ||
+            (textStyleArgumentOrder - setOf("color", "fontSize")).any { argument(call, it) != null }) {
             if (api == "androidx.compose.material.Text" && argument(call, "style") == null)
                 target.diagnostics.unsupported(call, "Material 2 LocalTextStyle requires an explicit style")
             val inherited = if (api == "androidx.compose.material3.Text")
@@ -48,7 +50,8 @@ internal class ComposeTextRule(
             }
             val modifier = textStyleModifier(values + fallbackColor(), at)
             val attributes = listOf(target.attribute("align", listOf(target.enumValue("Alignment", "TopStart", call)), call),
-                target.attribute("attributeModifier", listOf(modifier), call))
+                target.attribute("attributeModifier", listOf(modifier), call)) +
+                minLinesConstraint(call, style, language, scope)
             return ComposeElement(target.native("Text", listOf(language.expression(text, scope)), call).copy(attributes = attributes),
                 orderedArguments = listOf(modifier))
         }
@@ -70,5 +73,23 @@ internal class ComposeTextRule(
         }
         return ComposeElement(target.native("Text", listOf(language.expression(text, scope)), call).copy(attributes = attrs),
             if (api == "androidx.compose.material3.Text") setOf("padding") else emptySet())
+    }
+
+    private fun minLinesConstraint(call: IrCall, style: EtsExpression, language: Language,
+        scope: Scope): List<EtsCall> {
+        val minLinesSource = argument(call, "minLines") ?: return emptyList()
+        val at = language.source(minLinesSource)
+        val minLines = language.expression(minLinesSource, scope)
+        if (minLines.type != EtsTypes.NUMBER)
+            target.diagnostics.unsupported(minLinesSource, "Text minLines requires Int")
+        val styleLineHeight = EtsMember(style, "lineHeight", EtsNullableType(EtsTypes.NUMBER), at)
+        val styleFontSize = EtsMember(style, "fontSize", EtsNullableType(EtsTypes.NUMBER), at)
+        val fallbackLineHeight = EtsBinary("*", EtsBinary("??", styleFontSize,
+            target.literal(14, minLinesSource), EtsTypes.NUMBER, at), target.literal(1.2, minLinesSource),
+            EtsTypes.NUMBER, at)
+        val lineHeight = EtsBinary("??", styleLineHeight, fallbackLineHeight, EtsTypes.NUMBER, at)
+        val minHeight = EtsBinary("*", lineHeight, minLines, EtsTypes.NUMBER, at)
+        return listOf(target.attribute("constraintSize", listOf(target.record("ConstraintSizeOptions",
+            linkedMapOf("minHeight" to minHeight), minLinesSource)), call))
     }
 }

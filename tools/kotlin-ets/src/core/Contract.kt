@@ -1,6 +1,7 @@
 package dev.ets
 
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
@@ -88,6 +89,8 @@ interface Language {
     fun type(type: IrType): EtsType
     fun expression(expression: IrExpression, scope: Scope): EtsExpression
     fun statements(body: IrBody, scope: Scope): List<EtsStatement>
+    fun statements(statements: List<IrStatement>, scope: Scope): List<EtsStatement> =
+        error("This language backend does not expose statement-list lowering")
     fun function(function: IrSimpleFunction, scope: Scope = Scope()): EtsFunction
     fun clazz(declaration: IrClass): EtsClass
     fun interfaceDefaults(declaration: IrClass): List<EtsFunction> = emptyList()
@@ -110,6 +113,19 @@ fun interface CallRule {
 
     /** Platform value representation; the shared call checker still validates every result. */
     fun mapType(type: IrType, language: Language): EtsType? = null
+
+    /** True only when moving a single source read cannot change evaluation order or observable behavior. */
+    fun isStableValue(call: IrCall): Boolean = false
+
+    /** Framework singleton values may be deferred until their owning call consumes their semantics. */
+    fun isStableObject(value: IrGetObjectValue): Boolean = false
+
+    /**
+     * A target rule may own an omitted binary parameter whose Kotlin default body is unavailable.
+     * Returning a resolution is a narrow contract for this exact call/parameter; null keeps the
+     * shared preflight fail-closed behavior.
+     */
+    fun omittedArgumentResolution(call: IrCall, parameter: IrValueParameter): String? = null
 
     /** A typed value, or null to decline. Unit effects belong in lowerStatement. */
     fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression?

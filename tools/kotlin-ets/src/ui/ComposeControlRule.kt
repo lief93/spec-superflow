@@ -9,6 +9,19 @@ internal data class ComposeElement(val element: EtsUiElement,
 
 internal const val BOUNDED_WIDTH = "layout:bounded-width"
 internal const val BOUNDED_HEIGHT = "layout:bounded-height"
+internal const val UNBOUNDED_WIDTH = "layout:unbounded-width"
+internal const val UNBOUNDED_HEIGHT = "layout:unbounded-height"
+
+internal fun hasDirectLayoutWeight(statements: List<EtsStatement>): Boolean = statements.any { statement ->
+    when (statement) {
+        is EtsUiElement -> statement.attributes.any {
+            (it.callee as? EtsReference)?.symbol?.name == "layoutWeight"
+        }
+        is EtsIf -> statement.branches.any { hasDirectLayoutWeight(it.body) }
+        is EtsBlock -> hasDirectLayoutWeight(statement.statements)
+        else -> false
+    }
+}
 
 internal abstract class ComposeControlRule(
     private val decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,

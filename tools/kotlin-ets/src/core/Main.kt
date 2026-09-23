@@ -81,14 +81,22 @@ fun main(arguments: Array<String>) {
         val shapes = ComposeShapeRule()
         val elevations = ComposeCardElevationRule(diagnostics)
         val compositionLocals = ComposeCompositionLocalRule(diagnostics)
-        val rules = listOf(stdlib, images, strings, dimensions, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeSurfaceColorAtElevationRule(), ComposeProjectColorSchemeRule(), ComposePlatformVersionRule(), ComposeThemeModeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeMaterialImageVectorRule(), ComposeSnackbarHostStateRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposeDimensionRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), compositionLocals, ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeFlowRule(), shapes, elevations, ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
+        val rules = listOf(stdlib, images, strings, dimensions, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeSurfaceColorAtElevationRule(), ComposeProjectColorSchemeRule(), ComposePlatformVersionRule(), ComposeThemeModeRule(), ComposeStaticAnimationRule(diagnostics), ComposeIndicationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeMaterialImageVectorRule(), ComposeSnackbarHostStateRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposePagerBehaviorRule(), ComposeDimensionRule(), ComposeDrawGeometryRule(), ComposeBrushRule(diagnostics), ComposeBorderStrokeRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), compositionLocals, ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeNavigationRule(), ComposeFlowRule(), shapes, elevations, ComposeCardColorsRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
         var preflight: CoreProfileReport? = null
         val target = withKotlinFrontend(compilerArgs, entry, prepareModule = { module ->
             if (mode == "page") rules.forEach { it.prepareModule(module, diagnostics) }
         }, prepareDeclaration = { declaration ->
             if (mode == "page") rules.forEach { it.prepareSource(declaration, diagnostics) }
         }, externalSourceType = { type -> mode == "page" && adapters.providesSourceType(type) },
-            externalSourceCall = { function -> mode == "page" && adapters.replacesSourceCall(function) }) { frontend ->
+            externalSourceCall = { function -> mode == "page" && adapters.replacesSourceCall(function) },
+            retainUnreferencedFileInitializer = { property ->
+                mode != "page" || hasSourceFileInitializerEffects(property)
+            }, omitUnreferencedFileInitializer = { property ->
+                diagnostics.omitUi(property,
+                    "Unreferenced external file initializer omitted from the selected UI entry",
+                    "file-initializer:${symbolName(property)}", "platform_capability_fallback",
+                    "The unrelated platform/library initializer does not run in the generated page; direct reads still retain it.")
+            }) { frontend ->
             val module = frontend.module
             val backend = EtsBackend(diagnostics, rules, frontend.types)
             preflight = coreProfilePreflight(module, backend.language, diagnostics, compilerEnvironment)

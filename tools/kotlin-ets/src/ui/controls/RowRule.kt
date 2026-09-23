@@ -6,6 +6,7 @@ import org.jetbrains.kotlin.ir.expressions.*
 internal class ComposeRowRule(
     private val target: ArkUiCalls,
     private val content: (IrExpression, Scope) -> List<EtsStatement>,
+    private val contentFlags: (IrExpression?, Scope) -> Set<String>,
     private val touchBoxes: MutableMap<IrCall, TouchTargets>,
     decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,
 ) : ComposeControlRule(decorate) {
@@ -14,7 +15,10 @@ internal class ComposeRowRule(
         target.checkArguments(call, setOf("modifier", "verticalAlignment", "horizontalArrangement", "content"))
         val touch = touchTargets(call, scope, target.diagnostics)
         if (touch != null) touchBoxes[touch.box] = touch
-        val children = argument(call, "content")?.let { content(it, scope) } ?: emptyList()
+        val child = scope.fork()
+        child.semanticFlags.removeAll(setOf(UNBOUNDED_WIDTH, UNBOUNDED_HEIGHT))
+        child.semanticFlags += contentFlags(argument(call, "modifier"), scope)
+        val children = argument(call, "content")?.let { content(it, child) } ?: emptyList()
         val alignment = argument(call, "verticalAlignment")?.let { language.expression(it, scope) }
             ?: target.enumValue("VerticalAlign", "Top", call)
         val attrs = mutableListOf(target.attribute("alignItems", listOf(alignment), call))
@@ -33,6 +37,8 @@ internal class ComposeRowRule(
             attrs += target.attribute("onChildTouchTest", listOf(EtsLambda(listOf(EtsParameter(items)),
                 listOf(EtsReturn(dispatch, source)), dispatch.type, source)), call)
         }
+        if (UNBOUNDED_WIDTH !in child.semanticFlags && hasDirectLayoutWeight(children))
+            attrs += target.attribute("width", listOf(target.literal("100%", call)), call)
         return ComposeElement(target.native("Row", options, call, children).copy(attributes = attrs),
             orderedArguments = listOfNotNull(arrangement, justification, alignment))
     }

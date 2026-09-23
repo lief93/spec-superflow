@@ -29,9 +29,11 @@ fun Constrained(width: Int, label: String, enableScroll: Boolean = false) {
         Modifier
     }
     BoxWithConstraints(Modifier.width(width.dp).height(100.dp).testTag("constraints")) {
+        val nested = remember { mutableStateOf("Nested") }
         val availableWidth = maxWidth.value
         Column(Modifier.height(maxHeight).width(maxWidth).then(scrollModifier).padding(vertical = 0.dp, horizontal = 0.dp)) {
             Text(label)
+            Button(onClick = { nested.value = "Changed" }) { Text(nested.value) }
             WidthLabel(availableWidth.toInt())
             Box(Modifier.width((availableWidth / 2).dp).height(20.dp).testTag("halfWidth"))
             if (availableWidth > 200) Text("Wide") else Text("Narrow")

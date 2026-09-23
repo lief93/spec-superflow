@@ -1,6 +1,7 @@
 <resources>
     <string name="title">Resource title</string>
     <string name="subtitle">Resource subtitle</string>
+    <string name="TRANSACTIONS_NOTIFICATION_CHANNEL_NAME">Transactions</string>
     <string name="unused">Must not be emitted</string>
     <string name="styled"><b>Styled</b> text</string>
     <string name="greeting">Hello %1$s: %2$d items</string>

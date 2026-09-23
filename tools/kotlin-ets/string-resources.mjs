@@ -142,7 +142,7 @@ function parsedEntries(path, qualifierName, source, namespace) {
     if (node.tag === 'item') androidType = node.attrs.type === 'string' ? 'string' : null;
     if (!androidType) continue;
     const name = node.attrs.name ?? '';
-    if (!/^[a-z_][a-z0-9_]*$/.test(name)) throw new Error(`Invalid Android ${node.tag} name ${name}: ${path}`);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`Invalid Android ${node.tag} name ${name}: ${path}`);
     const symbol = `${namespace}.R.${androidType}.${name}`;
     try {
       let value;
@@ -207,7 +207,7 @@ export function materializeProjectStrings({ resourceRoots, namespace, out, symbo
   const idNumbers = new Set();
   const symbols = new Set();
   for (const line of readFileSync(symbolsFile, 'utf8').split(/\r?\n/)) {
-    const match = /^int\s+(string|plurals|array|dimen)\s+([a-z_][a-z0-9_]*)\s+(0x[0-9a-fA-F]+|\d+)\s*$/.exec(line);
+    const match = /^int\s+(string|plurals|array|dimen)\s+([A-Za-z_][A-Za-z0-9_]*)\s+(0x[0-9a-fA-F]+|\d+)\s*$/.exec(line);
     if (!match) continue;
     const symbol = `${namespace}.R.${match[1]}.${match[2]}`;
     const id = Number(match[3]);

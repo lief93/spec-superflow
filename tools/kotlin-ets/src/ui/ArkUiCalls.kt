@@ -26,10 +26,11 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
         val value = args.singleOrNull() ?: diagnostics.unsupported(owner, "Target attribute requires one argument: $name")
         val expected = when (name) {
             "id", "accessibilityText", "accessibilityLevel" -> EtsTypes.STRING
-            "enabled", "loop", "indicator", "select", "vertical", "clip", "focusable", "enableScrollInteraction" -> EtsTypes.BOOLEAN
+            "enabled", "loop", "indicator", "select", "vertical", "clip", "focusable", "enableScrollInteraction",
+            "disableSwipe" -> EtsTypes.BOOLEAN
             "scrollable" -> EtsNamedType("ScrollDirection")
             "scrollBar" -> EtsNamedType("BarState")
-            "index", "fontSize", "fontWeight", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight",
+            "index", "fontSize", "fontWeight", "backgroundColor", "maxLines", "strokeWidth", "color", "fill", "opacity", "layoutWeight",
             "minCount", "maxCount", "cellLength", "columnsGap", "rowsGap", "aspectRatio" -> EtsTypes.NUMBER
             "fontColor" -> value.type.takeIf { it == EtsTypes.NUMBER ||
                 it == EtsNamedType("Array", listOf(EtsTypes.NUMBER)) }
@@ -43,7 +44,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "align" -> EtsNamedType("Alignment")
             "objectFit" -> EtsNamedType("ImageFit")
             "colorFilter" -> EtsNamedType("ColorFilter")
-            "onClick" -> EtsFunctionType(emptyList(), EtsTypes.VOID)
+            "onClick", "onAppear" -> EtsFunctionType(emptyList(), EtsTypes.VOID)
             "onChange" -> value.type.takeIf {
                 it == EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.VOID) ||
                     it == EtsFunctionType(listOf(EtsTypes.STRING), EtsTypes.VOID)
@@ -56,8 +57,22 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
                     it.fields.values.all { field -> field == EtsTypes.NUMBER } }
             "shadow" -> value.type.takeIf { it is EtsRecordType && it.name == "ShadowOptions" &&
                 it.fields.keys == setOf("radius") && it.fields.values.single() == EtsTypes.NUMBER }
+            "border" -> value.type.takeIf {
+                it is EtsRecordType && it.name == "BorderOptions" &&
+                    it.fields.keys.all { field -> field in setOf("width", "color", "radius") } &&
+                    it.fields["width"] == EtsTypes.NUMBER && it.fields["color"] == EtsTypes.NUMBER &&
+                    (it.fields["radius"] == null || it.fields["radius"] == EtsTypes.NUMBER ||
+                        it.fields["radius"] == EtsTypes.STRING ||
+                        it.fields["radius"] is EtsRecordType &&
+                        (it.fields["radius"] as EtsRecordType).name == "BorderRadiuses")
+            }
+            "borderImage" -> value.type.takeIf { it is EtsRecordType && it.name == "BorderImageOption" &&
+                it.fields["source"] == linearGradientType && it.fields["width"] == EtsTypes.NUMBER &&
+                it.fields["slice"] == EtsTypes.NUMBER && it.fields["fill"] == EtsTypes.BOOLEAN }
             "offset" -> value.type.takeIf { it is EtsRecordType && it.name == "Position" &&
                 it.fields.keys.all { field -> field in setOf("x", "y") } && it.fields.values.all { it == EtsTypes.NUMBER } }
+            "position" -> value.type.takeIf { it is EtsRecordType && it.name == "Position" &&
+                it.fields.keys == setOf("x", "y") && it.fields.values.all { it == EtsTypes.NUMBER } }
             "rotate" -> value.type.takeIf { it is EtsRecordType && it.name == "RotateOptions" &&
                 it.fields.keys.all { field -> field in setOf("x", "y", "z", "angle", "centerX", "centerY", "centerZ", "perspective") } }
             "padding" -> value.type.takeIf { it == EtsTypes.NUMBER || it is EtsRecordType && it.name == "Padding" }
@@ -84,7 +99,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "Swiper" -> listOf(EtsNamedType("SwiperController"))
             "Column", "Row" -> if (args.isEmpty()) emptyList() else listOf(
                 EtsRecordType("${name}Options", mapOf("space" to EtsTypes.NUMBER)))
-            "Button", "Divider", "Checkbox", "Scroll", "Grid", "GridItem" -> emptyList()
+            "Button", "Divider", "Checkbox", "Scroll", "Grid", "GridItem", "Blank", "Circle" -> emptyList()
             "TextInput" -> listOf(EtsRecordType("TextInputOptions", mapOf("text" to EtsTypes.STRING)))
             "Toggle" -> listOf(EtsRecordType("ToggleOptions", mapOf("type" to EtsNamedType("ToggleType"), "isOn" to EtsTypes.BOOLEAN)))
             else -> diagnostics.unsupported(owner, "Unknown target control: $name")

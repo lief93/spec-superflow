@@ -48,14 +48,17 @@ internal class ComposeButtonRule(
         val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "IconButton requires content")
         val click = argument(call, "onClick") ?: target.diagnostics.unsupported(call, "IconButton requires callback")
         val attrs = listOf(target.attribute("onClick", listOf(callback(click, scope)), call),
-            target.attribute("type", listOf(target.enumValue("ButtonType", "Circle", call)), call)) + listOfNotNull(
+            target.attribute("type", listOf(target.enumValue("ButtonType", "Circle", call)), call),
+            target.attribute("backgroundColor", listOf(target.literal(0, call)), call),
+            target.attribute("width", listOf(target.literal(48, call)), call),
+            target.attribute("height", listOf(target.literal(48, call)), call)) + listOfNotNull(
             argument(call, "enabled")?.let { target.attribute("enabled", listOf(language.expression(it, scope)), call) })
         return ComposeElement(target.native("Button", emptyList(), call, content(body, scope)).copy(attributes = attrs),
             setOf("padding", "backgroundColor", "onClick", "enabled"))
     }
 
     private fun materialButton(call: IrCall, language: Language, scope: Scope, text: Boolean): ComposeElement {
-        target.checkArguments(call, setOf("onClick", "modifier", "enabled", "content", "colors", "shape", "contentPadding"))
+        target.checkArguments(call, setOf("onClick", "modifier", "enabled", "content", "colors", "shape", "contentPadding", "border"))
         val at = language.source(call)
         val context = materialContext(scope, at)
         val enabled = argument(call, "enabled")?.let { language.expression(it, scope) } ?: target.literal(true, call)
@@ -99,6 +102,7 @@ internal class ComposeButtonRule(
             language.callRules.filterIsInstance<ComposeShapeRule>().single()
                 .borderRadius(it, language, scope, target.diagnostics)
         } ?: target.literal("50%", call)
+        val border = argument(call, "border")?.let { language.expression(it, scope) }
         val row = target.native("Row", emptyList(), call, content(body, child)).copy(attributes = listOf(
             target.attribute("alignItems", listOf(target.enumValue("VerticalAlign", "Center", call)), call),
             target.attribute("justifyContent", listOf(target.enumValue("FlexAlign", "Center", call)), call)))
@@ -118,12 +122,27 @@ internal class ComposeButtonRule(
                 add(target.attribute("backgroundColor", listOf(selected("containerColor")), call))
             }
             add(target.attribute("borderRadius", listOf(shape), call))
+            add(target.attribute("clip", listOf(target.literal(true, call)), call))
+            border?.let {
+                val shapedBorderType = EtsRecordType("BorderOptions", linkedMapOf(
+                    "width" to EtsTypes.NUMBER,
+                    "color" to EtsTypes.NUMBER,
+                    "radius" to shape.type,
+                ))
+                val shapedBorder = EtsObject(linkedMapOf(
+                    "width" to EtsMember(it, "width", EtsTypes.NUMBER, at),
+                    "color" to EtsMember(it, "color", EtsTypes.NUMBER, at),
+                    "radius" to shape,
+                ), shapedBorderType, at)
+                add(target.attribute("border", listOf(shapedBorder), call))
+            }
             add(target.attribute("padding", listOf(padding), call))
             add(target.attribute("height", listOf(target.literal("auto", call)), call))
             add(target.attribute("constraintSize", listOf(target.record("ConstraintSizeOptions", linkedMapOf(
                 "minWidth" to target.literal(58, call), "minHeight" to target.literal(40, call)), call)), call))
         }
         return ComposeElement(target.native("Button", emptyList(), call, listOf(row)).copy(attributes = attrs),
-            setOf("padding", "backgroundColor", "onClick", "enabled"), orderedArguments = listOf(padding, shape))
+            setOf("padding", "backgroundColor", "onClick", "enabled"),
+            orderedArguments = listOfNotNull(padding, shape, border))
     }
 }

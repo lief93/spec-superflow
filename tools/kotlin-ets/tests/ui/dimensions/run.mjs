@@ -29,6 +29,7 @@ const page = compile('Page');
 assert.match(page, /Content\(width: number \| null, fontSize: number\)/);
 assert.match(page, /Compose dimension consumer received Dp\.Unspecified/);
 assert.match(page, /\)\(width\)\)/);
+assert.match(page, /selected \? 10(?:\.0)? : 5(?:\.0)?/);
 assert.doesNotMatch(page, /layoutPx|migrationContext/);
 assert.match(compile('Em', 2), /Unsupported dimension value: androidx.compose.ui.unit.em/);
 assert.match(compile('Unspecified', 2), /Compose dimension consumer requires a specified Dp value/);

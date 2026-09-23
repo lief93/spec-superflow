@@ -46,7 +46,7 @@ internal class ComposeTopAppBarRule(
             slot(title, onSurface, titleStyle)).copy(attributes = listOf(
                 target.attribute("layoutWeight", listOf(target.literal(1, call)), call),
                 target.attribute("height", listOf(height), call),
-                target.attribute("align", listOf(target.enumValue("Alignment", "Start", call)), call)))
+                target.attribute("alignContent", listOf(target.enumValue("Alignment", "CenterStart", call)), call)))
         argument(call, "actions")?.let { actions ->
             children += target.native("Row", emptyList(), call, slot(actions, onSurfaceVariant, inheritedStyle)).copy(attributes = listOf(
                 target.attribute("alignItems", listOf(target.enumValue("VerticalAlign", "Center", call)), call)))

@@ -26,14 +26,16 @@ internal class ComposeScaffoldRule(
             MaterialContextField.TEXT_STYLE to materialCurrentTextStyle(parent, at),
             MaterialContextField.SHAPES to materialShapes(parent, at))
 
-        val vertical = mutableListOf<EtsStatement>()
-        argument(call, "topBar")?.let { vertical += content(it, child) }
-        vertical += body(contentSource, child, uniformPadding(target.literal(0, call), at))
-        val column = target.native("Column", emptyList(), call, vertical).copy(attributes = listOf(
-            target.attribute("alignItems", listOf(target.enumValue("HorizontalAlign", "Start", call)), call),
+        val topBar = argument(call, "topBar")
+        val topInset = if (topBar == null) target.literal(0, call) else target.literal(64, call)
+        val contentPadding = edgePadding(listOf(target.literal(0, call), topInset,
+            target.literal(0, call), target.literal(0, call)), at)
+        val page = target.native("Stack", listOf(target.stackOptions(call)), call,
+            body(contentSource, child, contentPadding)).copy(attributes = listOf(
             target.attribute("width", listOf(target.literal("100%", call)), call),
             target.attribute("height", listOf(target.literal("100%", call)), call)))
-        val layers = mutableListOf<EtsStatement>(column)
+        val layers = mutableListOf<EtsStatement>(page)
+        topBar?.let { layers += content(it, child) }
         argument(call, "snackbarHost")?.let { layers += content(it, child) }
         val scaffold = target.native("Stack", listOf(target.stackOptions(call)), call, layers).copy(attributes = listOf(
             target.attribute("backgroundColor", listOf(EtsMember(scheme, "background", EtsTypes.NUMBER, at)), call)))

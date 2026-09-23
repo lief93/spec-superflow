@@ -24,7 +24,10 @@ for (const [entry, status] of [['Page', 0], ['Propagate', 2]]) {
   else {
     const code = readFileSync(output, 'utf8');
     assert.match(code, /EtsComposeBoxWithConstraints\(\{ content: new WrappedBuilder/);
-    assert.match(code, /args.bounds.value.maxWidth/);
+    assert.match(code, /BoxWithConstraintsContent_[^(]+\([^)]*bounds: Binding<__etsBoxConstraints>/);
+    assert.match(code, /@State private nested: string = "Nested"/);
+    assert.match(code, /this\.nested = "Changed"/);
+    assert.match(code, /bounds.value.maxWidth/);
     assert.match(code, /fixedWidth: true, fixedHeight: true/);
     assert.match(code, /Text\("Wide"\)/);
     assert.match(code, /Text\("Narrow"\)/);

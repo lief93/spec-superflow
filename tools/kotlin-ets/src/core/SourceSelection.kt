@@ -12,7 +12,9 @@ import org.jetbrains.kotlin.ir.visitors.*
 internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
     prepareDeclaration: (IrDeclaration) -> Unit = {}, ignored: Set<IrElement> = emptySet(),
     externalSourceType: (IrType) -> Boolean = { false },
-    externalSourceCall: (IrSimpleFunction) -> Boolean = { false }): String {
+    externalSourceCall: (IrSimpleFunction) -> Boolean = { false },
+    retainUnreferencedFileInitializer: (IrProperty) -> Boolean = { true },
+    omitUnreferencedFileInitializer: (IrProperty) -> Unit = {}): String {
     val declarations = module.files.flatMap { it.declarations }
     val source = declarations.toSet()
     val roots = declarations.filterIsInstance<IrSimpleFunction>().filter {
@@ -22,6 +24,7 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
     val kept = linkedMapOf<IrDeclaration, String>()
     val pending = ArrayDeque<IrDeclaration>()
     val activeFiles = mutableSetOf<IrFile>()
+    val omittedInitializerCandidates = linkedSetOf<IrProperty>()
     val members = linkedSetOf<IrSimpleFunction>()
     val visitedMembers = mutableSetOf<IrSimpleFunction>()
     val requiredMembers = mutableSetOf<Pair<IrClass, String>>()
@@ -73,7 +76,10 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
         // File guards initialize even unread storage in declaration order. Keep its
         // dependency closure, not just fields visibly read by the selected entry.
         file.declarations.filterIsInstance<IrProperty>().filter { !it.isConst && it.backingField != null }
-            .forEach { enqueue(it, "file initialization: ${file.fileEntry.name}") }
+            .forEach {
+                if (retainUnreferencedFileInitializer(it)) enqueue(it, "file initialization: ${file.fileEntry.name}")
+                else omittedInitializerCandidates += it
+            }
     }
     fun reference(symbol: IrSymbol?, from: IrDeclaration, invoked: Boolean = true) {
         if (symbol == null || !symbol.isBound) return
@@ -149,6 +155,7 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
             }
         })
     }
+    omittedInitializerCandidates.filter { it !in kept }.forEach(omitUnreferencedFileInitializer)
     fun item(declaration: IrDeclaration, reason: String): String {
         val file = sourceFile(declaration)?.fileEntry?.name
         return "{\"symbol\":" + quote(name(declaration)) + ",\"source\":" +
@@ -168,4 +175,29 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
         }
     })
     return report
+}
+
+/**
+ * UI entry selection keeps source-owned initialization effects, but does not
+ * turn an unrelated platform/library singleton in the same file into a page
+ * dependency. A direct reference still retains the property through the normal
+ * symbol worklist.
+ */
+internal fun hasSourceFileInitializerEffects(property: IrProperty): Boolean {
+    val initializer = property.backingField?.initializer?.expression ?: return false
+    var found = false
+    initializer.acceptVoid(object : IrElementVisitorVoid {
+        override fun visitElement(element: IrElement) {
+            if (found) return
+            when (element) {
+                is IrCall -> if (sourceFile(element.symbol.owner) != null) found = true
+                is IrConstructorCall -> if (sourceFile(element.symbol.owner) != null) found = true
+                is IrSetValue, is IrSetField, is IrThrow -> found = true
+            }
+            if (!found) element.acceptChildrenVoid(this)
+        }
+
+        override fun visitFunction(declaration: IrFunction) = Unit
+    })
+    return found
 }

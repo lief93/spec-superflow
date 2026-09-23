@@ -17,9 +17,13 @@ import androidx.compose.ui.unit.dp
 @Composable fun Tile(shape: Shape) {
     Box(Modifier.size(80.dp).clip(shape).background(Color.Red).testTag("circle"))
 }
+@Composable fun DefaultTile(shape: Shape = RoundedCornerShape(6.dp)) {
+    Box(Modifier.size(80.dp).clip(shape).background(Color.Red).testTag("default"))
+}
 @Composable fun Page() {
     Column {
         Tile(CircleShape)
+        DefaultTile()
         Box(Modifier.size(160.dp, 80.dp).clip(CircleShape).background(Color.Blue).testTag("capsule"))
         Box(Modifier.size(80.dp).background(Color.Green).clip(CircleShape).testTag("outside"))
         Box(Modifier.size(80.dp).padding(10.dp).clip(CircleShape).background(Color.Red).testTag("padded"))

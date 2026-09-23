@@ -10,6 +10,7 @@ internal class ComposeSurfaceRule(
     private val content: (IrExpression, Scope) -> EtsExpression,
     private val cardContent: (IrExpression, Scope) -> EtsExpression,
     private val modifierBounds: (IrExpression?, Scope) -> Set<String>,
+    private val callback: (IrExpression, Scope) -> EtsExpression,
     private val decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,
 ) : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
@@ -52,15 +53,32 @@ internal class ComposeSurfaceRule(
     }
 
     private fun card(call: IrCall, language: Language, scope: Scope): List<EtsStatement> {
-        val interactive = call.symbol.owner.valueParameters.any { it.name.asString() == "onClick" }
-        if (interactive) target.diagnostics.unsupported(argument(call, "elevation") ?: argument(call, "onClick") ?: call,
-            "Interactive Card elevation states cannot be represented by the static Harmony shadow backend")
-        target.checkArguments(call, setOf("modifier", "shape", "elevation", "content"))
+        val click = argument(call, "onClick")
+        val interactive = click != null
+        target.checkArguments(call, setOf("onClick", "modifier", "enabled", "shape", "colors", "elevation",
+            "border", "interactionSource", "content"))
         val at = language.source(call)
         val context = materialContext(scope, at)
         val scheme = materialScheme(context, at)
-        val background = EtsMember(scheme, "surfaceContainerHighest", EtsTypes.NUMBER, at)
-        val foreground = EtsMember(scheme, "onSurface", EtsTypes.NUMBER, at)
+        val defaultBackground = EtsMember(scheme, "surfaceContainerHighest", EtsTypes.NUMBER, at)
+        val defaultForeground = EtsMember(scheme, "onSurface", EtsTypes.NUMBER, at)
+        val enabled = argument(call, "enabled")?.let { language.expression(it, scope) } ?: target.literal(true, call)
+        if (enabled.type != EtsTypes.BOOLEAN) target.diagnostics.unsupported(call, "Card enabled requires Boolean")
+        data class Palette(val container: EtsExpression, val content: EtsExpression,
+            val disabledContainer: EtsExpression, val disabledContent: EtsExpression)
+        fun palette(value: IrExpression): Palette {
+            val colors = language.expression(value, scope)
+            if (colors.type != cardColorsType) target.diagnostics.unsupported(value,
+                "Card colors require a mapped CardColors value")
+            fun color(name: String): EtsExpression = if (colors is EtsObject)
+                colors.fields.getValue(name) else EtsMember(colors, name, EtsTypes.NUMBER, language.source(value))
+            return Palette(color("containerColor"), color("contentColor"),
+                color("disabledContainerColor"), color("disabledContentColor"))
+        }
+        val colors = argument(call, "colors")?.let(::palette)
+            ?: Palette(defaultBackground, defaultForeground, defaultBackground, defaultForeground)
+        val background = EtsConditional(enabled, colors.container, colors.disabledContainer, EtsTypes.NUMBER, at)
+        val foreground = EtsConditional(enabled, colors.content, colors.disabledContent, EtsTypes.NUMBER, at)
         val shapes = language.callRules.filterIsInstance<ComposeShapeRule>().single()
         val radius = argument(call, "shape")?.let { shapes.borderRadius(it, language, scope, target.diagnostics) }
             ?: shapes.themeBorderRadius("medium", context, call, target.diagnostics)
@@ -68,12 +86,37 @@ internal class ComposeSurfaceRule(
         val elevationSource = argument(call, "elevation")
         val model = elevationSource?.let(elevations::staticElevation) ?: elevations.filledDefault(at)
         val attributes = mutableListOf(target.attribute("borderRadius", listOf(radius), call))
+        if (interactive && listOf(model.pressed, model.focused, model.hovered, model.dragged, model.disabled)
+                .any { it != model.default }) {
+            target.diagnostics.omitUi(elevationSource ?: requireNotNull(click), "Interactive Card elevation states use the default static shadow",
+                "androidx.compose.material3.Card.elevation", "omitted_animation_modifier",
+                "Card content, click behavior and default elevation are preserved; animated interaction shadows are omitted.",
+                discarded = emptyList())
+        }
         if (model.default != 0.0) {
             val value = elevationSource?.let { language.expression(it, scope) } ?: elevations.targetValue(model, at)
             val converted = target.call("vp2px", listOf(elevations.defaultValue(value, at)), call,
                 listOf(EtsTypes.NUMBER), EtsTypes.NUMBER)
             val shadow = target.record("ShadowOptions", linkedMapOf("radius" to converted), call)
             attributes += target.attribute("shadow", listOf(shadow), call)
+        }
+        if (click != null) {
+            attributes += target.attribute("onClick", listOf(callback(click, scope)), call)
+            attributes += target.attribute("enabled", listOf(enabled), call)
+        }
+        argument(call, "interactionSource")?.let {
+            target.diagnostics.omitUi(it, "Card interactionSource omitted from static interaction projection",
+                "androidx.compose.material3.Card.interactionSource", "omitted_animation_modifier",
+                "Card click and enabled behavior are preserved; press interaction state is omitted.")
+        }
+        argument(call, "border")?.let { border ->
+            val resolved = when (border) {
+                is IrGetValue -> scope.aliases[border.symbol] ?: border
+                is IrBlock -> border.statements.lastOrNull() as? IrExpression ?: border
+                else -> border
+            }
+            if (resolved !is IrConst || resolved.kind != IrConstKind.Null)
+                attributes += target.attribute("border", listOf(language.expression(border, scope)), call)
         }
         val body = argument(call, "content") ?: target.diagnostics.unsupported(call, "Card requires content")
         return emit(call, language, scope, background, foreground, body, argument(call, "modifier"), true, attributes)

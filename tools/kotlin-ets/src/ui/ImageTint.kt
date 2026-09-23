@@ -11,4 +11,13 @@ function __etsImageTint(color: number): ColorFilter {
     0, 0, 0, (color >>> 24) / 255, 0
   ]);
 }
+
+function __etsOptionalImageFilter(filter: ColorFilter | null): ColorFilter {
+  return filter ?? new ColorFilter([
+    1, 0, 0, 0, 0,
+    0, 1, 0, 0, 0,
+    0, 0, 1, 0, 0,
+    0, 0, 0, 1, 0
+  ]);
+}
 """.trimIndent())

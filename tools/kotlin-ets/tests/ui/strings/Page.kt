@@ -5,12 +5,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalContext
 
 fun decorate(label: String): String = "[" + label + "]"
+fun androidString(context: android.content.Context): String = context.getString(R.string.title)
 @Composable fun Page() {
     Column {
         BasicText(decorate(stringResource(R.string.title)))
         BasicText(stringResource(if (true) R.string.subtitle else R.string.title))
+        BasicText(stringResource(R.string.TRANSACTIONS_NOTIFICATION_CHANNEL_NAME))
+        BasicText(androidString(LocalContext.current))
     }
 }
 @Composable fun Missing() { BasicText(stringResource(R.string.missing)) }

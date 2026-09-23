@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { compilerEnvironment } from './compiler-environment.mjs';
 import { materializeProjectImages } from './image-resources.mjs';
 import { materializeProjectStrings } from './string-resources.mjs';
+import { materializeProjectFonts } from './font-resources.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const help = `Kotlin to ETS: Gradle project input
@@ -194,6 +195,15 @@ export function main(args) {
       stringResources = pack.output;
       writeFileSync(join(workDir, 'string-resources.json'), JSON.stringify(pack, null, 2), { flag: 'wx' });
     }
+    let fontResources = options.fontResources;
+    if (!fontResources && inputs.resourceInputs) {
+      stage = 'font-resources';
+      const pack = materializeProjectFonts({ resourceRoots: inputs.resourceInputs.roots,
+        namespace: inputs.resourceInputs.namespace, variant: inputs.resourceInputs.variant,
+        symbolsFile: inputs.resourceInputs.symbols, out: join(workDir, 'font-resources') });
+      fontResources = pack.properties;
+      writeFileSync(join(workDir, 'font-resources.json'), JSON.stringify(pack, null, 2), { flag: 'wx' });
+    }
     stage = 'compiler';
     const compilerArgs = [join(root, 'kotlin-ets'), '--mode', options.mode, options.outputFlag, options.output,
       '--unsupported-policy', options.unsupportedPolicy,
@@ -202,7 +212,7 @@ export function main(args) {
       ...(options.entry ? ['--entry', options.entry] : []),
       ...(imageResources ? ['--image-resources', imageResources] : []),
       ...(stringResources ? ['--string-resources', stringResources] : []),
-      ...(options.fontResources ? ['--font-resources', options.fontResources] : [])];
+      ...(fontResources ? ['--font-resources', fontResources] : [])];
     if (options.preflightOutput) compilerArgs.push('--preflight-out', options.preflightOutput);
     const result = runLogged('bash', compilerArgs, options.project, workDir, stage);
     process.stdout.write(readFileSync(join(workDir, 'compiler.stdout.log')));

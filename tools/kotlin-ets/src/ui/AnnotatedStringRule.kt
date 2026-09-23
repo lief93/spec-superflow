@@ -76,7 +76,8 @@ internal class ComposeAnnotatedStringRule : CallRule {
             return withStyle(builder, style, block, language, scope, at)
         }
         if (sourceFile(owner) != null) return null
-        if (receiver != null && language.type(receiver.type) == annotatedBuilderType) {
+        val receiverType = receiver?.type?.classOrNull?.owner?.let(::symbolName)
+        if (receiver != null && receiverType == "androidx.compose.ui.text.AnnotatedString.Builder") {
             val target = language.expression(receiver, scope)
             return when (owner.name.asString()) {
                 "append" -> {
@@ -99,7 +100,7 @@ internal class ComposeAnnotatedStringRule : CallRule {
                 else -> null
             }
         }
-        if (receiver != null && language.type(receiver.type.makeNotNull()) == annotatedStringType &&
+        if (receiver != null && receiverType == "androidx.compose.ui.text.AnnotatedString" &&
             owner.name.asString() == "getStringAnnotations") {
             if (argument(call, "tag") != null) reject(call, language, "Tagged getStringAnnotations is not mapped")
             val start = argument(call, "start") ?: call.getValueArgument(0) ?: return null

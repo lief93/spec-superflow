@@ -132,7 +132,8 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 setOf("painter", "contentDescription", "modifier")
             else setOf("model", "contentDescription", "modifier")
             textField -> setOf("value", "onValueChange", "modifier", "enabled")
-            isPager -> setOf("state", "modifier", "pageContent", "userScrollEnabled")
+            isPager -> setOf("state", "modifier", "pageContent", "userScrollEnabled", "flingBehavior",
+                "snapPosition")
             isLazyList -> setOf("modifier", "state", "content", "userScrollEnabled")
             else -> setOf("modifier", "content")
         })
@@ -205,6 +206,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
     private fun pager(call: IrCall, scope: Scope,
         modifiers: List<WidgetModifier<EtsExpression, SourceSpan>>,
         source: SourceSpan): Widget.Pager<EtsExpression, SourceSpan> {
+        validatePagerBehavior(call, scope, diagnostics)
         val state = argument(call, "state")
             ?: diagnostics.unsupported(call, "HorizontalPager requires state")
         val holder = (resolve(state, scope) as? IrGetValue)?.symbol
@@ -481,10 +483,9 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
     private fun modifiers(value: IrExpression?, scope: Scope,
         parent: WidgetLayoutScope?): List<WidgetModifier<EtsExpression, SourceSpan>> {
         val expression = value?.let { resolve(it, scope) } ?: return emptyList()
-        if (expression is IrGetObjectValue && sourceFile(expression.symbol.owner) == null &&
+        if (expression is IrGetObjectValue &&
             symbolName(expression.symbol.owner) == "androidx.compose.ui.Modifier.Companion") return emptyList()
         val call = expression as? IrCall ?: diagnostics.unsupported(expression, "Unsupported widget Modifier value")
-        if (sourceFile(call.symbol.owner) != null) diagnostics.unsupported(call, "Source Modifier functions require explicit widget semantics")
         val api = symbolName(call.symbol.owner)
         if (api.endsWith(".animateItem"))
             diagnostics.unsupported(call, "LazyItemScope animateItem is not supported")
@@ -498,6 +499,10 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             checkArguments(call, setOf("other"))
             return previous + modifiers(argument(call, "other") ?: diagnostics.unsupported(call, "Modifier.then requires other"),
                 scope, parent)
+        }
+        if (api == "androidx.compose.foundation.layout.safeDrawingPadding") {
+            checkArguments(call, emptySet())
+            return previous
         }
         val at = language.source(call)
         fun dimension(value: IrExpression): EtsExpression {
@@ -584,7 +589,14 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 WidgetModifier.Background(widgetValue(color, scope, WidgetValueType.COLOR), at)
             }
             "androidx.compose.foundation.clickable" -> {
-                checkArguments(call, setOf("onClick", "enabled"))
+                checkArguments(call, setOf("onClick", "enabled", "interactionSource", "indication"))
+                for (name in listOf("interactionSource", "indication")) {
+                    argument(call, name)?.let { value ->
+                        diagnostics.omitUi(value, "Widget clickable $name omitted from static interaction projection",
+                            "androidx.compose.foundation.clickable.$name", "omitted_animation_modifier",
+                            "Click action and enabled state are preserved; press indication state and animation are omitted.")
+                    }
+                }
                 val enabled = argument(call, "enabled")?.let {
                     if (!it.type.isBoolean()) diagnostics.unsupported(it, "Widget clickable enabled requires Boolean")
                     scalar(it, scope)

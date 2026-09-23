@@ -28,6 +28,7 @@ const page = compile('Page');
 assert.match(page, /Page\(first: number = 1/);
 assert.equal((page.match(/\.layoutWeight\(/g) ?? []).length, 4);
 assert.match(page, /\.padding\(8\.0\)\.layoutWeight\(__etsLayoutWeight\(first\)\)/);
+assert.doesNotMatch(page, /\.(?:width|height)\("100%"\)\.layoutWeight\(/);
 const parsed = ts.createSourceFile('page.ts', page.replace('export struct Page', 'export class Page'), ts.ScriptTarget.ES2022, true);
 const ordinary = parsed.statements.filter(node => !(ts.isClassDeclaration(node) && node.name?.text === 'Page'))
   .map(node => node.getFullText(parsed)).join('\n');

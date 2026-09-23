@@ -29,7 +29,7 @@ class StringResources(
     private val at = SourceSpan("EtsStringResources.kt", 0, 0)
 
     companion object {
-        private val SYMBOL = Regex("[A-Za-z_][A-Za-z0-9_.]*\\.R\\.(string|plurals|array)\\.[a-z_][a-z0-9_]*")
+        private val SYMBOL = Regex("[A-Za-z_][A-Za-z0-9_.]*\\.R\\.(string|plurals|array)\\.[A-Za-z_][A-Za-z0-9_]*")
         private val QUALIFIER = Regex("[a-z]{2}(_[A-Z]{2})?")
 
         private fun properties(file: File, label: String): Map<String, String> {
@@ -58,7 +58,7 @@ class StringResources(
                         require(qualifier == "base" || QUALIFIER.matches(qualifier)) { "Unsupported resource qualifier: $file" }
                         val grouped = linkedMapOf<String, MutableMap<String, String>>()
                         properties(file, "plural resource entry").forEach { (key, value) ->
-                            val match = Regex("^(.+\\.R\\.plurals\\.[a-z_][a-z0-9_]*)\\.(zero|one|two|few|many|other)$").matchEntire(key)
+                            val match = Regex("^(.+\\.R\\.plurals\\.[A-Za-z_][A-Za-z0-9_]*)\\.(zero|one|two|few|many|other)$").matchEntire(key)
                                 ?: error("Invalid plural resource entry: $key")
                             grouped.getOrPut(match.groupValues[1]) { linkedMapOf() }[match.groupValues[2]] = value
                         }
@@ -70,7 +70,7 @@ class StringResources(
                         require(qualifier == "base" || QUALIFIER.matches(qualifier)) { "Unsupported resource qualifier: $file" }
                         val grouped = linkedMapOf<String, MutableMap<Int, String>>()
                         properties(file, "string-array entry").forEach { (key, value) ->
-                            val match = Regex("^(.+\\.R\\.array\\.[a-z_][a-z0-9_]*)\\.([0-9]+)$").matchEntire(key)
+                            val match = Regex("^(.+\\.R\\.array\\.[A-Za-z_][A-Za-z0-9_]*)\\.([0-9]+)$").matchEntire(key)
                                 ?: error("Invalid string-array entry: $key")
                             grouped.getOrPut(match.groupValues[1]) { linkedMapOf() }[match.groupValues[2].toInt()] = value
                         }
@@ -80,7 +80,7 @@ class StringResources(
                         }
                     }
                     name == "base" || QUALIFIER.matches(name) -> strings[name] = properties(file, "string resource symbol").also { values ->
-                        values.keys.forEach { require(Regex("[A-Za-z_][A-Za-z0-9_.]*\\.R\\.string\\.[a-z_][a-z0-9_]*").matches(it)) {
+                        values.keys.forEach { require(Regex("[A-Za-z_][A-Za-z0-9_.]*\\.R\\.string\\.[A-Za-z_][A-Za-z0-9_]*").matches(it)) {
                             "Invalid string resource symbol: $it" } }
                     }
                     else -> error("Unsupported string resource input file: $file")
@@ -149,6 +149,13 @@ class StringResources(
     }
 
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = when (symbolName(call.symbol.owner)) {
+        "android.content.Context.getString" -> {
+            val idSource = call.getValueArgument(0)
+                ?: reject(call, language, "Context.getString requires a resource id")
+            val id = resource(idSource, StringResourceKind.STRING, language, scope)
+            val args = call.symbol.owner.valueParameters.getOrNull(1)?.let { call.getValueArgument(1) }
+            if (args == null) read(id) else format(id, args, call, language, scope)
+        }
         "androidx.compose.ui.res.stringResource" -> {
             val id = resource(argument(call, "id") ?: reject(call, language, "stringResource requires id"), StringResourceKind.STRING, language, scope)
             val args = argument(call, "formatArgs")

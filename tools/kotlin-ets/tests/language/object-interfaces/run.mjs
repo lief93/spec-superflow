@@ -24,7 +24,7 @@ const cp = run('classpath', 'bash', [compiler, '--classpath']);
 const jar = join(work, 'oracle.jar');
 run('compile-jvm', 'bash', [compiler, join(here, 'Program.kt'), join(here, 'Oracle.kt'), '-d', jar]);
 const expected = run('jvm', `${java}/bin/java`, ['-cp', `${cp}:${jar}`, 'objectinterfaces.OracleKt']).split('\n');
-assert.deepEqual(expected, ['consumed', 'triggered', 'true']);
+assert.deepEqual(expected, ['consumed', 'triggered', 'true', 'complete', 'true']);
 const output = join(work, 'Program.ets');
 run('compile-ets', 'bash', [join(root, 'kotlin-ets'), '--mode', 'language', '--classpath', cp,
   '--out', output, join(here, 'Program.kt')]);
@@ -32,5 +32,6 @@ const code = readFileSync(output, 'utf8');
 const context = vm.createContext({ exports: {} });
 vm.runInContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.CommonJS } }).outputText, context);
-assert.deepEqual(['defaultEvent', 'triggeredEvent', 'sameInstance'].map(name => String(context.exports[name]())), expected);
-console.log('PASS JVM/ETS singleton generic interfaces: covariance, dispatch and identity');
+assert.deepEqual(['defaultEvent', 'triggeredEvent', 'sameInstance', 'sealedObjectLabel', 'sealedObjectIdentity']
+  .map(name => String(context.exports[name]())), expected);
+console.log('PASS JVM/ETS singleton interfaces and sealed-class inheritance: dispatch and identity');

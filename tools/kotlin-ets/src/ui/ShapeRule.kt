@@ -166,8 +166,8 @@ internal class ComposeShapeRule : CallRule {
                 val index = function.valueParameters.indexOf(parameter)
                 val kinds = sourceCalls.filter { it.call.symbol.owner == function &&
                     sourceFile(it.root)?.declarations?.contains(it.root) == true }.map { sourceCall ->
-                    val argument = sourceCall.call.getValueArgument(index) ?: diagnostics.unsupported(source,
-                        "Shape parameter requires a static source argument")
+                    val argument = sourceCall.call.getValueArgument(index) ?: parameter.defaultValue?.expression
+                        ?: diagnostics.unsupported(source, "Shape parameter requires a static source argument or default")
                     sourceKind(argument, diagnostics)
                 }
                 if (kinds.isEmpty()) diagnostics.unsupported(source,
@@ -186,8 +186,8 @@ internal class ComposeShapeRule : CallRule {
             val index = function.valueParameters.indexOf(parameter)
             val values = sourceCalls.filter { it.call.symbol.owner == function &&
                 sourceFile(it.root)?.declarations?.contains(it.root) == true }.map { sourceCall ->
-                val argument = sourceCall.call.getValueArgument(index) ?: diagnostics.unsupported(source,
-                    "Shape parameter requires a static source argument")
+                val argument = sourceCall.call.getValueArgument(index) ?: parameter.defaultValue?.expression
+                    ?: diagnostics.unsupported(source, "Shape parameter requires a static source argument or default")
                 staticShape(argument, diagnostics)
             }.distinctBy { listOf(it.kind, it.topStart, it.topEnd, it.bottomEnd, it.bottomStart) }
             return values.singleOrNull() ?: diagnostics.unsupported(source,

@@ -259,6 +259,18 @@ class StandardLibraryRules : CallRule {
                             targetElement, listOf(receiverNode(), arg(0)), listOf(targetElement))
                     }
                 }
+                "kotlin.collections.List.contains", "kotlin.collections.MutableList.contains" -> {
+                    val element = receiver?.type.listElement() ?: return null
+                    val value = args.singleOrNull() ?: return null
+                    if (sourceFile(owner) == null && value.type == element && call.type.isExactly("kotlin.Boolean")) {
+                        val targetElement = language.type(element)
+                        val equality = keyStrategy(element, language, scope, source, includeHash = false).single()
+                        return external("__etsListContains", listOf(
+                            EtsNamedType("Array", listOf(targetElement)), targetElement,
+                            EtsFunctionType(listOf(targetElement, targetElement), EtsTypes.BOOLEAN)),
+                            EtsTypes.BOOLEAN, listOf(receiverNode(), arg(0), equality), listOf(targetElement))
+                    }
+                }
                 "kotlin.collections.MutableList.add" -> {
                     val element = receiver?.type.listElement() ?: return null
                     if (receiver?.type.isExactly("kotlin.collections.MutableList") && args.size == 1 &&

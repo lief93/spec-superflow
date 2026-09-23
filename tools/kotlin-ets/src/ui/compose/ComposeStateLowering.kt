@@ -95,7 +95,7 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
                 states += state
                 fields += state.field
             } else {
-                val pager = pagerState(statement, handled)
+                val pager = pagerState(statement, scope, handled)
                 if (pager != null) {
                     pagerStates += pager
                     fields += listOf(pager.currentPage, pager.controller)
@@ -367,14 +367,21 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
         return ScrollState(declaration.symbol, field)
     }
 
-    private fun pagerState(statement: IrStatement, handled: MutableSet<IrStatement>): PagerState? {
+    private fun pagerState(statement: IrStatement, scope: Scope,
+        handled: MutableSet<IrStatement>): PagerState? {
         val declaration = statement as? IrVariable ?: return null
         val call = declaration.initializer as? IrCall ?: return null
         if (symbolName(call.symbol.owner) != "androidx.compose.foundation.pager.rememberPagerState") return null
         call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
-            if (call.getValueArgument(index) != null && parameter.name.asString() !in setOf("initialPage", "pageCount"))
+            if (call.getValueArgument(index) != null && parameter.name.asString() !in
+                setOf("initialPage", "initialPageOffsetFraction", "pageCount"))
                 diagnostics.unsupported(call.getValueArgument(index)!!,
                     "Unsupported rememberPagerState argument: ${parameter.name}")
+        }
+        argument(call, "initialPageOffsetFraction")?.let { expression ->
+            val value = (expression as? IrConst)?.value as? Number
+            if (value?.toDouble() != 0.0) diagnostics.unsupported(expression,
+                "Pager initialPageOffsetFraction requires 0 because ArkUI Swiper starts on whole pages")
         }
         val pageCountLambda = argument(call, "pageCount")
             ?: diagnostics.unsupported(call, "rememberPagerState requires pageCount")
@@ -384,13 +391,16 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
             ?: diagnostics.unsupported(pageCountLambda, "Pager pageCount requires one direct result")
         val pageCountExpression = (pageCountResult as? IrReturn)?.value ?: pageCountResult as? IrExpression
             ?: diagnostics.unsupported(pageCountResult, "Pager pageCount requires an integer result")
+        if (!pageCountExpression.type.isInt())
+            diagnostics.unsupported(pageCountExpression, "Pager pageCount requires Int")
         val count = (pageCountExpression as? IrConst)?.value as? Int
-        if (count == null || count <= 0)
-            diagnostics.unsupported(pageCountExpression, "Pager pageCount currently requires a positive integer literal")
+        if (count != null && count <= 0)
+            diagnostics.unsupported(pageCountExpression, "Pager pageCount must be positive")
+        val pageCount = language.expression(pageCountExpression, scope)
         val initialExpression = argument(call, "initialPage")
         val initial = if (initialExpression == null) 0 else (initialExpression as? IrConst)?.value as? Int
             ?: diagnostics.unsupported(initialExpression, "Pager initialPage currently requires an integer literal")
-        if (initial !in 0 until count)
+        if (initial < 0 || count != null && initial >= count)
             diagnostics.unsupported(initialExpression ?: call, "Pager initialPage must be within pageCount")
         val at = language.source(declaration)
         val currentName = "${declaration.name}_currentPage"
@@ -403,8 +413,7 @@ class ComposeStateLowering(private val language: Language, private val diagnosti
             controllerName, controllerType, at), EtsNew(controllerType, emptyList(), at),
             visibility = EtsVisibility.PRIVATE)
         handled += statement
-        return PagerState(declaration.symbol, current,
-            EtsLiteral(count, EtsTypes.NUMBER, language.source(pageCountExpression)), controller)
+        return PagerState(declaration.symbol, current, pageCount, controller)
     }
 
     private fun state(statement: IrStatement, scope: Scope, handled: MutableSet<IrStatement>): State? {

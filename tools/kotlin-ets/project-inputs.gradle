@@ -48,6 +48,13 @@ if (gradle.parent == null) gradle.projectsEvaluated {
         // Include producer dependencies, not the selected KotlinCompile action.
         // Resolving files happens in doLast, after these producers have run.
         dependsOn compile.sources.buildDependencies, compile.javaSources.buildDependencies, compile.libraries.buildDependencies
+        // Compiler plugins such as KAPT can add generated classpath directories
+        // through a direct task dependency without attaching builtBy metadata to
+        // the file collection. Preserve the compile task's declared producer
+        // graph while still excluding the compiler action itself.
+        dependsOn {
+            compile.taskDependencies.getDependencies(compile).findAll { dependency -> dependency != compile }
+        }
         doLast { collectionTask ->
             def completedOutputs = [:]
             // Gradle 9 isolates project state during parallel configuration.

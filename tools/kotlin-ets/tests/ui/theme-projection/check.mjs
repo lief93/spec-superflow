@@ -43,6 +43,15 @@ assert.match(code, /Text\("Next"\)/);
 assert.match(code, /\.onClick\(/);
 assert.doesNotMatch(code, /SDK_INT|LocalView|androidPalette|statusBarColor/);
 
+const staticFallback = run('static-fallback', 'StaticFallbackPage');
+assert.equal(staticFallback.result.status, 0, staticFallback.result.stdout + staticFallback.result.stderr);
+assert.deepEqual(staticFallback.report.degradations.map(d => d.action), ['platform_capability_fallback']);
+const staticFallbackCode = readFileSync(staticFallback.output, 'utf8');
+assert.doesNotMatch(staticFallbackCode, /__etsCurrentProjectColorScheme/);
+assert.match(staticFallbackCode, /4279383126/);
+assert.match(staticFallbackCode, /4284826401/);
+assert.match(staticFallbackCode, /Text\("Static source palette"\)/);
+
 const strict = run('strict', 'Page', ['--unsupported-policy', 'error']);
 assert.equal(strict.result.status, 2);
 assert.equal(strict.report.degradationCount, 0);

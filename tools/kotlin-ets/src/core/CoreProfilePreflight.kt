@@ -186,8 +186,11 @@ fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnosti
                         else when {
                             parameter.defaultValue != null -> CoreProfileArgumentResolution(parameter.name.asString(), "source_default")
                             parameter.varargElementType != null -> CoreProfileArgumentResolution(parameter.name.asString(), "empty_vararg")
-                            else -> diagnostics.unsupported(expression,
-                                "Preflight found a missing resolved argument ${parameter.name} in ${symbolName(owner)}")
+                            else -> language.callRules.firstNotNullOfOrNull {
+                                it.omittedArgumentResolution(expression, parameter)
+                            }?.let { CoreProfileArgumentResolution(parameter.name.asString(), it) }
+                                ?: diagnostics.unsupported(expression,
+                                    "Preflight found a missing resolved argument ${parameter.name} in ${symbolName(owner)}")
                         }
                     }
                     val category = profileCategory(expression)

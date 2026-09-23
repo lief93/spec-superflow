@@ -121,7 +121,11 @@ internal fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) {
         shared.lower(body, owner)
         local.lower(body, owner)
         namedLocals(body).firstOrNull()?.let {
-            diagnostics.unsupported(it, "Official local declaration lowering left an unsupported nested function")
+            val parent = (it.parent as? IrDeclarationWithName)?.let(::symbolName)
+                ?: it.parent.javaClass.simpleName
+            diagnostics.unsupported(it,
+                "Official local declaration lowering left an unsupported nested function: " +
+                    "${it.name.asString()} (origin=${it.origin}, parent=$parent)")
         }
     }
     val popup = LocalClassPopupLowering(context)

@@ -1,6 +1,7 @@
 package materialbutton
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -11,7 +12,8 @@ import androidx.compose.ui.unit.dp
 
 @Composable fun Action(modifier: Modifier, colors: ButtonColors, enabled: Boolean, clicked: () -> Unit) {
     Button(onClick = clicked, modifier = modifier, colors = colors, enabled = enabled,
-        shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(16.dp)) {
+        shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(16.dp),
+        border = BorderStroke(1.dp, Color.Green)) {
         Text("Action")
     }
 }

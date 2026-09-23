@@ -76,6 +76,10 @@ run('failed-producer', project, ':', 'compileKotlin', ['-PproducerClasspath=true
 const present = run('present-producer', project, ':', 'compileKotlin', ['-PproducerClasspath=true', '-PpresentProducer=true', '--rerun-tasks']);
 assert.ok(present.data.classpath.some(path => path.endsWith('/generated/empty-plugin-classes')));
 assert.deepEqual(present.data.omittedClasspath, []);
+const direct = run('direct-task-producer', project, ':', 'compileKotlin', ['-PdirectTaskClasspath=true', '--rerun-tasks']);
+assert.ok(direct.graph.includes(':generateDirectCollectorClasses'));
+assert.ok(direct.data.classpath.some(path => path.endsWith('/generated/direct-plugin-classes')));
+assert.deepEqual(direct.data.omittedClasspath, []);
 run('missing-library', project, ':', 'compileKotlin', ['-PmissingLibrary=true'], /missing-library\.jar/);
 run('wrong-task', project, ':', 'help', [], /KotlinCompile/);
 run('missing-task', project, ':', 'notACompileTask', [], /notACompileTask/);
@@ -103,6 +107,6 @@ assert.ok(android.data.resourceInputs.symbols.endsWith('/R.txt'));
 assert.deepEqual(sourceHashes(join(host, 'app/src')), before);
 writeFileSync(join(work, 'complete.json'), JSON.stringify({ jvmSources: jvm.data.sources.length,
   jvmClasspath: jvm.data.classpath.length, androidSources: android.data.sources.length,
-  androidClasspath: android.data.classpath.length, negatives: 8, producerCases: 4, selectedCompileTasksAbsent: true,
+  androidClasspath: android.data.classpath.length, negatives: 8, producerCases: 5, selectedCompileTasksAbsent: true,
   androidSourcesUnchanged: true, scriptSha256: createHash('sha256').update(readFileSync(script)).digest('hex') }, null, 2));
 console.log('PASS actual Gradle inputs, generated sources/classes, empty producer provenance, transitive projects, Android classpath, eight closed boundaries');

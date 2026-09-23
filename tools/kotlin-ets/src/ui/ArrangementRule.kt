@@ -2,6 +2,8 @@
 package dev.ets
 
 import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.expressions.IrGetField
+import org.jetbrains.kotlin.ir.expressions.IrGetObjectValue
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
 
@@ -29,6 +31,8 @@ internal class ComposeArrangementRule : CallRule {
             language.source(space), "Arrangement.spacedBy")), language.source(call))
     }
 
+    override fun isStableValue(call: IrCall): Boolean = fixedArrangementName(call) != null
+
     override fun targetFiles(program: EtsProgram): List<EtsFile> {
         var used = false
         program.files.forEach { it.declarations.forEach { declaration -> walkEts(declaration) {
@@ -55,10 +59,25 @@ internal fun arrangementOptions(value: EtsExpression, control: String, target: A
 /** Fixed Arrangement getters map to the native main-axis alignment attribute. */
 internal fun arrangementAlignment(value: org.jetbrains.kotlin.ir.expressions.IrExpression,
     scope: Scope, target: ArkUiCalls): EtsExpression? {
-    val call = resolvedCall(value, scope) ?: return null
-    val property = call.symbol.owner.correspondingPropertySymbol?.owner ?: return null
-    if (!symbolName(property).startsWith("androidx.compose.foundation.layout.Arrangement.")) return null
-    val name = when (property.name.asString()) {
+    val resolved = resolveExpression(value, scope) ?: return null
+    val (owner, propertyName) = when (resolved) {
+        is IrCall -> {
+            val function = resolved.symbol.owner
+            val property = function.correspondingPropertySymbol?.owner
+            (property?.let(::symbolName) ?: symbolName(function)) to
+                (property?.name?.asString() ?: getterName(function.name.asString()))
+        }
+        is IrGetField -> {
+            val field = resolved.symbol.owner
+            val property = field.correspondingPropertySymbol?.owner
+            (property?.let(::symbolName) ?: symbolName(field)) to
+                (property?.name?.asString() ?: field.name.asString())
+        }
+        is IrGetObjectValue -> symbolName(resolved.symbol.owner) to resolved.symbol.owner.name.asString()
+        else -> return null
+    }
+    if (!owner.startsWith("androidx.compose.foundation.layout.Arrangement.")) return null
+    val name = when (propertyName) {
         "Start", "Top" -> "Start"
         "Center" -> "Center"
         "End", "Bottom" -> "End"
@@ -67,5 +86,21 @@ internal fun arrangementAlignment(value: org.jetbrains.kotlin.ir.expressions.IrE
         "SpaceEvenly" -> "SpaceEvenly"
         else -> return null
     }
-    return target.enumValue("FlexAlign", name, call)
+    return target.enumValue("FlexAlign", name, resolved)
+}
+
+private fun fixedArrangementName(call: IrCall): String? {
+    val function = call.symbol.owner
+    val property = function.correspondingPropertySymbol?.owner
+    val owner = property?.let(::symbolName) ?: symbolName(function)
+    if (!owner.startsWith("androidx.compose.foundation.layout.Arrangement.")) return null
+    val name = property?.name?.asString() ?: getterName(function.name.asString())
+    return name.takeIf { it in setOf("Start", "Top", "Center", "End", "Bottom",
+        "SpaceBetween", "SpaceAround", "SpaceEvenly") }
+}
+
+private fun getterName(name: String): String = when {
+    name.startsWith("<get-") && name.endsWith(">") -> name.removePrefix("<get-").removeSuffix(">")
+    name.startsWith("get") -> name.removePrefix("get")
+    else -> name
 }

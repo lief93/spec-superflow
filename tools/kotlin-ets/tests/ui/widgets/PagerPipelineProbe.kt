@@ -109,10 +109,13 @@ fun main(args: Array<String>) {
         check("ForEach([0, 1, 2, 3, 4] as Array<number>, (page: number) => {" in fivePageCode)
         check("@State private pager_currentPage: number = 4;" in fivePageCode)
         check(".disableSwipe(! false)" in fivePageCode)
+        val dynamicCode = ComposeWidgetPipeline(
+            EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules(), ComposeDimensionRule())), StandardLibraryRuntime)
+            .compile(module, "widgetpager.DynamicPageCount")
+        check("Swiper(" in dynamicCode && "pages" in dynamicCode && "length:" in dynamicCode)
 
         val expected = linkedMapOf(
-            "DynamicPageCount" to "positive integer literal",
-            "EmptyPageCount" to "positive integer literal",
+            "EmptyPageCount" to "must be positive",
             "OutOfBoundsInitialPage" to "within pageCount",
             "InlinePagerState" to "requires source remembered PagerState",
             "ReversePager" to "Unsupported androidx.compose.foundation.pager.HorizontalPager widget argument: reverseLayout",

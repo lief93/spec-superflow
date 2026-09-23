@@ -21,9 +21,18 @@ def producer = tasks.register('generateCollectorClasses') {
         else delete(generatedClasses)
     }
 }
+def directGeneratedClasses = layout.buildDirectory.dir('generated/direct-plugin-classes')
+def directProducer = tasks.register('generateDirectCollectorClasses') {
+    outputs.dir(directGeneratedClasses)
+    doLast { directGeneratedClasses.get().asFile.mkdirs() }
+}
 tasks.named('compileKotlin') {
     if (providers.gradleProperty('producerClasspath').isPresent()) {
         libraries.from(files(generatedClasses).builtBy(producer))
+    }
+    if (providers.gradleProperty('directTaskClasspath').isPresent()) {
+        dependsOn(directProducer)
+        libraries.from(files(directGeneratedClasses))
     }
     exclude '**/Excluded.kt'
     doFirst { throw new GradleException('SELECTED_KOTLIN_COMPILE_MUST_NOT_EXECUTE') }

@@ -19,9 +19,9 @@ assert.equal(result.status, 0, result.stdout + result.stderr);
 const report = JSON.parse(readFileSync(output + '.diagnosis.json', 'utf8'));
 assert.equal(report.degradationCount, 0);
 const code = readFileSync(output, 'utf8');
-assert.match(code, /\.width\(circleSize\)/);
-assert.match(code, /\.height\(circleSize\)/);
-assert.match(code, /\.backgroundColor\(circleColor\)/);
+assert.match(code, /\.width\([\s\S]*?circleSize[\s\S]*?\)\.height\(/);
+assert.match(code, /\.height\([\s\S]*?circleSize[\s\S]*?\)\.backgroundColor\(/);
+assert.match(code, /\.backgroundColor\([\s\S]*?circleColor[\s\S]*?\)\.borderRadius/);
 assert.match(code, /\.borderRadius\("50%"\)/);
 const negative = join(root, 'Effectful.ets');
 const failed = spawnSync('bash', [launcher, '--entry', 'modifiernamed.Effectful',

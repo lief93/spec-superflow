@@ -71,6 +71,10 @@ fun main() {
     record("singleton(9)") { singleton(9) }
     record("listRead(4, 8, 1)") { listRead(4, 8, 1) }
     record("listSize(\"a\", \"b\")") { listSize("a", "b") }
+    record("containsInt(2)") { containsInt(2) }
+    record("containsInt(9)") { containsInt(9) }
+    record("containsString(\"beta\")") { containsString("beta") }
+    record("containsString(\"Beta\")") { containsString("Beta") }
     record("append(5)") { append(5) }
     record("emptyMutableAdd(5)") { emptyMutableAdd(5) }
     record("mapped(10)") { mapped(10) }

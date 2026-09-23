@@ -34,6 +34,8 @@ for (const [entry, status] of [['Page', 0], ['UnsupportedShape', 0], ['CutThroug
     assert.match(source, /\.borderRadius\(\{ topLeft: shape\.topStart, topRight: shape\.topEnd, bottomRight: shape\.bottomEnd, bottomLeft: shape\.bottomStart \}\)\.clip\(true\)/);
     assert.match(source, /Tile\(new EtsShape\("circle", 999999(?:\.0)?, 999999(?:\.0)?, 999999(?:\.0)?, 999999(?:\.0)?\)\)/);
     assert.match(source, /Tile\(new EtsShape\("rounded", 0(?:\.0)?, 0(?:\.0)?, 0(?:\.0)?, 0(?:\.0)?\)\)/);
+    assert.match(source, /DefaultTile\(shape: EtsShape = new EtsShape\("rounded", 6(?:\.0)?, 6(?:\.0)?, 6(?:\.0)?, 6(?:\.0)?\)\)/);
+    assert.match(source, /DefaultTile\(new EtsShape\("rounded", 6(?:\.0)?, 6(?:\.0)?, 6(?:\.0)?, 6(?:\.0)?\)\)/);
     assert.match(source, /\.padding\(10(?:\.0)?\)/);
     assert.match(source, /\.backgroundColor\(4278255360\)/);
   }

@@ -75,7 +75,7 @@ try {
     execute(`generate-${fixture}`, [path.join(root, 'kotlin-ets'), '--mode', 'language', '--out', output, source], root);
     assertRuntimeHelpers(output, fixture === 'Scalars'
       ? ['__etsIntDiv', '__etsIntRem', '__etsListAdd', '__etsSubstring', '__etsSubstringFrom']
-      : ['__etsListGet', '__etsListAdd', '__etsListMap']);
+      : ['__etsListGet', '__etsListContains', '__etsListAdd', '__etsListMap']);
     cpSync(output, copy);
     inputs.push({ source, sourceHash, output, copy, sha256: hash(output) });
     write(path.join(run, 'generated-inputs.json'), inputs);

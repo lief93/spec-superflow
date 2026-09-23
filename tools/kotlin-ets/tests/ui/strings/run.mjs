@@ -33,9 +33,9 @@ assert.match(code, /getContext\(\)\.resourceManager\.getStringSync\(\$r\("app\.s
 assert.doesNotMatch(code, /Resource title|Must not be emitted/);
 const base = JSON.parse(readFileSync(join(work, 'Page.ets.resources/base/element/string.json'))).string;
 const french = JSON.parse(readFileSync(join(work, 'Page.ets.resources/fr/element/string.json'))).string;
-assert.deepEqual(base.map(x => x.value).sort(), ['Resource subtitle', 'Resource title']);
+assert.deepEqual(base.map(x => x.value).sort(), ['Resource subtitle', 'Resource title', 'Transactions']);
 assert.deepEqual(french.map(x => x.value).sort(), ['Sous-titre', 'Titre']);
-assert.deepEqual(base.map(x => x.name).sort(), french.map(x => x.name).sort());
+assert.deepEqual(base.filter(x => x.value !== 'Transactions').map(x => x.name).sort(), french.map(x => x.name).sort());
 assert.match(compile('Missing', 2), /Unsupported Android values resource.*string\.missing/);
 assert.match(compile('Styled', 2), /Unsupported Android values resource.*styled/);
 assert.match(compile('MissingPlural', 2), /Unsupported Android values resource.*plurals\.missing/);

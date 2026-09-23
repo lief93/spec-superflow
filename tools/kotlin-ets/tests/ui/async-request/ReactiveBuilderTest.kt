@@ -37,14 +37,32 @@ fun main() {
     check("Text(value.value)" in printed)
     check("UIUtils.makeBinding" in printed)
     check(result.files.first().declarations.last() == ordinary)
-    fun rejected(label: EtsFunction) {
-        val error = runCatching { bindReactiveBuilderArguments(program(label = label)) }.exceptionOrNull()
-        check(error is Unsupported && error.diagnostic.source == at)
-        check("single immediate consumer" in error.message.orEmpty())
-    }
-    rejected(leaf.copy(body = leaf.body + leaf.body))
+    val loopIndex = EtsParameter(EtsSymbol("Page:index", "index", EtsTypes.NUMBER, at))
+    val selected = EtsParameter(EtsSymbol("Indicator:selected", "selected", EtsTypes.BOOLEAN, at))
+    val indicator = EtsFunction("Indicator", listOf(selected), EtsTypes.VOID,
+        listOf(ui("Text", listOf(EtsReference(selected.symbol)))), at, builder = true)
+    val currentPage = field.copy(symbol = field.symbol.copy(type = EtsTypes.NUMBER), initializer = EtsLiteral(0, EtsTypes.NUMBER, at))
+    val selectedValue = EtsBinary("===", EtsMember(self, currentPage.symbol.name, EtsTypes.NUMBER, at),
+        EtsReference(loopIndex.symbol), EtsTypes.BOOLEAN, at)
+    val loop = EtsUiForEach(EtsArray(listOf(EtsLiteral(0, EtsTypes.NUMBER, at)), EtsTypes.NUMBER, at), loopIndex,
+        listOf(invoke(indicator, selectedValue)), at)
+    val loopBuild = EtsFunction("build", emptyList(), EtsTypes.VOID, listOf(loop), at,
+        kind = EtsFunctionKind.METHOD, build = true)
+    val loopProgram = EtsProgram(listOf(EtsFile("Indicator.kt", listOf(indicator,
+        EtsClass("Page", listOf(currentPage, loopBuild), at, component = true, entry = true)))))
+    val loopResult = bindReactiveBuilderArguments(loopProgram)
+    EtsValidator().validate(loopResult)
+    val loopPrinted = EtsPrinter().program(loopResult)
+    check("Indicator(selected: Binding<boolean>)" in loopPrinted)
+    check("UIUtils.makeBinding" in loopPrinted)
+    check("this.message === index" in loopPrinted)
+    val shared = bindReactiveBuilderArguments(program(label = leaf.copy(body = leaf.body + leaf.body)))
+    EtsValidator().validate(shared)
+    val sharedPrinted = EtsPrinter().program(shared)
+    check("ForEach([value.value]" in sharedPrinted)
+    check(sharedPrinted.windowed("Text(__ets_value)".length).count { it == "Text(__ets_value)" } == 2)
     val delayed = EtsLambda(emptyList(), leaf.body, EtsTypes.VOID, at)
-    rejected(leaf.copy(body = listOf(ui("Button", listOf(delayed)))))
+    bindReactiveBuilderArguments(program(label = leaf.copy(body = listOf(ui("Button", listOf(delayed))))))
     val counted = EtsReference(EtsSymbol("counted", "counted", EtsFunctionType(listOf(string), string), at, true))
     val effect = EtsCall(counted, listOf(state), string, at)
     val skipped = leaf.copy(body = listOf(EtsIf(listOf(EtsBranch(EtsLiteral(false, EtsTypes.BOOLEAN, at), leaf.body)), at)))
@@ -87,6 +105,22 @@ fun main() {
     rejectsEffects(pureProgram.copy(files = pureProgram.files.map { file -> file.copy(declarations = file.declarations.map {
         if (it == pure) effectful else it
     }) }))
+    val lazyValue = EtsGlobal(EtsSymbol("global:Colors.kt:1:__etsField_Gray20", "__etsField_Gray20", string, at),
+        text(""), true)
+    val initialize = EtsFunction("__etsInitialize_colors", emptyList(), EtsTypes.VOID, emptyList(), at)
+    val guard = EtsExpressionStatement(EtsCall(EtsReference(initialize.symbol), emptyList(), EtsTypes.VOID, at))
+    val getter = EtsFunction("__etsGet_Gray20", emptyList(), string,
+        listOf(guard, EtsReturn(EtsReference(lazyValue.symbol), at)), at)
+    val getterCall = EtsCall(EtsReference(getter.symbol), emptyList(), string, at)
+    val getterUse = EtsUiElement(EtsCall(EtsReference(reverse.symbol), listOf(state, getterCall), EtsTypes.VOID, at))
+    val getterProgram = EtsProgram(listOf(EtsFile("Colors.kt", listOf(lazyValue, initialize, getter, reverse,
+        page.copy(members = listOf(field, build.copy(body = listOf(getterUse))))))))
+    EtsValidator().validate(bindReactiveBuilderArguments(getterProgram))
+    val ordinaryGetter = getter.copy(name = "readGray20")
+    val ordinaryCall = getterCall.copy(callee = EtsReference(ordinaryGetter.symbol))
+    rejectsEffects(getterProgram.copy(files = listOf(EtsFile("Colors.kt", listOf(lazyValue, initialize, ordinaryGetter, reverse,
+        page.copy(members = listOf(field, build.copy(body = listOf(getterUse.copy(call = getterUse.call.copy(
+            arguments = listOf(state, ordinaryCall))))))))))))
     val resourceType = EtsNamedType("Resource")
     val resource = EtsCall(EtsReference(EtsSymbol("arkui:resource", "\$r",
         EtsFunctionType(listOf(string), resourceType), at, true)), listOf(state), resourceType, at)

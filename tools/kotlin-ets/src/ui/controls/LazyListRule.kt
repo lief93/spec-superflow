@@ -12,45 +12,56 @@ import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.ir.visitors.acceptVoid
 
-/** Native Scroll+Column for a local rememberLazyListState and List itemsIndexed/item content. */
-internal class ComposeLazyColumnRule(
+/** Native scrolling Row/Column for LazyList item, items and itemsIndexed content. */
+internal class ComposeLazyListRule(
     private val target: ArkUiCalls,
     private val bind: (IrValueParameter) -> EtsReference,
     private val body: (IrBody, Scope) -> List<EtsStatement>,
+    private val indexItems: (EtsExpression, IrElement) -> EtsExpression,
     decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,
 ) : ComposeControlRule(decorate) {
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
-        if (symbolName(call.symbol.owner) != "androidx.compose.foundation.lazy.LazyColumn") return null
-        target.checkArguments(call, setOf("modifier", "state", "content", "verticalArrangement", "horizontalAlignment", "userScrollEnabled"))
-        validateState(argument(call, "state"), scope, call, language)
+        val api = symbolName(call.symbol.owner)
+        if (api !in setOf("androidx.compose.foundation.lazy.LazyColumn",
+                "androidx.compose.foundation.lazy.LazyRow")) return null
+        val vertical = api.endsWith("LazyColumn")
+        target.checkArguments(call, setOf("modifier", "state", "content", "verticalArrangement",
+            "horizontalArrangement", "horizontalAlignment", "verticalAlignment", "userScrollEnabled"))
+        validateState(argument(call, "state"), scope, call, language, api.substringAfterLast('.'))
         val enabled = argument(call, "userScrollEnabled")?.let { language.expression(it, scope) } ?: target.literal(true, call)
-        val children = argument(call, "content")?.let { lazyContent(it, language, scope) } ?: emptyList()
-        val alignment = argument(call, "horizontalAlignment")?.let { language.expression(it, scope) }
-            ?: target.enumValue("HorizontalAlign", "Start", call)
-        val arrangementSource = argument(call, "verticalArrangement")
+        val children = argument(call, "content")?.let { lazyContent(it, language, scope, api) } ?: emptyList()
+        val alignment = argument(call, if (vertical) "horizontalAlignment" else "verticalAlignment")
+            ?.let { language.expression(it, scope) }
+            ?: target.enumValue(if (vertical) "HorizontalAlign" else "VerticalAlign",
+                if (vertical) "Start" else "Center", call)
+        val arrangementSource = argument(call, if (vertical) "verticalArrangement" else "horizontalArrangement")
         val justification = arrangementSource?.let { arrangementAlignment(it, scope, target) }
         val arrangement = arrangementSource?.takeIf { justification == null }?.let { language.expression(it, scope) }
-        val options = arrangement?.let { listOf(arrangementOptions(it, "Column", target, call)) } ?: emptyList()
-        val column = target.native("Column", options, call, children).copy(attributes = listOf(
+        val container = if (vertical) "Column" else "Row"
+        val options = arrangement?.let { listOf(arrangementOptions(it, container, target, call)) } ?: emptyList()
+        val content = target.native(container, options, call, children).copy(attributes = listOf(
             target.attribute("alignItems", listOf(alignment), call)) + listOfNotNull(
             justification?.let { target.attribute("justifyContent", listOf(it), call) }))
         val attrs = listOf(
-            target.attribute("scrollable", listOf(target.enumValue("ScrollDirection", "Vertical", call)), call),
+            target.attribute("scrollable", listOf(target.enumValue("ScrollDirection",
+                if (vertical) "Vertical" else "Horizontal", call)), call),
             target.attribute("scrollBar", listOf(target.enumValue("BarState", "Off", call)), call),
             target.attribute("enableScrollInteraction", listOf(enabled), call),
             target.attribute("align", listOf(target.enumValue("Alignment", "TopStart", call)), call),
         )
-        return ComposeElement(target.native("Scroll", emptyList(), call, listOf(column)).copy(attributes = attrs),
+        return ComposeElement(target.native("Scroll", emptyList(), call, listOf(content)).copy(attributes = attrs),
             orderedArguments = listOfNotNull(arrangement, justification, alignment))
     }
 
-    private fun validateState(state: IrExpression?, scope: Scope, owner: IrCall, language: Language) {
+    private fun validateState(state: IrExpression?, scope: Scope, owner: IrCall, language: Language,
+        control: String) {
         if (state == null) return
         fun resolve(value: IrExpression?): IrExpression? =
             if (value is IrGetValue && value.symbol in scope.aliases) resolve(scope.aliases[value.symbol]) else value
         val remembered = resolve(state) as? IrCall
         if (remembered == null || symbolName(remembered.symbol.owner) != "androidx.compose.foundation.lazy.rememberLazyListState")
-            target.diagnostics.unsupported(owner, "LazyColumn requires a local rememberLazyListState; shared or observed list state is not yet supported")
+            target.diagnostics.unsupported(owner,
+                "$control requires a local rememberLazyListState; shared or observed list state is not yet supported")
         target.checkArguments(remembered, setOf("initialFirstVisibleItemIndex", "initialFirstVisibleItemScrollOffset"))
         fun zero(name: String) {
             val value = argument(remembered, name)?.let { language.expression(it, scope) } ?: return
@@ -61,10 +72,15 @@ internal class ComposeLazyColumnRule(
         zero("initialFirstVisibleItemScrollOffset")
     }
 
-    private fun lazyContent(expression: IrExpression, language: Language, scope: Scope): List<EtsStatement> {
-        val fn = lambda(expression, scope) ?: target.diagnostics.unsupported(expression, "LazyColumn requires a source content lambda")
-        if (fn.valueParameters.isNotEmpty()) target.diagnostics.unsupported(fn, "LazyColumn content uses a LazyListScope receiver, not value parameters")
-        return lazyBody(fn.body ?: target.diagnostics.unsupported(fn, "LazyColumn requires a content body"), language, scope.fork())
+    private fun lazyContent(expression: IrExpression, language: Language, scope: Scope,
+        api: String): List<EtsStatement> {
+        val control = api.substringAfterLast('.')
+        val fn = lambda(expression, scope)
+            ?: target.diagnostics.unsupported(expression, "$control requires a source content lambda")
+        if (fn.valueParameters.isNotEmpty()) target.diagnostics.unsupported(fn,
+            "$control content uses a LazyListScope receiver, not value parameters")
+        return lazyBody(fn.body ?: target.diagnostics.unsupported(fn, "$control requires a content body"),
+            language, scope.fork())
     }
 
     private fun lazyBody(body: IrBody, language: Language, scope: Scope): List<EtsStatement> = when (body) {
@@ -88,6 +104,31 @@ internal class ComposeLazyColumnRule(
     private fun lazyCall(call: IrCall, language: Language, scope: Scope): List<EtsStatement> {
         val api = symbolName(call.symbol.owner)
         return when (api) {
+            "androidx.compose.foundation.lazy.items",
+            "androidx.compose.foundation.lazy.LazyListScope.items" -> {
+                target.checkArguments(call, setOf("items", "count", "itemContent"))
+                val items = argument(call, "items")
+                val count = argument(call, "count")
+                if ((items == null) == (count == null))
+                    target.diagnostics.unsupported(call, "items requires exactly one list or count source")
+                val fn = contentLambda(argument(call, "itemContent"), scope, call)
+                val parameter = fn.valueParameters.singleOrNull()
+                    ?: target.diagnostics.unsupported(fn, "items requires one item or index parameter")
+                if (fn.extensionReceiverParameter != null && used(fn.extensionReceiverParameter!!, fn.body ?: fn))
+                    target.diagnostics.unsupported(fn, "LazyItemScope members are not mapped")
+                val child = scope.fork()
+                val value = bind(parameter)
+                child.bindings[parameter.symbol] = value
+                val values = if (items != null) {
+                    if (items.type.classOrNull?.owner?.let(::symbolName) !in
+                        setOf("kotlin.collections.List", "kotlin.collections.MutableList"))
+                        target.diagnostics.unsupported(items, "items currently requires a List or count")
+                    language.expression(items, scope)
+                } else indexItems(language.expression(checkNotNull(count), scope), call)
+                listOf(EtsUiForEach(values, EtsParameter(value.symbol),
+                    body(fn.body ?: target.diagnostics.unsupported(call, "items requires a body"), child),
+                    language.source(call)))
+            }
             "androidx.compose.foundation.lazy.itemsIndexed",
             "androidx.compose.foundation.lazy.LazyListScope.itemsIndexed" -> {
                 target.checkArguments(call, setOf("items", "itemContent"))
@@ -116,7 +157,7 @@ internal class ComposeLazyColumnRule(
                     target.diagnostics.unsupported(fn, "LazyItemScope members are not mapped")
                 body(fn.body ?: target.diagnostics.unsupported(call, "item requires a body"), scope.fork())
             }
-            else -> target.diagnostics.unsupported(call, "Unsupported LazyColumn DSL: $api")
+            else -> target.diagnostics.unsupported(call, "Unsupported lazy list DSL: $api")
         }
     }
 

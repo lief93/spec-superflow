@@ -6,6 +6,7 @@ public class R {
         public static int missing = 3;
         public static int styled = 4;
         public static int greeting = 5;
+        public static int TRANSACTIONS_NOTIFICATION_CHANNEL_NAME = 10;
     }
     public static class plurals {
         public static int photos = 6;

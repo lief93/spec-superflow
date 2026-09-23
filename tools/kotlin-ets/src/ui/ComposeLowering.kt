@@ -1,6 +1,7 @@
 @file:OptIn(org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI::class)
 package dev.ets
 
+import java.util.IdentityHashMap
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
@@ -32,6 +33,8 @@ internal fun bindImplicitContextArguments(contracts: List<ImplicitContextContrac
 }
 
 /** Consumes resolved, pre-Compose-lowering IR. No source spelling is used for API dispatch. */
+private const val DRAW_SCOPE = "compose:draw-scope"
+
 class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val adapters: AdapterModules = AdapterModules()) {
     private val bindingSymbols = linkedMapOf<IrValueSymbol, EtsSymbol>()
@@ -59,6 +62,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private var usesMaterialContext = false
     private var usesCompositionContext = false
     private var usesFocusManager = false
+    private var rememberContentAllowed = false
     private val touchBoxes = linkedMapOf<IrCall, TouchTargets>()
     private val shapes by lazy { language.callRules.filterIsInstance<ComposeShapeRule>().single() }
     private val compositionLocals by lazy {
@@ -71,6 +75,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         fields.clear(); states.clear(); pagers.clear(); coroutineScopes.clear(); delegatedValues.clear()
         slots.clear(); hostProvidedRootDefaults.clear(); builders.clear(); fieldNames.clear(); slotMethods.clear(); constraintBuilders.clear(); constraintDataClasses.clear(); slotMethodNames.clear()
         usesMaterialTypography = false
+        rememberContentAllowed = false
         touchBoxes.clear()
         bindingSymbols.clear()
         builderSymbols.clear()
@@ -221,16 +226,19 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 override fun lowerUi(call: IrCall, language: Language, scope: Scope) =
                     if (symbolName(call.symbol.owner) == "kotlin.repeat") repeatUi(call, scope) else null
             },
-            ComposeColumnRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "height") }, ::modifiers),
+            ComposeColumnRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "height") },
+                ::modifierContentFlags, ::modifiers),
             ComposeForEachRule(target, { binding(it) }, { body, scope -> uiBody(body, scope) }),
-            ComposeRowRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "width") }, touchBoxes, ::modifiers),
-            ComposeBoxRule(target, ::uiLambdaBody, touchBoxes, ::modifiers),
+            ComposeRowRule(target, { value, scope -> uiLambdaBodyWithAxis(value, scope, "width") },
+                ::modifierContentFlags, touchBoxes, ::modifiers),
+            ComposeBoxRule(target, ::uiLambdaBody, ::modifierContentFlags, touchBoxes, ::modifiers),
             ComposeBoxWithConstraintsRule(target, ::constraintsContent, ::modifiers),
+            ComposeCanvasRule(target, ::fixedCanvasSize, ::canvasContent, ::modifiers),
             ComposeCompositionLocalProviderRule(compositionLocals, diagnostics, ::provideCompositionContext),
             ComposeMaterialThemeRule(target, ::provideMaterialContext),
             ComposeProvideTextStyleRule(target, ::provideMaterialContext),
             ComposeSurfaceRule(target, ::surfaceContent, { content, scope -> surfaceContent(content, scope, "height") },
-                ::modifierBounds, ::modifiers),
+                ::modifierBounds, ::callback, ::modifiers),
             ComposeSpacerRule(target, ::modifiers),
             ComposeTextRule(target, ::dimension,
                 { usesMaterialTypography = true }, ::modifiers),
@@ -250,9 +258,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeImageRule(target, ::modifiers),
             ComposeIconRule(target, ::colorValue, ::modifiers),
             ComposeAsyncImageRule(target, ::modifiers),
+            ComposeLaunchedEffectRule(target, ::callback),
             ComposeHorizontalPagerRule(target, ::pagerBinding, { binding(it) }, { body, scope -> uiBody(body, scope) },
+                ::modifierContentFlags, ::indexItems, ::modifiers),
+            ComposeLazyListRule(target, { binding(it) }, { body, scope -> uiBody(body, scope) },
                 ::indexItems, ::modifiers),
-            ComposeLazyColumnRule(target, { binding(it) }, { body, scope -> uiBody(body, scope) }, ::modifiers),
             ComposeLazyVerticalGridRule(target, { binding(it) }, { body, scope -> uiBody(body, scope) },
                 { value, scope -> dimension(value, scope, "dp") }, ::modifiers),
         )
@@ -439,12 +449,17 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     scope.aliases[statement.symbol] = initial
                     return@forEachIndexed
                 }
+                if (DRAW_SCOPE in scope.semanticFlags && stableDrawExpression(initial, scope)) {
+                    scope.aliases[statement.symbol] = initial
+                    return@forEachIndexed
+                }
                 // Keep constant folding, but a compiler temporary's unsupported value
                 // is only fatal if a consumer survives the explicit UI omissions.
                 val deferred = diagnostics.reportUiDegradation &&
                     (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE || platformValue) && initial !is IrConst
                 var deferredFailure: Unsupported? = null
-                val value = try { language.expression(initial, scope) } catch (failure: Unsupported) {
+                val value = try { (initial as? IrCall)?.let { collectedStateFlowSnapshot(it, language, scope) }
+                    ?: language.expression(initial, scope) } catch (failure: Unsupported) {
                     if (!deferred) throw failure
                     deferredFailure = failure
                     null
@@ -508,47 +523,108 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         return count
     }
 
+    private fun stableDrawExpression(value: IrExpression, scope: Scope): Boolean = when (value) {
+        is IrConst -> true
+        is IrGetValue -> scope.aliases[value.symbol]?.let { stableDrawExpression(it, scope) }
+            ?: (value.type.classOrNull?.owner?.let(::symbolName) ==
+                "androidx.compose.ui.graphics.drawscope.DrawScope")
+        is IrCall -> {
+            val inputs = listOfNotNull(value.dispatchReceiver, value.extensionReceiver) +
+                value.symbol.owner.valueParameters.indices.mapNotNull(value::getValueArgument)
+            symbolName(value.symbol.owner) in setOf(
+                "androidx.compose.ui.graphics.drawscope.DrawScope.<get-size>",
+                "androidx.compose.ui.geometry.Size.<get-width>",
+                "androidx.compose.ui.geometry.Size.<get-height>",
+                "kotlin.Float.plus", "kotlin.Float.minus", "kotlin.Float.times", "kotlin.Float.div",
+                "kotlin.Double.plus", "kotlin.Double.minus", "kotlin.Double.times", "kotlin.Double.div",
+                "kotlin.Int.plus", "kotlin.Int.minus", "kotlin.Int.times", "kotlin.Int.div",
+            ) && inputs.all { stableDrawExpression(it, scope) }
+        }
+        else -> false
+    }
+
     // A mutable read can change while later named arguments run. Only immutable,
     // default-accessor reads may move to their single use without a value bridge.
     private fun stableRead(expression: IrExpression, scope: Scope): Boolean = when (expression) {
         is IrConst -> true
+        is IrGetObjectValue -> language.callRules.any { it.isStableObject(expression) }
         is IrGetValue -> scope.aliases[expression.symbol]?.let { stableRead(it, scope) }
             ?: when (val owner = expression.symbol.owner) {
                 is IrVariable -> !owner.isVar && expression.symbol in scope.bindings
                 is IrValueParameter -> expression.symbol in scope.bindings
                 else -> false
-            }
+        }
         is IrCall -> {
-            val getter = expression.symbol.owner
-            val api = symbolName(getter)
-            if (api in setOf("androidx.compose.ui.res.dimensionResource",
-                    "androidx.compose.ui.res.integerResource", "androidx.compose.ui.res.colorResource")) true
-            else if (api in setOf("kotlin.Int.unaryMinus", "kotlin.Int.unaryPlus",
-                    "kotlin.Float.unaryMinus", "kotlin.Float.unaryPlus",
-                    "kotlin.Double.unaryMinus", "kotlin.Double.unaryPlus") &&
-                getter.valueParameters.isEmpty())
-                expression.dispatchReceiver?.let { stableRead(it, scope) } == true
-            else {
-                val property = getter.correspondingPropertySymbol?.owner
-                property != null && !property.isVar && property.getter?.symbol == getter.symbol &&
-                    getter.origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR &&
-                    property.backingField?.isFinal == true && sourceFile(property) != null &&
-                    getter.valueParameters.isEmpty() && expression.extensionReceiver == null &&
+            if (language.callRules.any { it.isStableValue(expression) }) true else {
+                val getter = expression.symbol.owner
+                val api = symbolName(getter)
+                if (api in setOf("androidx.compose.ui.res.dimensionResource",
+                        "androidx.compose.ui.res.integerResource", "androidx.compose.ui.res.colorResource")) true
+                else if (getter.correspondingPropertySymbol?.owner?.let(::symbolName) in
+                    setOf("androidx.compose.ui.unit.dp", "androidx.compose.ui.unit.sp") &&
+                    getter.valueParameters.isEmpty())
+                    (expression.extensionReceiver ?: expression.dispatchReceiver)?.let { stableRead(it, scope) } == true
+                else if (api in setOf("kotlin.internal.ir.EQEQ", "kotlin.internal.ir.EQEQEQ") &&
+                    getter.valueParameters.indices.mapNotNull(expression::getValueArgument).all { stableRead(it, scope) }) true
+                else if (api == "kotlin.Boolean.not" && getter.valueParameters.isEmpty())
                     expression.dispatchReceiver?.let { stableRead(it, scope) } == true
+                else if (api in setOf("kotlin.Int.unaryMinus", "kotlin.Int.unaryPlus",
+                        "kotlin.Float.unaryMinus", "kotlin.Float.unaryPlus",
+                        "kotlin.Double.unaryMinus", "kotlin.Double.unaryPlus") &&
+                    getter.valueParameters.isEmpty())
+                    expression.dispatchReceiver?.let { stableRead(it, scope) } == true
+                else {
+                    val property = getter.correspondingPropertySymbol?.owner
+                    property != null && !property.isVar && property.getter?.symbol == getter.symbol &&
+                        getter.origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR &&
+                        property.backingField?.isFinal == true && sourceFile(property) != null &&
+                        getter.valueParameters.isEmpty() && expression.extensionReceiver == null &&
+                        (expression.dispatchReceiver == null || stableRead(expression.dispatchReceiver!!, scope))
+                }
             }
         }
         else -> false
     }
 
+    private fun stableTargetValue(expression: IrExpression, scope: Scope): Boolean = try {
+        stableTargetValue(language.expression(expression, scope), scope)
+    } catch (_: Unsupported) {
+        false
+    }
+
+    private fun stableTargetValue(value: EtsExpression, scope: Scope): Boolean = when (value) {
+        is EtsLiteral -> true
+        is EtsReference -> value.symbol.external || scope.bindings.any { (symbol, binding) ->
+            binding == value && when (val owner = symbol.owner) {
+                is IrVariable -> !owner.isVar
+                is IrValueParameter -> true
+                else -> false
+            }
+        }
+        is EtsMember -> stableTargetValue(value.receiver, scope)
+        is EtsObject -> value.fields.values.all { stableTargetValue(it, scope) }
+        is EtsArray -> value.elements.all { stableTargetValue(it, scope) }
+        is EtsCast -> stableTargetValue(value.value, scope)
+        is EtsNew -> value.arguments.all { stableTargetValue(it, scope) }
+        is EtsBinary -> stableTargetValue(value.left, scope) && stableTargetValue(value.right, scope)
+        is EtsUnary -> stableTargetValue(value.operand, scope)
+        is EtsConditional -> stableTargetValue(value.condition, scope) &&
+            stableTargetValue(value.whenTrue, scope) && stableTargetValue(value.whenFalse, scope)
+        is EtsLambda -> true
+        else -> false
+    }
+
     private fun uiStatement(node: IrStatement, scope: Scope, rootBody: Boolean = false): List<EtsStatement> = when (node) {
         is IrVariable -> uiStatements(listOf(node), scope, rootBody)
-        is IrCall -> (adaptCall(node, language, scope, CallContext.UI) as? CallResult.Ui)?.statements ?: run {
+        is IrCall -> withRememberContent(rootBody) {
+            (adaptCall(node, language, scope, CallContext.UI) as? CallResult.Ui)?.statements ?: run {
             val api = symbolName(node.symbol.owner)
             if (sourceFile(node.symbol.owner) != null || !node.type.isUnit())
                 diagnostics.unsupported(node, "Unsupported resolved UI API: $api")
             diagnostics.omitUi(node, "Unsupported resolved UI API: $api", api,
                 "omitted_ui_call", "Call, arguments, callbacks and any nested UI are omitted; supported siblings remain.")
             emptyList()
+            }
         }
         is IrReturn -> uiStatement(node.value, scope, rootBody)
         is IrTypeOperatorCall -> when (node.operator) {
@@ -570,7 +646,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         is IrWhen -> listOf(EtsIf(node.branches.filterNot { branch ->
             branch is IrElseBranch && syntheticNoWhenBranch(branch.result)
         }.map { branch -> EtsBranch(if (branch is IrElseBranch) null else expression(branch.condition, scope),
-            uiStatement(branch.result, scope.fork())) }, language.source(node)))
+            uiStatement(branch.result, scope.fork(), rootBody)) }, language.source(node)))
         else -> diagnostics.unsupported(node, "Unsupported UI statement ${node::class.simpleName}")
     }
 
@@ -598,22 +674,39 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     checkArguments(call, setOf("inputs", "key", "stateSaver", "init", "calculation"))
                 else checkArguments(call, setOf("calculation"))
                 val result = singleResult(calculation, scope, call)
-                val factory = result as? IrCall ?: diagnostics.unsupported(result, "Remember requires mutableStateOf")
-                if (symbolName(factory.symbol.owner) != "androidx.compose.runtime.mutableStateOf")
-                    diagnostics.unsupported(factory, "Remember supports only explicit mutableStateOf in this slice")
-                checkArguments(factory, setOf("value"))
-                val initial = argument(factory, "value") ?: diagnostics.unsupported(factory, "Missing state value")
-                val field = fieldName(name, variable)
-                fields += EtsField(EtsSymbol("ui:field:$field", field, language.type(initial.type), language.source(variable)),
-                    expression(initial, scope()), visibility = EtsVisibility.PRIVATE, state = true)
-                states[variable.symbol] = field
+                val factory = result as? IrCall
+                if (factory != null && symbolName(factory.symbol.owner) == "androidx.compose.runtime.mutableStateOf") {
+                    checkArguments(factory, setOf("value"))
+                    val initial = argument(factory, "value") ?: diagnostics.unsupported(factory, "Missing state value")
+                    val field = fieldName(name, variable)
+                    fields += EtsField(EtsSymbol("ui:field:$field", field, language.type(initial.type), language.source(variable)),
+                        expression(initial, scope()), visibility = EtsVisibility.PRIVATE, state = true)
+                    states[variable.symbol] = field
+                } else {
+                    // A keyless pure remember is component-instance storage, not reactive state.
+                    // Lower it once as a private field; using an empty scope rejects captures that
+                    // would require recomputation when builder parameters change.
+                    val initial = expression(result, scope())
+                    val field = fieldName(name, variable)
+                    fields += EtsField(EtsSymbol("ui:field:$field", field, initial.type, language.source(variable)),
+                        initial, visibility = EtsVisibility.PRIVATE)
+                    scope.bindings[variable.symbol] = field(field, initial.type, variable)
+                    scope.aliases.remove(variable.symbol)
+                }
             }
             "androidx.compose.foundation.pager.rememberPagerState" -> {
-                checkArguments(call, setOf("initialPage", "pageCount"))
+                checkArguments(call, setOf("initialPage", "initialPageOffsetFraction", "pageCount"))
+                argument(call, "initialPageOffsetFraction")?.let { offset ->
+                    val value = (offset as? IrConst)?.value as? Number
+                    if (value?.toDouble() != 0.0) diagnostics.unsupported(offset,
+                        "Pager initialPageOffsetFraction requires 0 because ArkUI Swiper starts on whole pages")
+                }
                 val count = singleResult(argument(call, "pageCount"), scope, call)
                 val countValue = (count as? IrConst)?.value as? Int
-                if (countValue == null || countValue <= 0)
-                    diagnostics.unsupported(count, "Pager pageCount currently requires a positive integer literal")
+                if (!count.type.isInt()) diagnostics.unsupported(count, "Pager pageCount requires Int")
+                if (countValue != null && countValue <= 0)
+                    diagnostics.unsupported(count, "Pager pageCount must be positive")
+                language.expression(count, scope)
                 val initial = argument(call, "initialPage")?.let { language.expression(it, scope()) }
                     ?: EtsLiteral(0, EtsTypes.NUMBER, language.source(call))
                 val field = fieldName(name + "_currentPage", variable)
@@ -646,6 +739,20 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val result = statements.singleOrNull() ?: diagnostics.unsupported(fn, "Expected a single initializer expression")
         return (result as? IrReturn)?.value ?: result as? IrExpression
             ?: diagnostics.unsupported(result, "Expected initializer value")
+    }
+
+    private fun modifierLet(call: IrCall, scope: Scope): Pair<IrExpression, Scope>? {
+        if (symbolName(call.symbol.owner) != "kotlin.let") return null
+        checkArguments(call, setOf("block"))
+        val receiver = call.extensionReceiver
+            ?: diagnostics.unsupported(call, "Modifier let requires an extension receiver")
+        val block = argument(call, "block") ?: diagnostics.unsupported(call, "Modifier let requires a block")
+        val function = lambda(block, scope) ?: diagnostics.unsupported(block, "Modifier let requires a source lambda")
+        if (function.extensionReceiverParameter != null || function.valueParameters.size != 1)
+            diagnostics.unsupported(function, "Modifier let requires one value parameter")
+        val child = scope.fork()
+        child.aliases[function.valueParameters.single().symbol] = receiver
+        return singleResult(block, scope, call) to child
     }
 
     private fun sourceUiCall(call: IrCall, scope: Scope): List<EtsStatement>? {
@@ -683,9 +790,17 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         }) return null
         fun targetKey(value: EtsExpression): String = when (value) {
             is EtsLiteral -> "${value.type}:${value.value}"
+            is EtsReference -> "ref:${value.symbol.id}"
+            is EtsMember -> "member:${targetKey(value.receiver)}.${value.name}"
             is EtsObject -> value.fields.entries.joinToString(",", "${value.type}{", "}") { (name, field) ->
                 "$name=${targetKey(field)}"
             }
+            is EtsArray -> value.elements.joinToString(",", "array[", "]", transform = ::targetKey)
+            is EtsCast -> "cast:${value.type}:${targetKey(value.value)}"
+            is EtsNew -> value.arguments.joinToString(",", "new:${value.classType}(", ")", transform = ::targetKey)
+            is EtsBinary -> "binary:${value.operator}(${targetKey(value.left)},${targetKey(value.right)})"
+            is EtsUnary -> "unary:${value.operator}(${targetKey(value.operand)})"
+            is EtsConditional -> "conditional(${targetKey(value.condition)},${targetKey(value.whenTrue)},${targetKey(value.whenFalse)})"
             is EtsCall -> {
                 val callee = value.callee as? EtsReference
                     ?: diagnostics.unsupported(call, "Modifier target binding requires a direct pure helper")
@@ -713,9 +828,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             if (resolved is IrGetValue && scope.bindings[resolved.symbol]?.type == paddingType)
                 return "target:${targetKey(scope.bindings.getValue(resolved.symbol))}"
             if (resolved is IrGetValue) diagnostics.unsupported(resolved, "Dynamic Modifier operands require a first-class target layout program")
-            val literal = language.expression(resolved, scope) as? EtsLiteral
-                ?: diagnostics.unsupported(resolved, "Effectful Modifier operands require an evaluation-preserving layout program")
-            return "${literal.type}:${literal.value}"
+            return targetKey(language.expression(resolved, scope))
         }
         val identity = "${sourceFile(function)?.fileEntry?.name}:${function.startOffset}:${symbolName(function)}:" +
             inputs.joinToString(";") { "${it.first.index}=${key(it.second)}" }
@@ -858,6 +971,66 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         return uiLambdaBodyWithAxis(expression, scope, null)
     }
 
+    private fun canvasContent(expression: IrExpression, scope: Scope,
+        drawRule: ComposeDrawScopeRule): List<EtsStatement> {
+        val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected Canvas draw lambda")
+        if (fn.valueParameters.isNotEmpty() ||
+            fn.extensionReceiverParameter?.type?.classOrNull?.owner?.let(::symbolName) !=
+            "androidx.compose.ui.graphics.drawscope.DrawScope")
+            diagnostics.unsupported(fn, "Canvas draw lambda requires a DrawScope receiver")
+        val child = Scope(LinkedHashMap(scope.bindings), LinkedHashMap(scope.aliases), scope.callRule,
+            listOf(drawRule) + scope.callRules, LinkedHashMap(scope.ambientValues), LinkedHashSet(scope.semanticFlags))
+        child.semanticFlags += DRAW_SCOPE
+        child.bindings[fn.extensionReceiverParameter!!.symbol] = drawRule.scopeValue(language, child)
+        return uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing Canvas draw body"), child)
+    }
+
+    private fun fixedCanvasSize(modifier: IrExpression?, scope: Scope): Pair<IrExpression, IrExpression> {
+        var width: IrExpression? = null
+        var height: IrExpression? = null
+        fun collect(value: IrExpression?, child: Scope = scope.fork()) {
+            when (val resolved = dereference(value, child)) {
+                null, is IrGetObjectValue, is IrGetValue -> Unit
+                is IrBlock -> {
+                    resolved.statements.dropLast(1).forEach { statement ->
+                        val variable = statement as? IrVariable
+                            ?: diagnostics.unsupported(statement, "Canvas Modifier block requires compiler temporaries")
+                        val initial = variable.initializer
+                            ?: diagnostics.unsupported(variable, "Canvas Modifier temporary requires initializer")
+                        child.aliases[variable.symbol] = initial
+                    }
+                    collect(resolved.statements.lastOrNull() as? IrExpression, child)
+                }
+                is IrCall -> {
+                    collect(resolved.extensionReceiver ?: resolved.dispatchReceiver, child)
+                    when (symbolName(resolved.symbol.owner)) {
+                        "androidx.compose.ui.Modifier.then" -> collect(argument(resolved, "other"), child)
+                        "androidx.compose.foundation.layout.size" -> {
+                            val both = argument(resolved, "size")
+                            width = dereference(argument(resolved, "width") ?: both
+                                ?: diagnostics.unsupported(resolved, "Canvas size requires width"), child)
+                            height = dereference(argument(resolved, "height") ?: both
+                                ?: diagnostics.unsupported(resolved, "Canvas size requires height"), child)
+                        }
+                        "androidx.compose.foundation.layout.width" -> width = dereference(
+                            argument(resolved, "width") ?: diagnostics.unsupported(resolved, "Canvas width is missing"), child)
+                        "androidx.compose.foundation.layout.height" -> height = dereference(
+                            argument(resolved, "height") ?: diagnostics.unsupported(resolved, "Canvas height is missing"), child)
+                    }
+                }
+                else -> Unit
+            }
+        }
+        collect(modifier)
+        val result = Pair(width ?: diagnostics.unsupported(modifier ?: root,
+            "Canvas requires a fixed target width for DrawScope coordinates"),
+            height ?: diagnostics.unsupported(modifier ?: root,
+                "Canvas requires a fixed target height for DrawScope coordinates"))
+        dimension(result.first, scope, "dp")
+        dimension(result.second, scope, "dp")
+        return result
+    }
+
     private fun scaffoldContent(expression: IrExpression, scope: Scope, padding: EtsExpression): List<EtsStatement> {
         val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected Scaffold content lambda")
         if (fn.extensionReceiverParameter != null || fn.valueParameters.size != 1 ||
@@ -899,7 +1072,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val child = scope.fork()
         child.ambientValues.remove(LAYOUT_AXIS)
         if (axis != null) child.ambientValues[LAYOUT_AXIS] = literal(axis, expression)
-        return uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing content body"), child)
+        return uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing content body"), child,
+            rootBody = rememberContentAllowed)
+    }
+
+    private inline fun <T> withRememberContent(allowed: Boolean, block: () -> T): T {
+        val previous = rememberContentAllowed
+        rememberContentAllowed = allowed
+        return try { block() } finally { rememberContentAllowed = previous }
     }
 
     private fun provideMaterialContext(context: EtsExpression, content: IrExpression, scope: Scope,
@@ -965,34 +1145,60 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         child.ambientValues.remove(LAYOUT_AXIS)
         val captures = capturedValues(listOf(fn.body!!), scope).filter { it != receiver.symbol }
         val context = boundContextParameters(child, fn)
-        val captureParameters = captures.map { capturedParameter(it, scope) }
+        val captureParameters = captures.mapIndexed { index, symbol ->
+            val value = scope.bindings.getValue(symbol)
+            EtsParameter(EtsSymbol("ui:constraintCapture:${at.file}:${at.start}:$index",
+                symbol.owner.name.asString(), value.type, language.source(symbol.owner)))
+        }
+        captures.zip(captureParameters).forEach { (symbol, parameter) ->
+            child.bindings[symbol] = EtsReference(parameter.symbol)
+        }
+        val bounds = EtsParameter(EtsSymbol("ui:constraintBounds:${at.file}:${at.start}",
+            "bounds", boxConstraintsBindingType, at), reactiveInput = true)
+        child.bindings[receiver.symbol] = EtsReference(bounds.symbol)
+        val body = uiBody(fn.body!!, child, rootBody = true)
+        val contentMethod = EtsFunction(slotMethodName("BoxWithConstraintsContent_${at.start}"),
+            context.map { it.parameter } + captureParameters + bounds, EtsTypes.VOID, body, at,
+            kind = EtsFunctionKind.METHOD, builder = true)
+        slotMethods += contentMethod
+
+        val forwarded = contentMethod.parameters.mapIndexed { index, parameter -> EtsParameter(EtsSymbol(
+            "ui:constraintCallback:${at.file}:${at.start}:$index", parameter.symbol.name,
+            parameter.symbol.type, at), reactiveInput = parameter.reactiveInput) }
+        val callback = EtsLambda(forwarded, listOf(EtsExpressionStatement(
+            methodCall(contentMethod.symbol, forwarded.map { EtsReference(it.symbol) }, fn))), EtsTypes.VOID, at)
+        val nestedBuilderType = EtsNamedType("WrappedBuilder",
+            listOf(EtsTupleType(contentMethod.parameters.map { it.symbol.type })))
+        val nestedBuilder = EtsNew(nestedBuilderType, listOf(callback), at)
         val values = (context.map { it.parameter.symbol } + captureParameters.map { it.symbol })
             .zip(contextArguments(scope, content) + captures.map { scope.bindings.getValue(it) })
         val bindings = values.mapIndexed { index, (_, value) -> "value$index" to value }.toMap()
         val dataName = slotMethodName("ConstraintData_${at.start}")
         val dataType = etsClassSymbol(dataName, at).type as EtsNamedType
-        val dataParameters = bindings.map { (name, value) -> EtsParameter(EtsSymbol("ui:constraintData:${at.start}:$name", name, value.type, at)) }
+        val dataParameters = listOf(EtsParameter(EtsSymbol("ui:constraintData:${at.start}:content",
+            "content", nestedBuilderType, at))) + bindings.map { (name, value) -> EtsParameter(EtsSymbol(
+            "ui:constraintData:${at.start}:$name", name, value.type, at)) }
         val dataThis = EtsReference(EtsSymbol("ui:constraintData:${at.start}:this", "this", dataType, at, external = true))
         val constructor = EtsFunction("constructor", dataParameters, EtsTypes.VOID, dataParameters.map {
             EtsExpressionStatement(EtsAssignment(EtsMember(dataThis, it.symbol.name, it.symbol.type, at), EtsReference(it.symbol), at))
         }, at, kind = EtsFunctionKind.CONSTRUCTOR)
         constraintDataClasses += EtsClass(dataName, dataParameters.map { EtsField(it.symbol, readonly = true) } + constructor, at)
-        val data = EtsNew(dataType, bindings.values.toList(), at)
+        val data = EtsNew(dataType, listOf(nestedBuilder) + bindings.values, at)
         val argsType = boxConstraintsArgsType
         val args = EtsReference(EtsSymbol("ui:constraintArgs:${at.start}", "args", argsType, at))
-        child.bindings[receiver.symbol] = EtsMember(args, "bounds", boxConstraintsBindingType, at)
         // ArkUI structs cannot be generic. This paired builder/data envelope erases
-        // only the native component boundary, then restores its generated class.
+        // only the native component boundary. The page-owned builder remains bound
+        // to its component, so remembered state is not moved into a global builder.
         val dataRead = EtsCast(EtsMember(args, "data", EtsTypes.OBJECT, at), dataType, at)
-        values.forEachIndexed { index, (symbol, _) ->
-            val value = EtsMember(dataRead, "value$index", symbol.type, at)
-            if (index < context.size) child.ambientValues[context[index].contract.identity] = value
-            else child.bindings[captures[index - context.size]] = value
-        }
-        val body = uiBody(fn.body!!, child)
+        val nested = EtsMember(dataRead, "content", nestedBuilderType, at)
+        val invokeArguments = values.mapIndexed { index, (symbol, _) ->
+            EtsMember(dataRead, "value$index", symbol.type, at)
+        } + EtsMember(args, "bounds", boxConstraintsBindingType, at)
+        val invoke = call("builder", invokeArguments, fn, receiver = nested)
         val alignment = EtsMember(args, "alignment", EtsNamedType("Alignment"), at)
-        val bridge = EtsFunction(slotMethodName("BoxWithConstraintsContent_${at.start}"), listOf(EtsParameter(args.symbol, reactiveInput = true)), EtsTypes.VOID,
-            listOf(native("Stack", listOf(record("StackOptions", linkedMapOf("alignContent" to alignment), fn)), fn, body)), at,
+        val bridge = EtsFunction(slotMethodName("BoxWithConstraintsBridge_${at.start}"), listOf(EtsParameter(args.symbol, reactiveInput = true)), EtsTypes.VOID,
+            listOf(native("Stack", listOf(record("StackOptions", linkedMapOf("alignContent" to alignment), fn)), fn,
+                listOf(EtsUiElement(invoke)))), at,
             kind = EtsFunctionKind.FUNCTION, builder = true)
         constraintBuilders += bridge
         val builderType = EtsNamedType("WrappedBuilder", listOf(EtsTupleType(listOf(argsType))))
@@ -1026,6 +1232,10 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             val pager = pagerFor(receiver, scope, call)
             return field("${pager.name}_currentPage", EtsTypes.NUMBER, call)
         }
+        if (property == "androidx.compose.foundation.pager.PagerState.pageCount") {
+            val pager = pagerFor(receiver, scope, call)
+            return language.expression(pager.count, pager.scope)
+        }
         if (api == "kotlinx.coroutines.launch")
             diagnostics.unsupported(call, "Unsupported resolved platform expression: $api")
         return null
@@ -1035,23 +1245,54 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val api = symbolName(call.symbol.owner)
         if (api == "kotlinx.coroutines.launch") {
             val value = dereference(call.dispatchReceiver ?: call.extensionReceiver, scope) as? IrGetValue
-            if (value?.symbol !in coroutineScopes) diagnostics.unsupported(call, "launch requires remembered UI coroutine scope")
             checkArguments(call, setOf("block"))
-            val target = singleResult(argument(call, "block"), scope, call) as? IrCall
-                ?: diagnostics.unsupported(call, "Pager adapter supports only launch { pager.animateScrollToPage(...) }")
-            if (symbolName(target.symbol.owner) != "androidx.compose.foundation.pager.PagerState.animateScrollToPage")
-                diagnostics.unsupported(target, "Unsupported coroutine operation in Pager adapter")
-            checkArguments(target, setOf("page"))
-            val pager = pagerFor(target.dispatchReceiver, scope, target)
-            val page = argument(target, "page") ?: diagnostics.unsupported(target, "Missing pager target index")
-            val source = language.source(call)
-            val controller = field("${pager.name}_controller", EtsNamedType("SwiperController"), call)
-            val method = EtsMember(controller, "changeIndex",
-                EtsFunctionType(listOf(EtsTypes.NUMBER, EtsTypes.BOOLEAN), EtsTypes.VOID), source)
-            return listOf(EtsExpressionStatement(EtsCall(method, listOf(language.expression(page, scope),
-                EtsLiteral(true, EtsTypes.BOOLEAN, source)), EtsTypes.VOID, source)))
+            val block = argument(call, "block") ?: diagnostics.unsupported(call, "launch requires a block")
+            val function = lambda(block, scope) ?: diagnostics.unsupported(block, "launch requires a source lambda")
+            val body = (function.body as? IrBlockBody)?.statements
+                ?: diagnostics.unsupported(function, "launch requires a block body")
+            val target = body.singleOrNull()?.let(::statementExpression) as? IrCall
+            if (value?.symbol in coroutineScopes && target != null &&
+                symbolName(target.symbol.owner) == "androidx.compose.foundation.pager.PagerState.animateScrollToPage") {
+                checkArguments(target, setOf("page"))
+                val pager = pagerFor(target.dispatchReceiver, scope, target)
+                val page = argument(target, "page") ?: diagnostics.unsupported(target, "Missing pager target index")
+                val source = language.source(call)
+                val controller = field("${pager.name}_controller", EtsNamedType("SwiperController"), call)
+                val method = EtsMember(controller, "changeIndex",
+                    EtsFunctionType(listOf(EtsTypes.NUMBER, EtsTypes.BOOLEAN), EtsTypes.VOID), source)
+                return listOf(EtsExpressionStatement(EtsCall(method, listOf(language.expression(page, scope),
+                    EtsLiteral(true, EtsTypes.BOOLEAN, source)), EtsTypes.VOID, source)))
+            }
+            val delay = body.firstOrNull()?.let(::statementExpression) as? IrCall
+            if (delay != null && body.size > 1 && symbolName(delay.symbol.owner) == "kotlinx.coroutines.delay") {
+                checkArguments(delay, setOf("timeMillis"))
+                val duration = argument(delay, "timeMillis")
+                    ?: diagnostics.unsupported(delay, "delay requires timeMillis")
+                val source = language.source(call)
+                val delayed = EtsLambda(emptyList(), language.statements(body.drop(1), scope.fork()),
+                    EtsTypes.VOID, language.source(block))
+                val numericDuration = EtsCall(EtsReference(EtsSymbol("target:Number", "Number",
+                    EtsFunctionType(listOf(language.type(duration.type)), EtsTypes.NUMBER), source, external = true)),
+                    listOf(language.expression(duration, scope)), EtsTypes.NUMBER, source)
+                val timer = EtsReference(EtsSymbol("target:setTimeout", "setTimeout",
+                    EtsFunctionType(listOf(delayed.type, EtsTypes.NUMBER), EtsTypes.NUMBER), source, external = true))
+                return listOf(EtsExpressionStatement(EtsCall(timer, listOf(delayed, numericDuration),
+                    EtsTypes.NUMBER, source)))
+            }
+            if (value?.symbol !in coroutineScopes)
+                diagnostics.unsupported(call, "launch requires remembered UI coroutine scope or a delay-first timer block")
+            diagnostics.unsupported(call, "Unsupported coroutine operation in UI callback")
         }
         return null
+    }
+
+    private fun statementExpression(statement: IrStatement): IrExpression? = when (statement) {
+        is IrReturn -> statement.value
+        is IrTypeOperatorCall -> if (statement.operator == IrTypeOperator.IMPLICIT_COERCION_TO_UNIT)
+            statement.argument else statement
+        is IrContainerExpression -> statement.statements.singleOrNull()?.let(::statementExpression)
+        is IrExpression -> statement
+        else -> null
     }
 
     private fun pagerFor(expression: IrExpression?, scope: Scope, owner: IrElement): Pager {
@@ -1107,13 +1348,31 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
 
     private fun stableDimension(value: IrExpression, emitted: EtsExpression, scope: Scope): Boolean {
         if (emitted is EtsLiteral || stableRead(value, scope)) return true
+        if (value is IrWhen) return value.branches.all { branch ->
+            (branch is IrElseBranch || lowerableCondition(branch.condition, scope)) &&
+                stableDimension(branch.result, language.expression(branch.result, scope.fork()), scope.fork())
+        }
         val getter = dereference(value, scope) as? IrCall ?: return false
+        if (symbolName(getter.symbol.owner) in setOf("androidx.compose.ui.unit.Dp.plus",
+                "androidx.compose.ui.unit.Dp.minus", "androidx.compose.ui.unit.Dp.times",
+                "androidx.compose.ui.unit.Dp.div")) {
+            val receiver = getter.dispatchReceiver ?: getter.extensionReceiver ?: return false
+            val operand = getter.getValueArgument(0) ?: return false
+            return stableDimension(receiver, language.expression(receiver, scope), scope) &&
+                (stableRead(operand, scope) || stableDimension(operand, language.expression(operand, scope), scope))
+        }
         val property = getter.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
         if (property in setOf("minWidth", "minHeight", "maxWidth", "maxHeight").map {
                 "androidx.compose.foundation.layout.BoxWithConstraintsScope.$it" })
             return getter.dispatchReceiver?.let { stableRead(it, scope) } == true
         return property in setOf("androidx.compose.ui.unit.dp", "androidx.compose.ui.unit.sp") &&
             getter.extensionReceiver?.let { stableRead(it, scope) } == true
+    }
+
+    private fun lowerableCondition(value: IrExpression, scope: Scope): Boolean = try {
+        language.expression(value, scope).type == EtsTypes.BOOLEAN
+    } catch (_: Unsupported) {
+        false
     }
 
     private fun colorValue(expression: IrExpression, scope: Scope): EtsExpression {
@@ -1124,13 +1383,24 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     // Structural aliases are safe only when their construction has no user effects.
     private fun stableModifier(value: IrExpression, scope: Scope): Boolean {
         val resolved = dereference(value, scope) ?: return false
-        if (resolved is IrBlock) return (resolved.statements.singleOrNull() as? IrExpression)?.let { stableModifier(it, scope) } == true
+        if (resolved is IrBlock) {
+            val result = resolved.statements.lastOrNull() as? IrExpression ?: return false
+            val child = scope.fork()
+            for (statement in resolved.statements.dropLast(1)) {
+                val variable = statement as? IrVariable ?: return false
+                val initial = variable.initializer ?: return false
+                if (variable.isVar || variable.origin != IrDeclarationOrigin.IR_TEMPORARY_VARIABLE) return false
+                child.aliases[variable.symbol] = initial
+            }
+            return stableModifier(result, child)
+        }
         if (resolved is IrGetObjectValue) return symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.Companion"
         if (resolved is IrGetValue) return scope.bindings[resolved.symbol]?.type == emptyModifierType
         if (resolved is IrWhen) return resolved.branches.all {
-            (it is IrElseBranch || stableRead(it.condition, scope)) && stableModifier(it.result, scope)
+            (it is IrElseBranch || lowerableCondition(it.condition, scope)) && stableModifier(it.result, scope)
         }
-        if (resolved !is IrCall || sourceFile(resolved.symbol.owner) != null) return false
+        if (resolved !is IrCall) return false
+        modifierLet(resolved, scope)?.let { (result, child) -> return stableModifier(result, child) }
         if (symbolName(resolved.symbol.owner) !in setOf("androidx.compose.foundation.verticalScroll",
                 "androidx.compose.foundation.horizontalScroll", "androidx.compose.ui.Modifier.then",
                 "androidx.compose.foundation.layout.width", "androidx.compose.foundation.layout.height",
@@ -1138,16 +1408,26 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 "androidx.compose.foundation.layout.heightIn", "androidx.compose.foundation.layout.sizeIn",
                 "androidx.compose.foundation.layout.fillMaxWidth", "androidx.compose.foundation.layout.fillMaxHeight",
                 "androidx.compose.foundation.layout.fillMaxSize", "androidx.compose.foundation.layout.padding",
-                "androidx.compose.foundation.background", "androidx.compose.ui.draw.clip",
+                "androidx.compose.foundation.layout.wrapContentWidth",
+                "androidx.compose.foundation.layout.wrapContentHeight",
+                "androidx.compose.foundation.layout.wrapContentSize",
+                "androidx.compose.foundation.background", "androidx.compose.foundation.border", "androidx.compose.ui.draw.clip",
                 "androidx.compose.ui.platform.testTag", "androidx.compose.foundation.clickable",
                 "androidx.compose.foundation.layout.offset", "androidx.compose.ui.draw.rotate",
-                "androidx.compose.foundation.layout.aspectRatio")) return false
+                "androidx.compose.foundation.layout.aspectRatio", "androidx.compose.foundation.layout.BoxScope.align")) return false
         if (!stableModifier(resolved.extensionReceiver ?: resolved.dispatchReceiver ?: return false, scope)) return false
-        return resolved.symbol.owner.valueParameters.indices.mapNotNull(resolved::getValueArgument).all {
-            val arg = dereference(it, scope)
-            stableRead(it, scope) || arg is IrCall && symbolName(arg.symbol.owner) == "androidx.compose.foundation.rememberScrollState" &&
-                arg.symbol.owner.valueParameters.indices.mapNotNull(arg::getValueArgument).all { input -> stableRead(input, scope) } ||
-                arg != null && stableModifier(arg, scope)
+        val modifierApi = symbolName(resolved.symbol.owner)
+        // A clickable value is only aliased here. Its callback, enabled state and
+        // omitted indication arguments are validated exactly once when the final
+        // control consumes the modifier chain.
+        if (modifierApi == "androidx.compose.foundation.clickable") return true
+        return resolved.symbol.owner.valueParameters.indices.all { index ->
+            val value = resolved.getValueArgument(index) ?: return@all true
+            val arg = dereference(value, scope)
+            value is IrFunctionExpression || stableRead(value, scope) ||
+                arg is IrCall && symbolName(arg.symbol.owner) == "androidx.compose.foundation.rememberScrollState" &&
+                    arg.symbol.owner.valueParameters.indices.mapNotNull(arg::getValueArgument).all { input -> stableRead(input, scope) } ||
+                arg != null && stableModifier(arg, scope) || stableTargetValue(arg ?: value, scope)
         }
     }
 
@@ -1159,23 +1439,28 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         var width = false
         var height = false
         val operations = mutableListOf<IrCall>()
-        fun collect(value: IrExpression?) {
-            when (val resolved = dereference(value, scope)) {
+        fun collect(value: IrExpression?, currentScope: Scope = scope) {
+            when (val resolved = dereference(value, currentScope)) {
                 null, is IrGetObjectValue -> Unit
                 is IrGetValue -> Unit
                 is IrCall -> {
-                    collect(resolved.extensionReceiver ?: resolved.dispatchReceiver)
+                    modifierLet(resolved, currentScope)?.let { (result, child) ->
+                        collect(result, child)
+                        return
+                    }
+                    collect(resolved.extensionReceiver ?: resolved.dispatchReceiver, currentScope)
                     if (symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.then")
-                        collect(argument(resolved, "other"))
+                        collect(argument(resolved, "other"), currentScope)
                     else operations += resolved
                 }
                 is IrBlock -> {
                     for (statement in resolved.statements.dropLast(1)) {
                         val variable = statement as? IrVariable ?: continue
-                        variable.initializer?.let { scope.aliases[variable.symbol] = it }
+                        variable.initializer?.let { currentScope.aliases[variable.symbol] = it }
                     }
-                    collect(resolved.statements.lastOrNull() as? IrExpression)
+                    collect(resolved.statements.lastOrNull() as? IrExpression, currentScope)
                 }
+                is IrWhen -> resolved.branches.forEach { collect(it.result, currentScope) }
                 else -> Unit
             }
         }
@@ -1198,11 +1483,94 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         }
     }
 
+    private fun modifierContentFlags(expression: IrExpression?, initialScope: Scope): Set<String> {
+        data class Axes(val widthUnbounded: Boolean, val heightUnbounded: Boolean)
+
+        val scope = initialScope.fork()
+        fun transform(value: IrExpression?, input: Axes, currentScope: Scope = scope): Axes {
+            return when (val resolved = dereference(value, currentScope)) {
+                null, is IrGetObjectValue, is IrGetValue -> input
+                is IrBlock -> {
+                    resolved.statements.dropLast(1).forEach { statement ->
+                        val variable = statement as? IrVariable
+                            ?: diagnostics.unsupported(statement, "Unsupported statement in Modifier argument block")
+                        val initial = variable.initializer
+                            ?: diagnostics.unsupported(variable, "Modifier temporary requires an initializer")
+                        currentScope.aliases[variable.symbol] = initial
+                    }
+                    transform(resolved.statements.lastOrNull() as? IrExpression, input, currentScope)
+                }
+                is IrWhen -> {
+                    if (!stableModifier(resolved, currentScope)) diagnostics.unsupported(resolved,
+                        "Conditional Modifier requires stable conditions and effect-free construction")
+                    val outputs = resolved.branches.map { transform(it.result, input, currentScope) }
+                    // Content is lowered once for all runtime branches. Preserve the
+                    // least restrictive child constraints so a scrolling branch never
+                    // receives a falsely bounded child.
+                    Axes(outputs.any { it.widthUnbounded }, outputs.any { it.heightUnbounded })
+                }
+                is IrCall -> {
+                    modifierLet(resolved, currentScope)?.let { (result, child) ->
+                        return transform(result, input, child)
+                    }
+                    val receiver = resolved.extensionReceiver ?: resolved.dispatchReceiver
+                    var result = transform(receiver, input, currentScope)
+                    val api = symbolName(resolved.symbol.owner)
+                    if (api == "androidx.compose.ui.Modifier.then")
+                        return transform(argument(resolved, "other"), result, currentScope)
+                    wrapContent(resolved, language, currentScope, target)?.let { wrap ->
+                        return Axes(result.widthUnbounded || wrap.width,
+                            result.heightUnbounded || wrap.height)
+                    }
+                    result = when (api) {
+                        "androidx.compose.foundation.verticalScroll" -> result.copy(heightUnbounded = true)
+                        "androidx.compose.foundation.horizontalScroll" -> result.copy(widthUnbounded = true)
+                        "androidx.compose.foundation.layout.width" -> result.copy(widthUnbounded = false)
+                        "androidx.compose.foundation.layout.height" -> result.copy(heightUnbounded = false)
+                        "androidx.compose.foundation.layout.size" -> Axes(false, false)
+                        "androidx.compose.foundation.layout.widthIn" ->
+                            if (argument(resolved, "max")?.let { !isUnspecifiedDp(it, currentScope) } == true)
+                                result.copy(widthUnbounded = false) else result
+                        "androidx.compose.foundation.layout.heightIn" ->
+                            if (argument(resolved, "max")?.let { !isUnspecifiedDp(it, currentScope) } == true)
+                                result.copy(heightUnbounded = false) else result
+                        "androidx.compose.foundation.layout.sizeIn" -> result.copy(
+                            widthUnbounded = if (argument(resolved, "maxWidth")?.let { !isUnspecifiedDp(it, currentScope) } == true)
+                                false else result.widthUnbounded,
+                            heightUnbounded = if (argument(resolved, "maxHeight")?.let { !isUnspecifiedDp(it, currentScope) } == true)
+                                false else result.heightUnbounded)
+                        "androidx.compose.foundation.layout.aspectRatio" -> when {
+                            result.widthUnbounded && !result.heightUnbounded -> result.copy(widthUnbounded = false)
+                            result.heightUnbounded && !result.widthUnbounded -> result.copy(heightUnbounded = false)
+                            else -> result
+                        }
+                        else -> result
+                    }
+                    result
+                }
+                else -> input
+            }
+        }
+
+        val inherited = Axes(UNBOUNDED_WIDTH in initialScope.semanticFlags,
+            UNBOUNDED_HEIGHT in initialScope.semanticFlags)
+        val result = transform(expression, inherited)
+        return buildSet {
+            if (result.widthUnbounded) add(UNBOUNDED_WIDTH)
+            if (result.heightUnbounded) add(UNBOUNDED_HEIGHT)
+        }
+    }
+
     private fun modifiers(expression: IrExpression?, initialScope: Scope, node: ComposeElement,
         choices: Map<IrWhen, IrExpression>): List<EtsStatement> {
         val scope = initialScope.fork()
         val operations = mutableListOf<IrCall>()
         var choice: IrWhen? = null
+        val choiceScopes = IdentityHashMap<IrWhen, Scope>()
+        fun stableTargetConstant(value: EtsMember): Boolean {
+            val receiver = value.receiver as? EtsReference ?: return false
+            return receiver.symbol.external && receiver.type == value.type && value.type is EtsNamedType
+        }
         fun stableNamedValue(value: IrExpression): Boolean {
             val resolved = dereference(value, scope) ?: return false
             if (stableRead(resolved, scope) || isConstraintDimensionRead(resolved, scope) || stableModifier(resolved, scope)) return true
@@ -1215,60 +1583,69 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     .mapNotNull { resolved.getValueArgument(it) }.all(::stableNamedValue)
             }
             return try {
-                when (val emitted = language.expression(resolved, scope)) {
-                    is EtsLiteral -> true
-                    is EtsMember -> emitted.type == EtsTypes.NUMBER ||
-                        (emitted.receiver as? EtsReference)?.symbol?.id in
-                            setOf("arkui:Alignment", "arkui:HorizontalAlign", "arkui:VerticalAlign")
-                    is EtsReference, is EtsBinary, is EtsConditional -> emitted.type == EtsTypes.NUMBER
-                    else -> false
-                }
+                stableTargetValue(language.expression(resolved, scope), scope)
             } catch (_: Unsupported) { false }
         }
-        fun collect(value: IrExpression?) {
-            when (val resolved = dereference(value, scope)) {
+        fun collect(value: IrExpression?, currentScope: Scope = scope) {
+            when (val resolved = dereference(value, currentScope)) {
                 null -> return
                 is IrGetObjectValue -> if (symbolName(resolved.symbol.owner) !in setOf("androidx.compose.ui.Modifier.Companion", "androidx.compose.ui.Modifier"))
                     diagnostics.unsupported(resolved, "Expected Modifier companion")
-                is IrGetValue -> if (scope.bindings[resolved.symbol]?.type != emptyModifierType)
+                is IrGetValue -> if (currentScope.bindings[resolved.symbol]?.type != emptyModifierType &&
+                    resolved.symbol !in currentScope.aliases)
                     diagnostics.unsupported(resolved, "Unsupported bound Modifier value")
                 is IrWhen -> {
                     val selected = choices[resolved]
-                    if (selected != null) collect(selected)
-                    else if (choice == null) choice = resolved
+                    if (selected != null) collect(selected, currentScope)
+                    else if (choice == null) {
+                        choice = resolved
+                        choiceScopes[resolved] = currentScope
+                    }
                 }
                 is IrCall -> {
-                    collect(resolved.extensionReceiver ?: resolved.dispatchReceiver)
+                    modifierLet(resolved, currentScope)?.let { (result, child) ->
+                        collect(result, child)
+                        return
+                    }
+                    collect(resolved.extensionReceiver ?: resolved.dispatchReceiver, currentScope)
                     if (symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.then")
-                        collect(argument(resolved, "other"))
+                        collect(argument(resolved, "other"), currentScope)
                     else operations += resolved
                 }
                 is IrBlock -> {
                     // Kotlin wraps reordered named arguments in a block of temporaries.
                     // Alias only stable reads/constants; never duplicate or reorder effects.
+                    val finalCall = resolved.statements.lastOrNull() as? IrCall
+                    val explicitlyOmitted = if (finalCall != null &&
+                        symbolName(finalCall.symbol.owner) == "androidx.compose.foundation.clickable") {
+                        setOf("interactionSource", "indication").mapNotNull { name ->
+                            (argument(finalCall, name) as? IrGetValue)?.symbol
+                        }.toSet()
+                    } else emptySet()
                     resolved.statements.dropLast(1).forEach { statement ->
                         val variable = statement as? IrVariable
                         val initial = variable?.initializer
                         if (variable == null || variable.isVar || initial == null ||
                             variable.origin != IrDeclarationOrigin.IR_TEMPORARY_VARIABLE)
                             diagnostics.unsupported(statement, "Unsupported statement in Modifier argument block")
-                        if (!stableNamedValue(initial)) diagnostics.unsupported(initial,
+                        if (variable.symbol !in explicitlyOmitted && !stableNamedValue(initial)) diagnostics.unsupported(initial,
                             "Named Modifier arguments require stable values to preserve evaluation order")
-                        scope.aliases[variable.symbol] = initial
+                        currentScope.aliases[variable.symbol] = initial
                     }
                     collect(resolved.statements.lastOrNull() as? IrExpression
-                        ?: diagnostics.unsupported(resolved, "Modifier argument block requires a result"))
+                        ?: diagnostics.unsupported(resolved, "Modifier argument block requires a result"), currentScope)
                 }
                 else -> diagnostics.unsupported(resolved, "Unsupported Modifier receiver")
             }
         }
         collect(expression)
         choice?.let { conditional ->
-            if (!stableModifier(conditional, scope)) diagnostics.unsupported(conditional,
+            val conditionalScope = choiceScopes.getValue(conditional)
+            if (!stableModifier(conditional, conditionalScope)) diagnostics.unsupported(conditional,
                 "Conditional Modifier requires stable conditions and effect-free construction")
             return listOf(EtsIf(conditional.branches.map { branch -> EtsBranch(
-                if (branch is IrElseBranch) null else language.expression(branch.condition, scope),
-                modifiers(expression, scope, node, choices + (conditional to branch.result))) }, language.source(conditional)))
+                if (branch is IrElseBranch) null else language.expression(branch.condition, conditionalScope),
+                modifiers(expression, conditionalScope, node, choices + (conditional to branch.result))) }, language.source(conditional)))
         }
         val scrolling = ScrollModifier(target, language)
         val weights = operations.filter(::isWeightModifier)
@@ -1285,6 +1662,21 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             layoutWeight(emitted, language.source(value))
         }
         operations.removeAll(weights.toSet())
+        val boxAlignments = operations.filter {
+            symbolName(it.symbol.owner) == "androidx.compose.foundation.layout.BoxScope.align"
+        }
+        if (boxAlignments.size > 1)
+            diagnostics.unsupported(boxAlignments[1], "Repeated BoxScope.align modifiers are not supported")
+        val boxAlignment = boxAlignments.singleOrNull()?.let { call ->
+            checkArguments(call, setOf("alignment"))
+            val alignment = argument(call, "alignment")
+                ?: diagnostics.unsupported(call, "BoxScope.align requires alignment")
+            val emitted = expression(alignment, scope)
+            if (emitted.type != EtsNamedType("Alignment")) diagnostics.unsupported(alignment,
+                "BoxScope.align requires Alignment")
+            emitted
+        }
+        operations.removeAll(boxAlignments.toSet())
         val weightAxis = if (weight != null) (scope.ambientValues[LAYOUT_AXIS] as? EtsLiteral)?.value as? String else null
         if (weight != null && weightAxis == null)
             diagnostics.unsupported(weights.single(), "weight requires a known Row or Column parent; content slot parent is unresolved")
@@ -1300,11 +1692,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     else -> false
                 }
             }
-            is EtsMember -> (value.receiver as? EtsReference)?.symbol?.id in
-                setOf("arkui:Alignment", "arkui:HorizontalAlign", "arkui:VerticalAlign") ||
+            is EtsMember -> stableTargetConstant(value) ||
                 ((value.type == EtsTypes.NUMBER || value.type in ambientTypes) &&
                     stableArgument(value.receiver))
-            is EtsNew -> value.classType in ambientTypes && value.arguments.all(::stableArgument)
+            is EtsNew -> (value.classType in ambientTypes || value.classType == shapeType) &&
+                value.arguments.all(::stableArgument)
             is EtsBinary -> stableArgument(value.left) && stableArgument(value.right)
             is EtsUnary -> stableArgument(value.operand)
             is EtsConditional -> stableArgument(value.condition) && stableArgument(value.whenTrue) && stableArgument(value.whenFalse)
@@ -1317,12 +1709,15 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             else -> false
         }
         val requiresArgumentOrder = node.orderedArguments.any { !stableArgument(it) }
-        fun layer(index: Int, width: Boolean, height: Boolean): EtsUiElement {
+        fun layer(index: Int, width: Boolean, height: Boolean,
+            inheritedUnboundedWidth: Boolean, inheritedUnboundedHeight: Boolean): EtsUiElement {
             val attributes = linkedMapOf<String, EtsExpression>()
             if (width) attributes["width"] = literal("100%", owner)
             if (height) attributes["height"] = literal("100%", owner)
             var nextWidth = width
             var nextHeight = height
+            var unboundedWidth = inheritedUnboundedWidth && !width
+            var unboundedHeight = inheritedUnboundedHeight && !height
             val seen = mutableSetOf<String>()
             var cursor = index
             var wrap: WrapContent? = null
@@ -1336,8 +1731,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 }
                 wrap = wrapContent(call, language, scope, target)
                 if (wrap != null) {
-                    if (wrap.width) nextWidth = false
-                    if (wrap.height) nextHeight = false
+                    if (wrap.width) {
+                        nextWidth = false
+                        unboundedWidth = true
+                    }
+                    if (wrap.height) {
+                        nextHeight = false
+                        unboundedHeight = true
+                    }
                     cursor++
                     break
                 }
@@ -1348,9 +1749,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     "androidx.compose.foundation.layout.fillMaxSize", "androidx.compose.foundation.layout.size" -> setOf("width", "height")
                     "androidx.compose.foundation.layout.heightIn", "androidx.compose.foundation.layout.widthIn",
                     "androidx.compose.foundation.layout.sizeIn" -> setOf("constraintSize")
+                    "androidx.compose.foundation.layout.safeDrawingPadding" -> emptySet()
                     "androidx.compose.foundation.layout.padding" -> setOf("padding")
                     "androidx.compose.foundation.background" -> if (argument(call, "shape") == null) setOf("backgroundColor")
                         else setOf("backgroundColor", "borderRadius")
+                    "androidx.compose.foundation.border" -> if (argument(call, "shape") == null) setOf(
+                        if (argument(call, "brush") != null) "borderImage" else "border") else setOf(
+                        if (argument(call, "brush") != null) "borderImage" else "border", "borderRadius")
                     "androidx.compose.ui.draw.clip" -> setOf("borderRadius", "clip", "clipShape")
                     "androidx.compose.ui.platform.testTag" -> setOf("id")
                     "androidx.compose.foundation.clickable" -> setOf("onClick", "enabled")
@@ -1371,6 +1776,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 if ("padding" in seen || keys.any { it in seen }) break
                 if (api == "androidx.compose.ui.draw.clip" && "backgroundColor" in seen) break
                 when (api) {
+                    "androidx.compose.foundation.layout.safeDrawingPadding" -> {
+                        checkArguments(call, emptySet())
+                        // The generated Harmony page uses the platform's non-immersive
+                        // window contract, which already lays content inside the current
+                        // drawing-safe area. No fixed inset may be emitted here because
+                        // status bars, cutouts and navigation indicators are runtime data.
+                    }
                     "androidx.compose.foundation.layout.size" -> {
                         checkArguments(call, setOf("size", "width", "height"))
                         for (name in listOf("width", "height")) {
@@ -1382,9 +1794,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                             if (name == "width") {
                                 if (!nextWidth) attributes[name] = emitted
                                 nextWidth = true
+                                unboundedWidth = false
                             } else {
                                 if (!nextHeight) attributes[name] = emitted
                                 nextHeight = true
+                                unboundedHeight = false
                             }
                         }
                     }
@@ -1399,7 +1813,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                             if (!stableDimension(value, emitted, scope)) diagnostics.unsupported(value,
                                 "A size already fixed by an outer modifier requires a stable scalar argument")
                         }
-                        if (name == "width") nextWidth = true else nextHeight = true
+                        if (name == "width") {
+                            nextWidth = true
+                            unboundedWidth = false
+                        } else {
+                            nextHeight = true
+                            unboundedHeight = false
+                        }
                     }
                     "androidx.compose.foundation.layout.heightIn", "androidx.compose.foundation.layout.widthIn",
                     "androidx.compose.foundation.layout.sizeIn" -> {
@@ -1416,13 +1836,17 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         when (api) {
                             "androidx.compose.foundation.layout.heightIn" -> {
                                 bound("min", "minHeight"); bound("max", "maxHeight")
+                                if ("maxHeight" in bounds) unboundedHeight = false
                             }
                             "androidx.compose.foundation.layout.widthIn" -> {
                                 bound("min", "minWidth"); bound("max", "maxWidth")
+                                if ("maxWidth" in bounds) unboundedWidth = false
                             }
                             else -> {
                                 bound("minWidth", "minWidth"); bound("maxWidth", "maxWidth")
                                 bound("minHeight", "minHeight"); bound("maxHeight", "maxHeight")
+                                if ("maxWidth" in bounds) unboundedWidth = false
+                                if ("maxHeight" in bounds) unboundedHeight = false
                             }
                         }
                         if (bounds.isNotEmpty()) attributes["constraintSize"] = record("ConstraintSizeOptions", bounds, call)
@@ -1438,8 +1862,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                                 EtsLiteral(100, EtsTypes.NUMBER, source), EtsTypes.NUMBER, source),
                                 EtsLiteral("%", EtsTypes.STRING, source), EtsTypes.STRING, source)
                         } ?: EtsLiteral("100%", EtsTypes.STRING, source)
-                        if ("width" in keys) { if (!nextWidth) attributes["width"] = length; nextWidth = true }
-                        if ("height" in keys) { if (!nextHeight) attributes["height"] = length; nextHeight = true }
+                        if ("width" in keys && !unboundedWidth) {
+                            if (!nextWidth) attributes["width"] = length
+                            nextWidth = true
+                        }
+                        if ("height" in keys && !unboundedHeight) {
+                            if (!nextHeight) attributes["height"] = length
+                            nextHeight = true
+                        }
                     }
                     "androidx.compose.foundation.layout.padding" -> {
                         checkArguments(call, setOf("all", "horizontal", "vertical", "start", "top", "end", "bottom", "paddingValues"))
@@ -1471,6 +1901,35 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         argument(call, "shape")?.let { attributes["borderRadius"] =
                             shapes.borderRadius(it, language, scope, diagnostics) }
                     }
+                    "androidx.compose.foundation.border" -> {
+                        checkArguments(call, setOf("width", "color", "brush", "shape"))
+                        val widthSource = argument(call, "width")
+                            ?: diagnostics.unsupported(call, "Modifier.border requires width")
+                        val width = dimension(widthSource, scope, "dp")
+                        val color = argument(call, "color")
+                        val brush = argument(call, "brush")
+                        if ((color == null) == (brush == null)) diagnostics.unsupported(call,
+                            "Modifier.border requires exactly one color or brush")
+                        if (color != null) {
+                            attributes["border"] = EtsObject(linkedMapOf(
+                                "width" to width,
+                                "color" to colorValue(color, scope),
+                            ), borderStrokeType, language.source(call))
+                        } else {
+                            val gradient = language.expression(requireNotNull(brush), scope)
+                            if (gradient.type != linearGradientType) diagnostics.unsupported(brush,
+                                "Modifier.border brush requires Brush.linearGradient")
+                            attributes["borderImage"] = record("BorderImageOption", linkedMapOf(
+                                "source" to gradient,
+                                "width" to width,
+                                "slice" to width,
+                                "fill" to literal(false, call),
+                            ), call)
+                        }
+                        argument(call, "shape")?.let {
+                            attributes["borderRadius"] = shapes.borderRadius(it, language, scope, diagnostics)
+                        }
+                    }
                     "androidx.compose.ui.draw.clip" -> {
                         checkArguments(call, setOf("shape"))
                         val shape = argument(call, "shape") ?: diagnostics.unsupported(call, "Missing clip shape")
@@ -1485,9 +1944,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         attributes["id"] = expression(argument(call, "tag")!!, scope)
                     }
                     "androidx.compose.foundation.clickable" -> {
-                        if (node.touch == null) diagnostics.unsupported(call,
-                            "Minimum touch target arbitration requires a homogeneous Row/repeat/Box group")
-                        checkArguments(call, setOf("onClick", "enabled"))
+                        checkArguments(call, setOf("onClick", "enabled", "interactionSource", "indication"))
+                        for (name in listOf("interactionSource", "indication")) {
+                            argument(call, name)?.let { value ->
+                                diagnostics.omitUi(value, "Modifier.clickable $name omitted from static interaction projection",
+                                    "androidx.compose.foundation.clickable.$name", "omitted_animation_modifier",
+                                    "Click action and enabled state are preserved; press indication state and animation are omitted.")
+                            }
+                        }
                         attributes["onClick"] = callback(argument(call, "onClick")!!, scope)
                         argument(call, "enabled")?.let { attributes["enabled"] = expression(it, scope) }
                     }
@@ -1538,11 +2002,23 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         if (emitted !is EtsLiteral && !stableRead(ratio, scope))
                             diagnostics.unsupported(ratio, "aspectRatio requires a stable scalar value")
                         attributes["aspectRatio"] = emitted
-                        if (nextWidth) nextHeight = true else if (nextHeight) nextWidth = true
+                        if (nextWidth) {
+                            nextHeight = true
+                            unboundedHeight = false
+                        } else if (nextHeight) {
+                            nextWidth = true
+                            unboundedWidth = false
+                        }
                     }
                 }
                 if ("aspectRatio" in attributes) {
-                    if (nextWidth) nextHeight = true else if (nextHeight) nextWidth = true
+                    if (nextWidth) {
+                        nextHeight = true
+                        unboundedHeight = false
+                    } else if (nextHeight) {
+                        nextWidth = true
+                        unboundedWidth = false
+                    }
                 }
                 seen += keys
                 cursor++
@@ -1570,8 +2046,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             }
             if (scroll != null) {
                 val axis = scrolling.axis(scroll)
-                val child = layer(cursor, if (axis == "width") false else nextWidth,
-                    if (axis == "height") false else nextHeight)
+                // Compose keeps the viewport's minimum constraint on the scroll axis.
+                // ArkUI Scroll does not propagate it, so retain an already-bounded axis
+                // while still allowing overflowing descendants to define scroll extent.
+                val child = layer(cursor, nextWidth, nextHeight,
+                    unboundedWidth || axis == "width", unboundedHeight || axis == "height")
                 return native("Scroll", emptyList(), scroll, listOf(child)).copy(
                     attributes = scrolling.attributes(scroll, scope) + attrs)
             }
@@ -1580,10 +2059,18 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             if (wrap == null && cursor == operations.size && seen.none { it in node.modifierBoundaries })
                 return node.element.copy(attributes = node.element.attributes + attrs)
             val options = wrap?.let { record("StackOptions", linkedMapOf("alignContent" to it.alignment), owner) } ?: stackOptions(owner)
-            return native("Stack", listOf(options), owner, listOf(layer(cursor, nextWidth, nextHeight))).copy(attributes = attrs)
+            return native("Stack", listOf(options), owner,
+                listOf(layer(cursor, nextWidth, nextHeight, unboundedWidth, unboundedHeight))).copy(attributes = attrs)
         }
-        val result = layer(0, weightAxis == "width" || node.requiresBoundedSize && BOUNDED_WIDTH in scope.semanticFlags,
-            weightAxis == "height" || node.requiresBoundedSize && BOUNDED_HEIGHT in scope.semanticFlags)
+        var result = layer(0, node.requiresBoundedSize && BOUNDED_WIDTH in scope.semanticFlags,
+            node.requiresBoundedSize && BOUNDED_HEIGHT in scope.semanticFlags,
+            UNBOUNDED_WIDTH in scope.semanticFlags, UNBOUNDED_HEIGHT in scope.semanticFlags)
+        if (boxAlignment != null) {
+            result = native("Stack", listOf(record("StackOptions", linkedMapOf(
+                "alignContent" to boxAlignment), owner)), owner, listOf(result)).copy(attributes = listOf(
+                attribute("width", listOf(literal("100%", owner)), owner),
+                attribute("height", listOf(literal("100%", owner)), owner)))
+        }
         return listOf(if (weight == null) result else result.copy(attributes = result.attributes +
             attribute("layoutWeight", listOf(weight), owner)))
     }

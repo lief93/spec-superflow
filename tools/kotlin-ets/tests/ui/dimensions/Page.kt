@@ -18,10 +18,18 @@ fun choose(wide: Boolean): Dp = if (wide) 96.dp else 48.dp
         Text("Dimensions", fontSize = fontSize)
     }
 }
+@Composable fun ConditionalSize(selected: Boolean) {
+    Box(Modifier.size(if (selected) 10.dp else 5.dp))
+}
+@Composable fun ConditionalModifier(height: Dp) {
+    Spacer(Modifier.let { if (height != Dp.Unspecified) it.height(height) else it })
+}
 @Composable fun Page() {
     val width = choose(true)
     val size = fontSize(18)
     Content(width, size)
+    ConditionalSize(true)
+    ConditionalModifier(12.dp)
 }
 
 @Composable fun Em() { Text("unsupported", fontSize = 2.em) }

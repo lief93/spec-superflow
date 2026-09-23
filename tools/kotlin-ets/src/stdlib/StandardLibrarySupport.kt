@@ -99,6 +99,16 @@ private val supportFunctions = exceptionSupportFunctions + collectionSupportFunc
           return values.length === 0 ? null : values[0];
         }
     """.trimIndent()),
+    SupportFunction("stdlib:__etsListContains", """
+        function __etsListContains<T>(values: Array<T>, value: T, equal: (left: T, right: T) => boolean): boolean {
+          const size = values.length;
+          for (let index = 0; index < size; index++) {
+            if (equal(values[index], value)) { return true; }
+            if (values.length !== size) { throw new __etsThrowable('ConcurrentModificationException', 'ConcurrentModificationException'); }
+          }
+          return false;
+        }
+    """.trimIndent(), listOf("stdlib:__etsThrowable")),
     SupportFunction("stdlib:__etsListAdd", """
         function __etsListAdd<T>(values: Array<T>, value: T): boolean {
           values.push(value);
