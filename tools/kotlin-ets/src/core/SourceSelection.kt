@@ -10,7 +10,9 @@ import org.jetbrains.kotlin.ir.visitors.*
 
 /** Source-level counterpart of Kotlin/JS's symbol worklist, without JS DCE context. */
 internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
-    prepareDeclaration: (IrDeclaration) -> Unit = {}, ignored: Set<IrElement> = emptySet()): String {
+    prepareDeclaration: (IrDeclaration) -> Unit = {}, ignored: Set<IrElement> = emptySet(),
+    externalSourceType: (IrType) -> Boolean = { false },
+    externalSourceCall: (IrSimpleFunction) -> Boolean = { false }): String {
     val declarations = module.files.flatMap { it.declarations }
     val source = declarations.toSet()
     val roots = declarations.filterIsInstance<IrSimpleFunction>().filter {
@@ -89,6 +91,7 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
         val declaration = pending.removeFirst()
         if (declaration in source) prepareDeclaration(declaration)
         fun type(type: IrType) {
+            if (externalSourceType(type)) return
             val simple = type as? IrSimpleType ?: return
             reference(simple.classifier, declaration)
             // Collection adapters use key equality/hash without explicit source calls.
@@ -120,7 +123,9 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
                         element.dispatchReceiver?.let { requireValueMember(it.type, function.name.asString()) }
                 }
                 if (element is IrExpression) type(element.type)
-                if (element is IrDeclarationReference) reference(element.symbol, declaration)
+                if (element is IrDeclarationReference &&
+                    (element !is IrCall || !externalSourceCall(element.symbol.owner)))
+                    reference(element.symbol, declaration)
                 if (element is IrMemberAccessExpression<*>) element.typeArguments.forEach { it?.let(::type) }
                 when (element) {
                     is IrSimpleFunction -> {

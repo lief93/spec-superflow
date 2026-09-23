@@ -70,6 +70,7 @@ fun main(arguments: Array<String>) {
             listOf("-no-stdlib", "-no-reflect", "-classpath", classpath) + sources
         val images = options["--image-resources"]?.let { ImageResources.read(File(it).absoluteFile) } ?: ImageResources()
         val strings = options["--string-resources"]?.let { StringResources.read(File(it).absoluteFile) } ?: StringResources()
+        val dimensions = options["--string-resources"]?.let { DimensionResources.read(File(it).absoluteFile) } ?: DimensionResources()
         val fonts = options["--font-resources"]?.let { FontResources.read(File(it).absoluteFile) } ?: FontResources()
         val resourceOutput = File(output.absolutePath + ".resources")
         if ("--string-resources" in options || "--font-resources" in options || "--image-resources" in options) require(!Files.exists(resourceOutput.toPath(), NOFOLLOW_LINKS)) {
@@ -80,13 +81,14 @@ fun main(arguments: Array<String>) {
         val shapes = ComposeShapeRule()
         val elevations = ComposeCardElevationRule(diagnostics)
         val compositionLocals = ComposeCompositionLocalRule(diagnostics)
-        val rules = listOf(stdlib, images, strings, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeSurfaceColorAtElevationRule(), ComposeProjectColorSchemeRule(), ComposePlatformVersionRule(), ComposeThemeModeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposeDimensionRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), compositionLocals, ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeFlowRule(), shapes, elevations, ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
+        val rules = listOf(stdlib, images, strings, dimensions, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeSurfaceColorAtElevationRule(), ComposeProjectColorSchemeRule(), ComposePlatformVersionRule(), ComposeThemeModeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeMaterialImageVectorRule(), ComposeSnackbarHostStateRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposeDimensionRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), compositionLocals, ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeFlowRule(), shapes, elevations, ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
         var preflight: CoreProfileReport? = null
         val target = withKotlinFrontend(compilerArgs, entry, prepareModule = { module ->
             if (mode == "page") rules.forEach { it.prepareModule(module, diagnostics) }
         }, prepareDeclaration = { declaration ->
             if (mode == "page") rules.forEach { it.prepareSource(declaration, diagnostics) }
-        }) { frontend ->
+        }, externalSourceType = { type -> mode == "page" && adapters.providesSourceType(type) },
+            externalSourceCall = { function -> mode == "page" && adapters.replacesSourceCall(function) }) { frontend ->
             val module = frontend.module
             val backend = EtsBackend(diagnostics, rules, frontend.types)
             preflight = coreProfilePreflight(module, backend.language, diagnostics, compilerEnvironment)

@@ -158,6 +158,11 @@ class StandardLibraryRules : CallRule {
         if (name == "kotlin.String.<get-length>" && signature("kotlin.String", "kotlin.Int")) {
             return EtsMember(receiverNode(), "length", EtsTypes.NUMBER, source)
         }
+        if (name in setOf("kotlin.text.isEmpty", "kotlin.text.isNotEmpty") &&
+            signature("kotlin.String", "kotlin.Boolean")) {
+            val length = EtsMember(receiverNode(), "length", EtsTypes.NUMBER, source)
+            return binary(if (name.endsWith("isNotEmpty")) "!==" else "===", length, number(0), EtsTypes.BOOLEAN)
+        }
         if (name == "kotlin.String.get" && signature("kotlin.String", "kotlin.Char", "kotlin.Int"))
             return external("__etsStringGet", listOf(EtsTypes.STRING, EtsTypes.NUMBER), EtsTypes.STRING, listOf(receiverNode(), arg(0)))
         // No-arg uppercase/lowercase use Locale.ROOT. Binary metadata has no IR body.

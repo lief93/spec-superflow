@@ -4,6 +4,7 @@ private class Module(
     override val id: String,
     override val sourceCalls: Set<String> = setOf("sample.$id"),
     override val sourceTypes: Set<String> = emptySet(),
+    override val rootDefaultCalls: Set<String> = emptySet(),
     override val targetCalls: List<AdapterTargetCall> = emptyList(),
     override val imports: List<EtsImport> = emptyList(),
     private val created: MutableList<String> = mutableListOf()
@@ -38,6 +39,7 @@ fun main() {
     rejected(Module("a", setOf("")))
     rejected(Module("a", setOf("sample.shared")), Module("b", setOf("sample.shared")))
     rejected(Module("a", sourceTypes = setOf("sample.Type")), Module("b", sourceTypes = setOf("sample.Type")))
+    rejected(Module("a", rootDefaultCalls = setOf("sample.other")))
     rejected(Module("a", targetCalls = listOf(declaration)), Module("b", targetCalls = listOf(declaration)))
     rejected(Module("a", imports = listOf(EtsImport("one", "Value"))), Module("b", imports = listOf(EtsImport("two", "Value"))))
     val created = mutableListOf<String>()

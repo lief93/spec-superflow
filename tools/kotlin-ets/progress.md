@@ -1229,3 +1229,20 @@
   was 7m36s, 24,087 uncached input / 3,572,096 cached input / 6,072 output tokens;
   both agent counters remained unchanged. Different workload and reused prepared
   fixtures prevent causal savings claims. Continue main-only per user correction.
+- Architecture Samples StatisticsScreen now generates from pinned revision
+  `ee66e152` through explicit AndroidX Hilt, Accompanist swipe-refresh, and
+  project ViewModel host adapters. Fresh preflight evidence
+  `tests/preflight/.work/architecture-samples-NWxpzR` keeps 49/51 calls
+  recognized and the two Compose-specialized target-type gaps visible. The only
+  runtime degradation is `dimension_qualifier_fallback`: base 16dp is used where
+  Android's `w820dp` qualifier has no target equivalent; strict mode rejects it.
+- Harmony application evidence
+  `tests/preflight/.work/architecture-samples-app-x5giAV` passes DevEco ABC/HAP
+  compilation, normal `hdc install -r`, launch on `127.0.0.1:15557`, generated
+  layout inspection, and menu interaction from “Drawer closed” to “Drawer
+  opened” with a stable PID. Full UI `kotlin-ets-ui-tests-86Ipn7`, adapter CLI
+  `cli-w9Z0sm`, source selection `kotlin-ets-source-selection-fFXAW7`, general
+  preflight `run-STAcZp`, resource, and string regressions pass. Now in Android
+  remains 315/315 recognized (`now-in-android-fjoEgd`); Mars Photos remains at
+  100% with zero degradations (`mars-photos-BWT8Rq`). This batch is self-reviewed
+  under the current main-only instruction; no independent review is claimed.

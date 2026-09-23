@@ -171,6 +171,37 @@ assert.match(materialText, /content\.builder\(new EtsMaterialContext\([\s\S]*?\.
   'Button invokes a forwarded source slot with labelLarge typography');
 assert.ok(materialText.includes('instance.lineHeight(this.lineHeight ?? 0)'),
   'typed Material text styles apply their inherited line height through the shared modifier');
+const materialTopAppBar = generate('material-top-app-bar', join(here, 'MaterialTopAppBar.kt'),
+  'materialtopappbar.MaterialTopAppBar');
+assert.match(materialTopAppBar, /@Entry\s+@Component\s+export struct MaterialTopAppBar/);
+assert.match(materialTopAppBar, /new EtsImageVector\(\$r\("sys\.symbol\.line_3_horizontal"\)\)/,
+  'resolved Material Menu identity maps to the equivalent Harmony system symbol');
+assert.match(materialTopAppBar, /SymbolGlyph\(imageVector\.resource\).*\.accessibilityText\("Open navigation"\)/,
+  'typed ImageVector values remain passable through source builders and retain accessibility text');
+assert.match(materialTopAppBar, /Text\("Statistics"\)[\s\S]*Text\("Action"\)[\s\S]*\.height\(72\.0\)/,
+  'TopAppBar retains title, action slot, and explicit expanded height');
+assert.match(materialTopAppBar, /\.onClick\(onMenu\)/,
+  'TopAppBar navigation content retains its source callback');
+assert.match(generate('unsupported-material-icon', join(here, 'MaterialTopAppBar.kt'),
+  'materialtopappbar.UnsupportedMaterialIcon', false).message,
+  /Unsupported language type: androidx\.compose\.material\.icons\.Icons\.Filled/,
+  'unmapped ImageVector identities fail rather than selecting a guessed symbol');
+assert.match(generate('unsupported-top-app-bar-colors', join(here, 'MaterialTopAppBar.kt'),
+  'materialtopappbar.UnsupportedTopAppBarColors', false).message,
+  /Unsupported androidx\.compose\.material3\.TopAppBar argument: colors/,
+  'explicit TopAppBar parameters outside the supported contract fail at their source argument');
+const materialScaffoldState = generate('material-scaffold-state', join(here, 'MaterialScaffoldState.kt'),
+  'materialscaffoldstate.MaterialScaffoldState');
+assert.match(materialScaffoldState, /@Require @Prop state: EtsStateFlow<ScreenState>/,
+  'StateFlow root inputs remain typed host-provided component props');
+assert.match(materialScaffoldState, /@Require @Prop snackbarHostState: EtsSnackbarHostState/,
+  'remembered root SnackbarHostState construction becomes a required host prop');
+assert.match(materialScaffoldState, /Text\(state\.value\.title\)/,
+  'delegated lifecycle StateFlow reads bind to the typed snapshot value');
+assert.match(materialScaffoldState, /Stack\(\{ alignContent: Alignment\.TopStart \}\)[\s\S]*Text\("Top"\)[\s\S]*Text\(state\.value\.title\)[\s\S]*Stack\(\{ alignContent: Alignment\.TopStart \}\) \{\}/,
+  'Scaffold retains top bar, snackbar layer, and content');
+assert.match(materialScaffoldState, /Text\(state\.value\.title\)[^\n]*\.padding\(__etsUniformPadding\(0\)\)/,
+  'mapped Scaffold PaddingValues survive through a shared local Modifier chain');
 const providedText = generate('provided-text', join(here, 'UnsupportedTextProvider.kt'), 'negative.UnknownPage');
 assert.match(providedText, /__etsMergeTextStyle\(__etsMaterialContext\.textStyle \?\? __etsMaterialContext\.typography\.bodyLarge, new EtsTextStyle/);
 const invocationText = generate('invocation-text-contexts', join(here, 'UnsupportedTextContexts.kt'), 'negative.UnknownPage');

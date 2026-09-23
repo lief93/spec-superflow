@@ -52,6 +52,15 @@ Claims are resolved fully qualified IR names, not source spelling. An adapter
 must still check the supported overload, receiver, parameters and return type.
 Sharing a name does not make every overload supported.
 
+`rootDefaultCalls` is a narrow contract for a direct default expression on the
+selected root `@Composable`. The call must also be in `sourceCalls`, and its
+resolved result type must exactly match the parameter type. The compiler turns
+that parameter into a required target component prop and does not execute the
+platform-owned default. The same call in a function body, nested default, or
+ordinary value position still reaches the adapter and must reject unless the
+module defines separate target semantics. The built-in AndroidX Hilt adapter
+uses this contract for `hiltViewModel`; it does not construct or fake a ViewModel.
+
 Each `AdapterTargetCall(id, name, signature)` declares a module-owned target
 signature. `AdapterTargetApi.call` looks it up by ID and checks exact arity.
 The shared target validator checks argument types and target bindings, including
@@ -73,6 +82,14 @@ normal declaration and linking path. A binary signature without a reusable body
 may reach a declared adapter. If no adapter accepts it, generation fails with the
 source call span and names both missing options; JVM bytecode is not decompiled
 and no default value is fabricated.
+
+`replacesSourceBodies` is an explicit exception for a host bridge that owns the
+target implementation of every call listed in that module's `sourceCalls`.
+Source selection then treats only those calls, and only the types in the same
+module's `sourceTypes`, as externally supplied. This keeps Android repositories,
+coroutine bodies, and other implementation dependencies out of target lowering
+when the host contract replaces them. Keep this flag off for ordinary adapters;
+it is module-wide and never inferred from a matching name.
 
 ### Factory lifecycle
 
@@ -121,6 +138,21 @@ All three arguments must be explicit. In particular, an omitted `modifier`
 rejects at the source call, even if the Kotlin declaration provides a default.
 This finite example does not evaluate Kotlin default expressions and must not
 silently replace a default such as `Modifier.width(120.dp)` with no modifier.
+
+The built-in `accompanist-swipe-refresh` provider maps the finite
+`rememberSwipeRefreshState(Boolean)` and `SwipeRefresh` contract to ArkUI
+`Refresh`. It preserves the refresh callback, modifier, and content, and rejects
+explicit Accompanist parameters outside that contract.
+
+The built-in `architecture-samples-statistics` provider is a project bridge for
+the pinned public Statistics screen. It exports typed `StatisticsUiState` and
+`StatisticsViewModelBridge` host contracts for `uiState` and `refresh()` and sets
+`replacesSourceBodies` so the Android Hilt repository implementation is not
+lowered. It does not construct the ViewModel or perform repository work.
+
+Android `dimen` resources are materialized from finite base `dp` values. Android
+qualifiers have no direct target equivalent: report mode uses the base value and
+records `dimension_qualifier_fallback`; strict mode rejects the same source use.
 
 From the repository root:
 

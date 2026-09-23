@@ -6,6 +6,7 @@ import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
+import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
@@ -39,7 +40,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val states = linkedMapOf<IrValueSymbol, String>()
     private val pagers = linkedMapOf<IrValueSymbol, Pager>()
     private val coroutineScopes = mutableSetOf<IrValueSymbol>()
+    private val delegatedValues = linkedMapOf<IrSimpleFunctionSymbol, EtsExpression>()
     private val slots = mutableSetOf<IrValueSymbol>()
+    private val hostProvidedRootDefaults = mutableSetOf<IrValueSymbol>()
     private val builders = linkedSetOf<IrSimpleFunction>()
     private val builderSymbols = linkedMapOf<IrSimpleFunction, EtsSymbol>()
     private val modifierSpecializations = linkedMapOf<String, Pair<IrSimpleFunction, EtsFunction>>()
@@ -65,8 +68,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private data class ContextParameter(val contract: ImplicitContextContract, val parameter: EtsParameter)
 
     fun lower(module: IrModuleFragment, entryName: String): EtsProgram {
-        fields.clear(); states.clear(); pagers.clear(); coroutineScopes.clear()
-        slots.clear(); builders.clear(); fieldNames.clear(); slotMethods.clear(); constraintBuilders.clear(); constraintDataClasses.clear(); slotMethodNames.clear()
+        fields.clear(); states.clear(); pagers.clear(); coroutineScopes.clear(); delegatedValues.clear()
+        slots.clear(); hostProvidedRootDefaults.clear(); builders.clear(); fieldNames.clear(); slotMethods.clear(); constraintBuilders.clear(); constraintDataClasses.clear(); slotMethodNames.clear()
         usesMaterialTypography = false
         touchBoxes.clear()
         bindingSymbols.clear()
@@ -94,7 +97,11 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             rootScope.ambientValues[MATERIAL_CONTEXT] = defaultMaterialContext(at, shapes.initialShapes(at))
         }
         val rootArguments = root.valueParameters.map { parameter ->
-            val emitted = parameter.defaultValue?.expression?.let { language.expression(it, rootScope) } ?: run {
+            val default = parameter.defaultValue?.expression
+            val hostProvided = default?.let { adapters.consumesRootDefault(it, parameter.type) ||
+                isCompositionRootDefault(it) } == true
+            if (hostProvided) hostProvidedRootDefaults += parameter.symbol
+            val emitted = default?.takeUnless { hostProvided }?.let { language.expression(it, rootScope) } ?: run {
                 val name = parameter.name.asString()
                 val type = language.type(parameter.type)
                 fieldNames += name
@@ -117,7 +124,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         // Explicit projections can make source value helpers unreachable. Reuse the
         // symbol worklist before lowering remaining classes, not a second UI parser.
         if (diagnostics.omittedUiElements.isNotEmpty())
-            selectSourceDeclarations(module, entryName, ignored = diagnostics.omittedUiElements)
+            selectSourceDeclarations(module, entryName, ignored = diagnostics.omittedUiElements,
+                externalSourceType = adapters::providesSourceType,
+                externalSourceCall = adapters::replacesSourceCall)
         val retained = module.files.flatMap { it.declarations }.toSet()
         val ownership = BuilderOwnership(methods + slotMethods + constraintBuilders, rootMethod.symbol.id, pageReceiver.id)
         val files = linkedMapOf<String, MutableList<EtsDeclaration>>()
@@ -189,6 +198,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             if (usesMaterialTypography) listOf(EtsImport("@ohos.graphics.drawing", "__etsDrawing", default = true)) else emptyList()), language.callRules))
     }
 
+    private fun isCompositionRootDefault(expression: IrExpression): Boolean {
+        val call = resolveExpression(expression, Scope()) as? IrCall ?: return false
+        return sourceFile(call.symbol.owner) == null && symbolName(call.symbol.owner) in setOf(
+            "androidx.compose.runtime.remember", "androidx.compose.runtime.saveable.rememberSaveable",
+            "androidx.compose.runtime.rememberCoroutineScope")
+    }
+
     private val target = ArkUiCalls(language, diagnostics)
     private val uiRules: List<CallRule> by lazy {
         adapters.rules(object : AdapterUiServices {
@@ -219,6 +235,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeTextRule(target, ::dimension,
                 { usesMaterialTypography = true }, ::modifiers),
             ComposeButtonRule(target, ::uiLambdaBody, ::callback, ::modifiers),
+            ComposeTopAppBarRule(target, ::uiLambdaBody, ::dimension, ::modifiers),
+            ComposeSnackbarHostRule(target, ::modifiers),
+            ComposeScaffoldRule(target, ::uiLambdaBody, ::scaffoldContent, ::modifiers),
             ComposeBasicTextRule(target, ::modifiers),
             ComposeBasicTextFieldRule(target, ::bindInnerTextField, { fn, scope ->
                 uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing decoration body"), scope) }, ::modifiers),
@@ -346,7 +365,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             } else {
                 val reference = binding(parameter)
                 scope.bindings[parameter.symbol] = reference
-                EtsParameter(reference.symbol, parameter.defaultValue?.expression?.let { expression(it, scope) })
+                EtsParameter(reference.symbol, parameter.defaultValue?.expression
+                    ?.takeUnless { function == root && parameter.symbol in hostProvidedRootDefaults }
+                    ?.let { expression(it, scope) })
             }
         }
         val body = function.body ?: diagnostics.unsupported(function, "Builder has no source body")
@@ -377,7 +398,13 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private fun uiStatements(statements: List<IrStatement>, scope: Scope, rootBody: Boolean): List<EtsStatement> {
         val lines = mutableListOf<EtsStatement>()
         statements.forEachIndexed { index, statement ->
-            if (statement !is IrVariable) {
+            if (statement is IrLocalDelegatedProperty) {
+                val initializer = statement.delegate.initializer as? IrCall
+                    ?: diagnostics.unsupported(statement, "Delegated UI value requires a direct initializer call")
+                val snapshot = collectedStateFlowSnapshot(initializer, language, scope)
+                    ?: diagnostics.unsupported(initializer, "Delegated UI value requires a supported StateFlow snapshot")
+                delegatedValues[statement.getter.symbol] = snapshot
+            } else if (statement !is IrVariable) {
                 lines += uiStatement(statement, scope, rootBody)
             } else {
                 if (statement.isVar) diagnostics.unsupported(statement, "Mutable builder local requires remembered state")
@@ -407,8 +434,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     scope.aliases[statement.symbol] = initial
                     return@forEachIndexed
                 }
-                if (initial is IrFunctionExpression ||
-                    (platformValue && (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE || stableModifier(initial, scope)))) {
+                if (initial is IrFunctionExpression || stableModifier(initial, scope) ||
+                    (platformValue && statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE)) {
                     scope.aliases[statement.symbol] = initial
                     return@forEachIndexed
                 }
@@ -494,7 +521,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         is IrCall -> {
             val getter = expression.symbol.owner
             val api = symbolName(getter)
-            if (api in setOf("kotlin.Int.unaryMinus", "kotlin.Int.unaryPlus",
+            if (api in setOf("androidx.compose.ui.res.dimensionResource",
+                    "androidx.compose.ui.res.integerResource", "androidx.compose.ui.res.colorResource")) true
+            else if (api in setOf("kotlin.Int.unaryMinus", "kotlin.Int.unaryPlus",
                     "kotlin.Float.unaryMinus", "kotlin.Float.unaryPlus",
                     "kotlin.Double.unaryMinus", "kotlin.Double.unaryPlus") &&
                 getter.valueParameters.isEmpty())
@@ -652,6 +681,18 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             val resolved = dereference(value, scope) as? IrCall
             resolved != null && sourceFile(resolved.symbol.owner) == null
         }) return null
+        fun targetKey(value: EtsExpression): String = when (value) {
+            is EtsLiteral -> "${value.type}:${value.value}"
+            is EtsObject -> value.fields.entries.joinToString(",", "${value.type}{", "}") { (name, field) ->
+                "$name=${targetKey(field)}"
+            }
+            is EtsCall -> {
+                val callee = value.callee as? EtsReference
+                    ?: diagnostics.unsupported(call, "Modifier target binding requires a direct pure helper")
+                "${callee.symbol.id}(${value.arguments.joinToString(",", transform = ::targetKey)})"
+            }
+            else -> diagnostics.unsupported(call, "Modifier target binding requires a stable target value")
+        }
         fun key(value: IrExpression): String {
             val resolved = dereference(value, scope) ?: diagnostics.unsupported(value, "Missing Modifier value")
             if (resolved is IrGetObjectValue && symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.Companion") return "identity"
@@ -669,6 +710,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             }
             if (isLayoutScopeReceiver(resolved)) return "layoutScope:${resolved.type.classFqName ?: resolved.type.render()}"
             if (resolved is IrGetValue && scope.bindings[resolved.symbol]?.type == emptyModifierType) return "identity"
+            if (resolved is IrGetValue && scope.bindings[resolved.symbol]?.type == paddingType)
+                return "target:${targetKey(scope.bindings.getValue(resolved.symbol))}"
             if (resolved is IrGetValue) diagnostics.unsupported(resolved, "Dynamic Modifier operands require a first-class target layout program")
             val literal = language.expression(resolved, scope) as? EtsLiteral
                 ?: diagnostics.unsupported(resolved, "Effectful Modifier operands require an evaluation-preserving layout program")
@@ -683,8 +726,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             val previousFile = diagnostics.currentFile
             try {
                 builder(function, inputs.associate { it.first.symbol to it.second }, scope.aliases, name,
-                    scope.ambientValues, scope.bindings.filterValues { it.type == emptyModifierType }
-                        .mapValues { emptyModifierValue(language.source(call)) }).also {
+                    scope.ambientValues, scope.bindings.filterValues { it.type == emptyModifierType || it.type == paddingType }
+                        .mapValues { (_, value) -> if (value.type == emptyModifierType)
+                            emptyModifierValue(language.source(call)) else value }).also {
                     modifierSpecializations[identity] = function to it
                 }
             } finally {
@@ -812,6 +856,18 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
 
     private fun uiLambdaBody(expression: IrExpression, scope: Scope): List<EtsStatement> {
         return uiLambdaBodyWithAxis(expression, scope, null)
+    }
+
+    private fun scaffoldContent(expression: IrExpression, scope: Scope, padding: EtsExpression): List<EtsStatement> {
+        val fn = lambda(expression, scope) ?: diagnostics.unsupported(expression, "Expected Scaffold content lambda")
+        if (fn.extensionReceiverParameter != null || fn.valueParameters.size != 1 ||
+            fn.valueParameters.single().type.classFqName?.asString() !=
+            "androidx.compose.foundation.layout.PaddingValues")
+            diagnostics.unsupported(fn, "Scaffold content requires one PaddingValues parameter")
+        if (padding.type != paddingType) diagnostics.unsupported(expression, "Scaffold target padding has an invalid type")
+        val child = scope.fork()
+        child.bindings[fn.valueParameters.single().symbol] = padding
+        return uiBody(fn.body ?: diagnostics.unsupported(fn, "Missing Scaffold content body"), child)
     }
 
     private fun slotReceiver(expression: IrExpression?, scope: Scope): IrGetValue? {
@@ -950,6 +1006,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     }
 
     private fun platformCall(call: IrCall, scope: Scope): EtsExpression? {
+        delegatedValues[call.symbol]?.let { return it }
         val function = call.symbol.owner
         val api = symbolName(function)
         if (isUiBuilder(function) && sourceFile(function) != null && !function.isExternal)
@@ -1069,12 +1126,22 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val resolved = dereference(value, scope) ?: return false
         if (resolved is IrBlock) return (resolved.statements.singleOrNull() as? IrExpression)?.let { stableModifier(it, scope) } == true
         if (resolved is IrGetObjectValue) return symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.Companion"
+        if (resolved is IrGetValue) return scope.bindings[resolved.symbol]?.type == emptyModifierType
         if (resolved is IrWhen) return resolved.branches.all {
             (it is IrElseBranch || stableRead(it.condition, scope)) && stableModifier(it.result, scope)
         }
         if (resolved !is IrCall || sourceFile(resolved.symbol.owner) != null) return false
         if (symbolName(resolved.symbol.owner) !in setOf("androidx.compose.foundation.verticalScroll",
-                "androidx.compose.foundation.horizontalScroll", "androidx.compose.ui.Modifier.then")) return false
+                "androidx.compose.foundation.horizontalScroll", "androidx.compose.ui.Modifier.then",
+                "androidx.compose.foundation.layout.width", "androidx.compose.foundation.layout.height",
+                "androidx.compose.foundation.layout.size", "androidx.compose.foundation.layout.widthIn",
+                "androidx.compose.foundation.layout.heightIn", "androidx.compose.foundation.layout.sizeIn",
+                "androidx.compose.foundation.layout.fillMaxWidth", "androidx.compose.foundation.layout.fillMaxHeight",
+                "androidx.compose.foundation.layout.fillMaxSize", "androidx.compose.foundation.layout.padding",
+                "androidx.compose.foundation.background", "androidx.compose.ui.draw.clip",
+                "androidx.compose.ui.platform.testTag", "androidx.compose.foundation.clickable",
+                "androidx.compose.foundation.layout.offset", "androidx.compose.ui.draw.rotate",
+                "androidx.compose.foundation.layout.aspectRatio")) return false
         if (!stableModifier(resolved.extensionReceiver ?: resolved.dispatchReceiver ?: return false, scope)) return false
         return resolved.symbol.owner.valueParameters.indices.mapNotNull(resolved::getValueArgument).all {
             val arg = dereference(it, scope)
@@ -1243,6 +1310,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             is EtsConditional -> stableArgument(value.condition) && stableArgument(value.whenTrue) && stableArgument(value.whenFalse)
             is EtsObject -> value.fields.values.all(::stableArgument)
             is EtsArray -> value.elements.all(::stableArgument)
+            is EtsCall -> (value.callee as? EtsReference)?.symbol?.name in setOf(
+                "__etsUniformPadding", "__etsSymmetricPadding", "__etsEdgePadding") &&
+                value.arguments.all(::stableArgument)
             is EtsLambda -> true
             else -> false
         }
@@ -1372,9 +1442,15 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         if ("height" in keys) { if (!nextHeight) attributes["height"] = length; nextHeight = true }
                     }
                     "androidx.compose.foundation.layout.padding" -> {
-                        checkArguments(call, setOf("all", "horizontal", "vertical", "start", "top", "end", "bottom"))
+                        checkArguments(call, setOf("all", "horizontal", "vertical", "start", "top", "end", "bottom", "paddingValues"))
                         fun edge(name: String) = argument(call, name)?.let { dimension(it, scope, "dp") } ?: literal(0, call)
-                        attributes["padding"] = if (argument(call, "all") != null) edge("all")
+                        val paddingValues = argument(call, "paddingValues")?.let { value ->
+                            language.expression(value, scope).also {
+                                if (it.type != paddingType) diagnostics.unsupported(value,
+                                    "Modifier.padding requires mapped PaddingValues")
+                            }
+                        }
+                        attributes["padding"] = paddingValues ?: if (argument(call, "all") != null) edge("all")
                         else if (call.symbol.owner.valueParameters.any { it.name.asString() == "horizontal" }) {
                             val horizontal = edge("horizontal")
                             val vertical = edge("vertical")

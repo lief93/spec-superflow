@@ -51,7 +51,8 @@ class StringResources(
             for (file in directory.listFiles().orEmpty().filter { it.extension == "properties" }) {
                 val name = file.nameWithoutExtension
                 when {
-                    name == "source-resource-ids" || name.startsWith("unsupported") -> Unit
+                    name == "source-resource-ids" || name.startsWith("unsupported") ||
+                        name == "dimensions" || name == "dimension-qualifiers" -> Unit
                     name.startsWith("plurals-") -> {
                         val qualifier = name.removePrefix("plurals-")
                         require(qualifier == "base" || QUALIFIER.matches(qualifier)) { "Unsupported resource qualifier: $file" }
@@ -97,7 +98,7 @@ class StringResources(
             }
             require(supported.intersect(errors.keys).isEmpty()) { "Values resource cannot be both materialized and unsupported" }
             val ids = directory.resolve("source-resource-ids.properties").takeIf(File::isFile)?.let { file ->
-                properties(file, "string resource ID symbol").mapValues { (symbol, value) ->
+                properties(file, "string resource ID symbol").filterKeys { StringResourceKind.symbol(it) != null }.mapValues { (symbol, value) ->
                     require(symbol in supported) { "Values resource ID has no materialized resource: $symbol" }
                     java.lang.Long.decode(value).also { require(it in 1..Int.MAX_VALUE.toLong()) { "Invalid values resource ID: $symbol" } }.toInt()
                 }.also { require(it.values.toSet().size == it.size) { "Ambiguous values resource IDs" } }

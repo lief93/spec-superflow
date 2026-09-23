@@ -108,6 +108,8 @@ fun <T> withKotlinModule(arguments: List<String>, emit: (IrModuleFragment) -> T)
 fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
     prepareModule: (IrModuleFragment) -> Unit = {},
     prepareDeclaration: (org.jetbrains.kotlin.ir.declarations.IrDeclaration) -> Unit = {},
+    externalSourceType: (org.jetbrains.kotlin.ir.types.IrType) -> Boolean = { false },
+    externalSourceCall: (org.jetbrains.kotlin.ir.declarations.IrSimpleFunction) -> Boolean = { false },
     emit: (KotlinFrontendSession) -> T): T {
     val disposable = Disposer.newDisposable()
     var session: KotlinFrontendSession? = null
@@ -135,7 +137,8 @@ fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
             IrTypeSystemContextImpl(translated.result.irBuiltIns), CallCaptures(analyzed.result, translated.result))
         session = frontend
         prepareModule(frontend.module)
-        entry?.let { System.err.println(selectSourceDeclarations(frontend.module, it, prepareDeclaration)) }
+        entry?.let { System.err.println(selectSourceDeclarations(frontend.module, it, prepareDeclaration,
+            externalSourceType = externalSourceType, externalSourceCall = externalSourceCall)) }
         val lowering = EtsLoweringPhases.run(translated, frontend.bodies, frontend::rebindInlinedCaptures)
         check(!translated.diagnosticCollector.hasErrors && !messages.hasErrors()) {
             "Kotlin lowering diagnostics prohibit target output"

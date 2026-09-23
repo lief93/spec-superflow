@@ -7,6 +7,7 @@ import org.jetbrains.kotlin.ir.types.*
 
 private val flowSource = SourceSpan("EtsFlow.kt", -1, -1)
 private val flowClass = etsClassSymbol("EtsFlow", flowSource)
+private val stateFlowClass = etsClassSymbol("EtsStateFlow", flowSource)
 private val flowTypeParameter = EtsTypeParameter("compose:flow:T", "T")
 private val flowNames = setOf(
     "kotlinx.coroutines.flow.Flow",
@@ -37,8 +38,9 @@ internal class ComposeFlowRule : CallRule {
         val owner = type.classOrNull?.owner ?: return null
         if (sourceFile(owner) != null || symbolName(owner) !in flowNames) return null
         val argument = ((type as? IrSimpleType)?.arguments?.singleOrNull() as? IrTypeProjection)?.type
-            ?: return EtsNamedType(flowClass.name, listOf(EtsTypes.OBJECT), flowClass.id)
-        return EtsNamedType(flowClass.name, listOf(language.type(argument)), flowClass.id)
+        val target = if (symbolName(owner) in setOf("kotlinx.coroutines.flow.StateFlow",
+                "kotlinx.coroutines.flow.MutableStateFlow")) stateFlowClass else flowClass
+        return EtsNamedType(target.name, listOf(argument?.let(language::type) ?: EtsTypes.OBJECT), target.id)
     }
 
     override fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? {
@@ -48,9 +50,11 @@ internal class ComposeFlowRule : CallRule {
         val at = language.source(call)
         val initial = (0 until call.valueArgumentsCount).mapNotNull { call.getValueArgument(it)?.let { value -> language.expression(value, scope) } }
         val type = language.type(call.type) as EtsNamedType
-        return if (initial.isEmpty()) EtsNew(type, emptyList(), at)
-        else EtsCall(EtsLambda(emptyList(), initial.map { EtsExpressionStatement(it) } +
-            listOf(EtsReturn(EtsNew(type, emptyList(), at), at)), type, at), emptyList(), type, at)
+        if (type.symbolId == stateFlowClass.id) return EtsNew(type, listOf(initial.singleOrNull()
+            ?: throw Unsupported(Diagnostic("UNSUPPORTED", "MutableStateFlow requires one initial value", at))), at)
+        return if (initial.isEmpty()) EtsNew(type, emptyList(), at) else EtsCall(EtsLambda(emptyList(),
+            initial.map { EtsExpressionStatement(it) } + listOf(EtsReturn(EtsNew(type, emptyList(), at), at)),
+            type, at), emptyList(), type, at)
     }
 
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
@@ -65,9 +69,11 @@ internal class ComposeFlowRule : CallRule {
             val arguments = (0 until call.valueArgumentsCount).mapNotNull { index ->
                 call.getValueArgument(index)?.let { language.expression(it, scope) }
             }
-            return if (arguments.isEmpty()) EtsNew(type, emptyList(), at)
-            else EtsCall(EtsLambda(emptyList(), arguments.map { EtsExpressionStatement(it) } +
-                listOf(EtsReturn(EtsNew(type, emptyList(), at), at)), type, at), emptyList(), type, at)
+            if (type.symbolId == stateFlowClass.id) return EtsNew(type, listOf(arguments.singleOrNull()
+                ?: throw Unsupported(Diagnostic("UNSUPPORTED", "MutableStateFlow requires one initial value", at))), at)
+            return if (arguments.isEmpty()) EtsNew(type, emptyList(), at) else EtsCall(EtsLambda(emptyList(),
+                arguments.map { EtsExpressionStatement(it) } + listOf(EtsReturn(EtsNew(type, emptyList(), at), at)),
+                type, at), emptyList(), type, at)
         }
         if (api !in collectionApis && !api.endsWith(".collectAsState") && !api.endsWith(".collectAsStateWithLifecycle") &&
             property !in snapshotProperties) return null
@@ -76,17 +82,30 @@ internal class ComposeFlowRule : CallRule {
     }
 
     override fun targetFiles(program: EtsProgram): List<EtsFile> {
-        if (!usesType(program)) return emptyList()
+        if (!usesType(program, flowClass.id) && !usesType(program, stateFlowClass.id)) return emptyList()
         val constructor = EtsFunction("constructor", emptyList(), EtsTypes.VOID, emptyList(), flowSource,
             kind = EtsFunctionKind.CONSTRUCTOR)
-        return listOf(EtsFile(flowSource.file!!, listOf(
-            EtsClass(flowClass.name, listOf(constructor), flowSource, exported = true,
-                typeParameters = listOf(flowTypeParameter)))))
+        val declarations = mutableListOf<EtsDeclaration>()
+        if (usesType(program, flowClass.id)) declarations += EtsClass(flowClass.name, listOf(constructor), flowSource,
+            exported = true, typeParameters = listOf(flowTypeParameter))
+        if (usesType(program, stateFlowClass.id)) {
+            val valueType = EtsTypeParameterType(flowTypeParameter.id, flowTypeParameter.name)
+            val value = EtsSymbol("compose:state-flow:value", "value", valueType, flowSource)
+            val parameter = EtsParameter(EtsSymbol("compose:state-flow:initial", "initialValue", valueType, flowSource))
+            val selfType = EtsNamedType(stateFlowClass.name, listOf(valueType), stateFlowClass.id)
+            val self = EtsReference(EtsSymbol("state-flow:this", "this", selfType, flowSource, external = true))
+            val stateConstructor = EtsFunction("constructor", listOf(parameter), EtsTypes.VOID, listOf(
+                EtsExpressionStatement(EtsAssignment(EtsMember(self, value.name, value.type, flowSource, value.id),
+                    EtsReference(parameter.symbol), flowSource))), flowSource, kind = EtsFunctionKind.CONSTRUCTOR)
+            declarations += EtsClass(stateFlowClass.name, listOf(EtsField(value, readonly = true), stateConstructor),
+                flowSource, exported = true, typeParameters = listOf(flowTypeParameter), valueSnapshot = true)
+        }
+        return if (declarations.isEmpty()) emptyList() else listOf(EtsFile(flowSource.file!!, declarations))
     }
 
-    private fun usesType(program: EtsProgram): Boolean {
+    private fun usesType(program: EtsProgram, symbolId: String): Boolean {
         fun uses(type: EtsType): Boolean = when (type) {
-            is EtsNamedType -> type.symbolId == flowClass.id || type.arguments.any(::uses)
+            is EtsNamedType -> type.symbolId == symbolId || type.arguments.any(::uses)
             is EtsFunctionType -> type.parameters.any(::uses) || uses(type.result)
             is EtsNullableType -> uses(type.inner)
             else -> false
@@ -97,4 +116,21 @@ internal class ComposeFlowRule : CallRule {
         } } }
         return found
     }
+}
+
+internal fun collectedStateFlowSnapshot(call: IrCall, language: Language, scope: Scope): EtsExpression? {
+    val api = symbolName(call.symbol.owner)
+    if (api !in collectionApis && !api.endsWith(".collectAsStateWithLifecycle") && !api.endsWith(".collectAsState"))
+        return null
+    call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
+        if (call.getValueArgument(index) != null)
+            throw Unsupported(Diagnostic("UNSUPPORTED",
+                "Flow snapshot collection does not support explicit ${parameter.name} configuration",
+                language.source(call.getValueArgument(index)!!)))
+    }
+    val receiverSource = call.extensionReceiver ?: call.dispatchReceiver ?: return null
+    val receiver = language.expression(receiverSource, scope)
+    val type = receiver.type as? EtsNamedType ?: return null
+    if (type.symbolId != stateFlowClass.id || type.arguments.size != 1) return null
+    return EtsMember(receiver, "value", type.arguments.single(), language.source(call), "compose:state-flow:value")
 }

@@ -120,8 +120,8 @@ const probe = process.env.KOTLIN_ETS_PROBE ?? '/tmp/kotlin-official-frontend-pro
 const composeCp = JSON.parse(readFileSync(join(probe, 'classpath.json'), 'utf8')).join(':');
 const page = cli('page', 'Page.kt', { mode: 'page', entry: 'demo.adapters.AdapterPage', adapters: external, classpath: composeCp });
 assert.ok(page.includes('Text("Independent adapter")'));
-assert.ok(page.includes('.width(120).id("adapter-frame")'));
-assert.ok(page.includes('.width(24).id("adapter-content")'));
+assert.ok(page.includes('.width(120.0).id("adapter-frame")'));
+assert.ok(page.includes('.width(24.0).id("adapter-content")'));
 assert.ok(!page.includes('this.Frame("Independent adapter"'), 'explicit adapter source claim precedes structural source builder');
 const omitted = cli('omitted-modifier', 'OmittedModifier.kt', { mode: 'page', entry: 'demo.adapters.OmittedModifierPage',
   adapters: external, classpath: composeCp, status: 2 });

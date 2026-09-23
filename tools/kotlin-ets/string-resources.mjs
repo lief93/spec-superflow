@@ -3,7 +3,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const RESOURCE_TYPES = new Map([['string', 'string'], ['plurals', 'plurals'], ['string-array', 'array']]);
+const RESOURCE_TYPES = new Map([['string', 'string'], ['plurals', 'plurals'], ['string-array', 'array'], ['dimen', 'dimen']]);
 const QUANTITIES = new Set(['zero', 'one', 'two', 'few', 'many', 'other']);
 
 function decodeEntities(value, path) {
@@ -95,14 +95,16 @@ function validateFormats(value, path) {
   for (let i = 0; i < value.length; i++) {
     if (value[i] !== '%') continue;
     if (value[i + 1] === '%') { i++; continue; }
-    const match = /^%(?:([1-9][0-9]*)\$)?([sd])/.exec(value.slice(i));
+    const match = /^%(?:([1-9][0-9]*)\$)?(?:\.([0-9]+))?([sdf])/.exec(value.slice(i));
     if (!match) throw new Error(`unsupported string format near ${value.slice(i, i + 12)}: ${path}`);
     const position = match[1] ? Number(match[1]) : ++sequential;
     indexed ||= match[1] !== undefined;
     unindexed ||= match[1] === undefined;
     if (indexed && unindexed) throw new Error(`mixed indexed and unindexed string formats are unsupported: ${path}`);
-    if (types.has(position) && types.get(position) !== match[2]) throw new Error(`conflicting format types at argument ${position}: ${path}`);
-    types.set(position, match[2]);
+    const type = match[3];
+    if (match[2] !== undefined && type !== 'f') throw new Error(`format precision is supported only for floating-point values: ${path}`);
+    if (types.has(position) && types.get(position) !== type) throw new Error(`conflicting format types at argument ${position}: ${path}`);
+    types.set(position, type);
     i += match[0].length - 1;
   }
 }
@@ -145,6 +147,12 @@ function parsedEntries(path, qualifierName, source, namespace) {
     try {
       let value;
       if (androidType === 'string') value = androidText(node, path);
+      else if (androidType === 'dimen') {
+        if (node.children.length) throw new Error(`nested dimension content is unsupported: ${path}`);
+        const match = /^(-?(?:\d+(?:\.\d+)?|\.\d+))dp$/.exec(node.text.trim());
+        if (!match || !Number.isFinite(Number(match[1]))) throw new Error(`only finite dp dimensions are supported: ${path}`);
+        value = Number(match[1]);
+      }
       else if (androidType === 'plurals') {
         if (node.text.trim() || !node.children.length || node.children.some(item => item.tag !== 'item')) throw new Error(`invalid plurals structure: ${path}`);
         value = {};
@@ -158,8 +166,10 @@ function parsedEntries(path, qualifierName, source, namespace) {
         if (node.text.trim() || node.children.some(item => item.tag !== 'item')) throw new Error(`invalid string-array structure: ${path}`);
         value = node.children.map(item => androidText(item, path));
       }
-      if (qualifierName === null) throw new Error(`unsupported values qualifier ${basename(dirname(path))}: ${path}`);
-      entries.push({ symbol, androidType, qualifier: qualifierName, value, source, path, reason: null, shadowed: [] });
+      const directory = basename(dirname(path));
+      const selectedQualifier = androidType === 'dimen' ? (directory === 'values' ? 'base' : directory.slice('values-'.length)) : qualifierName;
+      if (selectedQualifier === null || !selectedQualifier) throw new Error(`unsupported values qualifier ${directory}: ${path}`);
+      entries.push({ symbol, androidType, qualifier: selectedQualifier, value, source, path, reason: null, shadowed: [] });
     } catch (error) {
       entries.push({ symbol, androidType, qualifier: qualifierName ?? `unsupported:${basename(dirname(path))}`, value: null,
         source, path, reason: error.message, shadowed: [] });
@@ -197,7 +207,7 @@ export function materializeProjectStrings({ resourceRoots, namespace, out, symbo
   const idNumbers = new Set();
   const symbols = new Set();
   for (const line of readFileSync(symbolsFile, 'utf8').split(/\r?\n/)) {
-    const match = /^int\s+(string|plurals|array)\s+([a-z_][a-z0-9_]*)\s+(0x[0-9a-fA-F]+|\d+)\s*$/.exec(line);
+    const match = /^int\s+(string|plurals|array|dimen)\s+([a-z_][a-z0-9_]*)\s+(0x[0-9a-fA-F]+|\d+)\s*$/.exec(line);
     if (!match) continue;
     const symbol = `${namespace}.R.${match[1]}.${match[2]}`;
     const id = Number(match[3]);
@@ -243,19 +253,21 @@ export function materializeProjectStrings({ resourceRoots, namespace, out, symbo
     const entries = bySymbol.get(symbol) ?? [];
     const base = entries.find(entry => entry.qualifier === 'base');
     const bad = entries.find(entry => entry.reason);
-    const expectedType = /\.R\.(string|plurals|array)\./.exec(symbol)[1];
+    const expectedType = /\.R\.(string|plurals|array|dimen)\./.exec(symbol)[1];
     if (!base) unavailable.set(symbol, { reason: `No default ${symbol} value exists in collected module resource roots`, entries });
     else if (base.androidType !== expectedType) unavailable.set(symbol, { reason: `Selected resource type does not match R.txt for ${symbol}`, entries });
     else if (bad) unavailable.set(symbol, { reason: bad.reason, entries });
     else supported.set(symbol, { id, entries: entries.filter(entry => entry.qualifier !== null) });
   }
 
-  const stringPacks = new Map(), pluralPacks = new Map(), arrayPacks = new Map();
+  const stringPacks = new Map(), pluralPacks = new Map(), arrayPacks = new Map(), dimensions = new Map(), dimensionQualifiers = new Map();
   const pack = (packs, qualifierName) => { if (!packs.has(qualifierName)) packs.set(qualifierName, new Map()); return packs.get(qualifierName); };
   for (const [symbol, item] of supported) for (const entry of item.entries) {
     if (entry.androidType === 'string') pack(stringPacks, entry.qualifier).set(symbol, entry.value);
     else if (entry.androidType === 'plurals') for (const [quantity, value] of Object.entries(entry.value)) pack(pluralPacks, entry.qualifier).set(`${symbol}.${quantity}`, value);
-    else entry.value.forEach((value, index) => pack(arrayPacks, entry.qualifier).set(`${symbol}.${index}`, value));
+    else if (entry.androidType === 'array') entry.value.forEach((value, index) => pack(arrayPacks, entry.qualifier).set(`${symbol}.${index}`, value));
+    else if (entry.qualifier === 'base') dimensions.set(symbol, entry.value);
+    else dimensionQualifiers.set(symbol, [...(dimensionQualifiers.get(symbol) ?? []), entry.qualifier]);
   }
 
   mkdirSync(dirname(destination), { recursive: true });
@@ -267,11 +279,16 @@ export function materializeProjectStrings({ resourceRoots, namespace, out, symbo
     if (!stringPacks.has('base')) writeFileSync(join(stage, 'base.properties'), '', { flag: 'wx' });
     for (const [qualifierName, values] of pluralPacks) writeFileSync(join(stage, `plurals-${qualifierName}.properties`), properties(values), { flag: 'wx' });
     for (const [qualifierName, values] of arrayPacks) writeFileSync(join(stage, `arrays-${qualifierName}.properties`), properties(values), { flag: 'wx' });
+    writeFileSync(join(stage, 'dimensions.properties'), properties(dimensions), { flag: 'wx' });
+    writeFileSync(join(stage, 'dimension-qualifiers.properties'), properties([...dimensionQualifiers]
+      .map(([symbol, qualifiers]) => [symbol, [...new Set(qualifiers)].sort().join(',')])), { flag: 'wx' });
     writeFileSync(join(stage, 'source-resource-ids.properties'), properties([...supported]
       .filter(([, item]) => item.id !== undefined).map(([symbol, item]) => [symbol, item.id])), { flag: 'wx' });
-    writeFileSync(join(stage, 'unsupported-string-resources.properties'), properties([...unavailable].map(([symbol, item]) => [symbol, Buffer.from(item.reason).toString('base64')])), { flag: 'wx' });
+    writeFileSync(join(stage, 'unsupported-string-resources.properties'), properties([...unavailable]
+      .filter(([symbol]) => !symbol.includes('.R.dimen.'))
+      .map(([symbol, item]) => [symbol, Buffer.from(item.reason).toString('base64')])), { flag: 'wx' });
     writeFileSync(join(stage, 'unsupported-string-resource-ids.properties'), properties([...unavailable]
-      .filter(([symbol]) => ids.has(symbol)).map(([symbol, item]) =>
+      .filter(([symbol]) => ids.has(symbol) && !symbol.includes('.R.dimen.')).map(([symbol, item]) =>
         [String(ids.get(symbol)), Buffer.from(`Unsupported Android values resource ${symbol}: ${item.reason}`).toString('base64')])), { flag: 'wx' });
     const provenance = { schemaVersion: 1, namespace, variant, roots, resources: [...symbols].sort().map(symbol => {
       const item = supported.get(symbol) ?? unavailable.get(symbol);

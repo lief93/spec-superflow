@@ -29,8 +29,10 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "enabled", "loop", "indicator", "select", "vertical", "clip", "focusable", "enableScrollInteraction" -> EtsTypes.BOOLEAN
             "scrollable" -> EtsNamedType("ScrollDirection")
             "scrollBar" -> EtsNamedType("BarState")
-            "index", "fontSize", "fontColor", "fontWeight", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight",
+            "index", "fontSize", "fontWeight", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight",
             "minCount", "maxCount", "cellLength", "columnsGap", "rowsGap", "aspectRatio" -> EtsTypes.NUMBER
+            "fontColor" -> value.type.takeIf { it == EtsTypes.NUMBER ||
+                it == EtsNamedType("Array", listOf(EtsTypes.NUMBER)) }
             "columnsTemplate", "rowsTemplate" -> EtsTypes.STRING
             "hitTestBehavior" -> EtsNamedType("HitTestMode")
             "clipShape" -> pathShapeType
@@ -74,6 +76,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "Text", "Span" -> listOf(EtsTypes.STRING)
             "Image" -> listOf(args.singleOrNull()?.type?.takeIf { it == ImageResources.RESOURCE || it == EtsTypes.STRING }
                 ?: diagnostics.unsupported(owner, "Image requires Resource or URL string"))
+            "SymbolGlyph" -> listOf(materialImageVectorResourceType)
             "Stack" -> listOf(stackOptions(owner).type)
             "WithTheme" -> listOf(EtsRecordType("SurfaceThemeOptions", mapOf("theme" to
                 EtsRecordType("SurfaceTheme", mapOf("colors" to

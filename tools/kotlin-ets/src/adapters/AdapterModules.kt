@@ -8,7 +8,11 @@ import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetObjectValue
 import org.jetbrains.kotlin.ir.expressions.IrGetField
+import org.jetbrains.kotlin.ir.expressions.IrBlock
+import org.jetbrains.kotlin.ir.expressions.IrComposite
+import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.types.classOrNull
 
 /** A build-time SPI provider, not another source parser or code generator. */
@@ -17,6 +21,10 @@ interface AdapterModule {
     val sourceCalls: Set<String>
     val sourceTypes: Set<String> get() = emptySet()
     val sourceFields: Set<String> get() = emptySet()
+    /** Explicit project bridges may replace source-owned bodies that belong to a host-supplied dependency. */
+    val replacesSourceBodies: Boolean get() = false
+    /** Direct root @Composable defaults supplied by the target host instead of executed during construction. */
+    val rootDefaultCalls: Set<String> get() = emptySet()
     val targetCalls: List<AdapterTargetCall> get() = emptyList()
     val imports: List<EtsImport> get() = emptyList()
     fun create(target: AdapterTargetApi, ui: AdapterUiServices?): CallRule
@@ -70,6 +78,9 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
             claim(module.sourceCalls, calls, "source call")
             claim(module.sourceTypes, types, "source type")
             claim(module.sourceFields, fields, "source field")
+            require(module.rootDefaultCalls.all { it in module.sourceCalls }) {
+                "Adapter ${module.id} root defaults must also be declared source calls"
+            }
             module.targetCalls.forEach { declaration ->
                 require(declaration.id.isNotBlank() && declaration.name.isNotBlank()) { "Blank target API in adapter ${module.id}" }
                 require(declaration.signature.typeParameters.isEmpty()) { "Adapter target API must have an instantiated signature: ${declaration.id}" }
@@ -108,11 +119,12 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
                     track(delegate.mapType(type, language)) else null
 
             override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? =
-                if (ui == null && claimed(call) && !reusableSourceBody(call))
+                if (ui == null && claimed(call) && (module.replacesSourceBodies || !reusableSourceBody(call)))
                     track(delegate.lower(call, language, scope)) else null
 
             override fun lowerConstructor(call: IrConstructorCall, language: Language, scope: Scope): EtsExpression? =
-                if (ui == null && symbolName(call.symbol.owner) in module.sourceCalls && !reusableSourceBody(call))
+                if (ui == null && symbolName(call.symbol.owner) in module.sourceCalls &&
+                    (module.replacesSourceBodies || !reusableSourceBody(call)))
                     track(delegate.lowerConstructor(call, language, scope)) else null
 
             override fun lowerObject(value: IrGetObjectValue, language: Language, scope: Scope): EtsExpression? =
@@ -124,12 +136,37 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
                     track(delegate.lowerField(value, language, scope)) else null
 
             override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
-                if (ui == null && claimed(call) && !reusableSourceBody(call))
+                if (ui == null && claimed(call) && (module.replacesSourceBodies || !reusableSourceBody(call)))
                     track(delegate.lowerStatement(call, language, scope)) else null
 
             override fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
                 if (ui != null && claimed(call)) track(delegate.lowerUi(call, language, scope)) else null
         }
+    }
+
+    fun consumesRootDefault(expression: IrExpression, expectedType: IrType): Boolean {
+        fun call(value: IrExpression): IrCall? = when (value) {
+            is IrCall -> value
+            is IrTypeOperatorCall -> call(value.argument)
+            is IrBlock -> (value.statements.lastOrNull() as? IrExpression)?.let(::call)
+            is IrComposite -> (value.statements.lastOrNull() as? IrExpression)?.let(::call)
+            else -> null
+        }
+        val resolved = call(expression) ?: return false
+        if (resolved.type != expectedType) return false
+        val module = ordered.singleOrNull { symbolName(resolved.symbol.owner) in it.rootDefaultCalls } ?: return false
+        used += module.id
+        return true
+    }
+
+    fun providesSourceType(type: IrType): Boolean {
+        val name = type.classFqName?.asString() ?: type.classOrNull?.owner?.let(::symbolName) ?: return false
+        return ordered.any { name in it.sourceTypes }
+    }
+
+    fun replacesSourceCall(function: org.jetbrains.kotlin.ir.declarations.IrSimpleFunction): Boolean {
+        val name = symbolName(function)
+        return ordered.any { it.replacesSourceBodies && name in it.sourceCalls }
     }
 
     companion object {

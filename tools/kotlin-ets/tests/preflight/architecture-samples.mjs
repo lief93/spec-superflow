@@ -16,12 +16,12 @@ const entry = 'com.example.android.architecture.blueprints.todoapp.statistics.St
 const categories = ['language_semantics', 'standard_library', 'neutral_compose_widget', 'modifier', 'resources',
   'project_dependencies'];
 const expectedCoverage = {
-  language_semantics: { total: 32, recognized: 31, unsupported: 1, percentage: 96.87 },
-  standard_library: { total: 51, recognized: 51, unsupported: 0, percentage: 100 },
-  neutral_compose_widget: { total: 15, recognized: 12, unsupported: 3, percentage: 80 },
+  language_semantics: { total: 14, recognized: 14, unsupported: 0, percentage: 100 },
+  standard_library: { total: 5, recognized: 5, unsupported: 0, percentage: 100 },
+  neutral_compose_widget: { total: 15, recognized: 14, unsupported: 1, percentage: 93.33 },
   modifier: { total: 7, recognized: 7, unsupported: 0, percentage: 100 },
   resources: { total: 6, recognized: 6, unsupported: 0, percentage: 100 },
-  project_dependencies: { total: 13, recognized: 6, unsupported: 7, percentage: 46.15 },
+  project_dependencies: { total: 4, recognized: 3, unsupported: 1, percentage: 75 },
 };
 
 mkdirSync(join(here, '.work'), { recursive: true });
@@ -41,11 +41,8 @@ function run(label, command, args, options = {}, expected = 0) {
 }
 
 function assertSource(source) {
-  assert.ok(source.file);
-  assert.ok(source.start >= 0);
-  assert.ok(source.end >= source.start);
-  assert.ok(source.line > 0 && source.column > 0);
-  assert.ok(source.endLine > 0 && source.endColumn > 0);
+  assert.ok(source.file && source.start >= 0 && source.end >= source.start);
+  assert.ok(source.line > 0 && source.column > 0 && source.endLine > 0 && source.endColumn > 0);
 }
 
 assert.match(run('origin', 'git', ['-C', seed, 'remote', 'get-url', 'origin']).stdout.trim(),
@@ -60,19 +57,29 @@ try {
   const output = join(evidence, 'StatisticsScreen.ets');
   const reportPath = join(evidence, 'core-profile.json');
   const compilation = run('project-preflight', 'node', [join(root, 'project.mjs'), '--project', project,
-    '--module', ':app', '--variant', 'debug', '--mode', 'page', '--unsupported-policy', 'error', '--entry', entry,
+    '--module', ':app', '--variant', 'debug', '--mode', 'page', '--unsupported-policy', 'report', '--entry', entry,
     '--out', output, '--preflight-out', reportPath, '--work-dir', projectRun, '--offline'],
-  { env: { ANDROID_HOME: androidHome } }, 2);
-  const backendBlocker = JSON.parse(compilation.stdout);
-  assert.equal(backendBlocker.code, 'UNSUPPORTED');
-  assert.equal(backendBlocker.message, 'External inline call has no loaded IR body: ' +
-    'androidx.hilt.navigation.compose.hiltViewModel. Provide explicit dependency source, a supported serialized ' +
-    'dependency, or a declared typed adapter; this call has no usable binary IR body. ' +
-    'JVM binary metadata contains no serialized IR. Unsupported external call: ' +
-    'androidx.hilt.navigation.compose.hiltViewModel. Missing dependency body or declared typed adapter');
-  assert.equal(backendBlocker.source.line, 47);
-  assert.equal(backendBlocker.source.column, 38);
-  assert.equal(existsSync(output), false);
+  { env: { ANDROID_HOME: androidHome } });
+  const generation = JSON.parse(compilation.stdout.split('\n').find(line => line.startsWith('{"ok"')));
+  assert.equal(generation.ok, true);
+  assert.equal(generation.status, 'generated_with_degradations');
+  assert.equal(generation.degradationCount, 1);
+  const target = readFileSync(output, 'utf8');
+  for (const seam of [
+    /@Require @Prop viewModel: StatisticsViewModelBridge/,
+    /Refresh\(\{ refreshing: loading \}\)/,
+    /\.onRefreshing\(onRefresh\)/,
+    /viewModel\.refresh\(\)/,
+    /\.padding\(16\.0\)/,
+    /SymbolGlyph\(new EtsImageVector\(\$r\("sys\.symbol\.line_3_horizontal"\)\)\.resource\)/,
+    /export interface StatisticsViewModelBridge/,
+  ]) assert.match(target, seam);
+
+  const diagnosis = JSON.parse(readFileSync(output + '.diagnosis.json', 'utf8'));
+  assert.equal(diagnosis.blockingFailure, null);
+  assert.equal(diagnosis.status, 'generated_with_degradations');
+  assert.deepEqual(diagnosis.degradations.map(value => value.action), ['dimension_qualifier_fallback']);
+  assert.equal(diagnosis.degradations[0].source.line, 79);
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
   assert.equal(inputs.compilerVersion, '2.1.10');
@@ -90,17 +97,20 @@ try {
   assert.equal(report.frontendCompilerVersion, '2.1.20');
   assert.equal(report.compatibilityDecision, 'same_language_line_older_patch');
   assert.deepEqual(Object.keys(report.coverage), categories);
-  assert.deepEqual(report.counts, Object.fromEntries(categories.map(category =>
-    [category, expectedCoverage[category].total])));
+  assert.deepEqual(report.counts, Object.fromEntries(categories.map(category => [category, expectedCoverage[category].total])));
   assert.deepEqual(report.coverage, expectedCoverage);
-  assert.equal(report.calls.length, 124);
+  assert.equal(report.calls.length, 51);
+  const unsupportedCalls = report.calls.filter(call => call.firstUnsupportedNode !== null);
+  assert.deepEqual(unsupportedCalls.map(call => call.finalRecognizedNode.symbol), [
+    'androidx.lifecycle.compose.collectAsStateWithLifecycle',
+    'androidx.compose.foundation.rememberScrollState',
+  ]);
   assert.equal(report.firstUnsupportedNode.kind, 'target_type');
-  assert.equal(report.firstUnsupportedNode.symbol, 'androidx.compose.runtime.remember');
-  assert.match(report.firstUnsupportedNode.message, /SnackbarHostState/);
-  assert.equal(report.firstUnsupportedNode.source.line, 48);
-  assert.equal(report.firstUnsupportedNode.source.column, 44);
+  assert.equal(report.firstUnsupportedNode.symbol, 'androidx.lifecycle.compose.collectAsStateWithLifecycle');
+  assert.match(report.firstUnsupportedNode.message, /androidx\.compose\.runtime\.State/);
+  assert.equal(report.firstUnsupportedNode.source.line, 55);
+  assert.equal(report.firstUnsupportedNode.source.column, 42);
   assertSource(report.firstUnsupportedNode.source);
-
   for (const call of report.calls) {
     assertSource(call.source);
     assert.ok(call.finalRecognizedNode?.symbol);
@@ -114,13 +124,10 @@ try {
       assert.ok(call.firstUnsupportedNode.responsibleModule.startsWith('tools/kotlin-ets/src/'));
     }
   }
-
-  const unsupportedCalls = report.calls.filter(call => call.firstUnsupportedNode !== null);
-  assert.equal(unsupportedCalls.length, 11);
   assert.deepEqual(Object.fromEntries(categories.map(category => [category,
     unsupportedCalls.filter(call => call.category === category).length])), {
-    language_semantics: 1, standard_library: 0, neutral_compose_widget: 3,
-    modifier: 0, resources: 0, project_dependencies: 7,
+    language_semantics: 0, standard_library: 0, neutral_compose_widget: 1,
+    modifier: 0, resources: 0, project_dependencies: 1,
   });
 
   const baseline = {
@@ -132,21 +139,14 @@ try {
     counts: report.counts,
     coverage: report.coverage,
     firstUnsupportedNode: report.firstUnsupportedNode,
-    backendBlocker,
+    backendBlocker: null,
     unsupportedCalls,
-    p0Gaps: [
-      { category: 'project_dependencies', node: 'androidx.hilt.navigation.compose.hiltViewModel',
-        responsibleModule: 'tools/kotlin-ets/src/adapters/AdapterModules.kt', source: backendBlocker.source,
-        detail: backendBlocker.message },
-      { category: 'six_category_coverage', node: 'unsupported_call_inventory',
-        responsibleModules: [...new Set(unsupportedCalls.map(call => call.responsibleModule))].sort(),
-        counts: { language_semantics: 1, neutral_compose_widget: 3, project_dependencies: 7 },
-        detail: 'Eleven source-linked calls remain unsupported; the report\'s designated first type gap is remember returning SnackbarHostState.' },
-    ],
+    degradations: diagnosis.degradations,
+    p0Gaps: [],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
-  console.log('PASS architecture-samples ee66e152: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS 124-call six-category baseline; dependency body and all 11 unsupported calls remain explicit');
+  console.log('PASS architecture-samples ee66e152: StatisticsScreen generates through the host ViewModel bridge');
+  console.log('PASS 49/51 preflight calls recognized; two Compose-specialized target types remain visible');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

@@ -90,3 +90,30 @@ test('library placeholder IDs retain named resources without inventing runtime I
   assert.match(readFileSync(join(pack.output, 'base.properties'), 'utf8'), /sample\.library\.R\.string\.label=Library/);
   assert.equal(readFileSync(join(pack.output, 'source-resource-ids.properties'), 'utf8'), '');
 });
+
+test('selected dimensions retain base dp values and record unavailable qualifiers', () => {
+  const work = mkdtempSync(join(tmpdir(), 'kotlin-ets-project-dimensions-'));
+  const main = join(work, 'main-res');
+  write(join(main, 'values/dimens.xml'), `<resources>
+    <dimen name="horizontal_margin">16dp</dimen>
+    <string name="percentage">%1$.1f%%</string>
+  </resources>`);
+  write(join(main, 'values-w820dp/dimens.xml'),
+    '<resources><dimen name="horizontal_margin">24dp</dimen></resources>');
+  const symbols = join(work, 'R.txt');
+  writeFileSync(symbols, [
+    'int dimen horizontal_margin 0x7f040001',
+    'int string percentage 0x7f010001',
+  ].join('\n') + '\n');
+  const pack = materializeProjectStrings({ namespace: 'sample.app', variant: 'debug', symbolsFile: symbols,
+    resourceRoots: [{ sourceSet: 'main', overlayPriority: 0, path: main }], out: join(work, 'out') });
+  assert.equal(pack.count, 2);
+  assert.equal(pack.unsupportedCount, 0);
+  assert.equal(readFileSync(join(pack.output, 'dimensions.properties'), 'utf8'),
+    'sample.app.R.dimen.horizontal_margin=16\n');
+  assert.equal(readFileSync(join(pack.output, 'dimension-qualifiers.properties'), 'utf8'),
+    'sample.app.R.dimen.horizontal_margin=w820dp\n');
+  assert.match(readFileSync(join(pack.output, 'base.properties'), 'utf8'), /%1\$\.1f%%/);
+  assert.match(readFileSync(join(pack.output, 'source-resource-ids.properties'), 'utf8'),
+    /sample\.app\.R\.dimen\.horizontal_margin=2130968577/);
+});
