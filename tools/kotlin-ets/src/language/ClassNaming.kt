@@ -32,7 +32,8 @@ class ClassNaming(private val functions: OverloadNaming) {
             }
         })
         val declarations = module.files.flatMap { it.declarations }
-        val fixed = declarations.filterIsInstance<IrSimpleFunction>().map { functions.name(it) }.toSet()
+        // Source declarations must not shadow target globals used by generated runtime support.
+        val fixed = declarations.filterIsInstance<IrSimpleFunction>().map { functions.name(it) }.toSet() + "Error"
         reserved.addAll(fixed)
         val table = NameTable<IrClass>(reserved = reserved)
         val shadowed = shadowedClassValues(module)

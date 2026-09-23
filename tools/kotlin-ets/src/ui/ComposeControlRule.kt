@@ -7,6 +7,9 @@ internal data class ComposeElement(val element: EtsUiElement,
     val modifierBoundaries: Set<String> = emptySet(), val touch: TouchTargets? = null,
     val orderedArguments: List<EtsExpression> = emptyList(), val requiresBoundedSize: Boolean = false)
 
+internal const val BOUNDED_WIDTH = "layout:bounded-width"
+internal const val BOUNDED_HEIGHT = "layout:bounded-height"
+
 internal abstract class ComposeControlRule(
     private val decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,
 ) : CallRule {

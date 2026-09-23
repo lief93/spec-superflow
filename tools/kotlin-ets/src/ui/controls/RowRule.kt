@@ -18,8 +18,11 @@ internal class ComposeRowRule(
         val alignment = argument(call, "verticalAlignment")?.let { language.expression(it, scope) }
             ?: target.enumValue("VerticalAlign", "Top", call)
         val attrs = mutableListOf(target.attribute("alignItems", listOf(alignment), call))
-        val arrangement = argument(call, "horizontalArrangement")?.let { language.expression(it, scope) }
+        val arrangementSource = argument(call, "horizontalArrangement")
+        val justification = arrangementSource?.let { arrangementAlignment(it, scope, target) }
+        val arrangement = arrangementSource?.takeIf { justification == null }?.let { language.expression(it, scope) }
         val options = arrangement?.let { listOf(arrangementOptions(it, "Row", target, call)) } ?: emptyList()
+        justification?.let { attrs += target.attribute("justifyContent", listOf(it), call) }
         if (touch != null) {
             val source = language.source(call)
             attrs += target.attribute("responseRegion", listOf(touch.rowRegion(source)), call)
@@ -31,6 +34,6 @@ internal class ComposeRowRule(
                 listOf(EtsReturn(dispatch, source)), dispatch.type, source)), call)
         }
         return ComposeElement(target.native("Row", options, call, children).copy(attributes = attrs),
-            orderedArguments = listOfNotNull(arrangement, alignment))
+            orderedArguments = listOfNotNull(arrangement, justification, alignment))
     }
 }

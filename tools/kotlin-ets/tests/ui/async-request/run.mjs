@@ -31,10 +31,16 @@ const out = join(work, 'Page.ets');
 run('page', 'bash', [...common, '--entry', 'asyncimages.Page', '--out', out, join(here, 'Page.kt')]);
 const source = readFileSync(out, 'utf8');
 assert.match(source, /EtsAsyncImage\(\{ request: new EtsImageRequest\(url\.value/);
+assert.match(source, /EtsAsyncImage\(\{ request: new EtsImageRequest\(url\.value, 0, null\), placeholder: [^,]+, error: [^,]+, fit: ImageFit\.Contain \}\)/);
 assert.match(source, /Picture\(__etsMaterialContext: EtsMaterialContext, url: Binding<string \| null>\)/);
 assert.match(source, /UIUtils\.makeBinding/);
 assert.match(source, /function inspectionPlaceholder\(id: number\)/);
 assert.match(source, /false \? __etsPainterResource\(id\) : null/);
+assert.match(source, /\.aspectRatio\(1\.5\)/);
+assert.match(source, /request\("https:\/\/example\.com\/card\.svg"\)/);
+assert.match(source, /column: true, fixedWidth: true, fixedHeight: true/);
+assert.match(source, /Text\("Loading"\)/);
+assert.doesNotMatch(source, /noWhenBranchMatchedException/);
 
 // Exercise emitted lifecycle methods, without simulating native rendering or network IO.
 const parsed = ts.createSourceFile('page.ts', source.replaceAll('export struct ', 'export class '), ts.ScriptTarget.ES2022, true);
@@ -59,6 +65,7 @@ image.request = new EtsImageRequest('a.svg', 600, null); image.aboutToAppear();
 const first = image.generation;
 assert.deepEqual(Array.from(image.tokens), [first]);
 assert.equal(image.showPlaceholder, true); assert.equal(image.progress, 0);
+assert.equal(image.showError, false);
 image.loaded(first); assert.equal(image.progress, 1); assert.equal(image.showPlaceholder, true);
 assert.equal(animations.length, 1); assert.equal(animations[0].duration, 600);
 image.loaded(first); assert.equal(animations.length, 1);
@@ -70,10 +77,10 @@ assert.equal(image.showPlaceholder, true); assert.equal(image.progress, 0); asse
 image.loaded(second); animations[1].onFinish(); assert.equal(image.showPlaceholder, false);
 image.request = new EtsImageRequest('b.svg', 200, null); image.requestChanged();
 assert.equal(image.generation, second, 'Equivalent rebuilt descriptor must not reset loaded image');
-image.request = new EtsImageRequest('c.svg', 0, null); image.requestChanged(); image.failed(image.generation);
-assert.equal(image.showPlaceholder, false); assert.equal(image.progress, 0);
+image.error = {}; image.request = new EtsImageRequest('c.svg', 0, null); image.requestChanged(); image.failed(image.generation);
+assert.equal(image.showPlaceholder, false); assert.equal(image.showError, true); assert.equal(image.progress, 0);
 image.request = new EtsImageRequest(null, 0, null); image.requestChanged();
-assert.equal(image.tokens.length, 0); assert.equal(image.showPlaceholder, false);
+assert.equal(image.tokens.length, 0); assert.equal(image.showPlaceholder, false); assert.equal(image.showError, false);
 image.request = new EtsImageRequest('d.svg', 0, null); image.requestChanged(); image.loaded(image.generation);
 assert.equal(image.progress, 1); assert.equal(image.showPlaceholder, false);
 image.request = new EtsImageRequest('e.svg', 100, null); image.requestChanged();

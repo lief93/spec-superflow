@@ -51,3 +51,21 @@ internal fun arrangementOptions(value: EtsExpression, control: String, target: A
     return target.record("${control}Options", linkedMapOf("space" to
         EtsMember(value, "space", EtsTypes.NUMBER, value.source, arrangementSpace.id)), call)
 }
+
+/** Fixed Arrangement getters map to the native main-axis alignment attribute. */
+internal fun arrangementAlignment(value: org.jetbrains.kotlin.ir.expressions.IrExpression,
+    scope: Scope, target: ArkUiCalls): EtsExpression? {
+    val call = resolvedCall(value, scope) ?: return null
+    val property = call.symbol.owner.correspondingPropertySymbol?.owner ?: return null
+    if (!symbolName(property).startsWith("androidx.compose.foundation.layout.Arrangement.")) return null
+    val name = when (property.name.asString()) {
+        "Start", "Top" -> "Start"
+        "Center" -> "Center"
+        "End", "Bottom" -> "End"
+        "SpaceBetween" -> "SpaceBetween"
+        "SpaceAround" -> "SpaceAround"
+        "SpaceEvenly" -> "SpaceEvenly"
+        else -> return null
+    }
+    return target.enumValue("FlexAlign", name, call)
+}

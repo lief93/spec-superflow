@@ -24,6 +24,7 @@ assert.equal(page.report.degradationCount, 0);
 const code = readFileSync(page.output, 'utf8');
 assert.match(code, /Row\(\{ space: /);
 assert.match(code, /Column\(\{ space: /);
+assert.match(code, /justifyContent\(FlexAlign\.Center\)/);
 const unsupported = run('UnsupportedAlignment');
 assert.equal(unsupported.result.status, 2);
 assert.match(unsupported.report.blockingFailure.message, /spacedBy|alignment/);

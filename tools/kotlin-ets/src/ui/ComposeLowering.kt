@@ -181,7 +181,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             fields.add(0, EtsField(EtsSymbol("ui:file-ready", name, EtsTypes.BOOLEAN, at),
                 EtsCall(EtsReference(guard.symbol), emptyList(), EtsTypes.BOOLEAN, at), visibility = EtsVisibility.PRIVATE))
         }
-        val component = EtsClass(name, fields + lifecycle + pageMethods + build, language.source(root), exported = true, component = true, entry = true)
+        val hasRequiredInputs = fields.filterIsInstance<EtsField>().any { it.prop && it.required }
+        val component = EtsClass(name, fields + lifecycle + pageMethods + build, language.source(root), exported = true,
+            component = true, entry = !hasRequiredInputs)
         files.getOrPut(language.source(root).file!!) { mutableListOf() }.add(component)
         return bindReactiveBuilderArguments(linkAdapterDeclarations(EtsProgram(files.filterValues { it.isNotEmpty() }.map { (path, declarations) -> EtsFile(path, declarations) },
             if (usesMaterialTypography) listOf(EtsImport("@ohos.graphics.drawing", "__etsDrawing", default = true)) else emptyList()), language.callRules))
@@ -211,7 +213,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeCompositionLocalProviderRule(compositionLocals, diagnostics, ::provideCompositionContext),
             ComposeMaterialThemeRule(target, ::provideMaterialContext),
             ComposeProvideTextStyleRule(target, ::provideMaterialContext),
-            ComposeSurfaceRule(target, ::surfaceContent, { content, scope -> surfaceContent(content, scope, "height") }, ::modifiers),
+            ComposeSurfaceRule(target, ::surfaceContent, { content, scope -> surfaceContent(content, scope, "height") },
+                ::modifierBounds, ::modifiers),
             ComposeSpacerRule(target, ::modifiers),
             ComposeTextRule(target, ::dimension,
                 { usesMaterialTypography = true }, ::modifiers),
@@ -231,6 +234,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeHorizontalPagerRule(target, ::pagerBinding, { binding(it) }, { body, scope -> uiBody(body, scope) },
                 ::indexItems, ::modifiers),
             ComposeLazyColumnRule(target, { binding(it) }, { body, scope -> uiBody(body, scope) }, ::modifiers),
+            ComposeLazyVerticalGridRule(target, { binding(it) }, { body, scope -> uiBody(body, scope) },
+                { value, scope -> dimension(value, scope, "dp") }, ::modifiers),
         )
     }
 
@@ -317,7 +322,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
 
     private fun builder(function: IrSimpleFunction, modifiers: Map<IrValueSymbol, IrExpression> = emptyMap(),
         aliases: Map<IrValueSymbol, IrExpression> = emptyMap(), name: String = function.name.asString(),
-        ambient: Map<String, EtsExpression> = emptyMap()): EtsFunction {
+        ambient: Map<String, EtsExpression> = emptyMap(),
+        modifierBindings: Map<IrValueSymbol, EtsExpression> = emptyMap()): EtsFunction {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
         if (modifiers.isEmpty()) builderSymbol(function)
         if (function.extensionReceiverParameter != null || function.dispatchReceiverParameter != null)
@@ -325,6 +331,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         val scope = scope()
         scope.aliases.putAll(aliases)
         scope.aliases.putAll(modifiers)
+        scope.bindings.putAll(modifierBindings)
         scope.ambientValues.putAll(ambient)
         val parameters = contextParameters(scope, function) + function.valueParameters.filter { it.symbol !in modifiers }.map { parameter ->
             if (parameter.type.hasAnnotation(COMPOSABLE)) {
@@ -531,9 +538,19 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             if (resolved != null && resolved !== node) uiStatement(resolved, scope, rootBody)
             else diagnostics.unsupported(node, "Unexpected UI value")
         }
-        is IrWhen -> listOf(EtsIf(node.branches.map { branch -> EtsBranch(
-            if (branch is IrElseBranch) null else expression(branch.condition, scope), uiStatement(branch.result, scope.fork())) }, language.source(node)))
+        is IrWhen -> listOf(EtsIf(node.branches.filterNot { branch ->
+            branch is IrElseBranch && syntheticNoWhenBranch(branch.result)
+        }.map { branch -> EtsBranch(if (branch is IrElseBranch) null else expression(branch.condition, scope),
+            uiStatement(branch.result, scope.fork())) }, language.source(node)))
         else -> diagnostics.unsupported(node, "Unsupported UI statement ${node::class.simpleName}")
+    }
+
+    private fun syntheticNoWhenBranch(value: IrExpression): Boolean = when (value) {
+        is IrCall -> symbolName(value.symbol.owner) == "kotlin.internal.ir.noWhenBranchMatchedException"
+        is IrTypeOperatorCall -> syntheticNoWhenBranch(value.argument)
+        is IrBlock -> (value.statements.lastOrNull() as? IrExpression)?.let(::syntheticNoWhenBranch) == true
+        is IrComposite -> (value.statements.lastOrNull() as? IrExpression)?.let(::syntheticNoWhenBranch) == true
+        else -> false
     }
 
     private fun remember(variable: IrVariable, expression: IrExpression, scope: Scope, rootBody: Boolean): Boolean {
@@ -651,6 +668,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                 return "${symbolName(owner)}[$signature]($receivers;$arguments)"
             }
             if (isLayoutScopeReceiver(resolved)) return "layoutScope:${resolved.type.classFqName ?: resolved.type.render()}"
+            if (resolved is IrGetValue && scope.bindings[resolved.symbol]?.type == emptyModifierType) return "identity"
             if (resolved is IrGetValue) diagnostics.unsupported(resolved, "Dynamic Modifier operands require a first-class target layout program")
             val literal = language.expression(resolved, scope) as? EtsLiteral
                 ?: diagnostics.unsupported(resolved, "Effectful Modifier operands require an evaluation-preserving layout program")
@@ -665,7 +683,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             val previousFile = diagnostics.currentFile
             try {
                 builder(function, inputs.associate { it.first.symbol to it.second }, scope.aliases, name,
-                    scope.ambientValues).also {
+                    scope.ambientValues, scope.bindings.filterValues { it.type == emptyModifierType }
+                        .mapValues { emptyModifierValue(language.source(call)) }).also {
                     modifierSpecializations[identity] = function to it
                 }
             } finally {
@@ -1068,6 +1087,50 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private fun modifiers(expression: IrExpression?, initialScope: Scope, node: ComposeElement): List<EtsStatement> =
         modifiers(expression, initialScope, node, emptyMap())
 
+    private fun modifierBounds(expression: IrExpression?, initialScope: Scope): Set<String> {
+        val scope = initialScope.fork()
+        var width = false
+        var height = false
+        val operations = mutableListOf<IrCall>()
+        fun collect(value: IrExpression?) {
+            when (val resolved = dereference(value, scope)) {
+                null, is IrGetObjectValue -> Unit
+                is IrGetValue -> Unit
+                is IrCall -> {
+                    collect(resolved.extensionReceiver ?: resolved.dispatchReceiver)
+                    if (symbolName(resolved.symbol.owner) == "androidx.compose.ui.Modifier.then")
+                        collect(argument(resolved, "other"))
+                    else operations += resolved
+                }
+                is IrBlock -> {
+                    for (statement in resolved.statements.dropLast(1)) {
+                        val variable = statement as? IrVariable ?: continue
+                        variable.initializer?.let { scope.aliases[variable.symbol] = it }
+                    }
+                    collect(resolved.statements.lastOrNull() as? IrExpression)
+                }
+                else -> Unit
+            }
+        }
+        collect(expression)
+        operations.forEach { call ->
+            when (symbolName(call.symbol.owner)) {
+                "androidx.compose.foundation.layout.width", "androidx.compose.foundation.layout.fillMaxWidth" -> width = true
+                "androidx.compose.foundation.layout.height", "androidx.compose.foundation.layout.fillMaxHeight" -> height = true
+                "androidx.compose.foundation.layout.size", "androidx.compose.foundation.layout.fillMaxSize" -> {
+                    width = true; height = true
+                }
+                "androidx.compose.foundation.layout.aspectRatio" -> {
+                    if (width) height = true else if (height) width = true
+                }
+            }
+        }
+        return buildSet {
+            if (width) add(BOUNDED_WIDTH)
+            if (height) add(BOUNDED_HEIGHT)
+        }
+    }
+
     private fun modifiers(expression: IrExpression?, initialScope: Scope, node: ComposeElement,
         choices: Map<IrWhen, IrExpression>): List<EtsStatement> {
         val scope = initialScope.fork()
@@ -1224,6 +1287,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     "androidx.compose.ui.input.pointer.pointerInput" -> setOf("hitTestBehavior")
                     "androidx.compose.foundation.layout.offset" -> setOf("offset")
                     "androidx.compose.ui.draw.rotate" -> setOf("rotate")
+                    "androidx.compose.foundation.layout.aspectRatio" -> setOf("aspectRatio")
                     else -> {
                         diagnostics.omitUi(call, "Unsupported resolved Modifier API: $api", api,
                             "omitted_modifier", "Modifier arguments and behavior are omitted; other modifier operations remain.",
@@ -1387,6 +1451,22 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                             diagnostics.unsupported(degrees, "rotate currently requires a stable scalar argument")
                         attributes["rotate"] = record("RotateOptions", linkedMapOf("angle" to emitted), call)
                     }
+                    "androidx.compose.foundation.layout.aspectRatio" -> {
+                        checkArguments(call, setOf("ratio", "matchHeightConstraintsFirst"))
+                        val heightFirst = argument(call, "matchHeightConstraintsFirst")
+                        if (heightFirst != null && (expression(heightFirst, scope) as? EtsLiteral)?.value != false)
+                            diagnostics.unsupported(heightFirst, "aspectRatio currently requires matchHeightConstraintsFirst=false")
+                        val ratio = argument(call, "ratio")
+                            ?: diagnostics.unsupported(call, "Missing aspectRatio ratio")
+                        val emitted = expression(ratio, scope)
+                        if (emitted !is EtsLiteral && !stableRead(ratio, scope))
+                            diagnostics.unsupported(ratio, "aspectRatio requires a stable scalar value")
+                        attributes["aspectRatio"] = emitted
+                        if (nextWidth) nextHeight = true else if (nextHeight) nextWidth = true
+                    }
+                }
+                if ("aspectRatio" in attributes) {
+                    if (nextWidth) nextHeight = true else if (nextHeight) nextWidth = true
                 }
                 seen += keys
                 cursor++
@@ -1426,7 +1506,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             val options = wrap?.let { record("StackOptions", linkedMapOf("alignContent" to it.alignment), owner) } ?: stackOptions(owner)
             return native("Stack", listOf(options), owner, listOf(layer(cursor, nextWidth, nextHeight))).copy(attributes = attrs)
         }
-        val result = layer(0, weightAxis == "width", weightAxis == "height")
+        val result = layer(0, weightAxis == "width" || node.requiresBoundedSize && BOUNDED_WIDTH in scope.semanticFlags,
+            weightAxis == "height" || node.requiresBoundedSize && BOUNDED_HEIGHT in scope.semanticFlags)
         return listOf(if (weight == null) result else result.copy(attributes = result.attributes +
             attribute("layoutWeight", listOf(weight), owner)))
     }

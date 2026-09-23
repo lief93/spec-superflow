@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
     }
 }
 @Composable fun Dynamic(width: Dp = 12.dp) { Card(Modifier.width(width), "dynamic") }
+@Composable fun RequiredRoot(modifier: Modifier) { Card(modifier.fillMaxSize(), "root") }
 var calls = 0
 fun nextWidth(): Dp { calls += 1; return 30.dp }
 @Composable fun Effectful() { Card(Modifier.width(nextWidth()), "effectful") }

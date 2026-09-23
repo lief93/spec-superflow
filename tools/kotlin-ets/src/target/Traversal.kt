@@ -33,7 +33,7 @@ fun walkEts(node: EtsNode, visit: (EtsNode) -> Unit) {
         is EtsLoop -> { walk(node.condition); node.body.forEach(::walk) }
         is EtsUiElement -> { walk(node.call); node.children?.forEach(::walk); node.attributes.forEach(::walk) }
         is EtsUiComponent -> { walk(node.component); node.properties.values.forEach(::walk) }
-        is EtsUiForEach -> { walk(node.items); parameters(listOf(node.item)); node.body.forEach(::walk) }
+        is EtsUiForEach -> { walk(node.items); parameters(listOf(node.item)); node.body.forEach(::walk); node.key?.let(::walk) }
         is EtsUiLazyForEach -> {
             walk(node.dataSource)
             parameters(listOf(node.item, node.index))

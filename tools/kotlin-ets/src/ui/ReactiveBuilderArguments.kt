@@ -225,7 +225,8 @@ private class ReactiveBuilderRewriter(private val builders: Map<String, EtsFunct
         is EtsLoop -> value.copy(condition = expression(value.condition), body = value.body.map(::statement))
         is EtsUiElement -> value.copy(call = expression(value.call) as EtsCall, children = value.children?.map(::statement), attributes = value.attributes.map { expression(it) as EtsCall })
         is EtsUiComponent -> value.copy(properties = value.properties.mapValues { expression(it.value) })
-        is EtsUiForEach -> value.copy(items = expression(value.items), body = value.body.map(::statement))
+        is EtsUiForEach -> value.copy(items = expression(value.items), body = value.body.map(::statement),
+            key = value.key?.let(::expression) as? EtsLambda)
         is EtsUiLazyForEach -> value.copy(dataSource = expression(value.dataSource),
             body = value.body.map(::statement), key = value.key?.let(::expression) as? EtsLambda)
         is EtsFunction -> function(value)

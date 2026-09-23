@@ -100,7 +100,7 @@ data class EtsUiElement(val call: EtsCall, val children: List<EtsStatement>? = n
 data class EtsUiComponent(val component: EtsReference, val properties: Map<String, EtsExpression>,
     override val source: SourceSpan = component.source) : EtsStatement
 data class EtsUiForEach(val items: EtsExpression, val item: EtsParameter, val body: List<EtsStatement>,
-    override val source: SourceSpan) : EtsStatement
+    override val source: SourceSpan, val key: EtsLambda? = null) : EtsStatement
 data class EtsUiLazyForEach(val dataSource: EtsExpression, val item: EtsParameter,
     val index: EtsParameter, val body: List<EtsStatement>, val key: EtsLambda?,
     override val source: SourceSpan) : EtsStatement

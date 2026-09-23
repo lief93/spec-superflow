@@ -42,9 +42,19 @@ try {
   const compilation = run('project-preflight', 'node', [join(root, 'project.mjs'), '--project', project,
     '--module', ':app', '--variant', 'debug', '--mode', 'page', '--unsupported-policy', 'error', '--entry', entry,
     '--out', output, '--preflight-out', reportPath, '--work-dir', projectRun, '--offline'],
-  { env: { ANDROID_HOME: androidHome } }, 2);
-  assert.equal(JSON.parse(compilation.stdout).code, 'UNSUPPORTED');
-  assert.equal(existsSync(output), false);
+  { env: { ANDROID_HOME: androidHome } });
+  const generated = JSON.parse(compilation.stdout.split('\n').find(line => line.startsWith('{"ok"')));
+  assert.equal(generated.ok, true);
+  assert.equal(generated.status, 'generated');
+  assert.equal(generated.degradationCount, 0);
+  assert.equal(existsSync(output), true);
+  const diagnosis = JSON.parse(readFileSync(output + '.diagnosis.json', 'utf8'));
+  assert.equal(diagnosis.status, 'generated');
+  assert.equal(diagnosis.blockingFailure, null);
+  assert.equal(diagnosis.degradationCount, 0);
+  assert.match(readFileSync(output, 'utf8'), /@Component\s+export struct HomeScreen/);
+  assert.doesNotMatch(readFileSync(output, 'utf8'), /@Entry\s+@Component\s+export struct HomeScreen/);
+  assert.ok(existsSync(output + '.resources/base/element/string.json'));
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
   assert.equal(inputs.schemaVersion, 2);
@@ -111,12 +121,7 @@ try {
   assert.ok(elevation);
   assert.equal(elevation.firstUnsupportedNode, null);
   assert.equal(elevation.expectedTargetType, 'EtsCardElevation');
-  assert.equal(report.firstUnsupportedNode.source.line, 52);
-  assert.equal(report.firstUnsupportedNode.source.column, 5);
-  assert.equal(report.firstUnsupportedNode.kind, 'unsupported_expression');
-  assert.equal(report.firstUnsupportedNode.symbol, null);
-  assert.match(report.firstUnsupportedNode.message, /Entry parameter requires a source default/);
-  assert.match(report.firstUnsupportedNode.responsibleModule, /LanguageLowering/);
+  assert.equal(report.firstUnsupportedNode, null);
   for (const call of report.calls) {
     assert.ok(call.source.line > 0 && call.source.column > 0);
     assert.ok(call.finalRecognizedNode?.symbol);
@@ -130,15 +135,11 @@ try {
     compiler: { project: report.projectCompilerVersion, frontend: report.frontendCompilerVersion,
       compatibilityDecision: report.compatibilityDecision },
     coverage: report.coverage,
-    p0Gaps: [
-      { category: 'language_semantics', node: 'com.example.marsphotos.ui.screens.HomeScreen.photos',
-        responsibleModule: report.firstUnsupportedNode.responsibleModule, source: report.firstUnsupportedNode.source,
-        detail: report.firstUnsupportedNode.message },
-    ],
+    p0Gaps: [],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
-  console.log('PASS Mars Photos 8399c839: resources, MaterialTheme.shapes and CardDefaults.cardElevation reach 100% neutral widget coverage');
-  console.log('PASS no target: HomeScreen.photos without a source default is the next real P0 at HomeScreen.kt:52:5');
+  console.log('PASS Mars Photos 8399c839: all Core Profile categories reach 100% coverage');
+  console.log('PASS HomeScreen ETS and resources generated with zero degradations');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

@@ -30,6 +30,7 @@ fun spacing(base: Int, extra: Int): Arrangement.HorizontalOrVertical = Arrangeme
 @Composable fun Page() {
     Column {
         Text("Spacing before")
+        Column(verticalArrangement = Arrangement.Center) { Text("Centered") }
         Horizontal(spacing(6, 2))
         Vertical(Arrangement.spacedBy(12.dp))
         Text("Spacing after")

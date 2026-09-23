@@ -11,7 +11,7 @@ internal class ComposeAsyncImageRule(
 ) : ComposeControlRule(decorate) {
     override fun control(call: IrCall, language: Language, scope: Scope): ComposeElement? {
         if (symbolName(call.symbol.owner) != "coil.compose.AsyncImage") return null
-        target.checkArguments(call, setOf("model", "contentDescription", "modifier", "contentScale", "alpha", "placeholder"))
+        target.checkArguments(call, setOf("model", "contentDescription", "modifier", "contentScale", "alpha", "placeholder", "error"))
         val model = argument(call, "model") ?: target.diagnostics.unsupported(call, "AsyncImage requires model")
         val address = (model as? IrConst)?.value as? String
         if (address != null) {
@@ -22,7 +22,7 @@ internal class ComposeAsyncImageRule(
         val attrs = imageDescription(call, language, scope, target).toMutableList()
         val scale = argument(call, "contentScale")?.let { language.expression(it, scope) } ?: target.enumValue("ImageFit", "Contain", call)
         argument(call, "alpha")?.let { attrs += target.attribute("opacity", listOf(language.expression(it, scope)), call) }
-        if (address != null && argument(call, "placeholder") == null) {
+        if (address != null && argument(call, "placeholder") == null && argument(call, "error") == null) {
             attrs += target.attribute("objectFit", listOf(scale), call)
             return ComposeElement(target.native("Image", listOf(target.literal(address, model)), call).copy(attributes = attrs))
         }
@@ -36,9 +36,12 @@ internal class ComposeAsyncImageRule(
         val placeholder = argument(call, "placeholder")?.let { language.expression(it, scope) } ?: EtsLiteral(null, EtsTypes.NULL, at)
         if (!etsAssignable(placeholder.type, EtsNullableType(ImageResources.RESOURCE)))
             target.diagnostics.unsupported(call, "AsyncImage placeholder requires a supported resource Painter or null")
+        val error = argument(call, "error")?.let { language.expression(it, scope) } ?: EtsLiteral(null, EtsTypes.NULL, at)
+        if (!etsAssignable(error.type, EtsNullableType(ImageResources.RESOURCE)))
+            target.diagnostics.unsupported(call, "AsyncImage error requires a supported resource Painter or null")
         val child = EtsUiComponent(EtsReference(asyncImageSymbol, at), linkedMapOf(
-            "request" to request, "placeholder" to placeholder, "fit" to scale), at)
+            "request" to request, "placeholder" to placeholder, "error" to error, "fit" to scale), at)
         return ComposeElement(target.native("Stack", listOf(target.stackOptions(call)), call, listOf(child)).copy(attributes = attrs),
-            orderedArguments = listOf(request, placeholder), requiresBoundedSize = true)
+            orderedArguments = listOf(request, placeholder, error), requiresBoundedSize = true)
     }
 }

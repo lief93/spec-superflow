@@ -119,7 +119,7 @@ class ComposeWidgetPipeline(
                 attributes = value.attributes.map { expression(it) as EtsCall })
             is EtsUiComponent -> value.copy(properties = value.properties.mapValues { expression(it.value) })
             is EtsUiForEach -> value.copy(items = expression(value.items),
-                body = value.body.map(rewriteStatement))
+                body = value.body.map(rewriteStatement), key = value.key?.let(::expression) as? EtsLambda)
             is EtsUiLazyForEach -> value.copy(dataSource = expression(value.dataSource),
                 body = value.body.map(rewriteStatement), key = value.key?.let(::expression) as? EtsLambda)
             is EtsFunction -> value.copy(parameters = value.parameters.map { parameter ->

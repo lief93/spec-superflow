@@ -29,7 +29,9 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "enabled", "loop", "indicator", "select", "vertical", "clip", "focusable", "enableScrollInteraction" -> EtsTypes.BOOLEAN
             "scrollable" -> EtsNamedType("ScrollDirection")
             "scrollBar" -> EtsNamedType("BarState")
-            "index", "fontSize", "fontColor", "fontWeight", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight" -> EtsTypes.NUMBER
+            "index", "fontSize", "fontColor", "fontWeight", "backgroundColor", "maxLines", "strokeWidth", "color", "opacity", "layoutWeight",
+            "minCount", "maxCount", "cellLength", "columnsGap", "rowsGap", "aspectRatio" -> EtsTypes.NUMBER
+            "columnsTemplate", "rowsTemplate" -> EtsTypes.STRING
             "hitTestBehavior" -> EtsNamedType("HitTestMode")
             "clipShape" -> pathShapeType
             "type" -> value.type.takeIf { it == EtsNamedType("ButtonType") || it == EtsNamedType("InputType") }
@@ -79,7 +81,7 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
             "Swiper" -> listOf(EtsNamedType("SwiperController"))
             "Column", "Row" -> if (args.isEmpty()) emptyList() else listOf(
                 EtsRecordType("${name}Options", mapOf("space" to EtsTypes.NUMBER)))
-            "Button", "Divider", "Checkbox", "Scroll" -> emptyList()
+            "Button", "Divider", "Checkbox", "Scroll", "Grid", "GridItem" -> emptyList()
             "TextInput" -> listOf(EtsRecordType("TextInputOptions", mapOf("text" to EtsTypes.STRING)))
             "Toggle" -> listOf(EtsRecordType("ToggleOptions", mapOf("type" to EtsNamedType("ToggleType"), "isOn" to EtsTypes.BOOLEAN)))
             else -> diagnostics.unsupported(owner, "Unknown target control: $name")

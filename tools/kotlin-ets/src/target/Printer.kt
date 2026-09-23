@@ -134,7 +134,7 @@ class EtsPrinter {
             "${it.key}: ${expression(it.value)}"
         })
         is EtsUiForEach -> listOf("ForEach(${expression(value.items)}, (${parameters(listOf(value.item))}) => {") +
-            indent(statements(value.body)) + "})"
+            indent(statements(value.body)) + (value.key?.let { "}, ${expression(it)})" } ?: "})")
         is EtsUiLazyForEach -> listOf("LazyForEach(${expression(value.dataSource)}, " +
             "(${parameters(listOf(value.item, value.index))}) => {") +
             indent(statements(value.body)) + ("}" +

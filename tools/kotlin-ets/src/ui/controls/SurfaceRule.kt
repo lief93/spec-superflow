@@ -9,6 +9,7 @@ internal class ComposeSurfaceRule(
     private val target: ArkUiCalls,
     private val content: (IrExpression, Scope) -> EtsExpression,
     private val cardContent: (IrExpression, Scope) -> EtsExpression,
+    private val modifierBounds: (IrExpression?, Scope) -> Set<String>,
     private val decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,
 ) : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
@@ -84,6 +85,7 @@ internal class ComposeSurfaceRule(
         val at = language.source(call)
         val context = scope.ambientValues[MATERIAL_CONTEXT]
         val child = scope.fork()
+        child.semanticFlags += modifierBounds(modifier, scope)
         if (context != null) child.ambientValues[MATERIAL_CONTEXT] = newMaterialContext(at,
             MaterialContextField.COLOR_SCHEME to materialScheme(context, at),
             MaterialContextField.CONTENT_COLOR to foreground,
@@ -105,11 +107,13 @@ internal class ComposeSurfaceRule(
             val nested = statement.copy(children = statement.children?.map(::constrain))
             if ((nested.call.callee as? EtsReference)?.symbol?.id != "compose:surface") return nested
             val names = nested.attributes.map { (it.callee as? EtsReference)?.symbol?.name }
+            val fixedWidth = "width" in names || "height" in names && "aspectRatio" in names
+            val fixedHeight = "height" in names || "width" in names && "aspectRatio" in names
             val boundOptions = target.record("SurfaceOptions", linkedMapOf(
                 "content" to slot,
                 "column" to target.literal(column, call),
-                "fixedWidth" to target.literal("width" in names, call),
-                "fixedHeight" to target.literal("height" in names, call)), call)
+                "fixedWidth" to target.literal(fixedWidth, call),
+                "fixedHeight" to target.literal(fixedHeight, call)), call)
             return nested.copy(call = target.call("EtsComposeSurface", listOf(boundOptions), call, identity = "compose:surface"))
         }
         val colors = target.record("SurfaceColors", linkedMapOf("fontPrimary" to foreground), call)

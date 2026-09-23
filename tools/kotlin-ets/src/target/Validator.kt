@@ -741,6 +741,11 @@ class EtsValidator {
                 val array = value.items.type as? EtsNamedType ?: reject(value, "UI iteration requires a target array")
                 if (array.name != "Array" || array.arguments.size != 1 || array.arguments.single() != value.item.symbol.type || value.item.defaultValue != null) reject(value, "UI iteration item type differs from its array")
                 statements(value.body, parameters(listOf(value.item), scope), EtsTypes.VOID, emptySet(), setOf(value.item.symbol.name), ui = true)
+                value.key?.let { key ->
+                    if (key.parameters.map { it.symbol } != listOf(value.item.symbol) || key.returnType != EtsTypes.STRING)
+                        reject(key, "UI key generator requires the item and returns string")
+                    expression(key, scope)
+                }
             }
             is EtsUiLazyForEach -> {
                 if (!ui) reject(value, "Lazy UI iteration requires a builder body")

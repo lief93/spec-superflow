@@ -31,6 +31,7 @@ private fun asyncImageComponent(): EtsClass {
     val fields = listOf(
         field("request", imageRequestType, EtsNew(imageRequestType, listOf(nil(), number(0), nil()), at), prop = true, watch = "requestChanged"),
         field("placeholder", EtsNullableType(ImageResources.RESOURCE), nil(), prop = true),
+        field("error", EtsNullableType(ImageResources.RESOURCE), nil(), prop = true),
         field("fit", EtsNamedType("ImageFit"), enum("ImageFit", "Contain"), prop = true),
         field("url", EtsNullableType(EtsTypes.STRING), nil()),
         field("duration", EtsTypes.NUMBER, number(0)),
@@ -41,6 +42,7 @@ private fun asyncImageComponent(): EtsClass {
         field("tokens", EtsNamedType("Array", listOf(EtsTypes.NUMBER)), EtsArray(emptyList(), EtsTypes.NUMBER, at), state = true),
         field("progress", EtsTypes.NUMBER, number(0), state = true),
         field("showPlaceholder", EtsTypes.BOOLEAN, bool(false), state = true),
+        field("showError", EtsTypes.BOOLEAN, bool(false), state = true),
     )
     val self = EtsReference(EtsSymbol("asyncImage:this", "this", asyncImageSymbol.type, at, true))
     fun ref(name: String) = fields.single { it.symbol.name == name }.let { EtsMember(self, name, it.symbol.type, at, it.symbol.id) }
@@ -60,6 +62,7 @@ private fun asyncImageComponent(): EtsClass {
         guard(binary("&&", binary("&&", binary("===", ref("url"), data), binary("===", ref("duration"), duration)), binary("===", ref("svg"), svg))),
         increment, assign("url", data), assign("duration", duration), assign("svg", svg),
         assign("completed", bool(false)), assign("progress", number(0)), assign("showPlaceholder", binary("!==", data, nil())),
+        assign("showError", bool(false)),
         assign("tokens", EtsConditional(binary("===", data, nil()), EtsArray(emptyList(), EtsTypes.NUMBER, at),
             EtsArray(listOf(ref("generation")), EtsTypes.NUMBER, at), EtsNamedType("Array", listOf(EtsTypes.NUMBER)), at)),
     ))
@@ -77,20 +80,23 @@ private fun asyncImageComponent(): EtsClass {
             EtsBranch(null, listOf(assign("progress", number(1)), assign("showPlaceholder", bool(false))))), at),
     ))
     val failed = method("failed", listOf(token), listOf(guard(stale), assign("completed", bool(true)),
-        assign("progress", number(0)), assign("showPlaceholder", bool(false))))
+        assign("progress", number(0)), assign("showPlaceholder", bool(false)),
+        assign("showError", binary("!==", ref("error"), nil()))))
     fun image(source: EtsExpression, opacity: EtsExpression, attributes: List<EtsCall> = emptyList()) = EtsUiElement(native("Image", listOf(source)),
         attributes = listOf(native("width", listOf(text("100%"))), native("height", listOf(text("100%"))),
             native("objectFit", listOf(ref("fit"))), native("opacity", listOf(opacity)),
             native("accessibilityLevel", listOf(text("no")))) + attributes)
     val placeholder = EtsIf(listOf(EtsBranch(binary("&&", ref("showPlaceholder"), binary("!==", ref("placeholder"), nil())),
         listOf(image(EtsCast(ref("placeholder"), ImageResources.RESOURCE, at), binary("-", number(1), ref("progress"), EtsTypes.NUMBER))))), at)
+    val error = EtsIf(listOf(EtsBranch(binary("&&", ref("showError"), binary("!==", ref("error"), nil())),
+        listOf(image(EtsCast(ref("error"), ImageResources.RESOURCE, at), number(1))))), at)
     // Recreate the loading Image for each request; callbacks retain that request's token.
     val images = EtsUiForEach(ref("tokens"), token, listOf(image(EtsCast(ref("url"), EtsTypes.STRING, at), ref("progress"), listOf(
         native("onComplete", listOf(callback(listOf(invoke("loaded", listOf(tokenRef)))))),
         native("onError", listOf(callback(listOf(invoke("failed", listOf(tokenRef))))))
     ))), at)
     val build = EtsFunction("build", emptyList(), EtsTypes.VOID,
-        listOf(EtsUiElement(native("Stack", emptyList()), listOf(placeholder, images), listOf(
+        listOf(EtsUiElement(native("Stack", emptyList()), listOf(placeholder, images, error), listOf(
             native("width", listOf(text("100%"))), native("height", listOf(text("100%")))))), at,
         kind = EtsFunctionKind.METHOD, build = true)
     return EtsClass(asyncImageSymbol.name, fields + listOf(

@@ -14,9 +14,13 @@ internal class ComposeColumnRule(
         val children = argument(call, "content")?.let { content(it, scope) } ?: emptyList()
         val alignment = argument(call, "horizontalAlignment")?.let { language.expression(it, scope) }
             ?: target.enumValue("HorizontalAlign", "Start", call)
-        val arrangement = argument(call, "verticalArrangement")?.let { language.expression(it, scope) }
+        val arrangementSource = argument(call, "verticalArrangement")
+        val justification = arrangementSource?.let { arrangementAlignment(it, scope, target) }
+        val arrangement = arrangementSource?.takeIf { justification == null }?.let { language.expression(it, scope) }
         val options = arrangement?.let { listOf(arrangementOptions(it, "Column", target, call)) } ?: emptyList()
         return ComposeElement(target.native("Column", options, call, children).copy(attributes = listOf(
-            target.attribute("alignItems", listOf(alignment), call))), orderedArguments = listOfNotNull(arrangement, alignment))
+            target.attribute("alignItems", listOf(alignment), call)) + listOfNotNull(
+            justification?.let { target.attribute("justifyContent", listOf(it), call) })),
+            orderedArguments = listOfNotNull(arrangement, justification, alignment))
     }
 }
