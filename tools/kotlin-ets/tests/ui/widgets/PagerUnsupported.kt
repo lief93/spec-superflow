@@ -24,7 +24,12 @@ fun OutOfBoundsInitialPage() {
 }
 
 @Composable
-fun UnsupportedPagerArgument() {
-    val pager = rememberPagerState { 3 }
-    HorizontalPager(state = pager, userScrollEnabled = false) { page -> Text("Page $page") }
+fun InlinePagerState() {
+    HorizontalPager(state = rememberPagerState { 4 }) { page -> Text("Page $page") }
+}
+
+@Composable
+fun ReversePager() {
+    val pager = rememberPagerState { 4 }
+    HorizontalPager(state = pager, reverseLayout = true) { page -> Text("Page $page") }
 }

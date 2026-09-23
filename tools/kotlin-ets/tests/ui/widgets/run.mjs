@@ -115,8 +115,10 @@ assert.deepEqual(context.result, expectedState);
 const stateSemantics = join(work, 'state-profile-output/state-semantics.json');
 writeFileSync(stateSemantics, JSON.stringify({ expected: expectedState, actual: context.result }, null, 2) + '\n');
 console.log('PASS JVM/ETS Compose state transitions preserve update order and runtime branch reads');
-const pagerProbeJar = compile('pager-pipeline-probe', [join(here, 'PagerPipelineProbe.kt')],
-  [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
+const pagerProbeJar = join(work, 'pager-pipeline-probe.jar');
+run('compile-pager-pipeline-probe', 'java', ['-cp', cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+  '-no-stdlib', '-no-reflect', '-classpath', [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'),
+  `-Xfriend-paths=${compilerJar}`, join(here, 'PagerPipelineProbe.kt'), '-d', pagerProbeJar]);
 console.log(run('pager-profile-pipeline', 'java', ['-cp',
   [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar, pagerProbeJar].join(':'),
   'dev.ets.widgettest.PagerPipelineProbeKt', uiCp, join(work, 'pager-profile-output'),
@@ -127,22 +129,42 @@ const expectedPager = run('pager-jvm', 'java', ['-cp', `${cp}:${pagerOracleJar}`
 const pagerOutput = join(work, 'pager-profile-output/PagerProfile.ets');
 const pagerCode = readFileSync(pagerOutput, 'utf8');
 const pagerInitial = pagerCode.match(/@State private pager_currentPage: number = (\d+);/)?.[1];
+const pagerSelectedInitial = pagerCode.match(/@State private __etsState_selected: number = (-?\d+);/)?.[1];
 const pagerCallback = pagerCode.match(/\.onChange\(\(index: number\): void => \{([\s\S]*?)\n\s*\}\)/)?.[1];
-assert.ok(pagerInitial && pagerCallback, 'Expected typed Pager state and onChange callback in generated ETS');
+const pagerPageCondition = pagerCode.match(/if \((page < \d+)\)/)?.[1];
+const pagerIndicator = pagerCode.match(/Text\(("" \+ "Indicator "[^\n]+)\)\.align/)?.[1];
+const pagerButtonCondition = pagerCode.match(/if \((this\.pager_currentPage === \d+)\)/)?.[1];
+const pagerClickCallbacks = [...pagerCode.matchAll(
+  /\.onClick\(\(\): void => \{([\s\S]*?)\n\s*\}\)/g)].map(match => match[1].trim());
+assert.ok(pagerInitial && pagerSelectedInitial && pagerCallback && pagerPageCondition && pagerIndicator &&
+  pagerButtonCondition, 'Expected typed Pager state, runtime conditions and callbacks in generated ETS');
+assert.equal(pagerClickCallbacks.length, 2);
+assert.equal(pagerClickCallbacks[0], pagerClickCallbacks[1]);
 const pagerRuntimeSource = `class RuntimePager {
   pager_currentPage = ${pagerInitial};
+  __etsState_selected = ${pagerSelectedInitial};
   change(index) {${pagerCallback}\n  }
+  select() {${pagerClickCallbacks[0]}\n  }
+  snapshot() {
+    const page = this.pager_currentPage;
+    const content = ${pagerPageCondition} ? 'A' : 'B';
+    const indicator = ${pagerIndicator};
+    const button = ${pagerButtonCondition} ? 'Finish' : 'Next';
+    return [this.pager_currentPage, content, indicator, button, this.__etsState_selected].join('|');
+  }
 }
 const pager = new RuntimePager();
-result.push(String(pager.pager_currentPage));
-for (const page of [2, 0]) { pager.change(page); result.push(String(pager.pager_currentPage)); }`;
+result.push(pager.snapshot());
+for (const page of [2, 3]) { pager.change(page); result.push(pager.snapshot()); }
+pager.select(); result.push(pager.snapshot());
+pager.change(0); result.push(pager.snapshot());`;
 const pagerContext = { result: [] };
 vm.runInNewContext(pagerRuntimeSource, pagerContext, { timeout: 1000 });
 assert.deepEqual(pagerContext.result, expectedPager);
 const pagerSemantics = join(work, 'pager-profile-output/pager-semantics.json');
 writeFileSync(pagerSemantics,
   JSON.stringify({ expected: expectedPager, actual: pagerContext.result }, null, 2) + '\n');
-console.log('PASS JVM/ETS Pager onChange transitions preserve currentPage state');
+console.log('PASS JVM/ETS Pager swipe updates page content, indicator and conditional button together');
 const scrollProbeJar = compile('scroll-pipeline-probe', [join(here, 'ScrollPipelineProbe.kt')],
   [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
 console.log(run('scroll-profile-pipeline', 'java', ['-cp',
@@ -369,7 +391,7 @@ writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implemen
   lazyListProductionPipeline: true, lazyListJvmEtsSemantics: true,
   inputStateProductionPipeline: true, inputStateJvmEtsSemantics: true,
   composeHelperProductionPipeline: true, composeHelperJvmEtsSemantics: true,
-  sourceLinkedRejections: diagnostics.length + 42,
+  sourceLinkedRejections: diagnostics.length + 43,
   sdk: 'separate SDK command required', nativeRendering: 'not run',
 }, null, 2));
 console.log('PASS Widget module isolation, resolved structure, typed ETS and explicit unsupported diagnostics');

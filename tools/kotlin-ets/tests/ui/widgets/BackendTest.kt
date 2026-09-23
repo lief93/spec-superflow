@@ -158,12 +158,13 @@ fun main() {
     val changedPage = EtsParameter(EtsSymbol("test:changedPage", "index", EtsTypes.NUMBER, source))
     val pageChanged = EtsLambda(listOf(changedPage), listOf(EtsExpressionStatement(
         EtsAssignment(currentPage, EtsReference(changedPage.symbol), source))), EtsTypes.VOID, source)
-    val pager = backend.lower(Widget.Pager(currentPage, number(3), controller, pageChanged,
+    val pager = backend.lower(Widget.Pager(currentPage, number(3), controller,
+        EtsLiteral(true, EtsTypes.BOOLEAN, source), pageChanged,
         IndexedChildren(page, Children(listOf(Widget.Text(string("page"), noStyle, emptyList(), source))), source),
         emptyList(), source))
     check(name(pager) == "Swiper")
     check(pager.attributes.map { (it.callee as EtsReference).symbol.name } ==
-        listOf("index", "loop", "indicator", "onChange"))
+        listOf("width", "index", "loop", "indicator", "disableSwipe", "onChange"))
     val pageLoop = pager.children!!.single() as EtsUiForEach
     check((pageLoop.items as EtsArray).elements.map { (it as EtsLiteral).value } == listOf(0, 1, 2))
     check(pageLoop.item.symbol == page.symbol)
