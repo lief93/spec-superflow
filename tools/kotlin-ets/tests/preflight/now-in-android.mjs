@@ -16,7 +16,7 @@ const entry = 'com.google.samples.apps.nowinandroid.core.designsystem.component.
 const categories = ['language_semantics', 'standard_library', 'neutral_compose_widget', 'modifier', 'resources',
   'project_dependencies'];
 const expectedCoverage = {
-  language_semantics: { total: 109, recognized: 108, unsupported: 1, percentage: 99.08 },
+  language_semantics: { total: 109, recognized: 109, unsupported: 0, percentage: 100 },
   standard_library: { total: 15, recognized: 15, unsupported: 0, percentage: 100 },
   neutral_compose_widget: { total: 191, recognized: 191, unsupported: 0, percentage: 100 },
   modifier: { total: 0, recognized: 0, unsupported: 0, percentage: null },
@@ -65,22 +65,28 @@ try {
   const compilation = run('project-preflight', 'node', [join(root, 'project.mjs'), '--project', project,
     '--module', ':core:designsystem', '--variant', 'demoDebug', '--mode', 'page',
     '--unsupported-policy', 'report', '--entry', entry, '--out', output, '--preflight-out', reportPath,
-    '--work-dir', projectRun, '--offline'], { env: projectEnv }, 2);
-  const backendBlocker = JSON.parse(compilation.stdout);
-  assert.equal(backendBlocker.code, 'INVALID_TARGET');
-  assert.equal(backendBlocker.message, 'Conflicting target parameter');
-  assert.equal(backendBlocker.source.line, 192);
-  assert.equal(backendBlocker.source.column, 1);
-  assert.equal(existsSync(output), false);
+    '--work-dir', projectRun, '--offline'], { env: projectEnv });
+  const generation = JSON.parse(compilation.stdout);
+  assert.equal(generation.ok, true);
+  assert.equal(generation.status, 'generated_with_degradations');
+  assert.equal(generation.degradationCount, 3);
+  assert.equal(existsSync(output), true);
+  const target = readFileSync(output, 'utf8');
+  const temporaryBridges = [...target.matchAll(/function uiTemporary\d+_\d+_\d+\(([^)]*)\)/g)];
+  assert.ok(temporaryBridges.length >= 3);
+  for (const bridge of temporaryBridges) {
+    const names = [...bridge[1].matchAll(/(?:^|,\s*)([$\w]+)\s*:/g)].map(match => match[1]);
+    assert.equal(new Set(names).size, names.length,
+      'distinct compiler temporaries must retain distinct target parameter names');
+  }
   const diagnosis = JSON.parse(readFileSync(output + '.diagnosis.json', 'utf8'));
-  assert.equal(diagnosis.status, 'blocked');
+  assert.equal(diagnosis.status, 'generated_with_degradations');
   assert.deepEqual(diagnosis.degradations.map(value => value.action), [
     'project_theme_replacement', 'platform_capability_fallback', 'platform_capability_fallback',
   ]);
   assert.deepEqual(diagnosis.degradations.map(value => value.source.line), [242, 218, 232]);
   assert.ok(diagnosis.degradations.every(value => value.source.line > 0 && value.source.column > 0));
-  assert.deepEqual(diagnosis.blockingFailure,
-    { code: backendBlocker.code, message: backendBlocker.message, source: backendBlocker.source });
+  assert.equal(diagnosis.blockingFailure, null);
 
   const inputs = JSON.parse(readFileSync(join(projectRun, 'inputs.json'), 'utf8'));
   assert.equal(inputs.compilerVersion, '2.1.10');
@@ -170,12 +176,7 @@ try {
   assert.equal(staticColorSchemes.length, 4);
   assert.ok(staticColorSchemes.every(call => call.expectedTargetType === 'EtsMaterialColorScheme' &&
     call.finalRecognizedNode.kind === 'typed_call' && call.firstUnsupportedNode === null));
-  assert.equal(report.firstUnsupportedNode.kind, 'unsupported_call');
-  assert.equal(report.firstUnsupportedNode.symbol, 'kotlin.Boolean.not');
-  assert.equal(report.firstUnsupportedNode.message, 'Conflicting target parameter');
-  assert.equal(report.firstUnsupportedNode.source.line, 192);
-  assert.equal(report.firstUnsupportedNode.source.column, 1);
-  assertSource(report.firstUnsupportedNode.source);
+  assert.equal(report.firstUnsupportedNode, null);
 
   for (const call of report.calls) {
     assertSource(call.source);
@@ -192,11 +193,10 @@ try {
   }
 
   const unsupportedCalls = report.calls.filter(call => call.firstUnsupportedNode !== null);
-  assert.equal(unsupportedCalls.length, 1);
+  assert.equal(unsupportedCalls.length, 0);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'target_type').length, 0);
-  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 1);
+  assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_call').length, 0);
   assert.equal(unsupportedCalls.filter(call => call.firstUnsupportedNode.kind === 'unsupported_field').length, 0);
-  assert.ok(unsupportedCalls.every(call => call.category === 'language_semantics'));
 
   const baseline = {
     schemaVersion: 1,
@@ -207,22 +207,13 @@ try {
     counts: report.counts,
     coverage: report.coverage,
     firstUnsupportedNode: report.firstUnsupportedNode,
-    backendBlocker,
+    backendBlocker: null,
     unsupportedCalls,
-    p0Gaps: [
-      { category: 'language_semantics',
-        node: 'com.google.samples.apps.nowinandroid.core.designsystem.theme.NiaTheme',
-        responsibleModule: 'tools/kotlin-ets/src/language/LanguageLowering.kt', source: backendBlocker.source,
-        detail: backendBlocker.message },
-      { category: 'language_semantics', node: 'unsupported_call_inventory',
-        responsibleModule: 'tools/kotlin-ets/src/language/LanguageLowering.kt',
-        counts: { target_type: 0, unsupported_call: 1, unsupported_field: 0 },
-        detail: 'All neutral Compose widgets close; one source-linked NiaTheme parameter conflict remains.' },
-    ],
+    p0Gaps: [],
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS Now in Android 5e34fb49: Kotlin 2.1.10 project enters the formal 2.1.20 frontend');
-  console.log('PASS TextButton closes neutral Compose coverage at 191/191; the next NiaTheme language blocker stays explicit');
+  console.log('PASS TagPreview generates with 315/315 recognized calls and no backend blocker');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }
