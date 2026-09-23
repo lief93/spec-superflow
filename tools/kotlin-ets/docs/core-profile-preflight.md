@@ -47,6 +47,13 @@ Category precedence is source ownership first, then resource and Modifier
 semantics, Compose widgets, external Kotlin declarations, and other project or
 platform dependencies. Classification does not imply support.
 
+Project adapter failures retain their compiler source span and use explicit
+`firstUnsupportedNode.kind` values: `project_adapter_missing`,
+`project_adapter_void_result`, `project_adapter_return_type`,
+`project_adapter_arguments`, and `project_adapter_scope`. This distinguishes a
+missing concrete generic binding from an adapter that returned an invalid
+target expression.
+
 ## No-silent-fallback gate
 
 The existing `DiagnosticSink.omitUi` remains the only approved omission route:
@@ -137,10 +144,15 @@ All calls retain a 1-based source span, `finalRecognizedNode`, optional
 `firstUnsupportedNode`, and `responsibleModule`. The generated
 `public-project-baseline.json` preserves all eleven unsupported call records.
 The report's designated first type gap remains `remember` returning
-`SnackbarHostState` at line 48, column 44. The actual backend attempt stops
-earlier at `hiltViewModel` on line 47, column 38: the inline JVM dependency has
-no loaded IR body and JVM metadata contains no serialized IR. Generation fails
-closed there because no typed adapter declares the call, and emits no ETS target.
+`SnackbarHostState` at line 48, column 44. The baseline backend attempt stops
+earlier at `hiltViewModel` on line 47, column 38 because the inline JVM
+dependency has no loaded IR body and JVM metadata contains no serialized IR.
+The runner also loads a fixture-only project adapter registered by complete
+declaration identity and the concrete `StatisticsViewModel` return. That call
+then has no unsupported node, project-dependency coverage advances from 6/13 to
+7/13, and backend generation reaches the same source-linked `remember` /
+`SnackbarHostState` blocker at line 48, column 44. Production code contains no
+API-name special case for `hiltViewModel`.
 
 This project pins Kotlin 2.1.10, so production project generation rejects its
 compiler environment before frontend execution. The fixed 2.1.20 direct CLI run
@@ -192,7 +204,7 @@ Final verification evidence:
 | RED: empty UI | empty `@Builder` was generated silently | `tests/preflight/.work/run-ZdiDg6` |
 | Core Profile and no-silent-fallback | six groups, ownership, source defaults, locations and negative no-target cases | `tests/preflight/.work/run-VuJGm0` |
 | Mars Photos public baseline | widget 100%, Modifier 100%, resources 50%; two explicit P0 gaps; no target | `tests/preflight/.work/mars-photos-Lh41tH` |
-| Architecture Samples public baseline | 124 calls across all six groups; eleven explicit unsupported calls; no target | `tests/preflight/.work/architecture-samples-knJwa1` |
+| Architecture Samples public baseline and fixture adapter | baseline keeps 124 calls and eleven explicit gaps; exact `hiltViewModel` binding reaches `remember` / `SnackbarHostState` | `tests/preflight/.work/architecture-samples-XCI20N` |
 | Now in Android public baseline | 319 calls; language and stdlib 100%, Compose 91.62%; no target | `tests/preflight/.work/now-in-android-ejNSx9` |
 | Full language suite | pass | `tests/language/.work/run-01EAKd` |
 | Module suite | 44 JVM/module cases pass | `tests/modules/.work/run-KWHnWz` |

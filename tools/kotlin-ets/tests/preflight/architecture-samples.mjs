@@ -119,6 +119,32 @@ try {
     modifier: 0, resources: 0, project_dependencies: 7,
   });
 
+  const adapterOutput = join(evidence, 'StatisticsScreen.adapter.ets');
+  const adapterReportPath = join(evidence, 'core-profile.adapter.json');
+  const adapted = run('project-adapter', 'bash', [join(root, 'kotlin-ets'), '--mode', 'page',
+    '--unsupported-policy', 'error', '--entry', entry, '--classpath-file', join(collected, 'classpath.txt'),
+    '--sources-file', join(collected, 'sources.txt'), '--out', adapterOutput,
+    '--preflight-out', adapterReportPath], { env: {
+      KOTLIN_ETS_ADAPTER_DIRS: join(here, 'architecture-adapter'),
+    } }, 2);
+  const adapterBlocker = JSON.parse(adapted.stdout);
+  assert.equal(adapterBlocker.source.line, 48);
+  assert.equal(adapterBlocker.source.column, 44);
+  assert.match(adapterBlocker.message, /androidx\.compose\.runtime\.remember/);
+  assert.equal(existsSync(adapterOutput), false);
+  const adapterReport = JSON.parse(readFileSync(adapterReportPath, 'utf8'));
+  assert.equal(adapterReport.firstUnsupportedNode.source.line, 48);
+  assert.equal(adapterReport.firstUnsupportedNode.source.column, 44);
+  assert.equal(adapterReport.firstUnsupportedNode.symbol, 'androidx.compose.runtime.remember');
+  assert.match(adapterReport.firstUnsupportedNode.message, /androidx\.compose\.material3\.SnackbarHostState/);
+  const adaptedHilts = adapterReport.calls.filter(call =>
+    call.resolvedSymbol.startsWith('androidx.hilt.navigation.compose.hiltViewModel('));
+  assert.equal(adaptedHilts.length, 1);
+  const adaptedHilt = adaptedHilts[0];
+  assert.equal(adaptedHilt.firstUnsupportedNode, null);
+  assert.equal(adapterReport.coverage.project_dependencies.unsupported, 6);
+  assert.equal(adapterReport.coverage.project_dependencies.recognized, 7);
+
   const baseline = {
     schemaVersion: 1,
     project: { repository, revision, entry, module: ':app', variant: 'debug', task: inputs.task },
@@ -128,6 +154,8 @@ try {
     coverage: report.coverage,
     firstUnsupportedNode: report.firstUnsupportedNode,
     backendBlocker,
+    projectAdapter: { blocker: adapterBlocker, hiltCall: adaptedHilt,
+      projectDependencyCoverage: adapterReport.coverage.project_dependencies },
     unsupportedCalls,
     p0Gaps: [
       { category: 'project_dependencies', node: 'compiler_environment',
@@ -144,7 +172,8 @@ try {
   };
   writeFileSync(join(evidence, 'public-project-baseline.json'), JSON.stringify(baseline, null, 2) + '\n');
   console.log('PASS architecture-samples ee66e152: 124-call six-category Core Profile baseline');
-  console.log('PASS no target: compiler mismatch, dependency body, and all 11 unsupported calls remain explicit P0 evidence');
+  console.log('PASS hilt fixture adapter: exact declaration and target return advance to the next source-linked blocker');
+  console.log('PASS no baseline target: compiler mismatch, dependency body, and all 11 unsupported calls remain explicit P0 evidence');
 } finally {
   run('remove-worktree', 'git', ['-C', seed, 'worktree', 'remove', '--force', project]);
 }

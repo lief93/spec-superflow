@@ -58,10 +58,17 @@ data class CoreProfileReport(
         val node = recognizedNodes.firstOrNull { it.source.file == failure.source.file &&
             it.source.start == failure.source.start && it.source.end == failure.source.end }
         val module = owner?.responsibleModule ?: CoreProfileCategory.LANGUAGE.responsibleModule
-        val kind = when (node?.kind) {
-            "typed_call", "resolved_call" -> "unsupported_call"
-            "resolved_field" -> "unsupported_field"
-            "resolved_object" -> "unsupported_object"
+        val kind = when {
+            failure.code == "PROJECT_ADAPTER_MISSING" ||
+                (owner?.category == CoreProfileCategory.PROJECT_DEPENDENCY &&
+                    "declared typed adapter" in failure.message) -> "project_adapter_missing"
+            failure.code == "PROJECT_ADAPTER_VOID_RESULT" -> "project_adapter_void_result"
+            failure.code == "PROJECT_ADAPTER_RETURN_TYPE" -> "project_adapter_return_type"
+            failure.code == "PROJECT_ADAPTER_ARGUMENTS" -> "project_adapter_arguments"
+            failure.code == "PROJECT_ADAPTER_SCOPE" -> "project_adapter_scope"
+            node?.kind in setOf("typed_call", "resolved_call") -> "unsupported_call"
+            node?.kind == "resolved_field" -> "unsupported_field"
+            node?.kind == "resolved_object" -> "unsupported_object"
             else -> "unsupported_expression"
         }
         val unsupported = CoreProfileUnsupportedNode(kind,

@@ -4,7 +4,9 @@ private class Module(
     override val id: String,
     override val sourceCalls: Set<String> = setOf("sample.$id"),
     override val sourceTypes: Set<String> = emptySet(),
+    override val projectCalls: List<AdapterProjectCall> = emptyList(),
     override val targetCalls: List<AdapterTargetCall> = emptyList(),
+    override val targetValues: List<AdapterTargetValue> = emptyList(),
     override val imports: List<EtsImport> = emptyList(),
     private val created: MutableList<String> = mutableListOf()
 ) : AdapterModule {
@@ -29,6 +31,13 @@ fun main() {
     check(badType is InvalidTarget && badType.source == source)
     check(runCatching { target.call("missing", emptyList(), source) }.exceptionOrNull() is Unsupported)
     check(runCatching { target.call(declaration.id, emptyList(), source) }.exceptionOrNull() is Unsupported)
+    val provided = AdapterTargetValue("sample.state", "state", EtsNamedType("State"))
+    val targetWithValue = AdapterTargetApi(emptyMap(), mapOf(provided.id to provided))
+    check(targetWithValue.value(provided.id, EtsNamedType("State", symbolId = "source:state"), source).symbol.type ==
+        EtsNamedType("State", symbolId = "source:state"))
+    val wrongValue = runCatching { targetWithValue.value(provided.id, EtsTypes.STRING, source) }.exceptionOrNull()
+    check(wrongValue is Unsupported && wrongValue.diagnostic.code == "PROJECT_ADAPTER_RETURN_TYPE" &&
+        wrongValue.diagnostic.source == source)
     fun rejected(vararg modules: AdapterModule) {
         check(runCatching { AdapterModules(modules.toList()) }.exceptionOrNull() is IllegalArgumentException)
     }
@@ -39,6 +48,15 @@ fun main() {
     rejected(Module("a", setOf("sample.shared")), Module("b", setOf("sample.shared")))
     rejected(Module("a", sourceTypes = setOf("sample.Type")), Module("b", sourceTypes = setOf("sample.Type")))
     rejected(Module("a", targetCalls = listOf(declaration)), Module("b", targetCalls = listOf(declaration)))
+    val identity = AdapterCallIdentity("sample.provide", 1, parameters = emptyList(), returnType = "T of sample.provide")
+    val binding = AdapterProjectCall(identity, "sample.State", EtsNamedType("State"))
+    rejected(Module("a", projectCalls = listOf(binding)), Module("b", projectCalls = listOf(binding)))
+    rejected(Module("a", projectCalls = listOf(binding)), Module("b", projectCalls =
+        listOf(binding.copy(resolvedSourceReturnType = "sample.Other", targetReturnType = EtsNamedType("Other")))))
+    rejected(Module("a", projectCalls = listOf(binding)), Module("b", sourceCalls = setOf("sample.provide")))
+    rejected(Module("a", targetValues = listOf(provided)), Module("b", targetValues = listOf(provided)))
+    rejected(Module("a", targetCalls = listOf(declaration)),
+        Module("b", targetValues = listOf(AdapterTargetValue(declaration.id, "value", number))))
     rejected(Module("a", imports = listOf(EtsImport("one", "Value"))), Module("b", imports = listOf(EtsImport("two", "Value"))))
     val created = mutableListOf<String>()
     val modules = AdapterModules(listOf(Module("b", created = created), Module("a", created = created)))

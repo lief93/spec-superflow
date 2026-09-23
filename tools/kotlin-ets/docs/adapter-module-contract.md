@@ -10,22 +10,30 @@ modules, tests and the user-facing guide. Neither lane edits language lowering,
 target tree/validator/printer, existing control classes or the other's files.
 
 Public API in package dev.ets:
-- AdapterModule: id:String; sourceCalls:Set<String>; sourceTypes:Set<String>
-  (default empty); targetCalls:List<AdapterTargetCall> (default empty);
-  imports:List<EtsImport> (default empty);
+- AdapterModule: id:String; sourceCalls:Set<String> (default empty);
+  projectCalls:List<AdapterProjectCall> (default empty); sourceTypes:Set<String>
+  (default empty); sourceFields:Set<String> (default empty);
+  targetCalls:List<AdapterTargetCall> (default empty);
+  targetValues:List<AdapterTargetValue> (default empty); imports:List<EtsImport>
+  (default empty);
   create(target:AdapterTargetApi, ui:AdapterUiServices?):CallRule.
 - AdapterTargetCall(id:String, name:String, signature:EtsFunctionType).
+- AdapterTargetValue(id:String, name:String, type:EtsType).
 - AdapterTargetApi.call(id:String, arguments:List<EtsExpression>, source:SourceSpan,
   receiver:EtsExpression? = null):EtsCall. Exact arity, argument and return types
   remain checked; errors retain source. Signature declarations travel with module.
+- AdapterTargetApi.value(id:String, type:EtsType, source:SourceSpan):EtsReference.
+  The registered target type must structurally match the requested type. Declared
+  symbol identities remain exact; an omitted symbol identity is a typed template.
 - AdapterUiServices.content(IrExpression, Scope):List<EtsStatement> and
   decorate(IrExpression?, Scope, EtsUiElement, Set<String> = emptySet()):List<EtsStatement>
   delegate existing content/modifier conversion, never reparse source.
 - AdapterModules(modules:List<AdapterModule> = emptyList()); companion load()
   uses JVM ServiceLoader. rules(ui:AdapterUiServices? = null):List<CallRule>;
   imports:List<EtsImport>. Module construction order is sorted by id. Duplicate
-  module IDs, claimed source calls/types, target IDs and conflicting import
-  bindings fail before generation. Core and UI factories use the same CallRule
+  module IDs, claimed source calls/types/fields, project declaration ownership,
+  target call/value IDs and conflicting import bindings fail before generation.
+  Core and UI factories use the same CallRule
   dispatcher and typed target nodes. Null ui creates value/effect/type rules;
   scoped nonnull ui creates UI rules only, preventing duplicated value dispatch.
 
