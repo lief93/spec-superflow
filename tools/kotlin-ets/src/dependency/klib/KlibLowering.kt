@@ -43,6 +43,17 @@ interface KlibPrimitiveBoundary {
     val klibPrimitiveSymbols: Set<IrFunctionSymbol>
 }
 
+/** Dependency calls that a typed rule may replace only when their common body cannot be reused. */
+interface KlibAdapterFallback {
+    val klibAdapterFallbackSymbols: Set<IrFunctionSymbol>
+}
+
+private data class DependencyBodyRejection(val symbol: IrFunctionSymbol, val reason: String)
+private data class DependencyBodyClosure(
+    val admitted: LinkedHashMap<IrFunctionSymbol, FunctionBody.Available>,
+    val rejected: Map<IrFunctionSymbol, DependencyBodyRejection>,
+)
+
 /**
  * Consumes selected modules and the satisfiable dependency-body closure in one official symbol session.
  * No JS lowering pipeline or JS runtime emission. A session must be lowered only once.
@@ -69,8 +80,10 @@ fun KlibSession.lowerToEts(
     // Official jsCompiler.kt completes fake overrides after context-driven loading.
     linker.postProcess(inOrAfterLinkageStep = true)
     linker.checkNoUnboundSymbols(symbolTable, "before KLIB common inlining")
-    val candidateBodies = dependencyBodyClosure(modules, provider, libraryLocations.keys, loaded.bultins.unitClass,
-        rules.filterIsInstance<KlibPrimitiveBoundary>().flatMapTo(linkedSetOf()) { it.klibPrimitiveSymbols })
+    val closure = dependencyBodyClosure(modules, provider, libraryLocations.keys, loaded.bultins.unitClass,
+        rules.filterIsInstance<KlibPrimitiveBoundary>().flatMapTo(linkedSetOf()) { it.klibPrimitiveSymbols },
+        rules.filterIsInstance<KlibAdapterFallback>().flatMapTo(linkedSetOf()) { it.klibAdapterFallbackSymbols })
+    val candidateBodies = closure.admitted
     val recordedBodies = FunctionBodies { symbol ->
         val body = if (symbol.owner.fileOrNull?.module in modules || symbol in candidateBodies) provider.resolve(symbol)
             else FunctionBody.Unavailable(FunctionBody.Reason.NON_TRANSLATED_KLIB)
@@ -117,15 +130,30 @@ fun KlibSession.lowerToEts(
         val module = owner.fileOrNull?.module
         if (!owner.isExternal && (module == null || module in loweringModules)) return
         val resolution = provider.resolve(call.symbol)
-        val reason = (resolution as? FunctionBody.Unavailable)?.reason?.evidence
-            ?: "The dependency call remains after common inlining and is not selected for emission."
-        record(KlibDependencyDecision.Kind.REJECTED, call.symbol, language.source(call), reason)
+        val closureFailure = closure.rejected[call.symbol]
+        val reason = when {
+            closureFailure != null && closureFailure.symbol != call.symbol ->
+                "The dependency body closure is blocked by a transitive declaration"
+            closureFailure != null -> closureFailure.reason
+            else -> (resolution as? FunctionBody.Unavailable)?.reason?.evidence
+                ?: "The dependency call remains after common inlining and is not selected for emission."
+        }
+        val blocked = closureFailure?.takeIf { it.symbol != call.symbol }?.let { failure ->
+            val declaration = failure.symbol.owner
+            val file = declaration.fileOrNull
+            " Transitive dependency ${failure.symbol.signature ?: symbolName(declaration)} at " +
+                "${libraryLocations[file?.module] ?: "<unknown-library>"}; declaration " +
+                "${file?.fileEntry?.name ?: "<no-file>"}:${declaration.startOffset}..${declaration.endOffset}: ${failure.reason}."
+        } ?: ""
+        val detail = (if (reason.endsWith('.')) reason else "$reason.") +
+            "$blocked Fallback decision: no declared typed adapter accepted the call."
+        record(KlibDependencyDecision.Kind.REJECTED, call.symbol, language.source(call), detail)
         report(decisions.last())
         throw Unsupported(Diagnostic("UNSUPPORTED_KLIB_DEPENDENCY",
             "KLIB dependency ${call.symbol.signature ?: symbolName(owner)} at " +
                 "${libraryLocations[module] ?: "<unknown-library>"}; declaration " +
                 "${owner.fileOrNull?.fileEntry?.name ?: "<no-file>"}:${owner.startOffset}..${owner.endOffset}: " +
-                "$reason No target replacement accepted this call.", language.source(call)))
+                detail, language.source(call)))
     }
     val boundary = object : CallRule {
         override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
@@ -148,11 +176,12 @@ private fun dependencyBodyClosure(
     linkedModules: Set<IrModuleFragment>,
     unitClass: IrClassSymbol,
     primitiveSymbols: Set<IrFunctionSymbol>,
-): LinkedHashMap<IrFunctionSymbol, FunctionBody.Available> {
+    adapterFallbackSymbols: Set<IrFunctionSymbol>,
+): DependencyBodyClosure {
     val translated = modules.toSet()
     val discovered = linkedMapOf<IrFunctionSymbol, FunctionBody.Available>()
     val dependencies = linkedMapOf<IrFunctionSymbol, MutableList<IrFunctionSymbol>>()
-    val rejected = linkedSetOf<IrFunctionSymbol>()
+    val rejected = linkedMapOf<IrFunctionSymbol, DependencyBodyRejection>()
     val roots = mutableListOf<IrFunctionSymbol>()
     fun dependency(symbol: IrFunctionSymbol): Boolean {
         val module = symbol.owner.fileOrNull?.module
@@ -161,9 +190,15 @@ private fun dependencyBodyClosure(
     lateinit var discover: (IrFunctionSymbol) -> Unit
     discover = fun(symbol: IrFunctionSymbol) {
         if (!dependency(symbol) || symbol in discovered || symbol in rejected) return
-        val body = bodies.resolve(symbol) as? FunctionBody.Available ?: return
+        val body = bodies.resolve(symbol) as? FunctionBody.Available
+        if (body == null) {
+            // A missing body is itself the evidence that a typed adapter may be consulted.
+            // The final boundary still rejects the call when no rule accepts it.
+            return
+        }
         if (!body.isLoadableCommonBody(unitClass)) {
-            rejected += symbol
+            if (symbol !in adapterFallbackSymbols) rejected[symbol] = DependencyBodyRejection(symbol,
+                "The dependency body is incompatible with ETS common-body reuse")
             return
         }
         discovered[symbol] = body
@@ -171,11 +206,8 @@ private fun dependencyBodyClosure(
         body.body.acceptChildrenVoid(object : org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid {
             override fun visitElement(element: org.jetbrains.kotlin.ir.IrElement) {
                 if (element is IrFunctionAccessExpression && dependency(element.symbol)) {
-                    val child = bodies.resolve(element.symbol)
-                    if (child is FunctionBody.Available) {
-                        children += element.symbol
-                        discover(element.symbol)
-                    }
+                    children += element.symbol
+                    discover(element.symbol)
                 }
                 element.acceptChildrenVoid(this)
             }
@@ -195,8 +227,9 @@ private fun dependencyBodyClosure(
     do {
         changed = false
         dependencies.forEach { (symbol, children) ->
-            if (symbol !in rejected && children.any { it in rejected }) {
-                rejected += symbol
+            val cause = children.firstNotNullOfOrNull(rejected::get)
+            if (symbol !in rejected && cause != null) {
+                rejected[symbol] = cause
                 changed = true
             }
         }
@@ -208,7 +241,7 @@ private fun dependencyBodyClosure(
         dependencies[symbol].orEmpty().forEach(::admit)
     }
     roots.forEach(::admit)
-    return admitted
+    return DependencyBodyClosure(admitted, rejected)
 }
 
 private fun FunctionBody.Available.isLoadableCommonBody(unitClass: IrClassSymbol): Boolean {

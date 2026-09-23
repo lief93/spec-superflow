@@ -22,7 +22,7 @@ translation, JS backend phase pipeline or complete stdlib replacement is added.
 | JVM serialized IR | `BinaryBodies` deserializes checked inline JVM bodies; `LibraryInlining` runs the official common inliner | Keep format and admission policy; share only the official inliner invocation with the KLIB path |
 | Serialized KLIB | `KlibLoader` uses official `ModulesStructure`, `loadIr`, `JsIrLinker`; explicit translated vs dependency-only libraries | Preserve official descriptor/symbol identities and attach canonical library paths to loaded module identities |
 | Body availability | KLIB proofs inspected raw IR; shared body origins described source/JVM only | `KlibSession.bodies()` implements `FunctionBodies`, reports `SerializedKlibIr`, and exposes linked body capability for canonical symbols while enforcing borrowed lifetime |
-| Target compilation | Experiments directly invoked the backend | `KlibSession.lowerToEts()` discovers the transitive dependency body graph, prunes bodies whose signatures or nested bodies cannot be loaded, preserves canonical typed primitive boundaries, materializes the remaining ordinary top-level functions, and commits decisions only after typed lowering succeeds |
+| Target compilation | Experiments directly invoked the backend | `KlibSession.lowerToEts()` discovers the transitive dependency body graph, prefers compatible bodies before rules, preserves canonical typed primitive boundaries, admits an incompatible body boundary only when a rule declares its exact fallback symbol, materializes the remaining ordinary top-level functions, and commits decisions only after typed lowering succeeds |
 | Runtime | `StandardLibraryDependencies` collects from typed ETS and existing support emission expands dependencies | Expose the collector's direct roots for evidence; keep a single collector and the existing per-module runtime closure |
 
 Function FQNames/signatures in reports are display evidence. Production approval
@@ -37,6 +37,10 @@ common inliner. Ordinary top-level bodies retain their canonical symbols and
 source files in minimal temporary output modules. Primitive rules declare their
 canonical KLIB symbol boundaries, so a body-bearing primitive is not accidentally
 expanded. No other declaration from the dependency file or module is emitted.
+Unavailable bodies may proceed to typed rules, but the final dependency boundary
+rejects them if every rule declines. An incompatible body blocks its parents
+unless `KlibAdapterFallback` names that exact canonical symbol. This keeps
+fallback eligibility separate from display names and API-specific lists.
 
 The KLIB compiler context is the pinned official `JsIrBackendContext`, consistent
 with its `JsIrLinker` symbol universe. This context resolves compiler symbols;
@@ -61,10 +65,19 @@ JS-platform declarations while constructing its official context.
   diagnostic carries caller source, canonical library path, callee signature
   and producer declaration span. No ETS output is written by the harness.
 
-Producer sources are deleted after official KLIB compilation. Source offsets
-remain deserialized provenance; they are not fabricated local source files.
-Missing transitive KLIBs still fail through official linker diagnostics, with
-partial linkage disabled, as verified by the existing loader regression.
+The three-module fixture now selects only `application.klib` for translation.
+Its direct library and second-level helper are dependency-only. It reuses
+`adjusted`, `buttonLabel`, `echo` and `offset`, while an exact-symbol test rule
+replaces only the deliberately incompatible `bias` body. Removing that rule
+rejects `adjusted` with the transitive `bias` identity, both KLIB paths, both
+declaration spans, an explicit fallback decision, and a call-site source JSON
+entry at line 6, column 59.
+
+The capability fixture deletes producer sources after official KLIB compilation;
+its source offsets remain deserialized provenance. The three-module diagnostic
+fixture keeps its temporary producer files only through diagnostic serialization
+so line and column can be computed, then deletes them. Missing transitive KLIBs
+still fail through official linker diagnostics with partial linkage disabled.
 
 ## Reproduce
 
@@ -74,27 +87,30 @@ From `tools/kotlin-ets`, with `KOTLIN_JS_STDLIB` pointing to the pinned
 ```sh
 node tests/klib/capabilities/run.mjs
 node tests/klib/run.mjs
+node tests/klib/sdk.mjs tests/klib/.work/<run>/positive
 node tests/klib/portable-common/run.mjs
 node tests/binary-bodies/r2e/run.mjs
 node tests/binary-bodies/r2e/replay.mjs tests/binary-bodies/r2e/.work/<completed-run>
 ```
 
 Each harness records commands, original/compiled input hashes, diagnostics and
-results under its `.work/run-*` directory. `capabilities` strict-typechecks the
+results under its evidence directory. `capabilities` strict-typechecks the
 emitted modules with the installed DevEco TypeScript host and compares execution
 to the JVM for positive, negative and overflowing Int inputs. It verifies real
 cross-module imports, original body ownership, official inline consumption,
 minimal runtime roots, no unrelated collection helpers, rejected output absence
-and provider lifetime after session close. These are host semantic tests, not
-ArkVM/device evidence.
+and provider lifetime after session close. `sdk.mjs` additionally proves the
+three generated transitive modules are actual ArkTS compiler inputs and produce
+module artifacts, Ark bytecode and a HAP. There is no ArkVM/device execution.
 
 ## Boundaries
 
 The three-way classification does not promise general Kotlin dependency support.
-Only loadable top-level or inline bodies whose transitive body closure is loadable
-enter lowering. Platform/external calls still need a typed replacement or fail.
-The complete body and primitive closure must lower successfully before admission
-is reported or any target output is written.
+Compatible top-level or inline bodies enter lowering when their transitive body
+closure is satisfiable. Unavailable bodies and explicit platform calls still
+need a typed replacement or fail. Incompatible bodies require an exact declared
+fallback before their parents can enter lowering. The complete body and primitive
+closure must lower successfully before admission is reported or output is written.
 Full JS collections and coroutine implementations remain outside the admitted
 runtime. This increment does not delete existing stdlib adapters or claim that
 portable common source equivalents are identical to official JS collection
@@ -117,12 +133,12 @@ selection, JVM/ETS results, rejection diagnostics and production source hashes.
 3. **Explicit rejection:** an external no-body case reports library, declaration
    and call-site spans, with no ETS output. Focused collection fixtures also
    inject missing bodies and exact primitives.
-4. **Regressions:** loader `run-w1etNI` passes four host/JVM outcomes and missing
-   transitive dependency rejection; portable-common `run-Qiqnxa` passes 36 value
-   cases, nine exhaustion cases and callback exception identity; current JVM
-   member-inline `run-lLUdQT` passes 26 official inline blocks and seven refusal
-   boundaries, and `replay-9kDbtZ` passes three JVM/typed-ETS host pairs plus
-   unmapped-type and invalid-bound rejection.
+4. **Regressions:** capability `run-2kOY9t` passes all three selection modes and
+   `collection-first-or-null-common/run-SY6ys1` passes ordinary/inline body paths
+   plus both refusals. Loader `run-XMcHf9` passes four host/JVM outcomes and the
+   missing transitive dependency rejection. SDK evidence
+   `/private/tmp/kotlin-ets-klib-sdk-d94D9Q` records all three compiler inputs,
+   `.protoBin` files, `modules.abc`, a HAP, and unchanged input bytes.
 5. **Scope:** only this branch's dependency/inliner/runtime-selection code,
    focused tests and documentation are changed. No production UI files changed.
 
