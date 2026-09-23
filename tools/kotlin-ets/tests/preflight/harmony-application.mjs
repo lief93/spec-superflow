@@ -124,7 +124,7 @@ export function runHarmonyApplication(config) {
   const profilePath = join(host, 'build-profile.json5');
   const unsignedProfile = readFileSync(profilePath, 'utf8');
   let signed = false;
-  if (signingSource && !config.knownSigningBlocker) {
+  if (signingSource) {
     const sourceProfile = json5(resolve(signingSource));
     assert.ok(sourceProfile.app?.signingConfigs?.length, 'Signing source has no signingConfigs');
     const profile = json5(profilePath);
@@ -133,8 +133,6 @@ export function runHarmonyApplication(config) {
       sourceProfile.app.signingConfigs[0].name;
     writeFileSync(profilePath, JSON.stringify(profile, null, 2) + '\n');
     signed = true;
-  } else if (config.knownSigningBlocker) {
-    result.signingBlocker = { ...config.knownSigningBlocker };
   }
 
   const env = { ...process.env, JAVA_HOME: join(sdk, 'jbr/Contents/Home'), DEVECO_SDK_HOME: join(sdk, 'sdk'),
@@ -174,7 +172,7 @@ export function runHarmonyApplication(config) {
   result.application = {
     ability: 'EntryAbility', page: (config.mainPage ?? config.generatedPage).replace(/\.ets$/, ''),
     component: config.component, stagedPath: generatedPage, stagedSha256: sha256(generatedPage),
-    signingRequested: Boolean(signingSource || config.knownSigningBlocker), signed,
+    signingRequested: Boolean(signingSource), signed,
   };
   if (generatedResources) {
     const sourceBase = join(generatedResources, 'base');
@@ -195,18 +193,16 @@ export function runHarmonyApplication(config) {
     const target = ['-t', device];
     const availability = run('device-availability', hdc,
       [...target, 'shell', 'param', 'get', 'const.product.software.version'], { check: false });
-    if (availability.status !== 0 || !availability.stdout.trim()) {
+    const softwareVersion = availability.stdout.trim();
+    if (availability.status !== 0 || !softwareVersion || /\[Fail\]/i.test(softwareVersion + availability.stderr)) {
       result.device = { target: device, status: 'unavailable',
         blocker: `Authorized Harmony device ${device} is not connected` };
-    } else if (!signed) {
-      result.device = { target: device, status: 'not-installed',
-        blocker: result.signingBlocker?.message ?? 'The built HAP is unsigned' };
     } else {
       run('uninstall', hdc, [...target, 'uninstall', bundleName], { check: false });
       const install = run('install', hdc, [...target, 'install', '-r', hap]);
       assert.match(install.stdout + install.stderr, /successfully|success/i);
       run('launch', hdc, [...target, 'shell', 'aa', 'start', '-a', 'EntryAbility', '-b', bundleName]);
-      result.device = { target: device, status: 'pass', softwareVersion: availability.stdout.trim(),
+      result.device = { target: device, status: 'pass', softwareVersion,
         ...config.interactDevice?.({ run, hdc, target, bundleName, evidence, sha256 }) };
       run('force-stop', hdc, [...target, 'shell', 'aa', 'force-stop', bundleName], { check: false });
     }
