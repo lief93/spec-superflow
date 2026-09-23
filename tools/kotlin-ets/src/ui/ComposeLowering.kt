@@ -419,8 +419,9 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                     scope.aliases[statement.symbol] = initial
                     return@forEachIndexed
                 }
+                // Distinct compiler temporaries can inherit the same enclosing source span.
                 val name = if (statement.origin == IrDeclarationOrigin.IR_TEMPORARY_VARIABLE)
-                    "uiTemporary${statement.startOffset}" else statement.name.asString()
+                    "uiTemporary${statement.startOffset}_${bindingSymbols.size}" else statement.name.asString()
                 val child = scope.fork()
                 try {
                     child.bindings[statement.symbol] = binding(statement, name)

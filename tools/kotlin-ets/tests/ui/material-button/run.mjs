@@ -50,7 +50,7 @@ for (const [entry, status] of [['Page', 0], ['UnsupportedInteraction', 2], ['Uns
     assert.match(code, /\.disabledContentColor/);
     assert.match(code, /__etsUniformPadding\(16(?:\.0)?\)/);
     assert.match(code, /new EtsShape\("rounded", 12(?:\.0)?, 12(?:\.0)?, 12(?:\.0)?, 12(?:\.0)?\)/);
-    assert.match(code, /\.borderRadius\(\{ topLeft: uiTemporary\d+\.topStart, topRight: uiTemporary\d+\.topEnd, bottomRight: uiTemporary\d+\.bottomEnd, bottomLeft: uiTemporary\d+\.bottomStart \}\)/);
+    assert.match(code, /\.borderRadius\(\{ topLeft: uiTemporary\d+_\d+\.topStart, topRight: uiTemporary\d+_\d+\.topEnd, bottomRight: uiTemporary\d+_\d+\.bottomEnd, bottomLeft: uiTemporary\d+_\d+\.bottomStart \}\)/);
     assert.match(code, /\.enabled\(enabled\)/);
   }
 }
