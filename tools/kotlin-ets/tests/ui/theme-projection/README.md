@@ -18,10 +18,12 @@ SDK value remains blocking. Strict mode does not project anything. This is a
 bounded source shape, not automatic adaptation of every Android theme/helper.
 
 The native palette reads `kotlin_ets_material_<role>` through the current host
-ResourceManager, reusing the lazy project ColorScheme implementation. Configure
-consumed colors in `base/element/color.json` and `dark/element/color.json`. No
-automatic resource emission, hardcoded fallback palette, Android wallpaper
-simulation or independent configuration-change subscription is provided here.
+ResourceManager, reusing the lazy project ColorScheme implementation. Generation
+emits complete `base/element/color.json` and `dark/element/color.json` resource
+contracts using the typed Material defaults. A Harmony host may override those
+names with project colors while staging; existing host entries take precedence.
+There is no runtime constant fallback, Android wallpaper simulation or independent
+configuration-change subscription.
 The report records skipped source evaluation and the visual replacement;
 `generated_with_degradations` is not equivalence success.
 

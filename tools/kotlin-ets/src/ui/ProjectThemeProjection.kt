@@ -13,24 +13,25 @@ import org.jetbrains.kotlin.name.FqName
 internal var IrCall.usesNativeProjectTheme: Boolean? by irAttribute(followAttributeOwner = true)
 
 /** Project policy replaces an Android-only configuration value, never its content lambda. */
-internal fun projectAndroidTheme(declaration: IrDeclaration, diagnostics: DiagnosticSink) {
-    if (!diagnostics.reportUiDegradation) return
+internal fun projectAndroidTheme(declaration: IrDeclaration, diagnostics: DiagnosticSink): Boolean {
+    if (!diagnostics.reportUiDegradation) return false
     val previousFile = diagnostics.currentFile
     diagnostics.currentFile = sourceFile(declaration)?.fileEntry?.name
+    var projected = false
     try {
         declaration.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) { element.acceptChildrenVoid(this) }
             override fun visitSimpleFunction(declaration: IrSimpleFunction) {
-                if (declaration.hasAnnotation(FqName("androidx.compose.runtime.Composable")) && declaration.returnType.isUnit()) {
-                    (declaration.body as? IrBlockBody)?.let { projectThemeBody(it, diagnostics) }
-                }
+                if (declaration.hasAnnotation(FqName("androidx.compose.runtime.Composable")) && declaration.returnType.isUnit())
+                    (declaration.body as? IrBlockBody)?.let { projected = projectThemeBody(it, diagnostics) || projected }
                 declaration.acceptChildrenVoid(this)
             }
         })
     } finally { diagnostics.currentFile = previousFile }
+    return projected
 }
 
-private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
+private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink): Boolean {
     val originalReads = projectionLocalReads(body)
     var projected = false
     body.acceptVoid(object : IrElementVisitorVoid {
@@ -55,7 +56,7 @@ private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
             element.acceptChildrenVoid(this)
         }
     })
-    if (!projected) return
+    if (!projected) return false
 
     fun systemBarEffect(call: IrCall): Boolean {
         val action = argument(call, "effect") as? IrFunctionExpression ?: return false
@@ -126,4 +127,5 @@ private fun projectThemeBody(body: IrBlockBody, diagnostics: DiagnosticSink) {
     // Only prune locals that became unused because of this projection, not arbitrary
     // unused declarations or file initializers (which may have observable effects).
     pruneProjectedLocals(body, originalReads, diagnostics)
+    return true
 }

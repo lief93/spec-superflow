@@ -73,15 +73,13 @@ fun main(arguments: Array<String>) {
         val dimensions = options["--string-resources"]?.let { DimensionResources.read(File(it).absoluteFile) } ?: DimensionResources()
         val fonts = options["--font-resources"]?.let { FontResources.read(File(it).absoluteFile) } ?: FontResources()
         val resourceOutput = File(output.absolutePath + ".resources")
-        if ("--string-resources" in options || "--font-resources" in options || "--image-resources" in options) require(!Files.exists(resourceOutput.toPath(), NOFOLLOW_LINKS)) {
-            "Refusing to overwrite existing resource output: $resourceOutput"
-        }
         val adapters = AdapterModules.load()
         val stdlib = StandardLibraryRules()
         val shapes = ComposeShapeRule()
         val elevations = ComposeCardElevationRule(diagnostics)
         val compositionLocals = ComposeCompositionLocalRule(diagnostics)
-        val rules = listOf(stdlib, images, strings, dimensions, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeSurfaceColorAtElevationRule(), ComposeProjectColorSchemeRule(), ComposePlatformVersionRule(), ComposeThemeModeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeMaterialImageVectorRule(), ComposeSnackbarHostStateRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposeDimensionRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), compositionLocals, ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeFlowRule(), shapes, elevations, ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
+        val projectColors = ComposeProjectColorSchemeRule()
+        val rules = listOf(stdlib, images, strings, dimensions, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeSurfaceColorAtElevationRule(), projectColors, ComposePlatformVersionRule(), ComposeThemeModeRule(), ComposeStaticAnimationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeMaterialImageVectorRule(), ComposeSnackbarHostStateRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposeDimensionRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), compositionLocals, ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeFlowRule(), shapes, elevations, ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
         var preflight: CoreProfileReport? = null
         val target = withKotlinFrontend(compilerArgs, entry, prepareModule = { module ->
             if (mode == "page") rules.forEach { it.prepareModule(module, diagnostics) }
@@ -126,9 +124,12 @@ fun main(arguments: Array<String>) {
             }
         }
         Files.createDirectories(output.absoluteFile.parentFile.toPath())
-        val resources = strings.artifacts()
+        val resources = strings.artifacts() + projectColors.artifacts()
         val resourceFiles = fonts.artifacts() + images.artifacts()
         if (resources.isNotEmpty() || resourceFiles.isNotEmpty()) {
+            require(!Files.exists(resourceOutput.toPath(), NOFOLLOW_LINKS)) {
+                "Refusing to overwrite existing resource output: $resourceOutput"
+            }
             Files.createDirectory(resourceOutput.toPath())
             resources.forEach { (name, content) ->
                 val file = resourceOutput.resolve(name)

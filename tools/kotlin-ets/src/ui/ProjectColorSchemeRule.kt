@@ -18,8 +18,11 @@ internal class ComposeProjectColorSchemeRule : CallRule {
     private val paletteType = etsClassSymbol("EtsProjectColorScheme", at).type as EtsNamedType
     private val reader = colorReader()
     private val factory = colorFactory()
+    private var requiresResources = false
 
-    override fun prepareSource(declaration: IrDeclaration, diagnostics: DiagnosticSink) = projectAndroidTheme(declaration, diagnostics)
+    override fun prepareSource(declaration: IrDeclaration, diagnostics: DiagnosticSink) {
+        requiresResources = projectAndroidTheme(declaration, diagnostics) || requiresResources
+    }
 
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
         val owner = call.symbol.owner
@@ -30,11 +33,30 @@ internal class ComposeProjectColorSchemeRule : CallRule {
         if (owner.valueParameters.map { it.name.asString() } != listOf("context") ||
             owner.dispatchReceiverParameter != null || owner.extensionReceiverParameter != null)
             throw Unsupported(Diagnostic("UNSUPPORTED", "Unsupported dynamic ColorScheme signature", language.source(call)))
+        requiresResources = true
         val context = argument(call, "context") ?: throw Unsupported(Diagnostic("UNSUPPORTED",
             "Project ColorScheme requires a native host Context", language.source(call)))
         return EtsCall(EtsReference(factory.symbol), listOf(language.expression(context, scope),
             EtsLiteral(api.endsWith(".dynamicDarkColorScheme"), EtsTypes.BOOLEAN, language.source(call))),
             materialColorSchemeType, language.source(call))
+    }
+
+    fun artifacts(): Map<String, String> = if (!requiresResources) emptyMap() else mapOf(
+        "base/element/color.json" to colorResources(dark = false),
+        "dark/element/color.json" to colorResources(dark = true),
+    )
+
+    private fun colorResources(dark: Boolean): String = buildString {
+        append("{\n  \"color\": [\n")
+        materialColorSchemeDefaults.entries.forEachIndexed { index, (role, defaults) ->
+            val name = role.replace(Regex("([A-Z])")) { "_" + it.value.lowercase() }
+            val value = (if (dark) defaults.second else defaults.first).toString(16).uppercase().padStart(8, '0')
+            append("    { \"name\": \"kotlin_ets_material_").append(name)
+                .append("\", \"value\": \"#").append(value).append("\" }")
+            if (index != materialColorSchemeDefaults.size - 1) append(',')
+            append('\n')
+        }
+        append("  ]\n}\n")
     }
 
     override fun targetFiles(program: EtsProgram): List<EtsFile> {

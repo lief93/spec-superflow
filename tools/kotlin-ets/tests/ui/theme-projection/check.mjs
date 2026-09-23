@@ -42,6 +42,14 @@ assert.match(code, /Text\("First"\)/);
 assert.match(code, /Text\("Next"\)/);
 assert.match(code, /\.onClick\(/);
 assert.doesNotMatch(code, /SDK_INT|LocalView|androidPalette|statusBarColor/);
+const baseColors = JSON.parse(readFileSync(join(page.output + '.resources', 'base/element/color.json'), 'utf8'));
+const darkColors = JSON.parse(readFileSync(join(page.output + '.resources', 'dark/element/color.json'), 'utf8'));
+assert.equal(baseColors.color.length, 48);
+assert.equal(darkColors.color.length, 48);
+assert.deepEqual(baseColors.color.find(value => value.name === 'kotlin_ets_material_primary_container'),
+  {name: 'kotlin_ets_material_primary_container', value: '#FFEADDFF'});
+assert.deepEqual(darkColors.color.find(value => value.name === 'kotlin_ets_material_primary_container'),
+  {name: 'kotlin_ets_material_primary_container', value: '#FF4F378B'});
 
 const strict = run('strict', 'Page', ['--unsupported-policy', 'error']);
 assert.equal(strict.result.status, 2);
@@ -81,6 +89,7 @@ const clean = run('clean', 'Clean');
 assert.equal(clean.result.status, 0, clean.result.stdout + clean.result.stderr);
 assert.equal(clean.report.degradationCount, 0);
 assert.doesNotMatch(readFileSync(clean.output, 'utf8'), /__etsCurrentProjectColorScheme/);
+assert.equal(existsSync(clean.output + '.resources'), false);
 const business = run('business', 'BusinessEffect');
 assert.equal(business.result.status, 2);
 assert.equal(existsSync(business.output), false);

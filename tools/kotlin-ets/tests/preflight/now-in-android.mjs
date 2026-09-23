@@ -71,6 +71,13 @@ try {
   assert.equal(generation.status, 'generated_with_degradations');
   assert.equal(generation.degradationCount, 3);
   assert.equal(existsSync(output), true);
+  const baseColors = JSON.parse(readFileSync(join(output + '.resources', 'base/element/color.json'), 'utf8'));
+  const darkColors = JSON.parse(readFileSync(join(output + '.resources', 'dark/element/color.json'), 'utf8'));
+  for (const colors of [baseColors, darkColors]) {
+    assert.equal(colors.color.length, 48);
+    assert.equal(new Set(colors.color.map(value => value.name)).size, 48);
+    assert.ok(colors.color.some(value => value.name === 'kotlin_ets_material_primary_container'));
+  }
   const target = readFileSync(output, 'utf8');
   const temporaryBridges = [...target.matchAll(/function uiTemporary\d+_\d+_\d+\(([^)]*)\)/g)];
   assert.ok(temporaryBridges.length >= 3);

@@ -5,7 +5,7 @@ By explicit migration policy, `dynamicLightColorScheme(context)` and
 This is not Android wallpaper-color reproduction. Static `lightColorScheme` and
 `darkColorScheme` continue to use their explicit values and Material defaults.
 
-Put colors in the module's official resource directories:
+Generation supplies complete defaults in the module's official resource directories:
 
 ```
 src/main/resources/base/element/color.json
@@ -15,15 +15,15 @@ src/main/resources/dark/element/color.json
 Both use the same resource names. The adapter convention is
 `kotlin_ets_material_<snake_case_role>`, for example `kotlin_ets_material_primary`
 and `kotlin_ets_material_on_surface`. These names are not Harmony's official
-theme-role names. Alias them to existing project colors with `$color:brand_primary`,
-as shown in this fixture. Do not replace a project's existing resource files.
+theme-role names. Hosts may override them or alias them to existing project colors
+with `$color:brand_primary`, as shown in this fixture. Resource staging merges by
+name and preserves an existing project entry.
 
 The generated value implements the same typed ColorScheme contract as static
 palettes. A getter reads only the requested color using native
-`ResourceManager.getColorByNameSync`. Unused roles need no resources; this fixture
-renders with only `primary` configured. A consumed missing color reports its
-resource name rather than returning a fabricated default. Native resource
-qualifier fallback (for example dark to base) remains in effect.
+`ResourceManager.getColorByNameSync`. A consumed missing color still reports its
+resource name rather than returning a runtime constant. Native resource qualifier
+fallback (for example dark to base) remains in effect.
 
 The factory copies the native configuration, sets explicit LIGHT or DARK and
 creates `getOverrideResourceManager(configuration)`. It does not change the host

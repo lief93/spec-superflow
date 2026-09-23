@@ -41,6 +41,27 @@ function filesBelow(root, current = root) {
   });
 }
 
+function copyResourceBundle(source, target) {
+  for (const relative of filesBelow(source)) {
+    if (!relative.includes('/')) continue;
+    const from = join(source, relative);
+    const to = join(target, relative);
+    mkdirSync(dirname(to), { recursive: true });
+    if (relative.includes('/element/') && relative.endsWith('.json') && existsSync(to)) {
+      const generated = JSON.parse(readFileSync(from, 'utf8'));
+      const host = JSON.parse(readFileSync(to, 'utf8'));
+      for (const [kind, entries] of Object.entries(generated)) {
+        assert.ok(Array.isArray(entries), `Generated element resource group must be an array: ${relative}:${kind}`);
+        const previous = host[kind] ?? [];
+        assert.ok(Array.isArray(previous), `Host element resource group must be an array: ${relative}:${kind}`);
+        const names = new Set(previous.map(entry => entry.name));
+        host[kind] = [...previous, ...entries.filter(entry => !names.has(entry.name))];
+      }
+      writeFileSync(to, JSON.stringify(host, null, 2) + '\n');
+    } else cpSync(from, to);
+  }
+}
+
 export function runHarmonyApplication(config) {
   const checkout = resolve(config.checkout);
   assert.ok(existsSync(join(checkout, '.git')), `Checkout is not a Git worktree: ${checkout}`);
@@ -107,7 +128,7 @@ export function runHarmonyApplication(config) {
   if (config.copyGeneratedResources) {
     generatedResources = generated + '.resources';
     assert.ok(existsSync(join(generatedResources, 'base')), 'Generated ETS resource bundle is missing');
-    cpSync(join(generatedResources, 'base'), join(host, 'entry/src/main/resources/base'), { recursive: true });
+    copyResourceBundle(generatedResources, join(host, 'entry/src/main/resources'));
   }
 
   const appPath = join(host, 'AppScope/app.json5');
@@ -175,15 +196,27 @@ export function runHarmonyApplication(config) {
     signingRequested: Boolean(signingSource), signed,
   };
   if (generatedResources) {
-    const sourceBase = join(generatedResources, 'base');
-    const stagedBase = join(host, 'entry/src/main/resources/base');
-    const files = filesBelow(sourceBase).sort().map(path => {
-      const sourceSha256 = sha256(join(sourceBase, path));
-      const stagedSha256 = sha256(join(stagedBase, path));
-      assert.equal(stagedSha256, sourceSha256, `Generated resource changed while staging: ${path}`);
-      return { path, sourceSha256, stagedSha256 };
+    const stagedResources = join(host, 'entry/src/main/resources');
+    const files = filesBelow(generatedResources).filter(path => path.includes('/')).sort().map(path => {
+      const sourceFile = join(generatedResources, path);
+      const stagedFile = join(stagedResources, path);
+      const sourceSha256 = sha256(sourceFile);
+      const stagedSha256 = sha256(stagedFile);
+      if (sourceSha256 !== stagedSha256) {
+        assert.ok(path.includes('/element/') && path.endsWith('.json'),
+          `Only element resources may merge with the host: ${path}`);
+        const generated = JSON.parse(readFileSync(sourceFile, 'utf8'));
+        const staged = JSON.parse(readFileSync(stagedFile, 'utf8'));
+        for (const [kind, entries] of Object.entries(generated)) {
+          for (const entry of entries) {
+            assert.deepEqual(staged[kind]?.find(value => value.name === entry.name), entry,
+              `Generated resource changed while staging: ${path}:${entry.name}`);
+          }
+        }
+      }
+      return { path, sourceSha256, stagedSha256, merged: sourceSha256 !== stagedSha256 };
     });
-    result.resources = { source: generatedResources, staged: stagedBase, files };
+    result.resources = { source: generatedResources, staged: stagedResources, files };
   }
   result.hap = { path: hap, sha256: sha256(hap), bytes: readFileSync(hap).length };
   result.abc = { path: abc, sha256: sha256(abc), bytes: readFileSync(abc).length };
