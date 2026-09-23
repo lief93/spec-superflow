@@ -86,6 +86,7 @@ class HarmonyWidgetBackend {
                 expect(widget.currentPage, EtsTypes.NUMBER, "Pager.currentPage", at)
                 expect(widget.pageCount, EtsTypes.NUMBER, "Pager.pageCount", at)
                 expect(widget.controller, EtsNamedType("SwiperController"), "Pager.controller", at)
+                expect(widget.enabled, EtsTypes.BOOLEAN, "Pager.enabled", at)
                 expect(widget.onPageChange, EtsFunctionType(listOf(EtsTypes.NUMBER), EtsTypes.VOID),
                     "Pager.onPageChange", at)
                 expect(widget.pageContent.index, EtsTypes.NUMBER, "Pager.pageContent.index", widget.pageContent.source)
@@ -100,9 +101,12 @@ class HarmonyWidgetBackend {
                 native("Swiper", listOf(widget.controller), listOf(EtsUiForEach(pages,
                     EtsParameter(index.symbol), lower(widget.pageContent.children, null), widget.pageContent.source)))
                     .copy(attributes = listOf(
+                        call("width", listOf(EtsLiteral("100%", EtsTypes.STRING, at)), at),
                         call("index", listOf(widget.currentPage), at),
                         call("loop", listOf(EtsLiteral(false, EtsTypes.BOOLEAN, at)), at),
                         call("indicator", listOf(EtsLiteral(false, EtsTypes.BOOLEAN, at)), at),
+                        call("disableSwipe", listOf(EtsUnary("!", widget.enabled,
+                            EtsTypes.BOOLEAN, at)), at),
                         call("onChange", listOf(widget.onPageChange), at)))
             }
             is Widget.LazyList -> {

@@ -110,7 +110,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 setOf("painter", "contentDescription", "modifier")
             else setOf("model", "contentDescription", "modifier")
             textField -> setOf("value", "onValueChange", "modifier", "enabled")
-            isPager -> setOf("state", "modifier", "pageContent")
+            isPager -> setOf("state", "modifier", "pageContent", "userScrollEnabled")
             isLazyList -> setOf("modifier", "state", "content", "userScrollEnabled")
             else -> setOf("modifier", "content")
         })
@@ -188,6 +188,11 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         val holder = (resolve(state, scope) as? IrGetValue)?.symbol
         val binding = holder?.let(pagers::get)
             ?: diagnostics.unsupported(state, "HorizontalPager state requires source remembered PagerState")
+        val enabled = argument(call, "userScrollEnabled")?.let { value ->
+            if (!value.type.isBoolean()) diagnostics.unsupported(value,
+                "HorizontalPager userScrollEnabled requires Boolean")
+            scalar(value, scope)
+        } ?: EtsLiteral(true, EtsTypes.BOOLEAN, source)
         val content = argument(call, "pageContent")
             ?: diagnostics.unsupported(call, "HorizontalPager requires pageContent")
         val lambda = resolve(content, scope) as? IrFunctionExpression
@@ -207,7 +212,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             "index", EtsTypes.NUMBER, source)
         val onPageChange = EtsLambda(listOf(EtsParameter(changeSymbol)), listOf(EtsExpressionStatement(
             EtsAssignment(binding.currentPage, EtsReference(changeSymbol), source))), EtsTypes.VOID, source)
-        return Widget.Pager(binding.currentPage, binding.pageCount, binding.controller, onPageChange,
+        return Widget.Pager(binding.currentPage, binding.pageCount, binding.controller, enabled, onPageChange,
             IndexedChildren(index, children, language.source(content)), modifiers, source)
     }
 

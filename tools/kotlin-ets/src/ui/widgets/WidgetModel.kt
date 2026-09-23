@@ -23,7 +23,7 @@ sealed interface Widget<V, S> {
         override val source: S) : Widget<V, S>
     data class Box<V, S>(val children: Children<V, S>, override val modifiers: List<WidgetModifier<V, S>>,
         override val source: S) : Widget<V, S>
-    data class Pager<V, S>(val currentPage: V, val pageCount: V, val controller: V,
+    data class Pager<V, S>(val currentPage: V, val pageCount: V, val controller: V, val enabled: V,
         val onPageChange: V, val pageContent: IndexedChildren<V, S>,
         override val modifiers: List<WidgetModifier<V, S>>, override val source: S) : Widget<V, S>
     data class LazyList<V, S>(val axis: WidgetScrollAxis, val enabled: V,
