@@ -56,7 +56,7 @@ fun main(args: Array<String>) {
         check((column.modifiers[0] as WidgetModifier.Width).value.let { it as EtsLiteral }.value == 120.0)
         check((column.modifiers[2] as WidgetModifier.Width).value.let { it as EtsLiteral }.value == 80.0)
         check(((column.modifiers[3] as WidgetModifier.Fill).fraction as EtsReference).symbol == parameters[8].symbol)
-        check(column.children.widgets.size == 12)
+        check(column.children.widgets.size == 13)
         val title = column.children.widgets[0] as Widget.Text
         check(title.text.type == WidgetValueType.STRING)
         check(title.text.provenance == WidgetValueProvenance.Expression("title"))
@@ -168,7 +168,8 @@ fun main(args: Array<String>) {
             EtsLiteral("input", EtsTypes.STRING, at),
             EtsLambda(listOf(changed), emptyList(), EtsTypes.VOID, at),
             EtsLiteral(0xFF112233L, EtsTypes.NUMBER, at),
-            EtsLiteral(24, EtsTypes.NUMBER, at), EtsLiteral(0.75, EtsTypes.NUMBER, at)), EtsTypes.VOID, at))
+            EtsLiteral(24, EtsTypes.NUMBER, at), EtsLiteral(0.75, EtsTypes.NUMBER, at),
+            EtsLiteral(6, EtsTypes.NUMBER, at), EtsLiteral(2, EtsTypes.NUMBER, at)), EtsTypes.VOID, at))
         // The SDK requires an entry container. It is itself a semantic Box.
         val shell = HarmonyWidgetBackend().lower(Widget.Box(Children(emptyList()), emptyList(), at)).copy(children = listOf(content))
         val entry = EtsClass("WidgetPage", listOf(EtsFunction("build", emptyList(), EtsTypes.VOID,
@@ -190,7 +191,7 @@ fun main(args: Array<String>) {
         walkEts(builder, tree::add)
         val elements = tree.filterIsInstance<EtsUiElement>()
         check(elements.any { (it.call.callee as? EtsReference)?.symbol?.name == "Stack" })
-        check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Text" } == 8)
+        check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Text" } == 9)
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Image" } == 2)
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "TextInput" } == 2)
         val allAttributes = elements.flatMap { it.attributes }
@@ -235,6 +236,24 @@ fun main(args: Array<String>) {
             listOf("backgroundColor"), listOf("width", "height")))
         check(imageLayers[0].attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
             .arguments.single() == imageClick.onClick)
+        val orderedText = column.children.widgets[12] as Widget.Text
+        check(orderedText.modifiers.map { it.javaClass.simpleName } == listOf(
+            "Size", "Padding", "Offset", "Background", "Border", "Clip", "Click"))
+        val orderedOffset = orderedText.modifiers[2] as WidgetModifier.Offset
+        check((orderedOffset.x as EtsReference).symbol == parameters[9].symbol)
+        check((orderedOffset.y as EtsLiteral).value == -2.0)
+        val orderedBackground = orderedText.modifiers[3] as WidgetModifier.Background
+        check(orderedBackground.shape?.kind == WidgetShapeKind.ROUNDED &&
+            (orderedBackground.shape?.radius as EtsLiteral).value == 4.0)
+        val orderedBorder = orderedText.modifiers[4] as WidgetModifier.Border
+        check((orderedBorder.width as EtsReference).symbol == parameters[10].symbol)
+        check(orderedBorder.shape.kind == WidgetShapeKind.CIRCLE)
+        val orderedClip = orderedText.modifiers[5] as WidgetModifier.Clip
+        check(orderedClip.shape.kind == WidgetShapeKind.ROUNDED &&
+            (orderedClip.shape.radius as EtsLiteral).value == 3.0)
+        val orderedLayers = modifierLayers(orderedText)
+        val orderedStructure = orderedLayers.joinToString("|") { attributes(it).joinToString(",") }
+        File(output, "modifier-order.txt").writeText(orderedStructure + "\n")
         val expected = linkedMapOf(
             "UnknownWidget" to "Unsupported resolved widget API", "UnknownModifier" to "Unsupported resolved widget Modifier API",
             "WholeTextStyle" to "widget argument: style", "Conditional" to "Unsupported widget children statement",
@@ -247,7 +266,10 @@ fun main(args: Array<String>) {
             "MaterialDecoration" to "widget argument: label",
             "TextFieldCallbackFactory" to "requires a lambda",
             "BrushBackground" to "widget argument: brush",
-            "ShapedBackground" to "widget argument: shape",
+            "BrushBorder" to "widget argument: brush",
+            "AnimatedModifier" to "Unsupported resolved widget Modifier API",
+            "NonUniformShape" to "Widget shape requires",
+            "OffsetLambda" to "Widget offset requires the x/y Dp overload",
             "ClickSemantics" to "widget argument: onClickLabel",
             "ClickFactory" to "clickable onClick requires a lambda",
             "NegativeSize" to "finite and non-negative",

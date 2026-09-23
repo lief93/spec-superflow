@@ -483,6 +483,17 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 diagnostics.unsupported(value, "Widget dimension must be finite and non-negative")
             return emitted
         }
+        fun offsetDimension(value: IrExpression): EtsExpression {
+            if (value.type.classFqName?.asString() != "androidx.compose.ui.unit.Dp")
+                diagnostics.unsupported(value, "Widget offset requires Dp")
+            val emitted = scalar(value, scope)
+            if (emitted.type != EtsTypes.NUMBER) diagnostics.unsupported(value,
+                "Widget offset Dp requires scalar language lowering")
+            val constant = (emitted as? EtsLiteral)?.value as? Number
+            if (constant != null && !constant.toDouble().isFinite())
+                diagnostics.unsupported(value, "Widget offset must be finite")
+            return emitted
+        }
         fun required(name: String) = argument(call, name) ?: diagnostics.unsupported(call, "$api requires $name")
         val operation = when (api) {
             "androidx.compose.foundation.layout.size" -> {
@@ -552,10 +563,32 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 WidgetModifier.Padding(side("start", "horizontal"), side("top", "vertical"),
                     side("end", "horizontal"), side("bottom", "vertical"), at)
             }
+            "androidx.compose.foundation.layout.offset" -> {
+                if (call.symbol.owner.valueParameters.none { it.name.asString() == "x" })
+                    diagnostics.unsupported(call, "Widget offset requires the x/y Dp overload")
+                checkArguments(call, setOf("x", "y"))
+                fun axis(name: String) = argument(call, name)?.let(::offsetDimension)
+                    ?: EtsLiteral(0, EtsTypes.NUMBER, at)
+                WidgetModifier.Offset(axis("x"), axis("y"), at)
+            }
             "androidx.compose.foundation.background" -> {
-                checkArguments(call, setOf("color"))
+                checkArguments(call, setOf("color", "shape"))
                 val color = required("color")
-                WidgetModifier.Background(widgetValue(color, scope, WidgetValueType.COLOR), at)
+                WidgetModifier.Background(widgetValue(color, scope, WidgetValueType.COLOR), at,
+                    argument(call, "shape")?.let { shape(it, scope) })
+            }
+            "androidx.compose.foundation.border" -> {
+                checkArguments(call, setOf("width", "color", "shape"))
+                if (call.symbol.owner.valueParameters.none { it.name.asString() == "color" })
+                    diagnostics.unsupported(call, "Widget border requires the solid color overload")
+                WidgetModifier.Border(dimension(required("width")),
+                    widgetValue(required("color"), scope, WidgetValueType.COLOR),
+                    argument(call, "shape")?.let { shape(it, scope) }
+                        ?: WidgetShape(WidgetShapeKind.RECTANGLE, null, at), at)
+            }
+            "androidx.compose.ui.draw.clip" -> {
+                checkArguments(call, setOf("shape"))
+                WidgetModifier.Clip(shape(required("shape"), scope), at)
             }
             "androidx.compose.foundation.clickable" -> {
                 checkArguments(call, setOf("onClick", "enabled"))
@@ -594,6 +627,36 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             else -> diagnostics.unsupported(call, "Unsupported resolved widget Modifier API: $api")
         }
         return previous + operation
+    }
+
+    private fun shape(value: IrExpression, scope: Scope): WidgetShape<EtsExpression, SourceSpan> {
+        val resolved = resolve(value, scope)
+        val call = resolved as? IrCall
+            ?: diagnostics.unsupported(value, "Widget shape requires RectangleShape, CircleShape, or a uniform RoundedCornerShape")
+        val at = language.source(resolved)
+        val property = call.symbol.owner.correspondingPropertySymbol?.owner?.let(::symbolName)
+        if (property == "androidx.compose.ui.graphics.RectangleShape")
+            return WidgetShape(WidgetShapeKind.RECTANGLE, null, at)
+        if (property == "androidx.compose.foundation.shape.CircleShape")
+            return WidgetShape(WidgetShapeKind.CIRCLE, null, at)
+        val constructor = call.symbol.owner
+        if (symbolName(constructor) == "androidx.compose.foundation.shape.RoundedCornerShape" &&
+            constructor.valueParameters.size == 1 &&
+            constructor.valueParameters.single().type.classFqName?.asString() == "androidx.compose.ui.unit.Dp") {
+            val radius = call.getValueArgument(0)
+                ?: diagnostics.unsupported(value, "Uniform RoundedCornerShape requires a radius")
+            if (radius.type.classFqName?.asString() != "androidx.compose.ui.unit.Dp")
+                diagnostics.unsupported(radius, "Widget shape radius requires Dp")
+            val emitted = scalar(radius, scope)
+            if (emitted.type != EtsTypes.NUMBER)
+                diagnostics.unsupported(radius, "Widget shape radius requires scalar language lowering")
+            val constant = (emitted as? EtsLiteral)?.value as? Number
+            if (constant != null && (!constant.toDouble().isFinite() || constant.toDouble() < 0))
+                diagnostics.unsupported(radius, "Widget shape radius must be finite and non-negative")
+            return WidgetShape(WidgetShapeKind.ROUNDED, emitted, at)
+        }
+        diagnostics.unsupported(value,
+            "Widget shape requires RectangleShape, CircleShape, or a uniform RoundedCornerShape")
     }
 
     private fun resolve(value: IrExpression, scope: Scope): IrExpression = when (value) {

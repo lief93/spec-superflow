@@ -133,6 +133,39 @@ fun main() {
     }
     check(name(layers(styledText, shared.size).last().children!!.single() as EtsUiElement) == "Text")
     check(name(layers(styledImage, shared.size).last().children!!.single() as EtsUiElement) == "Image")
+    val rounded = WidgetShape<EtsExpression, SourceSpan>(WidgetShapeKind.ROUNDED, number(4), source)
+    val orderedModifiers: List<WidgetModifier<EtsExpression, SourceSpan>> = listOf(
+        WidgetModifier.Offset(number(6), number(-2), source),
+        WidgetModifier.Background(sharedColor, source, rounded),
+        WidgetModifier.Border(number(2), color(8),
+            WidgetShape(WidgetShapeKind.CIRCLE, null, source), source),
+        WidgetModifier.Clip(WidgetShape(WidgetShapeKind.RECTANGLE, null, source), source),
+        WidgetModifier.Click(click, EtsLiteral(true, EtsTypes.BOOLEAN, source), source),
+    )
+    val orderedElement = backend.lower(Widget.Text(string("ordered"), noStyle, orderedModifiers, source))
+    val orderedLayers = layers(orderedElement, orderedModifiers.size)
+    check(orderedLayers.map(::attributes) == listOf(
+        listOf("offset"), listOf("backgroundColor", "borderRadius"), listOf("border"),
+        listOf("borderRadius", "clip"), listOf("enabled", "onClick")))
+    val position = orderedLayers[0].attributes.single().arguments.single() as EtsObject
+    check(position.fields == mapOf("x" to number(6), "y" to number(-2)))
+    val border = orderedLayers[2].attributes.single().arguments.single() as EtsObject
+    check(border.type == EtsRecordType("BorderOptions", mapOf(
+        "width" to EtsTypes.NUMBER, "color" to EtsTypes.NUMBER, "radius" to EtsTypes.STRING)))
+    check((border.fields.getValue("radius") as EtsLiteral).value == "50%")
+    check((orderedLayers[3].attributes.first().arguments.single() as EtsLiteral).value == 0)
+    val orderedImage = backend.lower(Widget.Image(ImageSource.Resource(resource, source),
+        EtsLiteral("Ordered", EtsTypes.STRING, source), orderedModifiers, source))
+    check(layers(orderedImage, orderedModifiers.size).map(::attributes) == orderedLayers.map(::attributes))
+    val invalidOffset = Widget.Text(string("bad offset"), noStyle,
+        listOf(WidgetModifier.Offset<EtsExpression, SourceSpan>(
+            EtsLiteral("bad", EtsTypes.STRING, source), number(0), source)), source)
+    check(runCatching { backend.lower(invalidOffset) }.exceptionOrNull() is IllegalArgumentException)
+    val invalidBorder = Widget.Text(string("bad border"), noStyle,
+        listOf(WidgetModifier.Border<EtsExpression, SourceSpan>(
+            EtsLiteral("bad", EtsTypes.STRING, source), color(1),
+            WidgetShape(WidgetShapeKind.RECTANGLE, null, source), source)), source)
+    check(runCatching { backend.lower(invalidBorder) }.exceptionOrNull() is IllegalArgumentException)
     val resourceImage = backend.lower(Widget.Image(ImageSource.Resource(resource, source),
         EtsLiteral("Local", EtsTypes.STRING, source), emptyList(), source))
     val urlImage = backend.lower(Widget.Image(ImageSource.Url(EtsLiteral("https://example.invalid/a.png",
@@ -216,7 +249,7 @@ fun main() {
     check(runCatching { backend.lower(invalidConditional) }.exceptionOrNull() is IllegalArgumentException)
     val fn = EtsFunction("view", emptyList(), EtsTypes.VOID,
         listOf(element, rowLayout, boxLayout, styledText, styledButton, styledImage,
-            resourceImage, urlImage, textField, pager, scroll, conditional),
+            orderedElement, orderedImage, resourceImage, urlImage, textField, pager, scroll, conditional),
         source, builder = true)
     EtsValidator().validate(EtsProgram(listOf(EtsFile("model-only", listOf(fn)))))
     println("PASS backend without compiler/Compose; shared values, scoped layout modifiers, runtime branches and typed rejection")

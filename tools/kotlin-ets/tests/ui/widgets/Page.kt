@@ -3,7 +3,10 @@ package widgetsfixture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text as Label
@@ -11,11 +14,13 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,7 +38,7 @@ object KnownTokens {
 @Composable
 fun Page(title: String, enabled: Boolean, onAction: () -> Unit, imageUrl: String,
     input: String, onInput: (String) -> Unit, surfaceColor: Color, lineHeight: TextUnit,
-    fillFraction: Float) {
+    fillFraction: Float, offsetX: Dp, borderWidth: Dp) {
     val identity = Modifier
     val frame = Modifier.width(120.dp).padding(4.dp).width(80.dp).fillMaxSize(fillFraction)
     Column(modifier = frame.then(identity)) {
@@ -69,5 +74,11 @@ fun Page(title: String, enabled: Boolean, onAction: () -> Unit, imageUrl: String
             modifier = Modifier.width(100.dp))
         BasicTextField(value = input, onValueChange = onInput, enabled = enabled,
             modifier = Modifier.width(90.dp))
+        Label("ordered", Modifier.size(width = 48.dp, height = 24.dp).padding(2.dp)
+            .offset(x = offsetX, y = (-2).dp)
+            .background(surfaceColor, RoundedCornerShape(4.dp))
+            .border(borderWidth, Color.Blue, CircleShape)
+            .clip(RoundedCornerShape(3.dp))
+            .clickable(enabled = enabled, onClick = onAction))
     }
 }

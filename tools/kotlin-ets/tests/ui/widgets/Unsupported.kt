@@ -1,10 +1,13 @@
 package widgetsnegative
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
@@ -12,6 +15,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -20,6 +25,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -31,7 +37,7 @@ object UnknownTokens {
 }
 
 @Composable fun UnknownWidget() { Checkbox(checked = true, onCheckedChange = {}) }
-@Composable fun UnknownModifier() { Text("x", Modifier.offset(1.dp)) }
+@Composable fun UnknownModifier() { Text("x", Modifier.rotate(15f)) }
 @Composable fun WholeTextStyle() { Text("x", style = TextStyle(fontSize = 20.sp)) }
 @Composable fun Conditional() { if (true) while (false) { } else Text("y") }
 @Composable fun Helper() { LocalText("x") }
@@ -61,7 +67,14 @@ fun inputCallbackFactory(): (String) -> Unit = {}
 @Composable fun BrushBackground() {
     Text("x", Modifier.background(Brush.horizontalGradient(listOf(Color.Red, Color.Blue))))
 }
-@Composable fun ShapedBackground() { Text("x", Modifier.background(Color.Red, CircleShape)) }
+@Composable fun BrushBorder() {
+    Text("x", Modifier.border(1.dp, Brush.horizontalGradient(listOf(Color.Red, Color.Blue)), CircleShape))
+}
+@Composable fun AnimatedModifier() { Text("x", Modifier.animateContentSize()) }
+@Composable fun NonUniformShape() {
+    Text("x", Modifier.clip(RoundedCornerShape(topStart = 2.dp, topEnd = 4.dp)))
+}
+@Composable fun OffsetLambda() { Text("x", Modifier.offset { IntOffset.Zero }) }
 @Composable fun ClickSemantics() {
     Text("x", Modifier.clickable(onClickLabel = "action", role = Role.Button) {})
 }

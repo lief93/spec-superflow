@@ -77,6 +77,9 @@ sealed interface LazyListSlot<V, S> {
 
 enum class WidgetLayoutScope { ROW, COLUMN, BOX }
 enum class WidgetScrollAxis { VERTICAL, HORIZONTAL }
+enum class WidgetShapeKind { RECTANGLE, CIRCLE, ROUNDED }
+
+data class WidgetShape<V, S>(val kind: WidgetShapeKind, val radius: V?, val source: S)
 
 /** The source kind survives the platform seam; no resource or URL is reduced to source text. */
 sealed interface ImageSource<V, S> {
@@ -94,13 +97,18 @@ sealed interface WidgetModifier<V, S> {
     data class Height<V, S>(val value: V, override val source: S) : WidgetModifier<V, S>
     data class Padding<V, S>(val start: V, val top: V, val end: V, val bottom: V,
         override val source: S) : WidgetModifier<V, S>
+    data class Offset<V, S>(val x: V, val y: V, override val source: S) : WidgetModifier<V, S>
     data class Fill<V, S>(val width: Boolean, val height: Boolean, val fraction: V,
         override val source: S) : WidgetModifier<V, S>
     data class Weight<V, S>(val value: V, val parent: WidgetLayoutScope,
         override val source: S) : WidgetModifier<V, S>
     data class Align<V, S>(val value: V, val parent: WidgetLayoutScope,
         override val source: S) : WidgetModifier<V, S>
-    data class Background<V, S>(val color: WidgetValue<V, S>, override val source: S) : WidgetModifier<V, S>
+    data class Background<V, S>(val color: WidgetValue<V, S>, override val source: S,
+        val shape: WidgetShape<V, S>? = null) : WidgetModifier<V, S>
+    data class Border<V, S>(val width: V, val color: WidgetValue<V, S>, val shape: WidgetShape<V, S>,
+        override val source: S) : WidgetModifier<V, S>
+    data class Clip<V, S>(val shape: WidgetShape<V, S>, override val source: S) : WidgetModifier<V, S>
     data class Click<V, S>(val onClick: V, val enabled: V?,
         override val source: S) : WidgetModifier<V, S>
     data class Scroll<V, S>(val axis: WidgetScrollAxis, val offset: V, val onScroll: V,

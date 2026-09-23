@@ -259,6 +259,13 @@ class HarmonyWidgetBackend {
                     listOf(call("padding", listOf(EtsObject(sides,
                         EtsRecordType("Padding", sides.mapValues { EtsTypes.NUMBER }), source)), source))
                 }
+                is WidgetModifier.Offset -> {
+                    expect(modifier.x, EtsTypes.NUMBER, "Offset.x", source)
+                    expect(modifier.y, EtsTypes.NUMBER, "Offset.y", source)
+                    val position = linkedMapOf("x" to modifier.x, "y" to modifier.y)
+                    listOf(call("offset", listOf(EtsObject(position,
+                        EtsRecordType("Position", position.mapValues { EtsTypes.NUMBER }), source)), source))
+                }
                 is WidgetModifier.Fill -> {
                     expect(modifier.fraction, EtsTypes.NUMBER, "Fill.fraction", source)
                     val constant = (modifier.fraction as? EtsLiteral)?.value as? Number
@@ -279,8 +286,21 @@ class HarmonyWidgetBackend {
                 }
                 is WidgetModifier.Background -> {
                     val color = consume(modifier.color, WidgetValueType.COLOR)
-                    listOf(call("backgroundColor", listOf(color), source))
+                    listOf(call("backgroundColor", listOf(color), source)) + modifier.shape?.let { shape ->
+                        listOf(call("borderRadius", listOf(shapeRadius(shape)), source))
+                    }.orEmpty()
                 }
+                is WidgetModifier.Border -> {
+                    expect(modifier.width, EtsTypes.NUMBER, "Border.width", source)
+                    val values = linkedMapOf("width" to modifier.width,
+                        "color" to consume(modifier.color, WidgetValueType.COLOR),
+                        "radius" to shapeRadius(modifier.shape))
+                    listOf(call("border", listOf(EtsObject(values,
+                        EtsRecordType("BorderOptions", values.mapValues { it.value.type }), source)), source))
+                }
+                is WidgetModifier.Clip -> listOf(
+                    call("borderRadius", listOf(shapeRadius(modifier.shape)), source),
+                    call("clip", listOf(EtsLiteral(true, EtsTypes.BOOLEAN, source)), source))
                 is WidgetModifier.Click -> {
                     expect(modifier.onClick, EtsFunctionType(emptyList(), EtsTypes.VOID), "Click.onClick", source)
                     val enabled = modifier.enabled ?: EtsLiteral(true, EtsTypes.BOOLEAN, source)
@@ -325,6 +345,16 @@ class HarmonyWidgetBackend {
         if (constant != null) return EtsLiteral("${constant.toDouble() * 100}%", EtsTypes.STRING, at)
         return EtsBinary("+", EtsBinary("*", fraction, EtsLiteral(100, EtsTypes.NUMBER, at),
             EtsTypes.NUMBER, at), EtsLiteral("%", EtsTypes.STRING, at), EtsTypes.STRING, at)
+    }
+
+    private fun shapeRadius(shape: WidgetShape<EtsExpression, SourceSpan>): EtsExpression = when (shape.kind) {
+        WidgetShapeKind.RECTANGLE -> EtsLiteral(0, EtsTypes.NUMBER, shape.source)
+        WidgetShapeKind.CIRCLE -> EtsLiteral("50%", EtsTypes.STRING, shape.source)
+        WidgetShapeKind.ROUNDED -> {
+            val radius = requireNotNull(shape.radius) { "Rounded shape requires a radius at ${shape.source}" }
+            expect(radius, EtsTypes.NUMBER, "RoundedShape.radius", shape.source)
+            radius
+        }
     }
 
     /** The only target-type interpretation for semantic widget values. */

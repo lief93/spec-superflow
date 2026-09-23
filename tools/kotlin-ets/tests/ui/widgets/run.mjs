@@ -19,6 +19,7 @@ const pipeline = join(root, 'src/ui/pipeline/ComposeWidgetPipeline.kt');
 const pipelineProbe = join(here, 'CoreProfilePipelineProbe.kt');
 const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
   'BackendTest.kt', 'WidgetProbe.kt', 'CoreProfile.kt', 'CoreProfilePipelineProbe.kt',
+  'ModifierJvmOracle.kt',
   'StateProfile.kt', 'UnsupportedState.kt', 'StateJvmOracle.kt', 'StatePipelineProbe.kt',
   'PagerProfile.kt', 'PagerUnsupported.kt', 'PagerJvmOracle.kt', 'PagerPipelineProbe.kt',
   'ScrollProfile.kt', 'ScrollUnsupported.kt', 'ScrollJvmOracle.kt', 'ScrollPipelineProbe.kt',
@@ -54,6 +55,12 @@ run('compile-probe', 'java', ['-cp', cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMComp
 console.log(run('resolved-structure', 'java', ['-cp', [cp, modelJar, compilerJar, backendJar, adapterJar, probeJar].join(':'),
   'dev.ets.widgettest.WidgetProbeKt', uiCp, join(work, 'output'), join(here, 'widget_logo.svg'),
   join(here, 'Page.kt'), join(here, 'Unsupported.kt'), join(here, 'ImageR.java')]).trim());
+const modifierOracleJar = compile('modifier-jvm-oracle', [join(here, 'ModifierJvmOracle.kt')], cp);
+const expectedModifierOrder = run('modifier-jvm', 'java',
+  ['-cp', `${cp}:${modifierOracleJar}`, 'widgetsfixture.ModifierJvmOracleKt']).trim();
+const actualModifierOrder = readFileSync(join(work, 'output/modifier-order.txt'), 'utf8').trim();
+assert.equal(actualModifierOrder, expectedModifierOrder);
+console.log('PASS JVM oracle and target modifier layers preserve ordered semantics');
 const pipelineProbeJar = compile('pipeline-probe', [pipelineProbe],
   [cp, modelJar, compilerJar, backendJar, adapterJar, pipelineJar].join(':'));
 const agentClasses = join(work, 'agent-classes');
@@ -317,7 +324,7 @@ assert.ok(existsSync(scrollOutput));
 assert.ok(existsSync(lazyListOutput));
 assert.ok(existsSync(inputStateOutput));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
-assert.equal(diagnostics.length, 31);
+assert.equal(diagnostics.length, 34);
 assert.ok(diagnostics.every(line => line.includes('UNSUPPORTED') && line.includes('/Unsupported.kt')));
 assert.ok(implementation.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,
@@ -326,7 +333,7 @@ writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implemen
     scrollOutput, scrollSemantics, join(work, 'scroll-profile-output/scroll-diagnostics.tsv'),
     lazyListOutput, lazyListSemantics, join(work, 'lazy-list-profile-output/lazy-list-diagnostics.tsv'),
     inputStateOutput, inputStateSemantics, traceFile,
-    join(work, 'output/model.txt'), join(work, 'output/diagnostics.tsv'),
+    join(work, 'output/model.txt'), join(work, 'output/modifier-order.txt'), join(work, 'output/diagnostics.tsv'),
     join(work, 'state-profile-output/state-diagnostics.tsv'),
     join(work, 'input-state-output/input-state-diagnostic.tsv'),
     join(work, 'output/WidgetPage.ets.resources/base/media/widget_logo.svg'),
