@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kotlin-ets:project-adapter-manifest:1",
+  "title": "Kotlin to ETS project adapter manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "modules"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "modules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/module" }
+    }
+  },
+  "$defs": {
+    "nullableString": { "type": ["string", "null"] },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "typeParameters", "dispatchReceiver", "extensionReceiver", "parameters", "returnType", "suspend"],
+      "properties": {
+        "symbol": { "type": "string", "minLength": 1 },
+        "typeParameters": { "type": "integer", "minimum": 0 },
+        "dispatchReceiver": { "$ref": "#/$defs/nullableString" },
+        "extensionReceiver": { "$ref": "#/$defs/nullableString" },
+        "parameters": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "returnType": { "type": "string", "minLength": 1 },
+        "suspend": { "type": "boolean" }
+      }
+    },
+    "targetParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceName", "targetType", "optional"],
+      "properties": {
+        "sourceName": { "type": "string", "minLength": 1 },
+        "targetType": { "type": "string", "minLength": 1 },
+        "optional": { "type": "boolean" }
+      }
+    },
+    "contentSlot": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["sourceName", "required"],
+      "properties": {
+        "sourceName": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "consumption", "source", "resolvedSourceReturnType", "targetParameters", "explicitArguments", "targetReturnType", "targetId", "contentSlot", "requiredScope"],
+      "properties": {
+        "kind": { "enum": ["token", "color", "font", "dimension", "string_resource", "image_resource", "business_component", "target_dependency"] },
+        "consumption": { "enum": ["value", "statement", "ui"] },
+        "source": { "$ref": "#/$defs/source" },
+        "resolvedSourceReturnType": { "type": "string", "minLength": 1 },
+        "targetParameters": { "type": "array", "items": { "$ref": "#/$defs/targetParameter" } },
+        "explicitArguments": { "type": "integer", "minimum": 0 },
+        "targetReturnType": { "type": "string", "minLength": 1 },
+        "targetId": { "$ref": "#/$defs/nullableString" },
+        "contentSlot": { "$ref": "#/$defs/contentSlot" },
+        "requiredScope": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "targetCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "parameters", "returnType"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "parameters": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "returnType": { "type": "string", "minLength": 1 }
+      }
+    },
+    "targetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "import": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "name", "alias", "default"],
+      "properties": {
+        "module": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "alias": { "$ref": "#/$defs/nullableString" },
+        "default": { "type": "boolean" }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "inputs", "targetCalls", "targetValues", "imports"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "inputs": { "type": "array", "items": { "$ref": "#/$defs/input" } },
+        "targetCalls": { "type": "array", "items": { "$ref": "#/$defs/targetCall" } },
+        "targetValues": { "type": "array", "items": { "$ref": "#/$defs/targetValue" } },
+        "imports": { "type": "array", "items": { "$ref": "#/$defs/import" } }
+      }
+    }
+  }
+}

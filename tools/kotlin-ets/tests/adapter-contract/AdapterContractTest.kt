@@ -16,6 +16,15 @@ private class Module(
     }
 }
 
+private class InputModule(
+    override val id: String,
+    override val projectInputs: List<AdapterProjectInput>,
+    override val targetCalls: List<AdapterTargetCall> = emptyList(),
+    override val imports: List<EtsImport> = emptyList(),
+) : AdapterModule {
+    override fun create(target: AdapterTargetApi, ui: AdapterUiServices?) = CallRule { _, _, _ -> null }
+}
+
 fun main() {
     val source = SourceSpan("Adapter.kt", 10, 20)
     val number = EtsTypes.NUMBER
@@ -58,6 +67,34 @@ fun main() {
     rejected(Module("a", targetCalls = listOf(declaration)),
         Module("b", targetValues = listOf(AdapterTargetValue(declaration.id, "value", number))))
     rejected(Module("a", imports = listOf(EtsImport("one", "Value"))), Module("b", imports = listOf(EtsImport("two", "Value"))))
+
+    val sourceIdentity = AdapterCallIdentity("sample.input", 1,
+        parameters = listOf("kotlin.String"), returnType = "T of sample.input")
+    val sourceParameter = AdapterTargetParameter("key", EtsTypes.STRING)
+    val textInput = AdapterProjectInput(sourceIdentity, "sample.Value", EtsTypes.STRING,
+        kind = AdapterInputKind.TOKEN, parameters = listOf(sourceParameter), targetId = "input.text")
+    val numberInput = textInput.copy(targetReturnType = EtsTypes.NUMBER, kind = AdapterInputKind.COLOR,
+        targetId = "input.number")
+    val inputs = AdapterModules(listOf(InputModule("inputs", listOf(textInput, numberInput),
+        targetCalls = listOf(
+            AdapterTargetCall("input.text", "projectText", EtsFunctionType(listOf(EtsTypes.STRING), EtsTypes.STRING)),
+            AdapterTargetCall("input.number", "projectNumber", EtsFunctionType(listOf(EtsTypes.STRING), EtsTypes.NUMBER))),
+        imports = listOf(EtsImport("./ProjectInputs", "projectText")))))
+    val manifest = inputs.manifestJson()
+    check("\"schemaVersion\": 1" in manifest && "\"kind\": \"token\"" in manifest &&
+        "\"kind\": \"color\"" in manifest && "\"sourceName\": \"key\"" in manifest &&
+        "\"targetReturnType\": \"string\"" in manifest && "\"targetId\": \"input.text\"" in manifest &&
+        "\"module\": \"./ProjectInputs\"" in manifest)
+    rejected(InputModule("void-value", listOf(textInput.copy(targetReturnType = EtsTypes.VOID))))
+    rejected(InputModule("ui-value", listOf(textInput.copy(consumption = AdapterInputConsumption.UI))))
+    rejected(InputModule("duplicate-parameter", listOf(textInput.copy(parameters =
+        listOf(sourceParameter, sourceParameter)))))
+    rejected(InputModule("slot-parameter", listOf(textInput.copy(
+        consumption = AdapterInputConsumption.UI,
+        targetReturnType = EtsTypes.VOID,
+        kind = AdapterInputKind.BUSINESS_COMPONENT,
+        parameters = listOf(sourceParameter),
+        contentSlot = AdapterContentSlot("key")))))
     val created = mutableListOf<String>()
     val modules = AdapterModules(listOf(Module("b", created = created), Module("a", created = created)))
     check(modules.rules().size == 2 && created == listOf("a", "b"))

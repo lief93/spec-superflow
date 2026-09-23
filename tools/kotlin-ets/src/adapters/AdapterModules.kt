@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.ir.expressions.IrGetObjectValue
 import org.jetbrains.kotlin.ir.expressions.IrGetField
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
+import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.util.render
 
 /** A build-time SPI provider, not another source parser or code generator. */
@@ -17,6 +18,7 @@ interface AdapterModule {
     val id: String
     val sourceCalls: Set<String> get() = emptySet()
     val projectCalls: List<AdapterProjectCall> get() = emptyList()
+    val projectInputs: List<AdapterProjectInput> get() = projectCalls
     val sourceTypes: Set<String> get() = emptySet()
     val sourceFields: Set<String> get() = emptySet()
     val targetCalls: List<AdapterTargetCall> get() = emptyList()
@@ -39,14 +41,30 @@ data class AdapterCallIdentity(
     val suspend: Boolean = false,
 )
 
-/** A concrete generic result and its target representation for one project dependency call. */
-data class AdapterProjectCall(
+/** A concrete source result and its target representation for one project input. */
+enum class AdapterInputKind {
+    TOKEN, COLOR, FONT, DIMENSION, STRING_RESOURCE, IMAGE_RESOURCE, BUSINESS_COMPONENT, TARGET_DEPENDENCY,
+}
+
+enum class AdapterInputConsumption { VALUE, STATEMENT, UI }
+
+data class AdapterTargetParameter(val sourceName: String, val targetType: EtsType, val optional: Boolean = false)
+data class AdapterContentSlot(val sourceName: String, val required: Boolean = true)
+
+data class AdapterProjectInput(
     val source: AdapterCallIdentity,
     val resolvedSourceReturnType: String,
     val targetReturnType: EtsType,
     val explicitArguments: Int = 0,
     val requiredScope: String? = null,
+    val kind: AdapterInputKind = AdapterInputKind.TARGET_DEPENDENCY,
+    val consumption: AdapterInputConsumption = AdapterInputConsumption.VALUE,
+    val parameters: List<AdapterTargetParameter> = emptyList(),
+    val contentSlot: AdapterContentSlot? = null,
+    val targetId: String? = null,
 )
+
+typealias AdapterProjectCall = AdapterProjectInput
 
 interface AdapterUiServices {
     fun content(expression: IrExpression, scope: Scope): List<EtsStatement>
@@ -93,13 +111,13 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
         val fields = mutableMapOf<String, String>()
         val targets = linkedMapOf<String, AdapterTargetCall>()
         val targetValues = linkedMapOf<String, AdapterTargetValue>()
-        val projectCalls = linkedMapOf<Pair<AdapterCallIdentity, String>, String>()
+        val projectInputs = linkedMapOf<AdapterProjectInputKey, String>()
         val projectSymbols = mutableMapOf<String, String>()
         val projectIdentities = mutableMapOf<AdapterCallIdentity, String>()
         val bindings = mutableMapOf<String, EtsImport>()
         for (module in ordered) {
             require(module.id.isNotBlank() && ids.add(module.id)) { "Duplicate or blank adapter module ID: ${module.id}" }
-            require(module.sourceCalls.isNotEmpty() || module.projectCalls.isNotEmpty() ||
+            require(module.sourceCalls.isNotEmpty() || module.projectInputs.isNotEmpty() ||
                 module.sourceTypes.isNotEmpty() || module.sourceFields.isNotEmpty()) {
                 "Adapter module ${module.id} claims no source API"
             }
@@ -118,7 +136,7 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
             claim(module.sourceCalls, calls, "source call")
             claim(module.sourceTypes, types, "source type")
             claim(module.sourceFields, fields, "source field")
-            module.projectCalls.forEach { binding ->
+            module.projectInputs.forEach { binding ->
                 val identity = binding.source
                 require(identity.symbol.isNotBlank() && identity.typeParameters >= 0 &&
                     identity.parameters.none(String::isBlank) && identity.returnType.isNotBlank() &&
@@ -130,7 +148,44 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
                     binding.requiredScope?.isNotBlank() != false) {
                     "Invalid project call binding in adapter ${module.id}: $binding"
                 }
-                val key = identity to binding.resolvedSourceReturnType
+                require(binding.parameters.map { it.sourceName }.all(String::isNotBlank) &&
+                    binding.parameters.map { it.sourceName }.toSet().size == binding.parameters.size &&
+                    binding.parameters.none { it.targetType == EtsTypes.VOID } &&
+                    binding.contentSlot?.sourceName?.isNotBlank() != false &&
+                    binding.contentSlot?.sourceName !in binding.parameters.map { it.sourceName }) {
+                    "Invalid project input parameters in adapter ${module.id}: $binding"
+                }
+                binding.targetId?.let { targetId ->
+                    val targetCall = module.targetCalls.singleOrNull { it.id == targetId }
+                    val targetValue = module.targetValues.singleOrNull { it.id == targetId }
+                    require((targetCall == null) != (targetValue == null)) {
+                        "Unknown or ambiguous project input target $targetId in adapter ${module.id}"
+                    }
+                    if (targetCall != null) require(targetCall.signature.parameters.size == binding.parameters.size &&
+                        targetCall.signature.parameters.zip(binding.parameters).all { (actual, expected) ->
+                            adapterTargetTypeMatches(expected.targetType, actual)
+                        } && adapterTargetTypeMatches(binding.targetReturnType, targetCall.signature.result)) {
+                        "Project input target call signature mismatch for $targetId in adapter ${module.id}"
+                    }
+                    if (targetValue != null) require(binding.parameters.isEmpty() && binding.contentSlot == null &&
+                        adapterTargetTypeMatches(binding.targetReturnType, targetValue.type)) {
+                        "Project input target value type mismatch for $targetId in adapter ${module.id}"
+                    }
+                }
+                require(binding.parameters.isEmpty() && binding.contentSlot == null || binding.explicitArguments == 0) {
+                    "Typed project input parameters cannot use legacy explicitArguments in adapter ${module.id}: $binding"
+                }
+                require(when (binding.consumption) {
+                    AdapterInputConsumption.VALUE -> binding.targetReturnType != EtsTypes.VOID && binding.contentSlot == null
+                    AdapterInputConsumption.STATEMENT -> binding.targetReturnType == EtsTypes.VOID && binding.contentSlot == null
+                    AdapterInputConsumption.UI -> binding.targetReturnType == EtsTypes.VOID
+                }) { "Invalid project input consumption in adapter ${module.id}: $binding" }
+                require(binding.kind != AdapterInputKind.BUSINESS_COMPONENT ||
+                    binding.consumption == AdapterInputConsumption.UI) {
+                    "Business component project input requires UI consumption in adapter ${module.id}: $binding"
+                }
+                val key = AdapterProjectInputKey(identity, binding.resolvedSourceReturnType,
+                    binding.targetReturnType, binding.consumption)
                 require(identity.symbol !in calls) {
                     "Conflicting source/project call claim ${identity.symbol}: ${calls[identity.symbol]} and ${module.id}"
                 }
@@ -139,7 +194,17 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
                 require(identityOwner == null || identityOwner == module.id) {
                     "Conflicting project call identity ${identity.symbol}: $identityOwner and ${module.id}"
                 }
-                val previous = projectCalls.putIfAbsent(key, module.id)
+                val ambiguous = projectInputs.keys.firstOrNull { previous ->
+                    previous.source == identity && previous.resolvedSourceReturnType == binding.resolvedSourceReturnType &&
+                        previous.consumption == binding.consumption &&
+                        (adapterTargetTypeMatches(previous.targetReturnType, binding.targetReturnType) ||
+                            adapterTargetTypeMatches(binding.targetReturnType, previous.targetReturnType))
+                }
+                require(ambiguous == null) {
+                    "Ambiguous project input ${identity.symbol} returning ${binding.resolvedSourceReturnType}: " +
+                        "${projectInputs[ambiguous]} and ${module.id}"
+                }
+                val previous = projectInputs.putIfAbsent(key, module.id)
                 require(previous == null) {
                     "Conflicting project call ${identity.symbol} returning ${binding.resolvedSourceReturnType}: " +
                         "$previous and ${module.id}"
@@ -194,35 +259,117 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
             }
             private fun <T> track(value: T?): T? = value.also { if (it != null) used.add(module.id) }
 
-            private fun lowerProject(call: IrCall, language: Language, scope: Scope): EtsExpression? {
+            private fun projectBinding(call: IrCall, language: Language, scope: Scope,
+                consumption: AdapterInputConsumption): Pair<AdapterProjectInput, EtsType>? {
                 val sourceIdentity = identity(call)
-                val candidates = module.projectCalls.filter { it.source == sourceIdentity }
+                val candidates = module.projectInputs.filter { it.source == sourceIdentity }
                 if (candidates.isEmpty()) return null
                 val resolved = call.type.render()
-                val binding = candidates.singleOrNull { it.resolvedSourceReturnType == resolved }
-                    ?: projectFailure(call, language, "PROJECT_ADAPTER_MISSING",
-                        "Project adapter ${module.id} has no concrete binding for resolved return $resolved")
+                val resolvedCandidates = candidates.filter { it.resolvedSourceReturnType == resolved }
+                if (resolvedCandidates.isEmpty()) projectFailure(call, language, "PROJECT_ADAPTER_MISSING",
+                    "Project adapter ${module.id} has no concrete binding for resolved return $resolved")
                 val targetType = language.type(call.type)
-                if (!adapterTargetTypeMatches(binding.targetReturnType, targetType)) projectFailure(call, language,
-                    "PROJECT_ADAPTER_RETURN_TYPE", "Project adapter ${module.id} registered target return " +
-                        "${binding.targetReturnType}, resolved $targetType")
-                val explicit = (0 until call.valueArgumentsCount).count { call.getValueArgument(it) != null }
-                if (explicit != binding.explicitArguments) projectFailure(call, language,
-                    "PROJECT_ADAPTER_ARGUMENTS", "Project adapter ${module.id} requires " +
-                        "${binding.explicitArguments} explicit arguments, resolved $explicit")
+                val consumptionCandidates = resolvedCandidates.filter { it.consumption == consumption }
+                val binding = consumptionCandidates.singleOrNull {
+                    adapterTargetTypeMatches(it.targetReturnType, targetType)
+                } ?: projectFailure(call, language, "PROJECT_ADAPTER_RETURN_TYPE",
+                    "Project adapter ${module.id} has no ${consumption.name.lowercase()} binding for " +
+                        "resolved target return $targetType")
+                validateArguments(binding, call, language, scope)
                 binding.requiredScope?.let { required ->
                     if (required !in scope.ambientValues) projectFailure(call, language,
                         "PROJECT_ADAPTER_SCOPE", "Project adapter ${module.id} requires target scope $required")
                 }
+                return binding to targetType
+            }
+
+            private fun validateArguments(binding: AdapterProjectInput, call: IrCall,
+                language: Language, scope: Scope) {
+                if (binding.parameters.isEmpty() && binding.contentSlot == null) {
+                    val explicit = (0 until call.valueArgumentsCount).count { call.getValueArgument(it) != null }
+                    if (explicit != binding.explicitArguments) projectFailure(call, language,
+                        "PROJECT_ADAPTER_ARGUMENTS", "Project adapter ${module.id} requires " +
+                            "${binding.explicitArguments} explicit arguments, resolved $explicit")
+                    return
+                }
+                val sourceParameters = call.symbol.owner.valueParameters.associateBy { it.name.asString() }
+                val allowed = binding.parameters.mapTo(linkedSetOf()) { it.sourceName }
+                binding.contentSlot?.let { allowed += it.sourceName }
+                call.symbol.owner.valueParameters.forEachIndexed { index, parameter ->
+                    if (call.getValueArgument(index) != null && parameter.name.asString() !in allowed)
+                        projectFailure(call, language, "PROJECT_ADAPTER_ARGUMENTS",
+                            "Project adapter ${module.id} has no target parameter for ${parameter.name}")
+                }
+                binding.parameters.forEach { parameter ->
+                    val index = call.symbol.owner.valueParameters.indexOf(sourceParameters[parameter.sourceName]
+                        ?: projectFailure(call, language, "PROJECT_ADAPTER_ARGUMENTS",
+                            "Project adapter ${module.id} source parameter is missing: ${parameter.sourceName}"))
+                    val value = call.getValueArgument(index)
+                    if (value == null) {
+                        if (!parameter.optional) projectFailure(call, language, "PROJECT_ADAPTER_ARGUMENTS",
+                            "Project adapter ${module.id} requires argument ${parameter.sourceName}")
+                    } else {
+                        val actual = language.type(value.type)
+                        if (!adapterTargetTypeMatches(parameter.targetType, actual)) projectFailure(call, language,
+                            "PROJECT_ADAPTER_ARGUMENTS", "Project adapter ${module.id} argument ${parameter.sourceName} " +
+                                "requires ${parameter.targetType}, resolved $actual")
+                    }
+                }
+                binding.contentSlot?.let { slot ->
+                    val index = call.symbol.owner.valueParameters.indexOf(sourceParameters[slot.sourceName]
+                        ?: projectFailure(call, language, "PROJECT_ADAPTER_ARGUMENTS",
+                            "Project adapter ${module.id} content slot is missing: ${slot.sourceName}"))
+                    val value = call.getValueArgument(index)
+                    if (value == null) {
+                        if (slot.required) projectFailure(call, language, "PROJECT_ADAPTER_ARGUMENTS",
+                            "Project adapter ${module.id} requires content slot ${slot.sourceName}")
+                    } else {
+                        val function = lambda(value, scope)
+                        if (function == null || function.valueParameters.isNotEmpty() || !function.returnType.isUnit())
+                            projectFailure(call, language, "PROJECT_ADAPTER_ARGUMENTS",
+                                "Project adapter ${module.id} content slot ${slot.sourceName} requires () -> Unit")
+                    }
+                }
+            }
+
+            private fun lowerProject(call: IrCall, language: Language, scope: Scope): EtsExpression? {
+                val (binding, targetType) = projectBinding(call, language, scope, AdapterInputConsumption.VALUE)
+                    ?: return null
                 val value = delegate.lower(call, language, scope)
                     ?: projectFailure(call, language, "PROJECT_ADAPTER_MISSING",
                         "Project adapter ${module.id} declared the call but supplied no target value")
                 if (value.type == EtsTypes.VOID) projectFailure(call, language, "PROJECT_ADAPTER_VOID_RESULT",
-                    "Project adapter ${module.id} returned void for value call ${sourceIdentity.symbol}")
+                    "Project adapter ${module.id} returned void for value call ${binding.source.symbol}")
                 if (!adapterTargetTypeMatches(targetType, value.type)) projectFailure(call, language,
                     "PROJECT_ADAPTER_RETURN_TYPE", "Project adapter ${module.id} returned ${value.type}, expected $targetType")
                 used.add(module.id)
                 return value
+            }
+
+            private fun lowerProjectStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? {
+                projectBinding(call, language, scope, AdapterInputConsumption.STATEMENT) ?: return null
+                val statements = delegate.lowerStatement(call, language, scope)
+                    ?: delegate.lower(call, language, scope)?.let { value ->
+                        if (value.type != EtsTypes.VOID) projectFailure(call, language,
+                            "PROJECT_ADAPTER_RETURN_TYPE", "Project adapter ${module.id} returned ${value.type}, expected void")
+                        listOf(EtsExpressionStatement(value))
+                    } ?: projectFailure(call, language, "PROJECT_ADAPTER_MISSING",
+                        "Project adapter ${module.id} declared the call but supplied no target statement")
+                if (statements.isEmpty()) projectFailure(call, language, "PROJECT_ADAPTER_MISSING",
+                    "Project adapter ${module.id} supplied an empty target statement result")
+                used.add(module.id)
+                return statements
+            }
+
+            private fun lowerProjectUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? {
+                projectBinding(call, language, scope, AdapterInputConsumption.UI) ?: return null
+                val statements = delegate.lowerUi(call, language, scope)
+                    ?: projectFailure(call, language, "PROJECT_ADAPTER_MISSING",
+                        "Project adapter ${module.id} declared the component but supplied no target UI")
+                if (statements.isEmpty()) projectFailure(call, language, "PROJECT_ADAPTER_MISSING",
+                    "Project adapter ${module.id} supplied an empty target UI result")
+                used.add(module.id)
+                return statements
             }
 
             override fun mapType(type: IrType, language: Language): EtsType? =
@@ -247,13 +394,21 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
                     track(delegate.lowerField(value, language, scope)) else null
 
             override fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
-                if (ui == null && claimed(call) && !reusableSourceBody(call))
-                    track(delegate.lowerStatement(call, language, scope)) else null
+                if (ui == null && !reusableSourceBody(call))
+                    lowerProjectStatement(call, language, scope) ?: if (claimed(call))
+                        track(delegate.lowerStatement(call, language, scope)) else null else null
 
             override fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? =
-                if (ui != null && claimed(call)) track(delegate.lowerUi(call, language, scope)) else null
+                if (ui != null && !reusableSourceBody(call))
+                    lowerProjectUi(call, language, scope) ?: if (claimed(call))
+                        track(delegate.lowerUi(call, language, scope)) else null
+                else if (ui != null && claimed(call)) track(delegate.lowerUi(call, language, scope)) else null
         }
     }
+
+    fun manifest(): AdapterManifest = adapterManifest(ordered)
+
+    fun manifestJson(): String = manifest().json()
 
     companion object {
         fun load(): AdapterModules = try {
@@ -263,6 +418,13 @@ class AdapterModules(modules: List<AdapterModule> = emptyList()) {
         }
     }
 }
+
+private data class AdapterProjectInputKey(
+    val source: AdapterCallIdentity,
+    val resolvedSourceReturnType: String,
+    val targetReturnType: EtsType,
+    val consumption: AdapterInputConsumption,
+)
 
 private fun projectFailure(call: IrCall, language: Language, code: String, message: String): Nothing =
     throw Unsupported(Diagnostic(code, message, language.source(call)))

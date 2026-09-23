@@ -11,7 +11,9 @@ target tree/validator/printer, existing control classes or the other's files.
 
 Public API in package dev.ets:
 - AdapterModule: id:String; sourceCalls:Set<String> (default empty);
-  projectCalls:List<AdapterProjectCall> (default empty); sourceTypes:Set<String>
+  projectCalls:List<AdapterProjectCall> (legacy default empty);
+  projectInputs:List<AdapterProjectInput> (defaults to projectCalls);
+  sourceTypes:Set<String>
   (default empty); sourceFields:Set<String> (default empty);
   targetCalls:List<AdapterTargetCall> (default empty);
   targetValues:List<AdapterTargetValue> (default empty); imports:List<EtsImport>
@@ -19,6 +21,10 @@ Public API in package dev.ets:
   create(target:AdapterTargetApi, ui:AdapterUiServices?):CallRule.
 - AdapterTargetCall(id:String, name:String, signature:EtsFunctionType).
 - AdapterTargetValue(id:String, name:String, type:EtsType).
+- AdapterProjectInput: complete AdapterCallIdentity, concrete source return,
+  target parameter/return types, input kind, value/statement/UI consumption,
+  optional content slot, optional target call/value ID and required scope.
+  AdapterProjectCall remains a source-compatible alias.
 - AdapterTargetApi.call(id:String, arguments:List<EtsExpression>, source:SourceSpan,
   receiver:EtsExpression? = null):EtsCall. Exact arity, argument and return types
   remain checked; errors retain source. Signature declarations travel with module.
@@ -36,6 +42,9 @@ Public API in package dev.ets:
   Core and UI factories use the same CallRule
   dispatcher and typed target nodes. Null ui creates value/effect/type rules;
   scoped nonnull ui creates UI rules only, preventing duplicated value dispatch.
+- AdapterModules.manifest()/manifestJson() exports the validated declarations,
+  target signatures and imports as schema-versioned offline metadata. The JSON
+  contract is `docs/project-adapter-manifest.schema.json`.
 
 Build contract: discover module directories beneath built-in `adapters/` plus
 optional external roots from KOTLIN_ETS_ADAPTER_DIRS (platform path separator).

@@ -1,0 +1,355 @@
+{
+  "schemaVersion": 1,
+  "modules": [
+    {
+      "id": "example.project-inputs",
+      "inputs": [
+        {
+          "kind": "token",
+          "consumption": "value",
+          "source": {
+            "symbol": "demo.projectinputs.projectInput",
+            "typeParameters": 1,
+            "dispatchReceiver": null,
+            "extensionReceiver": null,
+            "parameters": [
+              "kotlin.String"
+            ],
+            "returnType": "T of demo.projectinputs.projectInput",
+            "suspend": false
+          },
+          "resolvedSourceReturnType": "demo.projectinputs.ProjectToken",
+          "targetParameters": [
+            {
+              "sourceName": "key",
+              "targetType": "string",
+              "optional": false
+            }
+          ],
+          "explicitArguments": 0,
+          "targetReturnType": "boolean",
+          "targetId": "project-input.token",
+          "contentSlot": null,
+          "requiredScope": null
+        },
+        {
+          "kind": "color",
+          "consumption": "value",
+          "source": {
+            "symbol": "demo.projectinputs.projectInput",
+            "typeParameters": 1,
+            "dispatchReceiver": null,
+            "extensionReceiver": null,
+            "parameters": [
+              "kotlin.String"
+            ],
+            "returnType": "T of demo.projectinputs.projectInput",
+            "suspend": false
+          },
+          "resolvedSourceReturnType": "demo.projectinputs.ProjectColor",
+          "targetParameters": [
+            {
+              "sourceName": "key",
+              "targetType": "string",
+              "optional": false
+            }
+          ],
+          "explicitArguments": 0,
+          "targetReturnType": "number",
+          "targetId": "project-input.color",
+          "contentSlot": null,
+          "requiredScope": null
+        },
+        {
+          "kind": "font",
+          "consumption": "value",
+          "source": {
+            "symbol": "demo.projectinputs.projectInput",
+            "typeParameters": 1,
+            "dispatchReceiver": null,
+            "extensionReceiver": null,
+            "parameters": [
+              "kotlin.String"
+            ],
+            "returnType": "T of demo.projectinputs.projectInput",
+            "suspend": false
+          },
+          "resolvedSourceReturnType": "demo.projectinputs.ProjectFont",
+          "targetParameters": [
+            {
+              "sourceName": "key",
+              "targetType": "string",
+              "optional": false
+            }
+          ],
+          "explicitArguments": 0,
+          "targetReturnType": "string",
+          "targetId": "project-input.font",
+          "contentSlot": null,
+          "requiredScope": null
+        },
+        {
+          "kind": "dimension",
+          "consumption": "value",
+          "source": {
+            "symbol": "demo.projectinputs.projectInput",
+            "typeParameters": 1,
+            "dispatchReceiver": null,
+            "extensionReceiver": null,
+            "parameters": [
+              "kotlin.String"
+            ],
+            "returnType": "T of demo.projectinputs.projectInput",
+            "suspend": false
+          },
+          "resolvedSourceReturnType": "demo.projectinputs.ProjectDimension",
+          "targetParameters": [
+            {
+              "sourceName": "key",
+              "targetType": "string",
+              "optional": false
+            }
+          ],
+          "explicitArguments": 0,
+          "targetReturnType": "number",
+          "targetId": "project-input.dimension",
+          "contentSlot": null,
+          "requiredScope": null
+        },
+        {
+          "kind": "string_resource",
+          "consumption": "value",
+          "source": {
+            "symbol": "demo.projectinputs.projectInput",
+            "typeParameters": 1,
+            "dispatchReceiver": null,
+            "extensionReceiver": null,
+            "parameters": [
+              "kotlin.String"
+            ],
+            "returnType": "T of demo.projectinputs.projectInput",
+            "suspend": false
+          },
+          "resolvedSourceReturnType": "demo.projectinputs.ProjectString",
+          "targetParameters": [
+            {
+              "sourceName": "key",
+              "targetType": "string",
+              "optional": false
+            }
+          ],
+          "explicitArguments": 0,
+          "targetReturnType": "string",
+          "targetId": "project-input.string",
+          "contentSlot": null,
+          "requiredScope": null
+        },
+        {
+          "kind": "image_resource",
+          "consumption": "value",
+          "source": {
+            "symbol": "demo.projectinputs.projectInput",
+            "typeParameters": 1,
+            "dispatchReceiver": null,
+            "extensionReceiver": null,
+            "parameters": [
+              "kotlin.String"
+            ],
+            "returnType": "T of demo.projectinputs.projectInput",
+            "suspend": false
+          },
+          "resolvedSourceReturnType": "demo.projectinputs.ProjectImage",
+          "targetParameters": [
+            {
+              "sourceName": "key",
+              "targetType": "string",
+              "optional": false
+            }
+          ],
+          "explicitArguments": 0,
+          "targetReturnType": "Resource",
+          "targetId": "project-input.image",
+          "contentSlot": null,
+          "requiredScope": null
+        },
+        {
+          "kind": "target_dependency",
+          "consumption": "value",
+          "source": {
+            "symbol": "demo.projectinputs.targetDependency",
+            "typeParameters": 0,
+            "dispatchReceiver": null,
+            "extensionReceiver": null,
+            "parameters": [
+              "kotlin.String"
+            ],
+            "returnType": "kotlin.String",
+            "suspend": false
+          },
+          "resolvedSourceReturnType": "kotlin.String",
+          "targetParameters": [
+            {
+              "sourceName": "name",
+              "targetType": "string",
+              "optional": false
+            }
+          ],
+          "explicitArguments": 0,
+          "targetReturnType": "string",
+          "targetId": "project-input.dependency",
+          "contentSlot": null,
+          "requiredScope": null
+        },
+        {
+          "kind": "business_component",
+          "consumption": "ui",
+          "source": {
+            "symbol": "demo.projectinputs.ProjectCard",
+            "typeParameters": 0,
+            "dispatchReceiver": null,
+            "extensionReceiver": null,
+            "parameters": [
+              "kotlin.String",
+              "@[Composable] kotlin.Function0<kotlin.Unit>"
+            ],
+            "returnType": "kotlin.Unit",
+            "suspend": false
+          },
+          "resolvedSourceReturnType": "kotlin.Unit",
+          "targetParameters": [
+            {
+              "sourceName": "title",
+              "targetType": "string",
+              "optional": false
+            }
+          ],
+          "explicitArguments": 0,
+          "targetReturnType": "void",
+          "targetId": null,
+          "contentSlot": {
+            "sourceName": "content",
+            "required": true
+          },
+          "requiredScope": null
+        }
+      ],
+      "targetCalls": [
+        {
+          "id": "project-input.token",
+          "name": "projectToken",
+          "parameters": [
+            "string"
+          ],
+          "returnType": "boolean"
+        },
+        {
+          "id": "project-input.color",
+          "name": "projectColor",
+          "parameters": [
+            "string"
+          ],
+          "returnType": "number"
+        },
+        {
+          "id": "project-input.font",
+          "name": "projectFont",
+          "parameters": [
+            "string"
+          ],
+          "returnType": "string"
+        },
+        {
+          "id": "project-input.dimension",
+          "name": "projectDimension",
+          "parameters": [
+            "string"
+          ],
+          "returnType": "number"
+        },
+        {
+          "id": "project-input.string",
+          "name": "projectString",
+          "parameters": [
+            "string"
+          ],
+          "returnType": "string"
+        },
+        {
+          "id": "project-input.image",
+          "name": "projectImage",
+          "parameters": [
+            "string"
+          ],
+          "returnType": "Resource"
+        },
+        {
+          "id": "project-input.dependency",
+          "name": "projectDependency",
+          "parameters": [
+            "string"
+          ],
+          "returnType": "string"
+        },
+        {
+          "id": "project-input.column",
+          "name": "Column",
+          "parameters": [],
+          "returnType": "void"
+        },
+        {
+          "id": "project-input.text",
+          "name": "Text",
+          "parameters": [
+            "string"
+          ],
+          "returnType": "void"
+        }
+      ],
+      "targetValues": [],
+      "imports": [
+        {
+          "module": "./ProjectInputsHost",
+          "name": "projectToken",
+          "alias": null,
+          "default": false
+        },
+        {
+          "module": "./ProjectInputsHost",
+          "name": "projectColor",
+          "alias": null,
+          "default": false
+        },
+        {
+          "module": "./ProjectInputsHost",
+          "name": "projectFont",
+          "alias": null,
+          "default": false
+        },
+        {
+          "module": "./ProjectInputsHost",
+          "name": "projectDimension",
+          "alias": null,
+          "default": false
+        },
+        {
+          "module": "./ProjectInputsHost",
+          "name": "projectString",
+          "alias": null,
+          "default": false
+        },
+        {
+          "module": "./ProjectInputsHost",
+          "name": "projectImage",
+          "alias": null,
+          "default": false
+        },
+        {
+          "module": "./ProjectInputsHost",
+          "name": "projectDependency",
+          "alias": null,
+          "default": false
+        }
+      ]
+    }
+  ]
+}
