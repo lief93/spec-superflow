@@ -3,8 +3,10 @@
 The resolved wrapContentWidth/Height/Size APIs introduce a native Stack boundary,
 preserve outer sizing and clear the wrapped axis's propagated fill constraint.
 No generated custom measurement implementation is needed for this bounded path.
-Only resolved alignment enums and unbounded=false are currently accepted;
-effectful/dynamic arguments fail explicitly instead of changing evaluation order.
+`unbounded=true` retains wrapping, alignment and the remaining modifier chain, but
+records that ArkUI native wrap-content measurement replaces Compose's infinite
+child constraint. Dynamic booleans and effectful alignment values fail explicitly
+instead of changing evaluation order.
 
 Run `node tools/kotlin-ets/tests/ui/wrap-content/run.mjs`, pass Page.ets to
 `tests/ui/basic-controls-sdk.mjs`, then pass the resulting HAP to `native.mjs`.

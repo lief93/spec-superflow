@@ -23,6 +23,7 @@ assert.match(code, /\.width\([\s\S]*?circleSize[\s\S]*?\)\.height\(/);
 assert.match(code, /\.height\([\s\S]*?circleSize[\s\S]*?\)\.backgroundColor\(/);
 assert.match(code, /\.backgroundColor\([\s\S]*?circleColor[\s\S]*?\)\.borderRadius/);
 assert.match(code, /\.borderRadius\("50%"\)/);
+assert.match(code, /\.backgroundColor\([\s\S]*?\.colorScheme\.primary[\s\S]*?\)\.padding\(/);
 const negative = join(root, 'Effectful.ets');
 const failed = spawnSync('bash', [launcher, '--entry', 'modifiernamed.Effectful',
   '--classpath-file', process.argv[2], '--out', negative, source], {

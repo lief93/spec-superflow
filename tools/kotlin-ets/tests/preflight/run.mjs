@@ -113,6 +113,18 @@ assert.equal(existsSync(incompatibleMetadataOutput), false);
 
 const probe = process.env.KOTLIN_ETS_PROBE ?? '/tmp/kotlin-official-frontend-probe-06';
 const composeClasspath = JSON.parse(readFileSync(join(probe, 'classpath.json'), 'utf8')).join(':');
+const projectProfileOutput = join(work, 'project-profile-report.json');
+const projectProfileResult = run('project-profile', 'bash', [cli, '--mode', 'preflight',
+  '--classpath', composeClasspath, '--out', projectProfileOutput, join(here, 'ProjectProfile.kt')]);
+const projectProfile = JSON.parse(readFileSync(projectProfileOutput, 'utf8'));
+assert.equal(JSON.parse(projectProfileResult.stdout).status, 'profiled');
+assert.deepEqual(projectProfile.pageEntries, ['preflightfixture.ProjectProfilePreview']);
+assert.ok(projectProfile.calls.length > 0);
+assert.ok(projectProfile.calls.some(call => call.resolvedSymbol.startsWith('androidx.compose.material3.Text(')));
+assert.ok(projectProfile.calls.some(call => call.resolvedSymbol.startsWith('kotlin.text.uppercase(')));
+assert.ok(projectProfile.unsupportedNodes.some(node => node.symbol === 'java.lang.Runnable' && node.kind === 'super_type'));
+assert.equal(existsSync(`${projectProfileOutput}.diagnosis.json`), false);
+
 const compose = compile('compose', ['--mode', 'page', '--unsupported-policy', 'error',
   '--entry', 'composablevalues.ComposableValues'], join(root, 'tests/ui/ComposableValues.kt'), 0, composeClasspath);
 assert.equal(entry(compose.report, 'androidx.compose.foundation.layout.Column(').category, 'neutral_compose_widget');
@@ -184,4 +196,5 @@ for (const call of [positive, platform, dependency, compose, coverage].flatMap(r
     assert.ok(call.firstUnsupportedNode.source.line > 0 && call.firstUnsupportedNode.source.column > 0);
 }
 console.log('PASS Core Profile: six categories, coverage ownership, recognized/gap nodes and 1-based locations');
+console.log('PASS project profile: complete raw module scan, Preview discovery and no target generation');
 console.log('PASS no silent fallback: source defaults recorded; empty UI rejected; unsupported calls publish no target');

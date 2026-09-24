@@ -9,6 +9,7 @@ internal class ComposeButtonRule(
     private val content: (IrExpression, Scope) -> List<EtsStatement>,
     private val callback: (IrExpression, Scope) -> EtsExpression,
     private val decorate: (IrExpression?, Scope, ComposeElement) -> List<EtsStatement>,
+    private val stableValue: (EtsExpression, Scope) -> Boolean,
 ) : CallRule {
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? = null
     override fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>? {
@@ -63,26 +64,7 @@ internal class ComposeButtonRule(
         val context = materialContext(scope, at)
         val enabled = argument(call, "enabled")?.let { language.expression(it, scope) } ?: target.literal(true, call)
         val palette = argument(call, "colors")?.let { language.expression(it, scope) } ?: defaultButtonColors(scope, at, text)
-        fun repeatable(value: EtsExpression): Boolean = when (value) {
-            is EtsLiteral -> true
-            is EtsReference -> value == context || value.type in setOf(EtsTypes.NUMBER, buttonColorsType, materialContextType, materialColorSchemeType) ||
-                scope.bindings.any { (symbol, binding) -> binding == value && when (val owner = symbol.owner) {
-                is IrVariable -> !owner.isVar
-                is IrValueParameter -> true
-                else -> false
-            } }
-            is EtsMember -> value.receiver.type in setOf(buttonColorsType, materialContextType, materialColorSchemeType) && repeatable(value.receiver)
-            is EtsNew -> value.classType in setOf(buttonColorsType, materialContextType, materialColorSchemeType) && value.arguments.all(::repeatable)
-            is EtsCall -> value.type == EtsTypes.NUMBER && value.arguments.all(::repeatable) && when (val callee = value.callee) {
-                is EtsReference -> true
-                is EtsMember -> repeatable(callee.receiver)
-                else -> false
-            }
-            is EtsBinary -> repeatable(value.left) && repeatable(value.right)
-            is EtsConditional -> repeatable(value.condition) && repeatable(value.whenTrue) && repeatable(value.whenFalse)
-            else -> false
-        }
-        if (!repeatable(enabled) || !repeatable(palette)) target.diagnostics.unsupported(call,
+        if (!stableValue(enabled, scope) || !stableValue(palette, scope)) target.diagnostics.unsupported(call,
             "Button colors/enabled require stable values; bind effectful expressions to source vals")
         fun selected(name: String): EtsExpression = EtsConditional(enabled,
             EtsMember(palette, name, EtsTypes.NUMBER, at),

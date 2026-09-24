@@ -14,8 +14,16 @@ internal fun wrapContent(call: IrCall, language: Language, scope: Scope, target:
     }
     target.checkArguments(call, setOf("align", "unbounded"))
     val unbounded = argument(call, "unbounded")
-    if (unbounded != null && (language.expression(unbounded, scope) as? EtsLiteral)?.value != false)
-        target.diagnostics.unsupported(unbounded, "wrapContent requires unbounded=false; unconstrained measurement is not supported")
+    if (unbounded != null) when ((language.expression(unbounded, scope) as? EtsLiteral)?.value) {
+        false -> Unit
+        true -> target.diagnostics.omitUi(unbounded,
+            "wrapContent unbounded measurement has no native ArkUI equivalent",
+            "androidx.compose.foundation.layout.wrapContent:unbounded",
+            "platform_capability_fallback",
+            "Wrapping and alignment are retained, but infinite child constraints use native wrap-content measurement.")
+        else -> target.diagnostics.unsupported(unbounded,
+            "wrapContent unbounded requires a constant Boolean to preserve measurement semantics")
+    }
     val supplied = argument(call, "align")?.let { language.expression(it, scope) }
     if (supplied != null) {
         val expected = if (axes.first && axes.second) "Alignment" else if (axes.second) "VerticalAlign" else "HorizontalAlign"

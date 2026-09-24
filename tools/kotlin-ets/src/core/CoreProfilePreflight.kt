@@ -6,10 +6,18 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrGetField
 import org.jetbrains.kotlin.ir.expressions.IrGetObjectValue
+import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrField
+import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.declarations.IrValueDeclaration
+import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classFqName
+import org.jetbrains.kotlin.ir.types.classOrNull
+import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
+import org.jetbrains.kotlin.name.FqName
 
 enum class CoreProfileCategory(val jsonName: String, val responsibleModule: String) {
     LANGUAGE("language_semantics", "tools/kotlin-ets/src/language/LanguageLowering.kt"),
@@ -76,6 +84,8 @@ data class CoreProfileCall(
 data class CoreProfileReport(
     val calls: List<CoreProfileCall>,
     val compilerEnvironment: CoreProfileCompilerEnvironment,
+    val pageEntries: List<String> = emptyList(),
+    val unsupportedNodes: List<CoreProfileUnsupportedNode> = emptyList(),
     val firstUnsupportedNode: CoreProfileUnsupportedNode? = null,
     internal val recognizedNodes: List<CoreProfileNode> = emptyList(),
 ) {
@@ -106,7 +116,8 @@ data class CoreProfileReport(
             node?.symbol, failure.message, failure.source, module)
         return copy(calls = calls.map { call ->
             if (call === owner && call.firstUnsupportedNode == null) call.copy(firstUnsupportedNode = unsupported) else call
-        }, firstUnsupportedNode = firstUnsupportedNode ?: unsupported)
+        }, unsupportedNodes = if (unsupportedNodes.any { it == unsupported }) unsupportedNodes else unsupportedNodes + unsupported,
+            firstUnsupportedNode = firstUnsupportedNode ?: unsupported)
     }
 }
 
@@ -157,16 +168,49 @@ fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnosti
     compilerEnvironment: CoreProfileCompilerEnvironment = coreProfileCompilerEnvironment(null)): CoreProfileReport {
     val calls = mutableListOf<CoreProfileCall>()
     val recognizedNodes = mutableListOf<CoreProfileNode>()
+    val unsupportedNodes = linkedMapOf<String, CoreProfileUnsupportedNode>()
+    val pageEntries = linkedSetOf<String>()
+    val preview = FqName("androidx.compose.ui.tooling.preview.Preview")
+    val composable = FqName("androidx.compose.runtime.Composable")
     module.files.forEach { file ->
         diagnostics.currentFile = file.fileEntry.name
         val sourceAnchors = mutableListOf<SourceSpan>()
         file.acceptChildrenVoid(object : IrElementVisitorVoid {
+            private fun inspectType(type: IrType, kind: String, at: SourceSpan) {
+                try {
+                    language.type(type)
+                } catch (failure: Unsupported) {
+                    val symbol = type.classFqName?.asString() ?: type.render()
+                    val owner = type.classOrNull?.owner
+                    val responsible = when {
+                        owner != null && sourceFile(owner) != null -> CoreProfileCategory.LANGUAGE.responsibleModule
+                        symbol.startsWith("kotlin.") -> CoreProfileCategory.LANGUAGE.responsibleModule
+                        symbol.startsWith("androidx.compose.") -> CoreProfileCategory.COMPOSE_WIDGET.responsibleModule
+                        else -> CoreProfileCategory.PROJECT_DEPENDENCY.responsibleModule
+                    }
+                    val unsupported = CoreProfileUnsupportedNode(kind, symbol,
+                        failure.diagnostic.message, at, responsible)
+                    val key = listOf(kind, symbol, at.file, at.start, at.end).joinToString(":")
+                    unsupportedNodes.putIfAbsent(key, unsupported)
+                }
+            }
+
             override fun visitElement(element: IrElement) {
+                if (element is IrSimpleFunction && sourceFile(element) != null &&
+                    element.hasAnnotation(preview) && element.hasAnnotation(composable)) {
+                    pageEntries += symbolName(element)
+                }
                 val elementSource = sourceSpan(element, diagnostics)
                 val sourceLinked = elementSource.start >= 0 && elementSource.end >= elementSource.start
                 if (sourceLinked) sourceAnchors += elementSource
                 val at = if (sourceLinked) elementSource else sourceAnchors.lastOrNull() ?: elementSource
                 try {
+                    when (element) {
+                        is IrValueDeclaration -> inspectType(element.type, "declared_type", at)
+                        is IrField -> inspectType(element.type, "declared_type", at)
+                        is IrSimpleFunction -> inspectType(element.returnType, "return_type", at)
+                        is IrClass -> element.superTypes.forEach { inspectType(it, "super_type", at) }
+                    }
                     if (element !is IrCall) {
                         val node = when (element) {
                             is IrGetField -> CoreProfileNode("resolved_field", symbolName(element.symbol.owner), at)
@@ -181,6 +225,9 @@ fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnosti
                     val owner = expression.symbol.owner
                     val symbol = symbolName(owner) + owner.valueParameters.joinToString(",", "(", ")") { it.type.render() } +
                         ":" + owner.returnType.render()
+                    val category = profileCategory(expression)
+                    val module = responsibleModule(expression, category)
+                    var unsupported: CoreProfileUnsupportedNode? = null
                     val resolutions = owner.valueParameters.mapIndexedNotNull { index, parameter ->
                         if (expression.getValueArgument(index) != null) null
                         else when {
@@ -189,19 +236,21 @@ fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnosti
                             else -> language.callRules.firstNotNullOfOrNull {
                                 it.omittedArgumentResolution(expression, parameter)
                             }?.let { CoreProfileArgumentResolution(parameter.name.asString(), it) }
-                                ?: diagnostics.unsupported(expression,
-                                    "Preflight found a missing resolved argument ${parameter.name} in ${symbolName(owner)}")
+                                ?: run {
+                                    unsupported = unsupported ?: CoreProfileUnsupportedNode(
+                                        "missing_argument", symbolName(owner),
+                                        "Preflight found a missing resolved argument ${parameter.name} in ${symbolName(owner)}",
+                                        at, module)
+                                    null
+                                }
                         }
                     }
-                    val category = profileCategory(expression)
-                    val module = responsibleModule(expression, category)
-                    var unsupported: CoreProfileUnsupportedNode? = null
                     val expected = try {
                         profileType(language.type(expression.type))
                     } catch (failure: Unsupported) {
                         val source = failure.diagnostic.source.takeIf { it.start >= 0 && it.end >= it.start } ?: at
-                        unsupported = CoreProfileUnsupportedNode("target_type", symbolName(owner), failure.diagnostic.message,
-                            source, module)
+                        unsupported = unsupported ?: CoreProfileUnsupportedNode("target_type", symbolName(owner),
+                            failure.diagnostic.message, source, module)
                         null
                     }
                     val recognizedKind = if (expected == null) "resolved_call" else "typed_call"
@@ -216,7 +265,9 @@ fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnosti
         })
     }
     val sorted = calls.sortedWith(compareBy({ it.source.file }, { it.source.start }, { it.resolvedSymbol }))
-    return CoreProfileReport(sorted, compilerEnvironment, sorted.firstNotNullOfOrNull { it.firstUnsupportedNode }, recognizedNodes)
+    val sortedUnsupported = unsupportedNodes.values.sortedWith(compareBy({ it.source.file }, { it.source.start }, { it.symbol }))
+    return CoreProfileReport(sorted, compilerEnvironment, pageEntries.sorted(), sortedUnsupported,
+        sorted.firstNotNullOfOrNull { it.firstUnsupportedNode }, recognizedNodes)
 }
 
 internal fun coreProfileJson(report: CoreProfileReport): String {
@@ -250,6 +301,8 @@ internal fun coreProfileJson(report: CoreProfileReport): String {
         (report.compilerEnvironment.projectCompilerVersion?.let(::quote) ?: "null") +
         ",\"frontendCompilerVersion\":" + quote(report.compilerEnvironment.frontendCompilerVersion) +
         ",\"compatibilityDecision\":" + quote(report.compilerEnvironment.compatibilityDecision) +
+        ",\"pageEntries\":[" + report.pageEntries.joinToString(",", transform = ::quote) + "]" +
+        ",\"unsupportedNodes\":[" + report.unsupportedNodes.joinToString(",", transform = ::unsupported) + "]" +
         ",\"counts\":{" + counts + "},\"coverage\":{" + coverage + "}" +
         ",\"firstUnsupportedNode\":" + (report.firstUnsupportedNode?.let(::unsupported) ?: "null") +
         ",\"calls\":[\n" + report.calls.joinToString(",\n", transform = ::call) + "\n]}\n"

@@ -17,6 +17,5 @@ import androidx.compose.ui.unit.dp
     }
 }
 @Composable fun Unbounded() { Box(Modifier.wrapContentHeight(unbounded = true)) }
-var calls = 0
-fun alignment(): Alignment { calls += 1; return Alignment.Center }
+fun alignment(): Alignment = Alignment.Center
 @Composable fun EffectfulAlignment() { Box(Modifier.wrapContentSize(alignment())) }

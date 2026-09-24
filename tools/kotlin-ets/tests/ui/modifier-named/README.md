@@ -3,8 +3,9 @@
 Kotlin IR represents reordered named arguments as temporaries in a block. Modifier
 consumption accepts compiler-generated immutable temporaries containing stable
 reads or mapped constants, including an existing Modifier chain with stable
-arguments. The aliases are scoped to that consumption. Size, background color,
-shape and trailing testTag remain intact.
+arguments. Implicit immutable UI context parameters, such as the current Material
+theme, are stable inputs as well. The aliases are scoped to that consumption.
+Size, background color, shape and trailing testTag remain intact.
 
 The frontend still owns argument binding. This is not source-string parsing or
 unrestricted inlining: effectful values, mutable reads and arbitrary block

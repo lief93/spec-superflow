@@ -1,6 +1,7 @@
 package pointerinput
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -27,6 +28,14 @@ fun Page() {
 @Composable
 fun Nonempty() {
     Box(Modifier.pointerInput(Unit) { awaitPointerEventScope { awaitPointerEvent() } })
+}
+
+@Composable
+fun Tap() {
+    val taps = remember { mutableStateOf(0) }
+    Box(Modifier.pointerInput(Unit) {
+        detectTapGestures(onTap = { taps.value = taps.value + 1 })
+    }) { Text("Taps ${taps.value}") }
 }
 
 private fun key(): Int = 1

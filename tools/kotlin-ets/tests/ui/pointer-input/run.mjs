@@ -23,6 +23,10 @@ function compile(entry, status = 0) {
   return status === 0 ? readFileSync(output, 'utf8') : result.stdout + result.stderr;
 }
 assert.match(compile('Page'), /\.hitTestBehavior\(HitTestMode.Default\)/);
-assert.match(compile('Nonempty', 2), /pointerInput.*empty handler/);
+const tap = compile('Tap');
+assert.match(tap, /\.hitTestBehavior\(HitTestMode.Default\)/);
+assert.match(tap, /\.onClick\(\(\): void => \{/);
+assert.match(tap, /this\.taps = this\.taps \+ 1/);
+assert.match(compile('Nonempty', 2), /raw pointer processing is not supported/);
 assert.match(compile('EvaluatedKey', 2), /pointerInput.*effect-free keys/);
 console.log('PASS empty input hit-test mapping and explicit nonempty/key diagnostics');

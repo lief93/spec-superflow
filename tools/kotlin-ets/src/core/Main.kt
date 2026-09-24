@@ -1,3 +1,4 @@
+@file:OptIn(org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI::class)
 package dev.ets
 
 import java.io.File
@@ -47,13 +48,22 @@ fun main(arguments: Array<String>) {
             }
         }
         val mode = options["--mode"] ?: "page"
-        require(mode in setOf("page", "language")) { "Mode must be page or language" }
+        require(mode in setOf("page", "language", "preflight")) {
+            "Mode must be page, language, or preflight"
+        }
+        require(mode != "preflight" || "--out" in options) {
+            "Preflight mode requires --out and does not support --out-dir"
+        }
         val policy = options["--unsupported-policy"] ?: if (mode == "page") "report" else "error"
         require(policy in setOf("report", "error")) { "Unsupported policy must be report or error" }
-        require(mode == "page" || policy == "error") { "Language mode requires unsupported-policy error" }
+        require(mode == "page" || policy == "error") { "$mode mode requires unsupported-policy error" }
         diagnostics.reportUiDegradation = policy == "report"
         val entry = options["--entry"]
         require(mode != "page" || entry != null) { "--entry is required for page mode" }
+        require(mode != "preflight" || entry == null) { "Preflight mode scans the complete module and does not accept --entry" }
+        require(mode != "preflight" || preflightOutput == null) {
+            "Preflight mode writes its report to --out; omit --preflight-out"
+        }
         if (mode == "page") {
             val report = File(output.absolutePath + ".diagnosis.json")
             require(!Files.exists(report.toPath(), NOFOLLOW_LINKS)) { "Refusing to overwrite existing diagnosis: $report" }
@@ -73,7 +83,7 @@ fun main(arguments: Array<String>) {
         val dimensions = options["--string-resources"]?.let { DimensionResources.read(File(it).absoluteFile) } ?: DimensionResources()
         val fonts = options["--font-resources"]?.let { FontResources.read(File(it).absoluteFile) } ?: FontResources()
         val resourceOutput = File(output.absolutePath + ".resources")
-        if ("--string-resources" in options || "--font-resources" in options || "--image-resources" in options) require(!Files.exists(resourceOutput.toPath(), NOFOLLOW_LINKS)) {
+        if (mode == "page" && ("--string-resources" in options || "--font-resources" in options || "--image-resources" in options)) require(!Files.exists(resourceOutput.toPath(), NOFOLLOW_LINKS)) {
             "Refusing to overwrite existing resource output: $resourceOutput"
         }
         val adapters = AdapterModules.load()
@@ -83,8 +93,10 @@ fun main(arguments: Array<String>) {
         val compositionLocals = ComposeCompositionLocalRule(diagnostics)
         val rules = listOf(stdlib, images, strings, dimensions, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeSurfaceColorAtElevationRule(), ComposeProjectColorSchemeRule(), ComposePlatformVersionRule(), ComposeThemeModeRule(), ComposeStaticAnimationRule(diagnostics), ComposeIndicationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeMaterialImageVectorRule(), ComposeSnackbarHostStateRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposePagerBehaviorRule(), ComposeDimensionRule(), ComposeDrawGeometryRule(), ComposeBrushRule(diagnostics), ComposeBorderStrokeRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), compositionLocals, ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeNavigationRule(), ComposeFlowRule(), shapes, elevations, ComposeCardColorsRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
         var preflight: CoreProfileReport? = null
-        val target = withKotlinFrontend(compilerArgs, entry, prepareModule = { module ->
-            if (mode == "page") rules.forEach { it.prepareModule(module, diagnostics) }
+        val target = withKotlinFrontend(compilerArgs, entry, runEtsLowerings = mode != "preflight", prepareModule = { module ->
+            if (mode == "page") {
+                rules.forEach { it.prepareModule(module, diagnostics) }
+            }
         }, prepareDeclaration = { declaration ->
             if (mode == "page") rules.forEach { it.prepareSource(declaration, diagnostics) }
         }, externalSourceType = { type -> mode == "page" && adapters.providesSourceType(type) },
@@ -105,20 +117,24 @@ fun main(arguments: Array<String>) {
                 Files.writeString(file.toPath(), coreProfileJson(requireNotNull(preflight)), CREATE_NEW)
             }
             try {
-                val generated = if (mode == "page") {
-                    backend.validateSource(module)
-                    val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
-                        requireNotNull(entry))
-                    val targetModule = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
-                    diagnostics.verifyNoSilentFallback(targetModule)
-                    if ("--out-dir" in options) emitEtsModules(targetModule, ComposeRuntime(StandardLibraryRuntime))
-                    else mapOf(output.name to emitEtsProgram(targetModule, ComposeRuntime(StandardLibraryRuntime)))
-                } else {
-                    val lowered = backend.lower(module)
-                    val program = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
-                    diagnostics.verifyNoSilentFallback(program)
-                    if ("--out-dir" in options) emitEtsModules(program, StandardLibraryRuntime)
-                    else mapOf(output.name to emitEtsProgram(program, StandardLibraryRuntime))
+                val generated = when (mode) {
+                    "page" -> {
+                        backend.validateSource(module)
+                        val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
+                            requireNotNull(entry))
+                        val targetModule = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
+                        diagnostics.verifyNoSilentFallback(targetModule)
+                        if ("--out-dir" in options) emitEtsModules(targetModule, ComposeRuntime(StandardLibraryRuntime))
+                        else mapOf(output.name to emitEtsProgram(targetModule, ComposeRuntime(StandardLibraryRuntime)))
+                    }
+                    "language" -> {
+                        val lowered = backend.lower(module)
+                        val program = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
+                        diagnostics.verifyNoSilentFallback(program)
+                        if ("--out-dir" in options) emitEtsModules(program, StandardLibraryRuntime)
+                        else mapOf(output.name to emitEtsProgram(program, StandardLibraryRuntime))
+                    }
+                    else -> mapOf(output.name to coreProfileJson(requireNotNull(preflight)))
                 }
                 publishPreflight()
                 generated
@@ -136,7 +152,7 @@ fun main(arguments: Array<String>) {
         Files.createDirectories(output.absoluteFile.parentFile.toPath())
         val resources = strings.artifacts()
         val resourceFiles = fonts.artifacts() + images.artifacts()
-        if (resources.isNotEmpty() || resourceFiles.isNotEmpty()) {
+        if (mode == "page" && (resources.isNotEmpty() || resourceFiles.isNotEmpty())) {
             Files.createDirectory(resourceOutput.toPath())
             resources.forEach { (name, content) ->
                 val file = resourceOutput.resolve(name)
@@ -153,12 +169,16 @@ fun main(arguments: Array<String>) {
             Files.createDirectory(output.toPath())
             target.forEach { (name, code) -> Files.writeString(output.resolve(name).toPath(), code, CREATE_NEW) }
         } else Files.writeString(output.toPath(), target.getValue(output.name), CREATE_NEW)
-        val status = if (diagnostics.degradations.isEmpty()) "generated" else "generated_with_degradations"
+        val status = when {
+            mode == "preflight" -> "profiled"
+            diagnostics.degradations.isEmpty() -> "generated"
+            else -> "generated_with_degradations"
+        }
         saveDiagnosis(status)
         println("{\"ok\":true,\"status\":" + quote(status) + ",\"diagnosis\":" + quote(diagnosisOutput?.path) +
             ",\"degradationCount\":" + diagnostics.degradations.size + ",\"frontend\":\"Kotlin-2.1.20-K2-FIR2IR\",\"output\":" + quote(output.path) +
             ",\"preflight\":" + quote(preflightOutput?.path) + ",\"preflightCallCount\":" + requireNotNull(preflight).calls.size +
-            ",\"resources\":" + (if (resources.isEmpty() && resourceFiles.isEmpty()) "null" else quote(resourceOutput.path)) + "}")
+            ",\"resources\":" + (if (mode != "page" || resources.isEmpty() && resourceFiles.isEmpty()) "null" else quote(resourceOutput.path)) + "}")
     } catch (failure: InvalidTarget) {
         saveDiagnosis("blocked", Diagnostic("INVALID_TARGET", failure.message ?: "Invalid target", failure.source))
         println("{\"ok\":false,\"code\":\"INVALID_TARGET\",\"message\":" + quote(failure.message) +

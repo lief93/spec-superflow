@@ -56,6 +56,8 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
     private val slotMethodNames = linkedSetOf<String>()
     private val fieldNames = mutableSetOf<String>()
     private val initializedBuilderFiles = linkedMapOf<IrFile, EtsFunction>()
+    private val stableGlobalSymbols = mutableSetOf<String>()
+    private val stableAccessorSymbols = mutableSetOf<String>()
     private lateinit var root: IrSimpleFunction
     private lateinit var pageReceiver: EtsSymbol
     private var usesMaterialTypography = false
@@ -81,11 +83,27 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         builderSymbols.clear()
         modifierSpecializations.clear(); activeSpecializations.clear()
         initializedBuilderFiles.clear()
+        stableGlobalSymbols.clear()
+        stableAccessorSymbols.clear()
         compositionLocals.prepareForLowering(module, language)
         usesCompositionContext = compositionLocals.contextRequired
         usesMaterialContext = requiresMaterialContext(module)
         usesFocusManager = requiresFocusManager(module)
         val declarations = module.files.flatMap { it.declarations }
+        declarations.filterIsInstance<IrProperty>().filter { property ->
+            !property.isVar && property.backingField?.initializer != null && !property.isExternal &&
+                !property.isExpect && !property.isDelegated && !property.isLateinit &&
+                listOfNotNull(property.getter, property.setter)
+                    .all { it.origin == IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR }
+        }.forEach { property ->
+            stableGlobalSymbols += topLevelStorage(property, language).id
+            property.getter?.let { getter ->
+                topLevelAccessorName(getter)?.let { targetName ->
+                    stableAccessorSymbols += etsFunctionSymbol(targetName, emptyList(), language.type(getter.returnType),
+                        language.source(getter), sourceName = getter.name.asString()).id
+                }
+            }
+        }
         val functions = declarations.filterIsInstance<IrSimpleFunction>()
         val entries = functions.filter { it.name.asString() == entryName || symbolName(it) == entryName }
         root = entries.singleOrNull() ?: diagnostics.unsupported(module, "Expected one source entry: $entryName")
@@ -242,7 +260,7 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
             ComposeSpacerRule(target, ::modifiers),
             ComposeTextRule(target, ::dimension,
                 { usesMaterialTypography = true }, ::modifiers),
-            ComposeButtonRule(target, ::uiLambdaBody, ::callback, ::modifiers),
+            ComposeButtonRule(target, ::uiLambdaBody, ::callback, ::modifiers, ::stableTargetValue),
             ComposeTopAppBarRule(target, ::uiLambdaBody, ::dimension, ::modifiers),
             ComposeSnackbarHostRule(target, ::modifiers),
             ComposeScaffoldRule(target, ::uiLambdaBody, ::scaffoldContent, ::modifiers),
@@ -592,25 +610,57 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
         false
     }
 
-    private fun stableTargetValue(value: EtsExpression, scope: Scope): Boolean = when (value) {
+    private fun stableTargetValue(value: EtsExpression, scope: Scope): Boolean =
+        stableTargetValue(value, scope, emptySet())
+
+    private fun stableTargetValue(value: EtsExpression, scope: Scope,
+        localSymbols: Set<String>): Boolean = when (value) {
         is EtsLiteral -> true
-        is EtsReference -> value.symbol.external || scope.bindings.any { (symbol, binding) ->
-            binding == value && when (val owner = symbol.owner) {
-                is IrVariable -> !owner.isVar
-                is IrValueParameter -> true
+        is EtsReference -> value.symbol.id in localSymbols || value.symbol.id in stableGlobalSymbols ||
+            value.symbol.external || value in scope.ambientValues.values ||
+            scope.bindings.any { (symbol, binding) ->
+                binding == value && when (val owner = symbol.owner) {
+                    is IrVariable -> !owner.isVar
+                    is IrValueParameter -> true
+                    else -> false
+                }
+            }
+        is EtsMember -> stableTargetValue(value.receiver, scope, localSymbols)
+        is EtsObject -> value.fields.values.all { stableTargetValue(it, scope, localSymbols) }
+        is EtsArray -> value.elements.all { stableTargetValue(it, scope, localSymbols) }
+        is EtsCast -> stableTargetValue(value.value, scope, localSymbols)
+        is EtsNew -> value.arguments.all { stableTargetValue(it, scope, localSymbols) }
+        is EtsBinary -> stableTargetValue(value.left, scope, localSymbols) &&
+            stableTargetValue(value.right, scope, localSymbols)
+        is EtsUnary -> stableTargetValue(value.operand, scope, localSymbols)
+        is EtsConditional -> stableTargetValue(value.condition, scope, localSymbols) &&
+            stableTargetValue(value.whenTrue, scope, localSymbols) &&
+            stableTargetValue(value.whenFalse, scope, localSymbols)
+        is EtsCall -> {
+            val lambda = value.callee as? EtsLambda
+            when {
+                (value.callee as? EtsReference)?.symbol?.id in stableAccessorSymbols ->
+                    value.arguments.all { stableTargetValue(it, scope, localSymbols) }
+                lambda != null && lambda.parameters.size == value.arguments.size ->
+                    value.arguments.all { stableTargetValue(it, scope, localSymbols) } &&
+                        lambda.body.all { stableTargetStatement(it, scope,
+                            localSymbols + lambda.parameters.map { parameter -> parameter.symbol.id }) }
                 else -> false
             }
         }
-        is EtsMember -> stableTargetValue(value.receiver, scope)
-        is EtsObject -> value.fields.values.all { stableTargetValue(it, scope) }
-        is EtsArray -> value.elements.all { stableTargetValue(it, scope) }
-        is EtsCast -> stableTargetValue(value.value, scope)
-        is EtsNew -> value.arguments.all { stableTargetValue(it, scope) }
-        is EtsBinary -> stableTargetValue(value.left, scope) && stableTargetValue(value.right, scope)
-        is EtsUnary -> stableTargetValue(value.operand, scope)
-        is EtsConditional -> stableTargetValue(value.condition, scope) &&
-            stableTargetValue(value.whenTrue, scope) && stableTargetValue(value.whenFalse, scope)
         is EtsLambda -> true
+        else -> false
+    }
+
+    private fun stableTargetStatement(statement: EtsStatement, scope: Scope,
+        localSymbols: Set<String>): Boolean = when (statement) {
+        is EtsReturn -> statement.value?.let { stableTargetValue(it, scope, localSymbols) } != false
+        is EtsThrow -> stableTargetValue(statement.value, scope, localSymbols)
+        is EtsIf -> statement.branches.all { branch ->
+            branch.condition?.let { stableTargetValue(it, scope, localSymbols) } != false &&
+                branch.body.all { stableTargetStatement(it, scope, localSymbols) }
+        }
+        is EtsBlock -> statement.statements.all { stableTargetStatement(it, scope, localSymbols) }
         else -> false
     }
 
@@ -1956,7 +2006,14 @@ class ComposeLowering(val language: Language, val diagnostics: DiagnosticSink,
                         argument(call, "enabled")?.let { attributes["enabled"] = expression(it, scope) }
                     }
                     "androidx.compose.ui.input.pointer.pointerInput" -> {
-                        attributes["hitTestBehavior"] = PointerInputModifier(target).value(call) { stableRead(it, scope) }
+                        val pointer = PointerInputModifier(target).value(call, { stableRead(it, scope) },
+                            { callback(it, scope) })
+                        attributes["hitTestBehavior"] = pointer.hitTest
+                        pointer.onTap?.let {
+                            if ("onClick" in attributes) diagnostics.unsupported(call,
+                                "Multiple click or tap handlers on one Modifier chain require ordered gesture dispatch")
+                            attributes["onClick"] = it
+                        }
                     }
                     "androidx.compose.foundation.layout.offset" -> {
                         checkArguments(call, setOf("x", "y"))

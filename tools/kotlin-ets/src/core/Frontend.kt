@@ -106,6 +106,7 @@ fun <T> withKotlinModule(arguments: List<String>, emit: (IrModuleFragment) -> T)
 }
 
 fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
+    runEtsLowerings: Boolean = true,
     prepareModule: (IrModuleFragment) -> Unit = {},
     prepareDeclaration: (org.jetbrains.kotlin.ir.declarations.IrDeclaration) -> Unit = {},
     externalSourceType: (org.jetbrains.kotlin.ir.types.IrType) -> Boolean = { false },
@@ -143,14 +144,16 @@ fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
             externalSourceType = externalSourceType, externalSourceCall = externalSourceCall,
             retainUnreferencedFileInitializer = retainUnreferencedFileInitializer,
             omitUnreferencedFileInitializer = omitUnreferencedFileInitializer)) }
-        val lowering = EtsLoweringPhases.run(translated, frontend.bodies, frontend::rebindInlinedCaptures)
+        val lowering = if (runEtsLowerings) {
+            EtsLoweringPhases.run(translated, frontend.bodies, frontend::rebindInlinedCaptures)
+        } else null
         check(!translated.diagnosticCollector.hasErrors && !messages.hasErrors()) {
             "Kotlin lowering diagnostics prohibit target output"
         }
         return try {
             emit(frontend)
         } catch (failure: Unsupported) {
-            throw explainUnavailableInlineBody(failure, lowering.unavailableInlineBodies)
+            throw lowering?.let { explainUnavailableInlineBody(failure, it.unavailableInlineBodies) } ?: failure
         }
     } finally {
         session?.close()

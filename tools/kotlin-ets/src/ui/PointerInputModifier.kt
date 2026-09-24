@@ -6,9 +6,12 @@ import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.types.classOrNull
 
+internal data class PointerInput(val hitTest: EtsExpression, val onTap: EtsExpression? = null)
+
 /** An empty pointer handler still participates in sibling hit testing. */
 internal class PointerInputModifier(private val target: ArkUiCalls) {
-    fun value(call: IrCall, stableKey: (IrExpression) -> Boolean): EtsExpression {
+    fun value(call: IrCall, stableKey: (IrExpression) -> Boolean,
+        callback: (IrExpression) -> EtsExpression): PointerInput {
         target.checkArguments(call, setOf("key1", "key2", "keys", "block"))
         val block = argument(call, "block")
         val unwrapped = if (block is IrTypeOperatorCall && block.operator == IrTypeOperator.SAM_CONVERSION &&
@@ -21,8 +24,33 @@ internal class PointerInputModifier(private val target: ArkUiCalls) {
             is IrGetObjectValue -> node.type.isUnit()
             else -> false
         }
-        if (handler?.function?.body?.let(::empty) != true)
-            target.diagnostics.unsupported(call, "pointerInput currently requires an empty handler; gesture/event processing needs an explicit mapping")
+        fun singleCall(node: IrElement?): IrCall? = when (node) {
+            is IrBlockBody -> node.statements.singleOrNull()?.let(::singleCall)
+            is IrReturn -> if (node.returnTargetSymbol == handler?.function?.symbol) singleCall(node.value) else null
+            is IrBlock -> node.statements.singleOrNull()?.let(::singleCall)
+            is IrComposite -> node.statements.singleOrNull()?.let(::singleCall)
+            is IrTypeOperatorCall -> when (node.operator) {
+                IrTypeOperator.IMPLICIT_CAST, IrTypeOperator.IMPLICIT_COERCION_TO_UNIT,
+                IrTypeOperator.IMPLICIT_NOTNULL -> singleCall(node.argument)
+                else -> null
+            }
+            is IrCall -> node
+            else -> null
+        }
+        val gesture = handler?.function?.body?.let(::singleCall)
+        val onTap = if (gesture != null &&
+            symbolName(gesture.symbol.owner) == "androidx.compose.foundation.gestures.detectTapGestures") {
+            target.checkArguments(gesture, setOf("onDoubleTap", "onLongPress", "onPress", "onTap"))
+            listOf("onDoubleTap", "onLongPress", "onPress").firstOrNull { argument(gesture, it) != null }?.let {
+                target.diagnostics.unsupported(argument(gesture, it)!!,
+                    "pointerInput detectTapGestures currently supports onTap only")
+            }
+            callback(argument(gesture, "onTap")
+                ?: target.diagnostics.unsupported(gesture, "pointerInput detectTapGestures requires onTap"))
+        } else null
+        if (handler?.function?.body?.let(::empty) != true && onTap == null)
+            target.diagnostics.unsupported(call,
+                "pointerInput requires an empty handler or detectTapGestures(onTap); raw pointer processing is not supported")
         fun key(value: IrExpression): Boolean = when (value) {
             is IrVararg -> value.elements.all { it is IrExpression && key(it) }
             is IrGetObjectValue -> value.type.isUnit()
@@ -34,6 +62,6 @@ internal class PointerInputModifier(private val target: ArkUiCalls) {
                 "pointerInput with an empty handler requires effect-free keys")
         }
         // Default blocks lower siblings without blocking descendants or ancestors.
-        return target.enumValue("HitTestMode", "Default", call)
+        return PointerInput(target.enumValue("HitTestMode", "Default", call), onTap)
     }
 }

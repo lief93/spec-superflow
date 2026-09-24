@@ -1,6 +1,7 @@
 # Core Profile preflight
 
-Every successful FIR2IR session scans resolved `IrCall` nodes before target
+Every successful FIR2IR session scans resolved `IrCall` nodes and declaration
+types before target
 generation. The scan is read-only: it does not select adapters, rewrite IR or
 decide that an unsupported operation is safe. The normal language or Compose
 generator remains authoritative and still fails closed. If generation rejects
@@ -16,6 +17,24 @@ Pass `--preflight-out /fresh/path/core-profile.json` to retain the scan. The
 Gradle project entry accepts and forwards the same option. Existing report paths
 are rejected before compilation. The CLI always runs the scan; without the
 option it returns only `preflightCallCount` in its result JSON.
+
+For a project-wide inventory, use `--mode preflight --out /fresh/path/profile.json`
+without `--entry`. This mode stops after the official FIR-to-IR frontend and scans
+the complete resolved module. It intentionally does not run source selection,
+framework projection, ETS lowerings, or target generation, so an unrelated
+Android platform guard or generated DAO cannot hide later calls. The report adds
+`pageEntries`, containing every resolved function annotated with both `@Preview`
+and `@Composable`; callers can use that list for a separate page-generation
+matrix. Project-wide coverage describes target-type readiness, not proof that
+every listed entry can already generate or run.
+
+The top-level `unsupportedNodes` inventory records declaration-level gaps that
+are not owned by a call, including parameter and field types, return types and
+supertypes. This lets a project scan expose an unsupported business-state type
+before a particular page happens to lower the containing class. Each item keeps
+the source occurrence, unsupported type symbol, responsible module and failure
+message. It remains an inventory: generation still decides whether the type is
+reachable and must fail.
 
 Each call record contains:
 
@@ -93,6 +112,8 @@ appearing in the report.
 - `Coverage.kt` proves neutral widget, Modifier and resource grouping and
   attaches the first resource failure to its containing call;
 - `EmptyUi.kt` proves an empty builder is rejected at its source declaration.
+- `ProjectProfile.kt` proves full-module mode discovers Preview entries and is
+  not blocked by declarations that only the ETS generation lowerings must handle.
 
 The run retains commands, stdout/stderr, preflight JSON and outputs under
 `tests/preflight/.work/run-*`. This is compiler/host evidence. It is not KLIB,
