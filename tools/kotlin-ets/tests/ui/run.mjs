@@ -411,12 +411,18 @@ assert.deepEqual(readdirSync(ownershipDirectory).sort(), [
 ]);
 const widgets = readFileSync(join(ownershipDirectory, 'Widgets.ets'), 'utf8');
 const ownershipPage = readFileSync(join(ownershipDirectory, 'Screen.ets'), 'utf8');
-for (const name of ['Leaf', 'Chain', 'Action', 'Frame']) assert.ok(widgets.includes(`export function ${name}(`));
+for (const name of ['Leaf', 'Chain', 'Action', 'Frame', 'Bridged', 'Dependent', 'DeepDependent']) {
+  assert.ok(widgets.includes(`export function ${name}(`));
+}
 assert.ok(widgets.includes('function PrivateCaption(__etsMaterialContext: EtsMaterialContext, label: string)')
   && !widgets.includes('export function PrivateCaption'));
+assert.ok(widgets.includes('function Bridged_content(__etsMaterialContext: EtsMaterialContext, captured: string)')
+  && !widgets.includes('export function Bridged_content'));
 const widgetAst = ts.createSourceFile('Widgets.ets', widgets, ts.ScriptTarget.Latest, true);
 const widgetFunctions = widgetAst.statements.filter(ts.isFunctionDeclaration);
-assert.deepEqual(widgetFunctions.map(node => node.name.text), ['PrivateCaption', 'Leaf', 'Chain', 'Action', 'Frame']);
+assert.deepEqual(widgetFunctions.map(node => node.name.text), [
+  'PrivateCaption', 'Leaf', 'Chain', 'Action', 'Frame', 'Bridged', 'Dependent', 'DeepDependent', 'Bridged_content',
+]);
 for (const functionNode of widgetFunctions) {
   function checkReceiver(node) {
     assert.notEqual(node.kind, ts.SyntaxKind.ThisKeyword, 'hoisted methods must not acquire a page receiver');
@@ -424,9 +430,13 @@ for (const functionNode of widgetFunctions) {
   }
   checkReceiver(functionNode);
 }
-assert.ok(ownershipPage.includes('struct OwnershipPage') && ownershipPage.includes('this.count'));
+assert.ok(ownershipPage.includes('struct OwnershipPage'));
+assert.match(ownershipPage, /@State private __etsState_count: number = 0;/);
+assert.match(ownershipPage, /this\.__etsState_count = this\.__etsState_count \+ 1 \| 0;/);
+assert.match(ownershipPage, /return this\.__etsState_count;/);
 assert.match(ownershipPage, /import \{ Chain \} from "\.\/Widgets"/);
 assert.match(ownershipPage, /import \{ Action \} from "\.\/Widgets"/);
+assert.match(ownershipPage, /import \{ DeepDependent \} from "\.\/Widgets"/);
 for (const name of readdirSync(ownershipDirectory)) moduleHashes.push({ path: join(ownershipDirectory, name),
   sha256: hash(join(ownershipDirectory, name)), entry: name === 'Screen.ets', relativePath: 'ownership/' + name });
 

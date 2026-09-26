@@ -204,6 +204,17 @@ fun main(args: Array<String>) {
             val reference = value as? EtsReference ?: return value
             return orderedBindings[reference.symbol.id]?.let(::sourceValue) ?: value
         }
+        fun sameValueBinding(actual: EtsExpression, expected: EtsExpression): Boolean {
+            val resolvedActual = sourceValue(actual)
+            val resolvedExpected = sourceValue(expected)
+            val actualReference = resolvedActual as? EtsReference
+            val expectedReference = resolvedExpected as? EtsReference
+            return if (actualReference != null && expectedReference != null) {
+                actualReference.symbol.id == expectedReference.symbol.id
+            } else {
+                resolvedActual == resolvedExpected
+            }
+        }
         check(elements.any { (it.call.callee as? EtsReference)?.symbol?.name == "Stack" })
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Text" } == 8)
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Image" } == 2)
@@ -229,9 +240,9 @@ fun main(args: Array<String>) {
         check(textAttributes(buttonLabel) == listOf("align", "fontSize", "fontWeight", "fontFamily", "lineHeight"))
         val nativeFields = elements.filter { (it.call.callee as? EtsReference)?.symbol?.name == "TextInput" }
         check(nativeFields.all { field ->
-            (field.call.arguments.single() as EtsObject).fields["text"] == materialField.value &&
-                field.attributes.single { (it.callee as EtsReference).symbol.name == "onChange" }
-                    .arguments.single() == materialField.onValueChange
+            sameValueBinding((field.call.arguments.single() as EtsObject).fields.getValue("text"), materialField.value) &&
+                sameValueBinding(field.attributes.single { (it.callee as EtsReference).symbol.name == "onChange" }
+                    .arguments.single(), materialField.onValueChange)
         })
         fun attributes(element: EtsUiElement) = element.attributes.map { (it.callee as EtsReference).symbol.name }
         val nativeStyledText = HarmonyWidgetBackend().lower(styledText)
