@@ -69,10 +69,15 @@ fun main(args: Array<String>) {
         check(attributeNames(verticalNative) == listOf(
             "scrollable", "initialOffset", "scrollBar", "enableScrollInteraction", "align", "onScroll"))
         val verticalFill = verticalNative.children!!.single() as EtsUiElement
-        check(callName(verticalFill) == "Stack" && attributeNames(verticalFill) == listOf("width"))
+        check(callName(verticalFill) == "Column" &&
+            attributeNames(verticalFill) == listOf("alignItems", "width"))
         val horizontalLayer = HarmonyWidgetBackend().lower(horizontal)
+        check(callName(horizontalLayer) == "Stack" && attributeNames(horizontalLayer) == listOf("width"))
         val horizontalNative = horizontalLayer.children!!.single() as EtsUiElement
         check(callName(horizontalNative) == "Scroll")
+        val horizontalFill = horizontalNative.children!!.single() as EtsUiElement
+        check(callName(horizontalFill) == "Row" &&
+            attributeNames(horizontalFill) == listOf("alignItems", "height"))
         val directions = listOf(verticalNative, horizontalNative).map { scroll ->
             val direction = scroll.attributes.first().arguments.single() as EtsMember
             direction.name
@@ -92,17 +97,28 @@ fun main(args: Array<String>) {
         check(".enableScrollInteraction(true)" in code && ".enableScrollInteraction(false)" in code)
         check("this.vertical_offset = yOffset;" in code)
         check("this.horizontal_offset = xOffset;" in code)
-        check("Text(\"\" + \"Vertical \" + this.vertical_offset)" in code)
-        check("Text(\"\" + \"Horizontal \" + this.horizontal_offset)" in code)
+        fun hasBoundText(expression: String) = Regex(
+            """ForEach\(\[${Regex.escape(expression)}\] as Array<string>, \((__etsUiArg\d+_\d+): string\) => \{\s*Text\(\1\)""")
+            .containsMatchIn(code)
+        check(hasBoundText("\"\" + \"Vertical \" + this.vertical_offset"))
+        check(hasBoundText("\"\" + \"Horizontal \" + this.horizontal_offset"))
         check(listOf("onboarding", "animateScrollTo(", "scrollTo(").none(code::contains))
+
+        val defaultDirection = ComposeWidgetPipeline(
+            EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules())), StandardLibraryRuntime)
+            .compile(module, "widgetscroll.ReverseScroll")
+        check(".scrollable(ScrollDirection.Vertical)" in defaultDirection)
+        val inlineState = ComposeWidgetPipeline(
+            EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules())), StandardLibraryRuntime)
+            .compile(module, "widgetscroll.InlineScrollState")
+        check(".scrollable(ScrollDirection.Vertical)" in inlineState)
+        check("@State" !in inlineState && ".onScroll(" !in inlineState)
 
         val expected = linkedMapOf(
             "NegativeScrollInitial" to "must be non-negative",
             "DynamicScrollInitial" to "requires an integer literal",
-            "ReverseScroll" to "reverseScrolling",
             "FlingScroll" to "flingBehavior",
             "Overscroll" to "overscrollEffect",
-            "InlineScrollState" to "source remembered ScrollState",
         )
         val diagnostics = expected.map { (name, message) ->
             val failure = try {

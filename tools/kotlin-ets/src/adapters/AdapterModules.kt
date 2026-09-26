@@ -90,6 +90,7 @@ class AdapterTargetApi internal constructor(
 
 class AdapterModules(modules: List<AdapterModule> = emptyList()) {
     private val ordered = modules.sortedBy { it.id }
+    val modules: List<AdapterModule> get() = ordered
     private val target: AdapterTargetApi
     private val used = linkedSetOf<String>()
     val imports: List<EtsImport> get() = ordered.filter { it.id in used }.flatMap { it.imports }.distinct()

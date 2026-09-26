@@ -15,8 +15,10 @@ const uiCp = JSON.parse(readFileSync(uiClasspathFile, 'utf8')).join(':');
 const modelSources = sources(join(root, 'src/ui/widgets'));
 const backendSources = sources(join(root, 'src/ui/harmony'));
 const adapter = join(root, 'src/ui/compose/ComposeWidgetAdapter.kt');
-const helper = join(root, 'src/ui/compose/ComposeHelperLowering.kt');
+const helper = join(root, 'src/ui/compose/ComposeSourceFunctionLowering.kt');
 const pipeline = join(root, 'src/ui/pipeline/ComposeWidgetPipeline.kt');
+const main = join(root, 'src/core/Main.kt');
+const legacyLowering = join(root, 'src/ui/ComposeLowering.kt');
 const pipelineProbe = join(here, 'CoreProfilePipelineProbe.kt');
 const fixtures = ['Page.kt', 'Unsupported.kt', 'ImageR.java', 'widget_logo.svg',
   'BackendTest.kt', 'WidgetProbe.kt', 'CoreProfile.kt', 'CoreProfilePipelineProbe.kt',
@@ -32,6 +34,9 @@ for (const path of modelSources) assert.doesNotMatch(readFileSync(path, 'utf8'),
 for (const path of backendSources) assert.doesNotMatch(readFileSync(path, 'utf8'), /org\.jetbrains|androidx|IrCall|ComposeWidget|ArkUiCalls/);
 assert.doesNotMatch(readFileSync(adapter, 'utf8'), /Harmony|ArkUi|EtsUiElement|EtsUiAttribute|arkui:|"Stack"|"alignItems"|"fontColor"|"backgroundColor"/);
 assert.doesNotMatch(readFileSync(pipeline, 'utf8'), /UiTextModule|ComposeLowering|PageText|TextModule/);
+assert.equal(existsSync(legacyLowering), false, 'The legacy direct Compose-to-ETS lowering must not exist');
+assert.match(readFileSync(main, 'utf8'), /ComposeWidgetPipeline/);
+assert.doesNotMatch(readFileSync(main, 'utf8'), /ComposeLowering/);
 assert.doesNotMatch(readFileSync(pipelineProbe, 'utf8'), /\bEtsProgram\s*\(|\bWidget\s*[.(]|\bChildren\s*\(/);
 function compile(name, inputs, classpath, options = []) {
   const jar = join(work, `${name}.jar`);
@@ -45,7 +50,8 @@ const backendJar = compile('harmony', [...backendSources, join(here, 'BackendTes
 console.log(run('backend-isolation', 'java', ['-cp', [stdlib, modelJar, targetJar, backendJar].join(':'), 'dev.ets.widgettest.BackendTestKt']).trim());
 // Adapter and compiler build without any Harmony implementation on their classpath.
 const compilerSources = sources(join(root, 'src')).filter(path =>
-  !modelSources.includes(path) && !backendSources.includes(path) && path !== adapter && path !== helper && path !== pipeline);
+  !modelSources.includes(path) && !backendSources.includes(path) && path !== adapter && path !== helper &&
+    path !== pipeline && !path.endsWith('/src/core/Main.kt'));
 const compilerJar = compile('compiler', compilerSources, `${cp}:${modelJar}`);
 const adapterJar = compile('adapter', [adapter, helper], `${cp}:${modelJar}:${compilerJar}`,
   [`-Xfriend-paths=${compilerJar}`]);
@@ -88,12 +94,14 @@ const stateCode = readFileSync(stateOutput, 'utf8');
 const fields = [...stateCode.matchAll(/@State private (\w+): (?:boolean|number|string) = ([^;]+);/g)];
 assert.deepEqual(fields.map(match => match[1]), ['__etsState_enabled', '__etsState_count', '__etsState_label']);
 const callback = stateCode.match(/\.onClick\(\(\): void => \{([\s\S]*?)\n\s*\}\)/)?.[1];
-const rendered = stateCode.match(/Text\((this\.__etsState_enabled \? [^\n]+ : "disabled")\)/)?.[1]
-  ?.replace('(this.model as StateModel)', 'this.model');
-const nullableRendered = stateCode.match(/Text\((this\.subtitle === null \? "none" : this\.subtitle as string)\)/)?.[1]
-  ?.replace('this.subtitle as string', 'this.subtitle');
+const rendered = stateCode.match(
+  /ForEach\(\[(this\.__etsState_enabled \? [^\n]+ : "disabled")\] as Array<string>, \((\w+): string\) => \{[\s\S]*?Text\(\2\)/)?.[1]
+  ?.replace('(model as StateModel)', 'this.model').replaceAll(/\btitle\b/g, 'this.title');
+const nullableRendered = stateCode.match(/Text\((subtitle === null \? "none" : subtitle as string)\)/)?.[1]
+  ?.replaceAll(/\bsubtitle\b/g, 'this.subtitle').replace('this.subtitle as string', 'this.subtitle');
 assert.ok(callback && rendered && nullableRendered,
   'Expected executable callback, props and runtime conditional in generated ETS');
+const callbackRuntime = callback.replaceAll(/\bstep\b/g, 'this.step').replaceAll(/\bonState\b/g, 'this.onState');
 const runtimeSource = `class RuntimeState {
   title = 'Profile';
   step = 2;
@@ -102,7 +110,7 @@ const runtimeSource = `class RuntimeState {
   actions = [];
   onState = value => this.actions.push(value);
 ${fields.map(match => `  ${match[1]} = ${match[2]};`).join('\n')}
-  click() {${callback}\n  }
+  click() {${callbackRuntime}\n  }
   snapshot() { return [this.${fields[0][1]}, this.${fields[1][1]}, this.${fields[2][1]},
     ${rendered}, ${nullableRendered}, this.actions.join(',')].join('|'); }
 }
@@ -132,7 +140,8 @@ const pagerInitial = pagerCode.match(/@State private pager_currentPage: number =
 const pagerSelectedInitial = pagerCode.match(/@State private __etsState_selected: number = (-?\d+);/)?.[1];
 const pagerCallback = pagerCode.match(/\.onChange\(\(index: number\): void => \{([\s\S]*?)\n\s*\}\)/)?.[1];
 const pagerPageCondition = pagerCode.match(/if \((page < \d+)\)/)?.[1];
-const pagerIndicator = pagerCode.match(/Text\(("" \+ "Indicator "[^\n]+)\)\.align/)?.[1];
+const pagerIndicator = pagerCode.match(
+  /ForEach\(\[((?:"" \+ "Indicator ")[^\n]+)\] as Array<string>, \((\w+): string\) => \{[\s\S]*?Text\(\2\)\.align/)?.[1];
 const pagerButtonCondition = pagerCode.match(/if \((this\.pager_currentPage === \d+)\)/)?.[1];
 const pagerClickCallbacks = [...pagerCode.matchAll(
   /\.onClick\(\(\): void => \{([\s\S]*?)\n\s*\}\)/g)].map(match => match[1].trim());
@@ -368,7 +377,7 @@ assert.ok(existsSync(lazyListOutput));
 assert.ok(existsSync(inputStateOutput));
 assert.ok(existsSync(helperOutput));
 const diagnostics = readFileSync(join(work, 'output/diagnostics.tsv'), 'utf8').split('\n');
-assert.equal(diagnostics.length, 31);
+assert.equal(diagnostics.length, 28);
 assert.ok(diagnostics.every(line => line.includes('UNSUPPORTED') && line.includes('/Unsupported.kt')));
 assert.ok(implementation.every(item => hash(item.path) === item.sha256));
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,

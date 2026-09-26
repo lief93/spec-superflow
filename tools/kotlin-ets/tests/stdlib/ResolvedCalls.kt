@@ -179,6 +179,7 @@ private class RecordingLanguage(private val file: String) : Language {
         EtsValidator().validate(EtsProgram(listOf(EtsFile(file, listOf(function)))))
     }
     override fun statements(body: IrBody, scope: Scope): List<EtsStatement> = error("Unexpected statements")
-    override fun function(function: IrSimpleFunction, scope: Scope): EtsFunction = error("Unexpected function")
+    override fun function(function: IrSimpleFunction, scope: Scope,
+        semantics: FunctionTargetSemantics): EtsFunction = error("Unexpected function")
     override fun clazz(declaration: IrClass): EtsClass = error("Unexpected class")
 }

@@ -20,6 +20,7 @@ internal class ComposeTextDecorationRule : CallRule {
         if (call.dispatchReceiver !is IrGetObjectValue)
             throw Unsupported(Diagnostic("UNSUPPORTED", "TextDecoration constant requires the companion singleton receiver", language.source(call)))
         val at = language.source(call)
-        return EtsMember(EtsReference(EtsSymbol("arkui:TextDecorationType", "TextDecorationType", textDecorationType, at, true)), name, textDecorationType, at)
+        return etsStableMember(EtsReference(EtsSymbol("arkui:TextDecorationType", "TextDecorationType",
+            textDecorationType, at, true)), name, textDecorationType, at)
     }
 }

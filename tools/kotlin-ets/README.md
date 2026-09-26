@@ -37,23 +37,26 @@ Kotlin sources + real dependency classpath
 | `src/core/Backend.kt` | Source validation and typed language-backend assembly |
 | `src/target/` | Compiler-independent target tree, validation and syntax-only printer |
 | `src/output/` | Source-file ownership, typed dependencies and flat module output |
-| `src/ui/` | Compose controls, remembered UI state, content slots and ordered modifiers |
-| `src/ui/controls/` | One file per control family, all implementing the shared call-rule contract |
+| `src/ui/compose/` | Compose calls, state and slots to the neutral widget model |
+| `src/ui/widgets/` | Target-independent widget and ordered-modifier semantics |
+| `src/ui/harmony/` | The only widget-to-ArkUI control and attribute backend |
+| `src/ui/pipeline/` | Production page entry joining language and widget lowering |
 | `src/core/Main.kt` | CLI, output assembly and failure handling |
 | `verification/` | Separate native hosts, generation identity, builds, installation and comparisons |
 
 Compiler IR is the source-program representation. Language lowering produces a
-typed `EtsProgram`, independent of the compiler and printer. The existing Compose
-adapter also produces this target tree, including controls, attributes, callbacks,
-state and slots; it no longer emits a separate `UiTextModule`. The full module boundary
+typed `EtsProgram`, independent of the compiler and printer. The Compose widget
+pipeline also produces this target tree, including controls, attributes, callbacks,
+state and slots. The legacy direct page assembler and `UiTextModule` are removed
+from production. The full module boundary
 and outstanding work are documented in [docs/architecture.md](docs/architecture.md).
 The four development lanes share [these fixed interfaces](docs/shared-contracts.md).
 Diagnostics may be serialized to JSON, but serialized JSON is not a compiler
 input. The old Python implementation remains independent and unchanged by this
 module. Its adapters are not automatically loaded here.
 
-See [Compose basic controls](docs/compose-basic-controls.md) for current control
-coverage, supported parameters, explicit limitations and focused test commands.
+See the [widget semantic pipeline](docs/widget-semantic-pipeline.md) for current
+control coverage, supported parameters, explicit limitations and focused tests.
 
 ## Run
 
@@ -115,8 +118,10 @@ Add `--preflight-out /fresh/path/core-profile.json` to retain the resolved call
 inventory before generation. It groups language semantics, standard library,
 neutral Compose widgets, Modifiers, resources and project dependencies with
 resolved signatures, expected ETS types, responsible modules and 1-based source
-locations. A failed attempt records its first unsupported node. The scan does
-not make unsupported calls acceptable;
+locations. A failed attempt records its first unsupported node. A successful
+generation reconciles conservative type probes only where validated target IR
+retains matching source evidence; explicit degradations remain visible. The scan
+does not make unsupported calls acceptable;
 see [Core Profile preflight](docs/core-profile-preflight.md).
 
 Language mode accepts either `--out` or `--out-dir`, never both. The latter keeps
@@ -149,7 +154,8 @@ publishes a new target file.
 - Conditions and arithmetic remain expressions. A preview's initial page does
   not remove other pages or state updates.
 - The UI slice supports the fixture's Column/Row/Box/Spacer/Text/Button/Pager,
-  root remembered scalar state, pager events and zero-argument UI content slots.
+  root remembered scalar state, pager events and typed zero- or multi-argument
+  UI content slots.
 - Ordinary dp values map to vp and text sp to the target text-size convention.
   Custom density, pixel measurement and unsupported modifier forms are rejected,
   not flattened into guessed numbers.

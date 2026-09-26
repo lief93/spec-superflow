@@ -1,14 +1,10 @@
 package dev.ets
 
 internal val textStyleSource = SourceSpan("EtsTextStyle.kt", 0, 0)
-internal val textStyleType = etsClassSymbol("EtsTextStyle", textStyleSource).type as EtsNamedType
+internal val textStyleType = etsTextStyleType
 private val textStyleMerge = etsFunctionSymbol("__etsMergeTextStyle",
     listOf(textStyleType, textStyleType), textStyleType, textStyleSource)
-internal val textStyleFields = linkedMapOf("color" to EtsTypes.NUMBER, "fontSize" to EtsTypes.NUMBER,
-    "fontWeight" to EtsTypes.NUMBER, "fontStyle" to EtsTypes.NUMBER, "fontFamily" to fontFamilyType,
-    "letterSpacing" to EtsTypes.NUMBER, "textDecoration" to textDecorationType,
-    "textAlign" to EtsNamedType("TextAlign"), "lineHeight" to EtsTypes.NUMBER,
-    "lineHeightStyle" to lineHeightStyleType)
+internal val textStyleFields = etsTextStyleFields
 
 internal fun mergeTextStyles(inherited: EtsExpression, provided: EtsExpression, at: SourceSpan): EtsExpression =
     EtsCall(EtsReference(textStyleMerge, at), listOf(inherited, provided), textStyleType, at)

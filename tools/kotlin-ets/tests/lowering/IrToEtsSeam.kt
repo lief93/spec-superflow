@@ -24,9 +24,10 @@ private class RecordingLanguage(private val inner: Language) : Language {
         return inner.expression(expression, scope)
     }
     override fun statements(body: org.jetbrains.kotlin.ir.expressions.IrBody, scope: Scope) = inner.statements(body, scope)
-    override fun function(function: IrSimpleFunction, scope: Scope): EtsFunction {
+    override fun function(function: IrSimpleFunction, scope: Scope,
+        semantics: FunctionTargetSemantics): EtsFunction {
         functions.add(function)
-        return inner.function(function, scope)
+        return inner.function(function, scope, semantics)
     }
     override fun clazz(declaration: IrClass): EtsClass {
         classes.add(declaration)

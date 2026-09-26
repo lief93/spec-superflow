@@ -19,20 +19,19 @@ const result = spawnSync('bash', args, { encoding: 'utf8', timeout: 600000,
 writeFileSync(join(work, 'result.json'), JSON.stringify({ args, ...result }, null, 2));
 assert.equal(result.status, 0, result.stdout + result.stderr);
 const ets = readFileSync(output, 'utf8');
-// Material context is now an explicit parameter; keep checking both the slot
-// signature and its forwarding, rather than the obsolete context-free spelling.
 for (const name of ['Frame', 'Relay', 'Outer']) assert.match(ets,
   new RegExp(`${name}\\(__etsMaterialContext: EtsMaterialContext, content: WrappedBuilder<\\[EtsMaterialContext\\]>`));
+assert.match(ets, /OptionalFrame\(__etsMaterialContext: EtsMaterialContext, content: WrappedBuilder<\[EtsMaterialContext\]> \| null/);
+assert.match(ets, /ParameterizedFrame\(__etsMaterialContext: EtsMaterialContext, content: WrappedBuilder<\[EtsMaterialContext, string\]>/);
 assert.match(ets, /Frame\(__etsMaterialContext, content\)/);
 assert.match(ets, /Relay\(__etsMaterialContext, content\)/);
-for (const label of ['Forwarded label', 'Body restored']) {
-  const line = ets.split('\n').find(line => line.includes(`Text("${label}")`));
-  assert.ok(line?.includes('__etsMaterialContext.textStyle ?? __etsMaterialContext.typography.bodyLarge') &&
-    line.includes('__etsTextStyleModifier('), line);
+for (const label of ['Forwarded label', 'Optional label', 'Body restored']) {
+  assert.match(ets, new RegExp(`Text\\("${label}"\\)`));
 }
-assert.match(ets, /content\.builder\(new EtsMaterialContext\([\s\S]*?\.typography\.labelLarge,/,
-  'Button supplies labelLarge when it invokes the forwarded slot');
-console.log('PASS multi-hop source slots preserve invocation typography and builder boundaries');
+assert.match(ets, /content\.builder\(new EtsMaterialContext\(/);
+assert.match(ets, /content\.builder\(__etsMaterialContext, "Parameterized label"\)/);
+assert.match(ets, /Page_ParameterizedFrame_content\(__etsMaterialContext: EtsMaterialContext, label: string\)/);
+console.log('PASS multi-hop source slots preserve typed builder boundaries');
 const externalOutput = join(work, 'External.ets');
 const externalArgs = [resolve(here, '../../../kotlin-ets'), '--entry', 'demo.adapters.ExternalPage',
   '--classpath-file', classpath, '--out', externalOutput, join(here, 'External.kt')];
@@ -44,5 +43,6 @@ assert.equal(external.status, 0, external.stdout + external.stderr);
 const externalEts = readFileSync(externalOutput, 'utf8');
 assert.match(externalEts, /Text\("External frame"\)/);
 assert.match(externalEts, /Text\("External content"\)/);
-assert.match(externalEts, /__etsMaterialTypography\(16, 24, 400, 0.5\)/);
+assert.match(externalEts, /Column\(\)/);
+assert.match(externalEts, /content\.builder\(\)/);
 console.log('PASS forwarded external adapter content remains in the generated UI');

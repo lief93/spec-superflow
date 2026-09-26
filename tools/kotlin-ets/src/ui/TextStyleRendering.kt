@@ -4,13 +4,12 @@ private val renderStyleSource = SourceSpan("EtsTextStyleModifier.kt", 0, 0)
 private val textAttributeType = EtsNamedType("TextAttribute", external = true)
 private val modifierContract = attributeModifierContract()
 internal val textAttributeModifierType = (modifierContract.symbol.type as EtsNamedType).copy(arguments = listOf(textAttributeType), external = true)
-internal val textStyleModifierType = etsClassSymbol("EtsTextStyleModifier", renderStyleSource).type as EtsNamedType
-internal val textStyleArgumentOrder = listOf("color", "fontSize", "fontStyle", "fontWeight", "fontFamily",
-    "letterSpacing", "textDecoration", "textAlign", "lineHeight", "overflow", "maxLines", "style")
+internal val textStyleModifierType = etsTextStyleModifierType
+internal val textStyleArgumentOrder = etsTextStyleArgumentOrder
 private val styleFactory = textStyleFactory()
 
 internal fun textStyleModifier(arguments: List<EtsExpression>, at: SourceSpan): EtsExpression =
-    EtsCall(EtsReference(styleFactory.symbol, at), arguments, textStyleModifierType, at)
+    etsTextStyleModifier(arguments, at)
 
 internal fun textStyleRenderingFiles(program: EtsProgram): List<EtsFile> {
     var used = false
@@ -55,7 +54,8 @@ private fun styleModifierClass(): EtsClass {
     val at = renderStyleSource
     fun nativeEnum(type: String, name: String): EtsExpression {
         val target = EtsNamedType(type)
-        return EtsMember(EtsReference(EtsSymbol("arkui:$type", type, target, at, true)), name, target, at)
+        return etsStableMember(EtsReference(EtsSymbol("arkui:$type", type, target, at, true)),
+            name, target, at)
     }
     fun number(value: Int) = EtsLiteral(value, EtsTypes.NUMBER, at)
     fun nil() = EtsLiteral(null, EtsTypes.NULL, at)

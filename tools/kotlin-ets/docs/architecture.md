@@ -42,6 +42,7 @@ raw expression string, source parser, or generated JavaScript is a target node.
 | `target/Tree.kt` | Compiler-independent types, symbols, declarations, expressions, statements, origins | Executing the source program |
 | `target/Validator.kt` | Target contract checks before output | Replacing Kotlin's semantic analyzer |
 | `target/TypeSubstitution.kt` | Substitute target generic types by binder identity | Inferring source types again or matching type-parameter names |
+| `target/UiEvaluationOrder.kt` | Target-expression effect metadata, once-only UI bindings and safe binding simplification | Guessing purity from Compose/ArkUI API names or printed source |
 | `target/Traversal.kt` | Exhaustive structural traversal shared by dependency consumers | Selecting only the currently previewed branch |
 | `target/Printer.kt` | Parentheses, escaping, indentation, target source syntax | Calls into Kotlin IR, adapters, or preview evaluation |
 | `output/Modules.kt` | Per-source-file output, symbol/type imports, required runtime support | Re-parsing printed expressions or renaming collisions silently |
@@ -62,6 +63,16 @@ contract tests, not additional compiler frameworks.
   frontend's resolved type arguments; it does not infer them from target text.
 - Every expression has a target type and source span. Lowering chooses target
   operators or runtime calls before formatting begins.
+- Target references and member access carry evaluation semantics. Language
+  lowering marks mutable local and top-level storage as runtime reads; member
+  access is conservative by default unless language or platform lowering marks
+  the stored property or fixed target constant stable. The decision is stored in
+  the typed target node; UI adapters and printers do not maintain name-based
+  purity lists.
+- A neutral widget may retain its explicit source-argument evaluation sequence.
+  The Harmony lowering binds non-reorderable values once, in that sequence, and
+  rewrites every target consumer to the typed binding. A later target pass removes
+  only bindings whose complete expression tree is proven safe to reorder.
 - `CallRule.lower` returns a typed node or declines the call. Language lowering
   checks an accepted result against the mapped source result type. No adapter
   returns an arbitrary target expression string.
@@ -103,9 +114,12 @@ concatenation lowering, is now integrated; see `official-lowering.md`.
 In particular, loading inline library
 bodies is different from reading a JVM method signature.
 
-The existing bounded Compose adapter now returns `EtsProgram` throughout:
-controls/children/attributes, loops/conditions, fields/builders, slots and event
-callbacks. `UiTextModule` and the independent UI text emitter were removed.
+Page mode now has one path: `ComposeWidgetPipeline` lowers resolved Compose calls
+to the neutral widget model, `HarmonyWidgetBackend` lowers that model to typed
+target nodes, and ordinary declarations use `IrDeclarationToEts`. The legacy
+`ComposeLowering` page assembler, `UiTextModule` and independent UI text emitter
+were removed. Controls/children/attributes, loops/conditions, fields/builders,
+slots and event callbacks all reach the same `EtsProgram`.
 The same validator, traversal and printer handle language and UI nodes. Fixed
 typography/touch implementations are explicit framework runtime dependencies.
 This completes the representation migration, not support for all Compose APIs.

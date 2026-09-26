@@ -9,12 +9,16 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.visitors.*
 
 /** Source-level counterpart of Kotlin/JS's symbol worklist, without JS DCE context. */
-internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
+data class SourceSelectionResult(val report: String, val declarations: Set<IrDeclaration>)
+
+fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
     prepareDeclaration: (IrDeclaration) -> Unit = {}, ignored: Set<IrElement> = emptySet(),
     externalSourceType: (IrType) -> Boolean = { false },
     externalSourceCall: (IrSimpleFunction) -> Boolean = { false },
+    targetOwnsSourceArgument: (IrCall, Int) -> Boolean = { _, _ -> false },
     retainUnreferencedFileInitializer: (IrProperty) -> Boolean = { true },
-    omitUnreferencedFileInitializer: (IrProperty) -> Unit = {}): String {
+    omitUnreferencedFileInitializer: (IrProperty) -> Unit = {},
+    prune: Boolean = true): SourceSelectionResult {
     val declarations = module.files.flatMap { it.declarations }
     val source = declarations.toSet()
     val roots = declarations.filterIsInstance<IrSimpleFunction>().filter {
@@ -30,6 +34,8 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
     val requiredMembers = mutableSetOf<Pair<IrClass, String>>()
     val virtualMembers = mutableSetOf<String>()
     val referencedFunctions = mutableSetOf<IrSimpleFunction>()
+    val targetOwnedArguments = java.util.Collections.newSetFromMap(
+        java.util.IdentityHashMap<IrElement, Boolean>())
     fun candidate(function: IrSimpleFunction) = function.parent is IrClass && function.correspondingPropertySymbol == null
     fun inherits(owner: IrClass, base: IrClass, visited: MutableSet<IrClass> = mutableSetOf()): Boolean =
         owner == base || visited.add(owner) && owner.superTypes.any {
@@ -47,6 +53,12 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
     fun requireValueMember(type: IrType, member: String) {
         if (type.isPrimitiveType() || type.isString() || type.isNothing()) return
         requireMember(type.classOrNull?.owner, member)
+    }
+    fun IrType.references(symbol: IrSymbol): Boolean {
+        val simple = this as? IrSimpleType ?: return false
+        return simple.classifier == symbol || simple.arguments.any {
+            (it as? IrTypeProjection)?.type?.references(symbol) == true
+        }
     }
 
     fun name(declaration: IrDeclaration): String = (declaration as? IrDeclarationWithName)?.let(::symbolName)
@@ -111,7 +123,8 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
         }
         declaration.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) {
-                if (element in ignored) return
+                if (element in ignored || element in targetOwnedArguments) return
+                var targetOwnedTypeArguments = emptySet<Int>()
                 if (element is IrSimpleFunction && candidate(element)) {
                     members.add(element)
                     if (!required(element) || !visitedMembers.add(element)) return
@@ -121,6 +134,22 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
                     element.arguments.forEach { requireValueMember(it.type, "toString") }
                 if (element is IrCall) {
                     val function = element.symbol.owner
+                    val targetOwnedValueArguments = (0 until element.valueArgumentsCount).filterTo(mutableSetOf()) { index ->
+                        targetOwnsSourceArgument(element, index)
+                    }
+                    targetOwnedValueArguments.forEach { index ->
+                        element.getValueArgument(index)?.let(targetOwnedArguments::add)
+                    }
+                    targetOwnedTypeArguments = function.typeParameters.indices.filterTo(mutableSetOf()) { typeIndex ->
+                        val symbol = function.typeParameters[typeIndex].symbol
+                        function.valueParameters.withIndex().any { (index, parameter) ->
+                            index in targetOwnedValueArguments && parameter.type.references(symbol)
+                        } && function.valueParameters.withIndex().none { (index, parameter) ->
+                            index !in targetOwnedValueArguments && parameter.type.references(symbol)
+                        } && function.dispatchReceiverParameter?.type?.references(symbol) != true &&
+                            function.extensionReceiverParameter?.type?.references(symbol) != true &&
+                            !function.returnType.references(symbol)
+                    }
                     if (symbolName(function) == "kotlin.internal.ir.EQEQ" &&
                         (0 until element.valueArgumentsCount).map { element.getValueArgument(it) }
                             .none { it is IrConst && it.kind == IrConstKind.Null })
@@ -132,7 +161,9 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
                 if (element is IrDeclarationReference &&
                     (element !is IrCall || !externalSourceCall(element.symbol.owner)))
                     reference(element.symbol, declaration)
-                if (element is IrMemberAccessExpression<*>) element.typeArguments.forEach { it?.let(::type) }
+                if (element is IrMemberAccessExpression<*>) element.typeArguments.forEachIndexed { index, argument ->
+                    if (index !in targetOwnedTypeArguments) argument?.let(::type)
+                }
                 when (element) {
                     is IrSimpleFunction -> {
                         type(element.returnType)
@@ -165,16 +196,18 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
     val report = "{\"event\":\"source-selection\",\"entry\":" + quote(entry) +
         ",\"kept\":[" + declarations.filter { it in kept }.joinToString(",") { item(it, kept.getValue(it)) } +
         "],\"excluded\":[" + declarations.filter { it !in kept }.joinToString(",") { item(it, "not reachable from entry") } + "]}"
-    module.files.forEach { it.declarations.removeAll { declaration -> declaration !in kept } }
-    module.acceptVoid(object : IrElementVisitorVoid {
-        override fun visitElement(element: IrElement) {
-            if (element is IrClass) element.declarations.removeAll {
-                it is IrSimpleFunction && candidate(it) && !required(it)
+    if (prune) {
+        module.files.forEach { it.declarations.removeAll { declaration -> declaration !in kept } }
+        module.acceptVoid(object : IrElementVisitorVoid {
+            override fun visitElement(element: IrElement) {
+                if (element is IrClass) element.declarations.removeAll {
+                    it is IrSimpleFunction && candidate(it) && !required(it)
+                }
+                element.acceptChildrenVoid(this)
             }
-            element.acceptChildrenVoid(this)
-        }
-    })
-    return report
+        })
+    }
+    return SourceSelectionResult(report, kept.keys.toSet())
 }
 
 /**
@@ -183,7 +216,7 @@ internal fun selectSourceDeclarations(module: IrModuleFragment, entry: String,
  * dependency. A direct reference still retains the property through the normal
  * symbol worklist.
  */
-internal fun hasSourceFileInitializerEffects(property: IrProperty): Boolean {
+fun hasSourceFileInitializerEffects(property: IrProperty): Boolean {
     val initializer = property.backingField?.initializer?.expression ?: return false
     var found = false
     initializer.acceptVoid(object : IrElementVisitorVoid {

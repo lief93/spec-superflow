@@ -27,6 +27,7 @@ internal class ComposeContentScaleRule : CallRule {
         val name = values.entries.firstOrNull { propertyName == "$sourceType.Companion.${it.key}" }?.value
             ?: throw Unsupported(Diagnostic("UNSUPPORTED", "Unsupported ContentScale: $propertyName", language.source(call)))
         val at = language.source(call)
-        return EtsMember(EtsReference(EtsSymbol("arkui:ImageFit", "ImageFit", targetType, at, external = true)), name, targetType, at)
+        return etsStableMember(EtsReference(EtsSymbol("arkui:ImageFit", "ImageFit", targetType, at,
+            external = true)), name, targetType, at)
     }
 }

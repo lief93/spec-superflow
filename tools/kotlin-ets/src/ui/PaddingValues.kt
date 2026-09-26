@@ -1,8 +1,6 @@
 package dev.ets
 
 private val paddingSource = SourceSpan("EtsPadding.kt", 0, 0)
-internal val paddingType = EtsRecordType("Padding", linkedMapOf("left" to EtsTypes.NUMBER,
-    "right" to EtsTypes.NUMBER, "top" to EtsTypes.NUMBER, "bottom" to EtsTypes.NUMBER))
 private val horizontalPadding = EtsSymbol("padding:horizontal", "horizontal", EtsTypes.NUMBER, paddingSource)
 private val verticalPadding = EtsSymbol("padding:vertical", "vertical", EtsTypes.NUMBER, paddingSource)
 private val symmetricPaddingFunction = EtsFunction("__etsSymmetricPadding",

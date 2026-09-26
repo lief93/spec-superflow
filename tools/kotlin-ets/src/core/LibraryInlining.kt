@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithName
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
+import org.jetbrains.kotlin.ir.declarations.IrValueParameter
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrInlinedFunctionBlock
@@ -34,11 +35,20 @@ import org.jetbrains.kotlin.utils.addToStdlib.assignFrom
 internal data class UnavailableInlineBody(val symbol: String, val source: SourceSpan, val evidence: String)
 
 /** Select only bodies supplied by the session's checked source/binary provider. */
-internal fun lowerSourceInlineFunctions(input: JvmFir2IrPipelineArtifact, bodies: FunctionBodies): List<UnavailableInlineBody> {
+internal fun lowerSourceInlineFunctions(input: JvmFir2IrPipelineArtifact, bodies: FunctionBodies,
+    retainSourceDefault: (IrValueParameter) -> Boolean = { true }): List<UnavailableInlineBody> {
     val module = input.result.irModuleFragment
     val unavailable = mutableListOf<UnavailableInlineBody>()
     module.files.forEach { file ->
         file.acceptChildrenVoid(object : IrElementVisitorVoid {
+            override fun visitValueParameter(declaration: IrValueParameter) {
+                if (declaration.defaultValue != null && !retainSourceDefault(declaration)) {
+                    declaration.defaultValue = null
+                    return
+                }
+                declaration.acceptChildrenVoid(this)
+            }
+
             override fun visitElement(element: IrElement) {
                 if (element is IrCall && element.symbol.owner.isInline && element.symbol.owner.body == null) {
                     val function = element.symbol.owner

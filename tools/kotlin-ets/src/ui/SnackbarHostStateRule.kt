@@ -5,9 +5,6 @@ import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classFqName
 
-private val snackbarHostStateSource = SourceSpan("EtsSnackbarHostState.kt", -1, -1)
-internal val snackbarHostStateType = etsClassSymbol("EtsSnackbarHostState", snackbarHostStateSource).type as EtsNamedType
-
 /** Target-owned identity for a host that has no active snackbar at component construction. */
 internal class ComposeSnackbarHostStateRule : CallRule {
     override fun mapType(type: IrType, language: Language): EtsType? =

@@ -35,6 +35,7 @@ internal class ComposeAlignmentRule : CallRule {
         val (type, name) = values[symbolName(property)] ?: return null
         val at = language.source(call)
         val target = EtsNamedType(type)
-        return EtsMember(EtsReference(EtsSymbol("arkui:$type", type, target, at, external = true)), name, target, at)
+        return etsStableMember(EtsReference(EtsSymbol("arkui:$type", type, target, at, external = true)),
+            name, target, at)
     }
 }

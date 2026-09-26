@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.sp
             Surface { Label() }
             Button(onClick = {}) { Text("Button") }
             Text("Explicit", style = MaterialTheme.typography.titleSmall, fontSize = 19.sp)
+            Text("Copied", style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = 30.sp, color = MaterialTheme.colorScheme.onBackground))
             MaterialTheme(typography = Typography(bodyLarge = TextStyle(fontSize = 31.sp))) {
                 Text("Nested", style = theme.typography.bodyLarge, color = theme.colorScheme.primary)
             }

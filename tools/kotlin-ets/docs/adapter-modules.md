@@ -95,20 +95,19 @@ it is module-wide and never inferred from a matching name.
 
 SPI instantiates providers once per compiler process. A registry calls
 `create(target, null)` for ordinary value/effect/type rules. These delegates may
-handle `lower`, `lowerStatement`, and `mapType`, but not UI dispatch.
+handle `lower`, `lowerStatement`, and `mapType`.
 
-Compose conversion separately calls `create(target, scopedUi)` for UI-only
-delegates. These handle `lowerUi`; ordinary operations are not dispatched again.
-Factories can be called more than once: keep scoped UI services in the returned
-rule, not in global mutable state. Do not assume a single UI factory instance or
-reuse one scope's services in another.
+The former page assembler also called `create(target, scopedUi)` and dispatched
+`lowerUi`. That lifecycle is historical and has no production caller. New UI
+extensions must map source calls into the neutral Widget model and let the
+Harmony backend own ArkUI control selection; do not revive scoped UI factories.
 
-`ui.content(expression, scope)` delegates content conversion and
-`ui.decorate(modifier, scope, element, boundaries)` delegates existing modifier
-semantics. An explicit UI source call claim gets an opportunity before structural
-business-component conversion and built-in controls. This UI projection is
-separate from the ordinary dependency body-first decision above. Returning
-`null` means the rule did not handle the call; it is not an empty UI substitute.
+For UI structure, implement `ComposeWidgetAdapterModule` on the same SPI
+provider and return one `ComposeWidgetRule`. The rule may use
+`ComposeWidgetServices.content`, `modifiers`, and `value`; those services retain
+source slots, modifier order, semantic value type and source spans. The result
+must be a neutral `Widget`, so project adapters cannot bypass the shared Harmony
+backend or target validator with prebuilt ArkUI statements.
 
 ### Initialization and imports
 
@@ -133,7 +132,7 @@ other overloads and receiver-bearing calls. The source library's behavior must m
 `examples/adapters/frame` is an external provider. It maps the finite
 `demo.adapters.Frame(label, modifier, content)` wrapper to a `Column` with a
 `Text` heading, then delegates its real Compose content and modifiers. It uses
-module-local `Column`/`Text` signatures without editing central ArkUI APIs.
+the neutral Widget SPI without editing central Compose or ArkUI rule lists.
 All three arguments must be explicit. In particular, an omitted `modifier`
 rejects at the source call, even if the Kotlin declaration provides a default.
 This finite example does not evaluate Kotlin default expressions and must not
@@ -225,10 +224,9 @@ Frozen build-side SHA-256:
 0c8d0f1feec61971d83158de4745a12df5c35f79f3a49662c07db1a6f9359694  examples/adapters/frame/src/ExampleFrameModule.kt
 ```
 
-The CLI snapshot manifest contains hashes for all production sources, module
-descriptors and fixtures, with live/snapshot equality checked. Main API/wiring
-hashes in that proof begin `bf8611261237` (AdapterModules), `b89235b41246` (Main),
-and `21b9ec74b872` (ComposeLowering).
+The CLI snapshot manifest and hashes below record the historical adapter-module
+experiment. Its `ComposeLowering` hash is not an active production dependency;
+the file has been removed.
 
 Cost observation for this lane: the explicit clock window was 08:09:31 through
 08:26:32 UTC (17m01s); initial inspection preceded the first clock capture.

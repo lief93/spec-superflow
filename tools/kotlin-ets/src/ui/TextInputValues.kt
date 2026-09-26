@@ -110,7 +110,7 @@ internal class ComposeTextInputValueRule : CallRule {
             (0 until result.valueArgumentsCount).forEach { index ->
                 result.getValueArgument(index)?.let { language.expression(it, scope) }
             }
-            return EtsNew(interactionSourceType, emptyList(), at)
+            return EtsNew(interactionSourceType, emptyList(), at, stableIdentity = true)
         }
         if (api == "androidx.compose.foundation.interaction.MutableInteractionSource") {
             (0 until call.valueArgumentsCount).forEach { index ->
@@ -171,10 +171,11 @@ internal class ComposeTextInputValueRule : CallRule {
         } } }
         if (used.isEmpty()) return emptyList()
         val declarations = mutableListOf<EtsDeclaration>()
-        fun marker(type: EtsNamedType, global: EtsSymbol? = null) {
+        fun marker(type: EtsNamedType, global: EtsSymbol? = null, valueSnapshot: Boolean = false) {
             if (used.none { it.symbolId == type.symbolId }) return
             declarations += EtsClass(type.name, listOf(EtsFunction("constructor", emptyList(), EtsTypes.VOID,
-                emptyList(), inputSource, kind = EtsFunctionKind.CONSTRUCTOR)), inputSource, exported = true)
+                emptyList(), inputSource, kind = EtsFunctionKind.CONSTRUCTOR)), inputSource, exported = true,
+                valueSnapshot = valueSnapshot)
             if (global != null) declarations += EtsGlobal(global, EtsNew(type, emptyList(), inputSource), false, exported = true)
         }
         marker(visualTransformationType)
@@ -188,7 +189,7 @@ internal class ComposeTextInputValueRule : CallRule {
         marker(keyboardActionsType, defaultKeyboardActions)
         marker(keyboardActionsCompanionType, keyboardActionsCompanion)
         marker(interactionSourceType)
-        marker(textFieldColorsType)
+        marker(textFieldColorsType, valueSnapshot = true)
         marker(textFieldDefaultsType, textFieldDefaultsObject)
         return listOf(EtsFile(inputSource.file!!, declarations))
     }

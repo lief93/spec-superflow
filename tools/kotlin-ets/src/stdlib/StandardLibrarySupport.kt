@@ -27,6 +27,14 @@ private val supportFunctions = exceptionSupportFunctions + collectionSupportFunc
           return values;
         }
     """.trimIndent(), listOf("stdlib:__etsIllegalArgumentException")),
+    SupportFunction("stdlib:__etsRepeatIndices", """
+        function __etsRepeatIndices(count: number): Array<number> {
+          if (count < 0) { return __etsIllegalArgumentException('Count must be non-negative.'); }
+          const values: Array<number> = [];
+          for (let index = 0; index < count; index++) { values.push(index); }
+          return values;
+        }
+    """.trimIndent(), listOf("stdlib:__etsIllegalArgumentException")),
     SupportFunction("stdlib:__etsIntArrayHash", """
         function __etsIntArrayHash(values: Array<number> | null): number {
           if (values === null) { return 0; }

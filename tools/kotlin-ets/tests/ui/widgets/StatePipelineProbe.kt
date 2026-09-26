@@ -67,12 +67,12 @@ fun main(args: Array<String>) {
         check("@State private __etsState_count: number = 0;" in code)
         check("@State private __etsState_label: string = \"ready\";" in code)
         check("this.__etsState_enabled = ! this.__etsState_enabled;" in code)
-        check("this.__etsState_count = this.__etsState_count + this.step | 0;" in code)
+        check("this.__etsState_count = this.__etsState_count + step | 0;" in code)
         check("this.__etsState_label = this.__etsState_enabled ? \"on\" : \"off\";" in code)
-        check("this.onState(this.__etsState_label);" in code)
-        check("this.__etsState_enabled ?" in code && "this.title" in code &&
-            "(this.model as StateModel).name" in code)
-        check("Text(this.subtitle === null ? \"none\" : this.subtitle as string)" in code)
+        check("onState(this.__etsState_label);" in code)
+        check("this.__etsState_enabled ?" in code && "title" in code &&
+            "(model as StateModel).name" in code)
+        check("Text(subtitle === null ? \"none\" : subtitle as string)" in code)
         check(listOf("remember", "mutableStateOf", "androidx.compose.runtime").none(code::contains))
         val expected = linkedMapOf(
             "SaveableState" to "rememberSaveable is outside",

@@ -139,20 +139,19 @@ changes tests and this audit only. The production source tree before and after i
 | `Backend.kt`, both lower overloads | Single-module overload delegates to module-list overload, then the same `IrToEts.program` boundary |
 | `Modules.kt`, `--out` | Accepts an already-typed program, validates and prints it; no Kotlin IR input |
 | `Modules.kt`, `--out-dir` | Accepts the same typed program, validates it, assembles imports/runtime support and prints files; its extra `EtsProgram` constructors are typed subsets/import headers, not a second IR translation |
-| `ComposeLowering.kt` | Separate page assembly exists and is explicitly outside this language-only audit; unchanged |
+| Page mode | `ComposeWidgetPipeline` reuses language declaration lowering, lowers Compose structure through the neutral Widget model and returns the same typed `EtsProgram`; the former separate page assembler was removed |
 
 This retains the Kotlin/JS reference's phase separation: IR-to-IR passes, then
 module/file AST generation, then output assembly/printing. See
 `kotlin-js-backend-reference.md`, sections 2–3. ETS keeps its typed target tree;
 the JS AST/printer is not used as an intermediate representation.
 
-“Unique” here means the audited production **language CLI route** and its two
-output modes, not one `EtsProgram` allocation or a type-system prohibition on
+“Unique” here means the audited production **language and page CLI routes** and
+their output modes, not one `EtsProgram` allocation or a type-system prohibition on
 calling low-level public mappers. Tests can call `IrToEts`/file mappers directly;
 the API does not carry an unforgeable “all phases completed” token. This audit
 does not claim all Kotlin semantics have moved out of `LanguageLowering`, nor
-does it cover Compose, KLIB loading, project adapter behavior, or ArkTS SDK/device
-acceptance. None of those implementations changed.
+does it establish KLIB, project-adapter, or ArkTS SDK/device acceptance.
 
 ### Five acceptance checks
 
@@ -209,11 +208,12 @@ The production route has one typed output boundary with two serialization forms:
 | --- | --- |
 | language `--out` | official frontend/IR phases → `EtsBackend.lower` → `IrToEts.program` → typed `EtsProgram` → validator → `emitEtsProgram` → validator → printer |
 | language `--out-dir` | same language boundary → `emitEtsModules` → validator → typed per-file assembly → printer |
-| page `--out` | official frontend/IR phases → `ComposeLowering.lower` → typed `EtsProgram` → `emitEtsProgram` → validator → printer |
-| page `--out-dir` | same page assembler → `emitEtsModules` → validator → typed per-file assembly → printer |
+| page `--out` | official frontend/IR phases → `ComposeWidgetPipeline.lower` → neutral widgets → Harmony target nodes + ordinary `IrDeclarationToEts` declarations → typed `EtsProgram` → `emitEtsProgram` → validator → printer |
+| page `--out-dir` | same widget pipeline → `emitEtsModules` → validator → typed per-file assembly → printer |
 
-`ComposeLowering` is a typed page assembler, so it does not re-enter the
-ordinary-language `IrToEts` mapper. Its public result is `EtsProgram`, and
+`ComposeWidgetPipeline` joins widget lowering with the ordinary declaration
+mapper instead of maintaining a second language mapper. Its public result is
+`EtsProgram`, and
 `Main.kt` can publish its text only through the same emitters. The final
 `Files.writeString` calls consume strings already
 returned by those emitters. Other writes in `Main.kt` publish diagnostics,
@@ -221,7 +221,7 @@ preflight JSON, or resources rather than ETS source. `project.mjs` only forwards
 the selected mode and output flag to the same `kotlin-ets` launcher; its
 `--collect-only` path produces no target.
 
-The test-only JVM agent now observes `ComposeLowering`, `IrToEts`, whole-program
+The test-only JVM agent now observes `ComposeWidgetPipeline`, `IrToEts`, whole-program
 validation, the shared emitters, and `EtsPrinter` without adding a production
 trace hook. Exact traces reject an alternate CLI generator, a missing typed
 program, an emitter bypass, or printing that starts before validation. The

@@ -7,7 +7,7 @@ import org.jetbrains.kotlin.ir.types.*
 private val emptyModifierSource = SourceSpan("EtsEmptyModifier.kt", 0, 0)
 internal val emptyModifierType = etsClassSymbol("EtsEmptyModifier", emptyModifierSource).type as EtsNamedType
 private val emptyModifier = EtsSymbol("compose:emptyModifier", "__etsEmptyModifier", emptyModifierType, emptyModifierSource)
-internal fun emptyModifierValue(at: SourceSpan) = EtsReference(emptyModifier, at)
+fun emptyModifierValue(at: SourceSpan) = EtsReference(emptyModifier, at)
 
 /** Only the identity value is representable here; modifier chains are not erased to it. */
 internal class ComposeEmptyModifierRule : CallRule {

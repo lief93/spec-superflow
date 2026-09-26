@@ -38,9 +38,10 @@ fun main(args: Array<String>) {
                 }
             }
         }
+        val shapes = ComposeShapeRule().also { it.prepareModule(module, sink) }
         val language = EtsBackend(sink,
             listOf(projectTokens, StandardLibraryRules(), ComposeColorValueRule(), ComposeDimensionRule(),
-                ComposeFontRule(FontResources()), ComposeAlignmentRule(), imageResources, strings)).language
+                ComposeFontRule(FontResources()), ComposeAlignmentRule(), shapes, imageResources, strings)).language
         val functions = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
         val page = functions.single { it.fqNameWhenAvailable?.asString() == "widgetsfixture.Page" }
         val scope = Scope()
@@ -195,6 +196,14 @@ fun main(args: Array<String>) {
         val tree = mutableListOf<EtsNode>()
         walkEts(builder, tree::add)
         val elements = tree.filterIsInstance<EtsUiElement>()
+        val orderedBindings = tree.filterIsInstance<EtsUiForEach>().mapNotNull { binding ->
+            val value = (binding.items as? EtsArray)?.elements?.singleOrNull() ?: return@mapNotNull null
+            binding.item.symbol.id to value
+        }.toMap()
+        fun sourceValue(value: EtsExpression): EtsExpression {
+            val reference = value as? EtsReference ?: return value
+            return orderedBindings[reference.symbol.id]?.let(::sourceValue) ?: value
+        }
         check(elements.any { (it.call.callee as? EtsReference)?.symbol?.name == "Stack" })
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Text" } == 8)
         check(elements.count { (it.call.callee as? EtsReference)?.symbol?.name == "Image" } == 2)
@@ -203,17 +212,20 @@ fun main(args: Array<String>) {
         check(allAttributes.count { (it.callee as? EtsReference)?.symbol?.name == "layoutWeight" } == 3)
         check(allAttributes.any { attribute -> (attribute.callee as? EtsReference)?.symbol?.name == "align" &&
             (attribute.arguments.singleOrNull() as? EtsMember)?.name == "BottomEnd" })
-        check(allAttributes.any { attribute -> (attribute.callee as? EtsReference)?.symbol?.name == "height" &&
+        check(allAttributes.any { attribute -> (attribute.callee as? EtsReference)?.symbol?.name == "width" &&
+            (attribute.arguments.singleOrNull() as? EtsLiteral)?.value == "50.0%" })
+        check(allAttributes.none { attribute -> (attribute.callee as? EtsReference)?.symbol?.name == "height" &&
             (attribute.arguments.singleOrNull() as? EtsLiteral)?.value == "50.0%" })
         val nativeButton = elements.single { (it.call.callee as? EtsReference)?.symbol?.name == "Button" }
         check(nativeButton.children?.single() is EtsUiElement)
         check(nativeButton.attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }.arguments.single() == button.onClick)
         check(elements.filter { (it.call.callee as? EtsReference)?.symbol?.name == "Text" }
-            .any { it.call.arguments.single() == buttonLabel.text.value })
+            .any { sourceValue(it.call.arguments.single()) == buttonLabel.text.value })
         fun textAttributes(text: Widget.Text<EtsExpression, SourceSpan>) = elements.single {
-            (it.call.callee as? EtsReference)?.symbol?.name == "Text" && it.call.arguments.single() == text.text.value
+            (it.call.callee as? EtsReference)?.symbol?.name == "Text" &&
+                sourceValue(it.call.arguments.single()) == text.text.value
         }.attributes.map { (it.callee as EtsReference).symbol.name }
-        check(textAttributes(resourceTitle) == listOf("align", "fontSize", "fontWeight", "fontFamily", "lineHeight"))
+        check(textAttributes(resourceTitle) == listOf("align", "fontSize", "fontWeight", "fontFamily", "lineHeight", "width"))
         check(textAttributes(buttonLabel) == listOf("align", "fontSize", "fontWeight", "fontFamily", "lineHeight"))
         val nativeFields = elements.filter { (it.call.callee as? EtsReference)?.symbol?.name == "TextInput" }
         check(nativeFields.all { field ->
@@ -221,30 +233,32 @@ fun main(args: Array<String>) {
                 field.attributes.single { (it.callee as EtsReference).symbol.name == "onChange" }
                     .arguments.single() == materialField.onValueChange
         })
-        fun modifierLayers(widget: Widget<EtsExpression, SourceSpan>): List<EtsUiElement> {
-            val result = mutableListOf<EtsUiElement>()
-            var current = HarmonyWidgetBackend().lower(widget)
-            repeat(widget.modifiers.size) {
-                result += current
-                current = current.children!!.single() as EtsUiElement
-            }
-            return result
-        }
         fun attributes(element: EtsUiElement) = element.attributes.map { (it.callee as EtsReference).symbol.name }
-        val textLayers = modifierLayers(styledText)
-        check(textLayers.map(::attributes) == listOf(listOf("width", "height"), listOf("backgroundColor"),
-            listOf("enabled", "onClick"), listOf("padding")))
-        check(textLayers[2].attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
+        val nativeStyledText = HarmonyWidgetBackend().lower(styledText)
+        check(attributes(nativeStyledText).takeLast(6) ==
+            listOf("width", "height", "backgroundColor", "enabled", "onClick", "padding"))
+        check(nativeStyledText.attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
             .arguments.single() == styledClick.onClick)
-        val imageLayers = modifierLayers(resourceImage)
-        check(imageLayers.map(::attributes) == listOf(listOf("enabled", "onClick"),
-            listOf("backgroundColor"), listOf("width", "height")))
-        check(imageLayers[0].attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
+        val nativeResourceImage = HarmonyWidgetBackend().lower(resourceImage)
+        check(attributes(nativeResourceImage).takeLast(5) ==
+            listOf("enabled", "onClick", "backgroundColor", "width", "height"))
+        check(nativeResourceImage.attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
             .arguments.single() == imageClick.onClick)
+        val effectfulText = adapter.lower(functions.single { it.name.asString() == "EffectfulValue" })
+            .widgets.single() as Widget.Text
+        check(effectfulText.text.value.type == EtsTypes.STRING)
+        val effectfulBackground = adapter.lower(functions.single { it.name.asString() == "EffectfulBackground" })
+            .widgets.single() as Widget.Text
+        check((effectfulBackground.modifiers.single() as WidgetModifier.Background).color.value.type == EtsTypes.NUMBER)
+        val shapedBackground = adapter.lower(functions.single { it.name.asString() == "ShapedBackground" })
+            .widgets.single() as Widget.Text
+        check((shapedBackground.modifiers.single() as WidgetModifier.Background).borderRadius?.let {
+            (it as? EtsLiteral)?.value == "50%"
+        } == true)
         val expected = linkedMapOf(
             "UnknownWidget" to "Unsupported resolved widget API", "UnknownModifier" to "Unsupported resolved widget Modifier API",
             "WholeTextStyle" to "widget argument: style", "Conditional" to "Unsupported widget children statement",
-            "Helper" to "Unsupported resolved widget API", "EffectfulValue" to "stable scalars",
+            "Helper" to "Unsupported resolved widget API",
             "CallbackFactory" to "callback requires a lambda", "NegativePadding" to "finite and non-negative",
             "MutableLocal" to "Mutable widget local", "EarlyReturn" to "Widget return",
             "ArbitraryPainter" to "arbitrary Painter", "RichText" to "requires String text",
@@ -253,11 +267,9 @@ fun main(args: Array<String>) {
             "MaterialDecoration" to "widget argument: label",
             "TextFieldCallbackFactory" to "requires a lambda",
             "BrushBackground" to "widget argument: brush",
-            "ShapedBackground" to "widget argument: shape",
             "ClickSemantics" to "widget argument: onClickLabel",
             "ClickFactory" to "clickable onClick requires a lambda",
             "NegativeSize" to "finite and non-negative",
-            "EffectfulBackground" to "stable scalars",
             "UnknownStringToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.label",
             "UnknownColorToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.color",
             "UnknownStyleToken" to "Unmapped project widget token widgetsnegative.UnknownTokens.fontSize",

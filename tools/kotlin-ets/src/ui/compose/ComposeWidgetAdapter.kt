@@ -4,6 +4,7 @@ package dev.ets.compose
 import dev.ets.*
 import dev.ets.widgets.*
 import java.net.URI
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
@@ -11,6 +12,7 @@ import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.util.isNullable as isNullableType
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.ir.visitors.acceptVoid
@@ -21,10 +23,13 @@ import org.jetbrains.kotlin.name.FqName
  * Children are statically described; callbacks remain typed language expressions.
  */
 class ComposeWidgetAdapter(private val language: Language, private val diagnostics: DiagnosticSink,
-    private val sourceWidget: ((IrCall, Scope) -> EtsExpression?)? = null,
+    private val sourceWidget: ((IrCall, Scope, WidgetLayoutScope?) -> Widget<EtsExpression, SourceSpan>?)? = null,
     private val pagers: Map<IrValueSymbol, ComposeStateLowering.PagerStateBinding> = emptyMap(),
     private val scrolls: Map<IrValueSymbol, ComposeStateLowering.ScrollStateBinding> = emptyMap(),
-    private val lazyLists: Map<IrValueSymbol, ComposeStateLowering.LazyListStateBinding> = emptyMap()) {
+    private val lazyLists: Map<IrValueSymbol, ComposeStateLowering.LazyListStateBinding> = emptyMap(),
+    private val widgetRules: List<ComposeWidgetRule> = emptyList(),
+    private val sourceContent: ((IrExpression, Scope, WidgetLayoutScope?) ->
+        Children<EtsExpression, SourceSpan>?)? = null) {
     constructor(language: Language, diagnostics: DiagnosticSink,
         pagers: Map<IrValueSymbol, ComposeStateLowering.PagerStateBinding>) :
         this(language, diagnostics, null, pagers, emptyMap(), emptyMap())
@@ -37,6 +42,9 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         scrolls: Map<IrValueSymbol, ComposeStateLowering.ScrollStateBinding>,
         lazyLists: Map<IrValueSymbol, ComposeStateLowering.LazyListStateBinding>) :
         this(language, diagnostics, null, pagers, scrolls, lazyLists)
+    private val resolvedWidgetRules = coreComposeWidgetRules(diagnostics) + widgetRules
+    private val touchBoxes = linkedMapOf<IrCall, TouchTargets>()
+
     fun lower(function: IrSimpleFunction, scope: Scope = Scope(),
         handledStatements: Set<IrStatement> = emptySet()): Children<EtsExpression, SourceSpan> {
         diagnostics.currentFile = sourceFile(function)?.fileEntry?.name
@@ -50,9 +58,10 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             scope.fork(), function, handledStatements, null)
     }
 
-    fun lowerFunctionBody(function: IrFunction, scope: Scope): Children<EtsExpression, SourceSpan> =
+    fun lowerFunctionBody(function: IrFunction, scope: Scope,
+        parent: WidgetLayoutScope? = null): Children<EtsExpression, SourceSpan> =
         body(function.body ?: diagnostics.unsupported(function, "Widget helper has no body"),
-            scope.fork(), function, parent = null)
+            scope.fork(), function, parent = parent)
 
     private fun body(body: IrBody, scope: Scope, owner: IrFunction,
         handledStatements: Set<IrStatement> = emptySet(), parent: WidgetLayoutScope?): Children<EtsExpression, SourceSpan> = when (body) {
@@ -64,24 +73,54 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
     }
 
     private fun statements(statements: List<IrStatement>, scope: Scope, owner: IrFunction, terminal: Boolean = true,
-        handledStatements: Set<IrStatement> = emptySet(), parent: WidgetLayoutScope?): List<Widget<EtsExpression, SourceSpan>> =
-        statements.flatMapIndexed { index, statement -> if (statement in handledStatements) emptyList() else when (statement) {
-            is IrVariable -> {
+        handledStatements: Set<IrStatement> = emptySet(), parent: WidgetLayoutScope?): List<Widget<EtsExpression, SourceSpan>> {
+        val result = mutableListOf<Widget<EtsExpression, SourceSpan>>()
+        statements.forEachIndexed { index, statement ->
+            if (statement in handledStatements) return@forEachIndexed
+            if (statement is IrVariable) {
                 val initial = statement.initializer ?: diagnostics.unsupported(statement, "Uninitialized widget local")
                 if (statement.isVar) diagnostics.unsupported(statement, "Mutable widget local is outside the static widget subset")
                 when {
                     initial.type.classFqName?.asString() in setOf("androidx.compose.ui.Modifier", "androidx.compose.ui.Modifier.Companion") ->
-                        modifiers(initial, scope, parent)
-                    resolve(initial, scope) is IrFunctionExpression -> Unit
-                    else -> scalar(initial, scope)
+                        modifiers(initial, scope, parent).let {
+                            scope.aliases[statement.symbol] = initial
+                        }
+                    resolve(initial, scope) is IrFunctionExpression -> {
+                        scope.aliases[statement.symbol] = initial
+                    }
+                    else -> {
+                        val local = language.lowerLocal(statement, scope, retainCompilerTemporary = false)
+                        val reference = local.reference ?: return@forEachIndexed
+                        val value = local.initializer
+                            ?: diagnostics.unsupported(statement, "Uninitialized widget value binding")
+                        val tail = statements.drop(index + 1)
+                        val children = Children(statements(tail, scope, owner, terminal,
+                            handledStatements, parent))
+                        result += Widget.ValueScope(reference, value, children,
+                            language.source(statement))
+                        return result
+                    }
                 }
-                scope.aliases[statement.symbol] = initial
-                emptyList()
+                return@forEachIndexed
             }
+            result += when (statement) {
             is IrCall -> listOf(widget(statement, scope, parent))
             is IrWhen -> listOf(conditional(statement, scope, owner, parent))
             is IrBlock -> statements(statement.statements, scope.fork(), owner, terminal && index == statements.lastIndex,
                 handledStatements, parent)
+            is IrTypeOperatorCall -> when (statement.operator) {
+                IrTypeOperator.IMPLICIT_COERCION_TO_UNIT -> {
+                    val value = statement.argument
+                    if (value is IrWhen) listOf(conditional(value, scope, owner, parent, discarded = true))
+                    else statements(listOf(value), scope, owner, terminal && index == statements.lastIndex,
+                        handledStatements, parent)
+                }
+                IrTypeOperator.IMPLICIT_CAST, IrTypeOperator.IMPLICIT_NOTNULL ->
+                    statements(listOf(statement.argument), scope, owner,
+                        terminal && index == statements.lastIndex, handledStatements, parent)
+                else -> diagnostics.unsupported(statement,
+                    "Unsupported widget type operation: ${statement.operator}")
+            }
             is IrReturn -> {
                 if (statement.returnTargetSymbol.owner !== owner || !terminal || index != statements.lastIndex)
                     diagnostics.unsupported(statement, "Widget return must terminate its own children body")
@@ -91,11 +130,17 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             is IrGetObjectValue -> if (statement.type.isUnit()) emptyList() else
                 diagnostics.unsupported(statement, "Unsupported object in widget children")
             else -> diagnostics.unsupported(statement, "Unsupported widget children statement: ${statement.javaClass.simpleName}")
-        } }
+            }
+        }
+        return result
+    }
 
     private fun conditional(value: IrWhen, scope: Scope, owner: IrFunction,
-        parent: WidgetLayoutScope?): Widget.Conditional<EtsExpression, SourceSpan> {
-        if (!value.type.isUnit()) diagnostics.unsupported(value, "Widget conditional must produce Unit children")
+        parent: WidgetLayoutScope?, discarded: Boolean = false): Widget.Conditional<EtsExpression, SourceSpan> {
+        val nullableUnit = value.type.isNullableType() && value.type.makeNotNull().isUnit()
+        if (!discarded && !value.type.isUnit() && !nullableUnit)
+            diagnostics.unsupported(value, "Widget conditional must produce Unit children")
+        val discardBranchValues = discarded || nullableUnit
         val branches = value.branches.map { branch ->
             val condition = if (branch is IrElseBranch) null else {
                 if (!branch.condition.type.isBoolean())
@@ -103,31 +148,149 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 scalar(branch.condition, scope)
             }
             val nested = scope.fork()
-            val children = Children(statements(listOf(branch.result), nested, owner, parent = parent))
-            WidgetBranch(condition, children, language.source(branch.result))
+            val result = branch.result
+            val children = if (discardBranchValues && result is IrConst && result.value == null)
+                Children(emptyList())
+            else Children(statements(listOf(result), nested, owner, parent = parent))
+            WidgetBranch(condition, children, language.source(result))
         }
         return Widget.Conditional(branches, language.source(value))
     }
 
+    private fun repeat(call: IrCall, scope: Scope,
+        parent: WidgetLayoutScope?): Widget.ForEach<EtsExpression, SourceSpan> {
+        checkArguments(call, setOf("times", "action"))
+        val times = argument(call, "times")
+            ?: diagnostics.unsupported(call, "repeat requires times")
+        if (!times.type.isInt()) diagnostics.unsupported(times, "repeat times requires Int")
+        val count = scalar(times, scope)
+        if (count.type != EtsTypes.NUMBER)
+            diagnostics.unsupported(times, "repeat times requires target number")
+        val actionExpression = argument(call, "action")
+            ?: diagnostics.unsupported(call, "repeat requires action")
+        val action = lambda(actionExpression, scope)
+            ?: diagnostics.unsupported(actionExpression, "repeat action requires a source lambda")
+        if (!action.returnType.isUnit())
+            diagnostics.unsupported(action, "repeat action requires Unit result")
+        val parameter = action.valueParameters.singleOrNull()
+            ?: diagnostics.unsupported(action, "repeat action requires one index parameter")
+        if (!parameter.type.isInt())
+            diagnostics.unsupported(parameter, "repeat action index requires Int")
+        val source = language.source(call)
+        val item = EtsReference(EtsSymbol(
+            "compose-repeat:${source.file}:${source.start}:index",
+            parameter.name.asString(), EtsTypes.NUMBER, language.source(parameter)))
+        val child = scope.fork().also { it.bindings[parameter.symbol] = item }
+        val children = body(action.body
+            ?: diagnostics.unsupported(action, "repeat action requires a body"),
+            child, action, parent = parent)
+        return Widget.ForEach(WidgetIterationData.Count(count), item, children, source)
+    }
+
+    private fun touchTarget(touch: TouchTargets, scope: Scope): WidgetTouchTarget<EtsExpression, SourceSpan> {
+        val source = language.source(touch.box)
+        fun number(value: Double): EtsExpression = EtsLiteral(value, EtsTypes.NUMBER, source)
+        val item = scope.bindings[touch.index.symbol]
+            ?: diagnostics.unsupported(touch.box, "Unbound repeated touch target index")
+        val id = EtsBinary("+", EtsLiteral("__etsTouch${touch.box.startOffset}_",
+            EtsTypes.STRING, source), item, EtsTypes.STRING, source)
+        val response = WidgetRectangle(number(-touch.expandX), number(-touch.expandY),
+            number(maxOf(48.0, touch.width)), number(maxOf(48.0, touch.height)), source)
+        val mouse = WidgetRectangle(number(0.0), number(0.0),
+            EtsLiteral("100%", EtsTypes.STRING, source),
+            EtsLiteral("100%", EtsTypes.STRING, source), source)
+        return WidgetTouchTarget(id, response, mouse, source)
+    }
+
+    private fun touchGroup(touch: TouchTargets, source: SourceSpan): WidgetTouchGroup<EtsExpression, SourceSpan> {
+        fun number(value: Double): EtsExpression = EtsLiteral(value, EtsTypes.NUMBER, source)
+        val x = maxOf(0.0, touch.expandX - touch.inset - touch.rowHorizontal)
+        val y = maxOf(0.0, touch.expandY - touch.inset - touch.rowVertical)
+        val response = WidgetRectangle(number(-x), number(-y),
+            EtsLiteral("calc(100% + ${2 * x}vp)", EtsTypes.STRING, source),
+            EtsLiteral("calc(100% + ${2 * y}vp)", EtsTypes.STRING, source), source)
+        return WidgetTouchGroup(response, number(touch.inset), number(touch.width),
+            number(touch.height), source)
+    }
+
+    private fun requiresMinimumTouchArbitration(
+        modifiers: List<WidgetModifier<EtsExpression, SourceSpan>>): Boolean {
+        if (modifiers.none { it is WidgetModifier.Click } ||
+            modifiers.any { it is WidgetModifier.Click && it.touchTarget != null }) return false
+        fun constant(value: EtsExpression): Double? =
+            ((value as? EtsLiteral)?.value as? Number)?.toDouble()
+        var width: Double? = null
+        var height: Double? = null
+        modifiers.forEach { modifier -> when (modifier) {
+            is WidgetModifier.Size -> {
+                width = constant(modifier.width)
+                height = constant(modifier.height)
+            }
+            is WidgetModifier.Width -> width = constant(modifier.value)
+            is WidgetModifier.Height -> height = constant(modifier.value)
+            else -> Unit
+        } }
+        return width?.let { it < 48.0 } == true || height?.let { it < 48.0 } == true
+    }
+
     private fun widget(call: IrCall, scope: Scope, parent: WidgetLayoutScope?): Widget<EtsExpression, SourceSpan> {
-        sourceWidget?.invoke(call, scope)?.let { lowered ->
-            if (lowered.type != EtsTypes.VOID)
-                diagnostics.unsupported(call, "Source composable call must produce target void")
-            return Widget.BuilderCall(lowered, language.source(call))
+        if (symbolName(call.symbol.owner) == "kotlin.repeat") return repeat(call, scope, parent)
+        val services = object : ComposeWidgetServices {
+            override fun content(expression: IrExpression, scope: Scope,
+                parent: WidgetLayoutScope?,
+                arguments: List<EtsExpression>): Children<EtsExpression, SourceSpan> {
+                val function = lambda(expression, scope)
+                if (function == null) {
+                    if (arguments.isNotEmpty()) diagnostics.unsupported(expression,
+                        "Parameterized widget content requires a structured lambda")
+                    return sourceContent?.invoke(expression, scope, parent)
+                        ?: diagnostics.unsupported(expression, "Widget content requires a structured lambda or slot")
+                }
+                if (function.valueParameters.size != arguments.size)
+                    diagnostics.unsupported(expression,
+                        "Widget content requires ${function.valueParameters.size} arguments, got ${arguments.size}")
+                val childScope = scope.fork()
+                function.valueParameters.zip(arguments).forEach { (parameter, value) ->
+                    childScope.bindings[parameter.symbol] = value
+                }
+                return body(function.body ?: diagnostics.unsupported(expression, "Widget content has no body"),
+                    childScope, function, parent = parent)
+            }
+
+            override val parent: WidgetLayoutScope? = parent
+
+            override fun modifiers(expression: IrExpression?, scope: Scope,
+                parent: WidgetLayoutScope?): List<WidgetModifier<EtsExpression, SourceSpan>> =
+                this@ComposeWidgetAdapter.modifiers(expression, scope, parent)
+
+            override fun value(expression: IrExpression, scope: Scope,
+                type: WidgetValueType): WidgetValue<EtsExpression, SourceSpan> =
+                widgetValue(expression, scope, type)
         }
+        resolvedWidgetRules.firstNotNullOfOrNull { it.lower(call, language, scope, services) }?.let { return it }
+        sourceWidget?.invoke(call, scope, parent)?.let { return it }
         val api = symbolName(call.symbol.owner)
         if (sourceFile(call.symbol.owner) != null || !call.type.isUnit() || api !in supported)
             diagnostics.unsupported(call, "Unsupported resolved widget API: $api")
+        val sourceTouchGroup = if (api == "androidx.compose.foundation.layout.Row")
+            touchTargets(call, scope, diagnostics) else null
+        sourceTouchGroup?.let { touchBoxes[it.box] = it }
         val text = api.endsWith(".Text")
-        val button = api.endsWith(".Button")
+        val button = api.endsWith("Button")
         val image = api in setOf("androidx.compose.foundation.Image", "coil.compose.AsyncImage")
         val textField = api.endsWith("TextField")
         val isPager = api == "androidx.compose.foundation.pager.HorizontalPager"
         val isLazyList = api in setOf("androidx.compose.foundation.lazy.LazyColumn",
             "androidx.compose.foundation.lazy.LazyRow")
+        val richTextStyle = language.callRules.any { it is ComposeTextStyleRule }
         checkArguments(call, when {
-            text -> setOf("text", "modifier", "fontSize", "fontWeight", "fontFamily", "lineHeight")
-            button -> setOf("onClick", "enabled", "modifier", "content")
+            text -> setOf("text", "modifier", "fontSize", "fontWeight", "fontFamily", "lineHeight") +
+                if (richTextStyle) setOf("minLines", "softWrap") + textStyleArgumentOrder else emptySet()
+            button -> if (api in setOf("androidx.compose.material3.Button",
+                    "androidx.compose.material3.TextButton"))
+                setOf("onClick", "enabled", "modifier", "content", "colors", "shape",
+                    "contentPadding", "border")
+            else setOf("onClick", "enabled", "modifier", "content")
             image -> if (api == "androidx.compose.foundation.Image")
                 setOf("painter", "contentDescription", "modifier")
             else setOf("model", "contentDescription", "modifier")
@@ -135,10 +298,22 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             isPager -> setOf("state", "modifier", "pageContent", "userScrollEnabled", "flingBehavior",
                 "snapPosition")
             isLazyList -> setOf("modifier", "state", "content", "userScrollEnabled")
+            api.endsWith(".Row") -> setOf("modifier", "horizontalArrangement", "verticalAlignment", "content")
+            api.endsWith(".Column") -> setOf("modifier", "verticalArrangement", "horizontalAlignment", "content")
+            api.endsWith(".Box") -> setOf("modifier", "contentAlignment", "content")
             else -> setOf("modifier", "content")
         })
         val source = language.source(call)
-        val modifier = modifiers(argument(call, "modifier"), scope, parent)
+        val rawModifiers = modifiers(argument(call, "modifier"), scope, parent)
+        val boxTouch = if (api == "androidx.compose.foundation.layout.Box") touchBoxes[call] else null
+        val modifier = if (boxTouch == null) rawModifiers else rawModifiers.map { operation ->
+            if (operation is WidgetModifier.Click) operation.copy(touchTarget = touchTarget(boxTouch, scope))
+            else operation
+        }
+        if (api == "androidx.compose.foundation.layout.Box" && boxTouch == null &&
+            requiresMinimumTouchArbitration(modifier))
+            diagnostics.unsupported(call,
+                "Minimum touch target arbitration requires a bounded homogeneous sibling group")
         fun required(name: String) = argument(call, name)
             ?: diagnostics.unsupported(call, "$api requires $name")
         if (text) {
@@ -153,16 +328,62 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                         diagnostics.unsupported(it, "Widget Text $name requires $sourceType")
                     widgetValue(it, scope, targetType)
                 }
+            val textValue = widgetValue(value, scope, WidgetValueType.STRING)
+            val fontSize = style("fontSize", "androidx.compose.ui.unit.TextUnit", WidgetValueType.FONT_SIZE)
+            val fontWeight = style("fontWeight", "androidx.compose.ui.text.font.FontWeight", WidgetValueType.FONT_WEIGHT)
+            val fontFamily = style("fontFamily", "androidx.compose.ui.text.font.FontFamily", WidgetValueType.FONT_FAMILY)
+            val lineHeight = style("lineHeight", "androidx.compose.ui.unit.TextUnit", WidgetValueType.LINE_HEIGHT)
+            val color = argument(call, "color")?.let { widgetValue(it, scope, WidgetValueType.COLOR) }
+            fun expression(name: String): EtsExpression? = argument(call, name)?.let { scalar(it, scope) }
+            val fontStyle = expression("fontStyle")
+            val letterSpacing = expression("letterSpacing")
+            val textDecoration = expression("textDecoration")
+            val textAlign = expression("textAlign")
+            val overflow = expression("overflow")
+            val maxLines = expression("maxLines")
+            val providedStyle = argument(call, "style")?.let { scalar(it, scope) }
+            val ambient = if (api == "androidx.compose.material3.Text")
+                scope.ambientValues[MATERIAL_CONTEXT] else null
+            val inherited = when {
+                api == "androidx.compose.material3.Text" && ambient != null -> {
+                    val base = materialCurrentTextStyle(ambient, source)
+                    argument(call, "style")?.let {
+                        mergeTextStyles(base, checkNotNull(providedStyle), language.source(it))
+                    } ?: base
+                }
+                api == "androidx.compose.material3.Text" && richTextStyle -> {
+                    val base = defaultTypographyRole("bodyLarge", source)
+                    argument(call, "style")?.let {
+                        mergeTextStyles(base, checkNotNull(providedStyle), language.source(it))
+                    } ?: base
+                }
+                providedStyle != null -> providedStyle
+                else -> null
+            }
             val style = WidgetTextStyle(
-                style("fontSize", "androidx.compose.ui.unit.TextUnit", WidgetValueType.FONT_SIZE),
-                style("fontWeight", "androidx.compose.ui.text.font.FontWeight", WidgetValueType.FONT_WEIGHT),
-                style("fontFamily", "androidx.compose.ui.text.font.FontFamily", WidgetValueType.FONT_FAMILY),
-                style("lineHeight", "androidx.compose.ui.unit.TextUnit", WidgetValueType.LINE_HEIGHT))
-            return Widget.Text(widgetValue(value, scope, WidgetValueType.STRING), style, modifier, source)
+                fontSize, fontWeight, fontFamily, lineHeight, color,
+                fontStyle, letterSpacing, textDecoration, textAlign, overflow, maxLines, inherited,
+                WidgetValue(WidgetValueType.COLOR,
+                    ambient?.let { materialContentColor(it, source) }
+                        ?: EtsLiteral(0xFF000000L, EtsTypes.NUMBER, source),
+                    WidgetValueProvenance.Expression(null), source))
+            val valuesByName = mapOf<String, EtsExpression?>(
+                "text" to textValue.value, "fontSize" to fontSize?.value,
+                "fontWeight" to fontWeight?.value, "fontFamily" to fontFamily?.value,
+                "lineHeight" to lineHeight?.value, "color" to color?.value,
+                "fontStyle" to fontStyle, "letterSpacing" to letterSpacing,
+                "textDecoration" to textDecoration, "textAlign" to textAlign,
+                "overflow" to overflow, "maxLines" to maxLines, "style" to providedStyle)
+            val sourceEvaluations = valuesByName.mapNotNull { (name, emitted) ->
+                val input = argument(call, name)
+                if (input == null || emitted == null) null else language.source(input).start to emitted
+            }.sortedBy { it.first }.map { it.second }
+            return Widget.Text(textValue, style, modifier, source, sourceEvaluations)
         }
         if (image) return image(call, api, scope, modifier, source)
         if (isPager) return pager(call, scope, modifier, source)
         if (isLazyList) return lazyList(call, api, scope, modifier, source)
+        if (api == "androidx.compose.foundation.layout.Spacer") return Widget.Spacer(modifier, source)
         if (textField) {
             val value = required("value")
             if (!value.type.isString()) diagnostics.unsupported(value,
@@ -178,29 +399,90 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
         }
         // A slot owns its nested scope; siblings never inherit bindings from its content.
         val content = argument(call, "content")
+        val childScope = scope.fork()
+        var buttonStyle: WidgetButtonStyle<EtsExpression, SourceSpan>? = null
+        if (button && api.startsWith("androidx.compose.material3.")) {
+            val context = materialInvocationContext(scope, source)
+            if (context != null) {
+                val enabled = argument(call, "enabled")?.let { scalar(it, scope) }
+                    ?: EtsLiteral(true, EtsTypes.BOOLEAN, source)
+                val materialButton = api in setOf("androidx.compose.material3.Button",
+                    "androidx.compose.material3.TextButton")
+                val palette = if (materialButton) argument(call, "colors")?.let { scalar(it, scope) }
+                    ?: defaultButtonColors(scope, source, api.endsWith("TextButton")) else null
+                fun selected(name: String): EtsExpression = EtsConditional(enabled,
+                    EtsMember(requireNotNull(palette), name, EtsTypes.NUMBER, source),
+                    EtsMember(requireNotNull(palette),
+                        "disabled" + name.replaceFirstChar { it.uppercaseChar() }, EtsTypes.NUMBER, source),
+                    EtsTypes.NUMBER, source)
+                val contentColor = if (materialButton) selected("contentColor")
+                    else materialContentColor(context, source)
+                if (materialButton) {
+                    val textual = api.endsWith("TextButton")
+                    buttonStyle = WidgetButtonStyle(
+                        WidgetValue(WidgetValueType.COLOR, selected("containerColor"),
+                            WidgetValueProvenance.Expression(null), source),
+                        argument(call, "contentPadding")?.let { scalar(it, scope) }
+                            ?: symmetricPadding(EtsLiteral(if (textual) 12 else 24, EtsTypes.NUMBER, source),
+                                EtsLiteral(8, EtsTypes.NUMBER, source), source),
+                        argument(call, "shape")?.let { shapeRadius(it, scope) }
+                            ?: EtsLiteral("50%", EtsTypes.STRING, source),
+                        argument(call, "border")?.let { scalar(it, scope) },
+                        EtsLiteral(58, EtsTypes.NUMBER, source),
+                        EtsLiteral(40, EtsTypes.NUMBER, source), textual, source)
+                }
+                childScope.ambientValues[MATERIAL_CONTEXT] = newMaterialContext(source,
+                    MaterialContextField.COLOR_SCHEME to materialScheme(context, source),
+                    MaterialContextField.CONTENT_COLOR to contentColor,
+                    MaterialContextField.TYPOGRAPHY to materialTypography(context, source),
+                    MaterialContextField.TEXT_STYLE to if (api.endsWith("IconButton"))
+                        materialCurrentTextStyle(context, source)
+                    else EtsMember(materialTypography(context, source), "labelLarge", textStyleType, source),
+                    MaterialContextField.SHAPES to materialShapes(context, source))
+            }
+        }
         val children = if (content == null && api == "androidx.compose.foundation.layout.Box" &&
             call.symbol.owner.valueParameters.none { it.name.asString() == "content" }) Children(emptyList()) else {
             val value = content ?: diagnostics.unsupported(call, "$api requires content")
-            val lambda = resolve(value, scope) as? IrFunctionExpression
-                ?: diagnostics.unsupported(value, "Widget children require a statically resolved lambda")
             val childParent = when {
                 button || api.endsWith(".Row") -> WidgetLayoutScope.ROW
                 api.endsWith(".Column") -> WidgetLayoutScope.COLUMN
                 else -> WidgetLayoutScope.BOX
             }
-            body(lambda.function.body ?: diagnostics.unsupported(value, "Widget children have no body"),
-                scope.fork(), lambda.function, parent = childParent)
+            services.content(value, childScope, childParent)
         }
         return when {
             button -> Widget.Button(event(required("onClick"), scope,
                 EtsFunctionType(emptyList(), EtsTypes.VOID), "callback"), argument(call, "enabled")?.let {
                 if (!it.type.isBoolean()) diagnostics.unsupported(it, "Widget Button enabled requires Boolean")
                 scalar(it, scope)
-            }, children, modifier, source)
-            api.endsWith(".Row") -> Widget.Row(children, modifier, source)
-            api.endsWith(".Column") -> Widget.Column(children, modifier, source)
-            else -> Widget.Box(children, modifier, source)
+            }, children, modifier, source, if (api.endsWith("IconButton"))
+                WidgetButtonRole.ICON else WidgetButtonRole.DEFAULT, buttonStyle)
+            api.endsWith(".Row") -> Widget.Row(children, modifier, source,
+                sourceTouchGroup?.let { touchGroup(it, source) },
+                mainAxisArrangement(argument(call, "horizontalArrangement"), scope),
+                argument(call, "verticalAlignment")?.let { scalar(it, scope) })
+            api.endsWith(".Column") -> Widget.Column(children, modifier, source,
+                mainAxisArrangement(argument(call, "verticalArrangement"), scope),
+                argument(call, "horizontalAlignment")?.let { scalar(it, scope) })
+            else -> Widget.Box(children, modifier, source,
+                argument(call, "contentAlignment")?.let { scalar(it, scope) })
         }
+    }
+
+    private fun mainAxisArrangement(value: IrExpression?, scope: Scope):
+        WidgetMainAxisArrangement<EtsExpression, SourceSpan>? = value?.let {
+        val source = language.source(it)
+        val fixed = arrangementAlignmentName(it, scope)
+        if (fixed != null) WidgetMainAxisArrangement.Alignment(when (fixed) {
+            "Start" -> WidgetMainAxisAlignment.START
+            "Center" -> WidgetMainAxisAlignment.CENTER
+            "End" -> WidgetMainAxisAlignment.END
+            "SpaceBetween" -> WidgetMainAxisAlignment.SPACE_BETWEEN
+            "SpaceAround" -> WidgetMainAxisAlignment.SPACE_AROUND
+            "SpaceEvenly" -> WidgetMainAxisAlignment.SPACE_EVENLY
+            else -> error("Unsupported fixed arrangement: $fixed")
+        }, source) else WidgetMainAxisArrangement.Spacing(arrangementSpace(scalar(it, scope)), source)
     }
 
     private fun pager(call: IrCall, scope: Scope,
@@ -483,10 +765,14 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
     private fun modifiers(value: IrExpression?, scope: Scope,
         parent: WidgetLayoutScope?): List<WidgetModifier<EtsExpression, SourceSpan>> {
         val expression = value?.let { resolve(it, scope) } ?: return emptyList()
+        if (expression is IrGetValue && scope.bindings[expression.symbol]?.type == emptyModifierType)
+            return emptyList()
         if (expression is IrGetObjectValue &&
             symbolName(expression.symbol.owner) == "androidx.compose.ui.Modifier.Companion") return emptyList()
+        if (expression is IrWhen) return conditionalModifiers(expression, scope, parent)
         val call = expression as? IrCall ?: diagnostics.unsupported(expression, "Unsupported widget Modifier value")
         val api = symbolName(call.symbol.owner)
+        if (api == "kotlin.let") return modifierLet(call, scope, parent)
         if (api.endsWith(".animateItem"))
             diagnostics.unsupported(call, "LazyItemScope animateItem is not supported")
         if (call.symbol.owner.dispatchReceiverParameter?.type?.classFqName?.asString() ==
@@ -515,7 +801,7 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             return emitted
         }
         fun required(name: String) = argument(call, name) ?: diagnostics.unsupported(call, "$api requires $name")
-        val operation = when (api) {
+        val operation: WidgetModifier<EtsExpression, SourceSpan> = when (api) {
             "androidx.compose.foundation.layout.size" -> {
                 checkArguments(call, setOf("size", "width", "height"))
                 val uniform = argument(call, "size")
@@ -574,19 +860,40 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 WidgetModifier.Align(emitted, WidgetLayoutScope.BOX, at)
             }
             "androidx.compose.foundation.layout.padding" -> {
-                checkArguments(call, setOf("all", "horizontal", "vertical", "start", "top", "end", "bottom"))
-                // Reject the PaddingValues overload even when its explicit value is absent.
-                if (call.symbol.owner.valueParameters.any { it.name.asString() == "paddingValues" })
-                    diagnostics.unsupported(call, "PaddingValues is outside the widget subset")
-                fun side(name: String, axis: String) = (argument(call, "all") ?: argument(call, name) ?: argument(call, axis))
-                    ?.let(::dimension) ?: EtsLiteral(0, EtsTypes.NUMBER, at)
-                WidgetModifier.Padding(side("start", "horizontal"), side("top", "vertical"),
-                    side("end", "horizontal"), side("bottom", "vertical"), at)
+                checkArguments(call, setOf("all", "horizontal", "vertical", "start", "top", "end", "bottom",
+                    "paddingValues"))
+                if (call.symbol.owner.valueParameters.any { it.name.asString() == "paddingValues" }) {
+                    val value = required("paddingValues")
+                    val emitted = scalar(value, scope)
+                    if (emitted.type != paddingType)
+                        diagnostics.unsupported(value, "Widget paddingValues requires PaddingValues")
+                    WidgetModifier.PaddingValues(emitted, at)
+                } else {
+                    fun side(name: String, axis: String) =
+                        (argument(call, "all") ?: argument(call, name) ?: argument(call, axis))
+                            ?.let(::dimension) ?: EtsLiteral(0, EtsTypes.NUMBER, at)
+                    WidgetModifier.Padding(side("start", "horizontal"), side("top", "vertical"),
+                        side("end", "horizontal"), side("bottom", "vertical"), at)
+                }
             }
             "androidx.compose.foundation.background" -> {
-                checkArguments(call, setOf("color"))
+                checkArguments(call, setOf("color", "shape"))
                 val color = required("color")
-                WidgetModifier.Background(widgetValue(color, scope, WidgetValueType.COLOR), at)
+                WidgetModifier.Background(widgetValue(color, scope, WidgetValueType.COLOR), at,
+                    argument(call, "shape")?.let { shapeRadius(it, scope) })
+            }
+            "androidx.compose.ui.draw.clip" -> {
+                checkArguments(call, setOf("shape"))
+                WidgetModifier.Clip(shapeRadius(required("shape"), scope), at)
+            }
+            "androidx.compose.ui.platform.testTag" -> {
+                checkArguments(call, setOf("tag"))
+                val tag = required("tag")
+                if (!tag.type.isString()) diagnostics.unsupported(tag, "Widget testTag requires String")
+                val emitted = scalar(tag, scope)
+                if (emitted.type != EtsTypes.STRING)
+                    diagnostics.unsupported(tag, "Widget testTag requires target string")
+                WidgetModifier.Tag(emitted, at)
             }
             "androidx.compose.foundation.clickable" -> {
                 checkArguments(call, setOf("onClick", "enabled", "interactionSource", "indication"))
@@ -606,17 +913,34 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             }
             "androidx.compose.foundation.verticalScroll",
             "androidx.compose.foundation.horizontalScroll" -> {
-                checkArguments(call, setOf("state", "enabled"))
+                checkArguments(call, setOf("state", "enabled", "reverseScrolling"))
                 val state = required("state")
-                val holder = (resolve(state, scope) as? IrGetValue)?.symbol
+                val resolvedState = resolve(state, scope)
+                val holder = (resolvedState as? IrGetValue)?.symbol
                 val binding = holder?.let(scrolls::get)
-                    ?: diagnostics.unsupported(state,
-                        "Scroll modifier state requires source remembered ScrollState")
+                if (binding == null) {
+                    val remembered = resolvedState as? IrCall
+                    if (remembered == null || symbolName(remembered.symbol.owner) !=
+                        "androidx.compose.foundation.rememberScrollState") {
+                        diagnostics.unsupported(state,
+                            "Scroll modifier state requires rememberScrollState or source remembered ScrollState")
+                    }
+                    checkArguments(remembered, setOf("initial"))
+                    argument(remembered, "initial")?.let { initial ->
+                        val emitted = scalar(initial, scope)
+                        if ((emitted as? EtsLiteral)?.value != 0) diagnostics.unsupported(initial,
+                            "Native scroll currently requires a zero initial offset")
+                    }
+                }
                 val enabled = argument(call, "enabled")?.let { value ->
                     if (!value.type.isBoolean())
                         diagnostics.unsupported(value, "Scroll modifier enabled requires Boolean")
                     scalar(value, scope)
                 } ?: EtsLiteral(true, EtsTypes.BOOLEAN, at)
+                argument(call, "reverseScrolling")?.let { value ->
+                    if ((scalar(value, scope) as? EtsLiteral)?.value != false)
+                        diagnostics.unsupported(value, "Scroll reverseScrolling requires false")
+                }
                 val x = EtsSymbol("compose-scroll:${at.file}:${at.start}:x", "xOffset",
                     EtsTypes.NUMBER, at)
                 val y = EtsSymbol("compose-scroll:${at.file}:${at.start}:y", "yOffset",
@@ -624,18 +948,84 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
                 val axis = if (api.endsWith("verticalScroll")) WidgetScrollAxis.VERTICAL
                     else WidgetScrollAxis.HORIZONTAL
                 val value = EtsReference(if (axis == WidgetScrollAxis.VERTICAL) y else x)
-                val onScroll = EtsLambda(listOf(EtsParameter(x), EtsParameter(y)),
-                    listOf(EtsExpressionStatement(EtsAssignment(binding.offset, value, at))),
-                    EtsTypes.VOID, at)
-                WidgetModifier.Scroll(axis, binding.offset, onScroll, enabled, at)
+                val onScroll = binding?.let { scroll -> EtsLambda(
+                    listOf(EtsParameter(x), EtsParameter(y)),
+                    listOf(EtsExpressionStatement(EtsAssignment(scroll.offset, value, at))),
+                    EtsTypes.VOID, at) }
+                WidgetModifier.Scroll(axis, binding?.offset ?: EtsLiteral(0, EtsTypes.NUMBER, at),
+                    onScroll, enabled, at)
             }
             else -> diagnostics.unsupported(call, "Unsupported resolved widget Modifier API: $api")
         }
         return previous + operation
     }
 
+    private fun conditionalModifiers(conditional: IrWhen, scope: Scope,
+        parent: WidgetLayoutScope?): List<WidgetModifier<EtsExpression, SourceSpan>> {
+        val branches = conditional.branches.map { branch ->
+            val condition = if (branch is IrElseBranch) null else {
+                if (!branch.condition.type.isBoolean()) diagnostics.unsupported(branch.condition,
+                    "Modifier condition requires Boolean")
+                scalar(branch.condition, scope)
+            }
+            WidgetModifierBranch(condition, modifiers(branch.result, scope.fork(), parent),
+                language.source(branch.result))
+        }
+        return listOf(WidgetModifier.Conditional(branches, language.source(conditional)))
+    }
+
+    private fun modifierLet(call: IrCall, scope: Scope,
+        parent: WidgetLayoutScope?): List<WidgetModifier<EtsExpression, SourceSpan>> {
+        checkArguments(call, setOf("block"))
+        val receiver = call.extensionReceiver
+            ?: diagnostics.unsupported(call, "Modifier let requires a receiver")
+        val previous = modifiers(receiver, scope, parent)
+        val blockExpression = argument(call, "block")
+            ?: diagnostics.unsupported(call, "Modifier let requires a block")
+        val block = lambda(blockExpression, scope)
+            ?: diagnostics.unsupported(blockExpression, "Modifier let requires a direct lambda")
+        val parameter = block.valueParameters.singleOrNull()
+            ?: diagnostics.unsupported(block, "Modifier let requires one receiver parameter")
+        val nested = scope.fork().also { it.aliases[parameter.symbol] = receiver }
+        val result = when (val body = block.body) {
+            is IrExpressionBody -> body.expression
+            is IrBlockBody -> {
+                if (body.statements.size != 1) diagnostics.unsupported(block,
+                    "Modifier let supports a single expression body")
+                when (val statement = body.statements.single()) {
+                    is IrReturn -> statement.value
+                    is IrExpression -> statement
+                    else -> diagnostics.unsupported(statement, "Modifier let requires an expression result")
+                }
+            }
+            else -> diagnostics.unsupported(block, "Modifier let requires an expression body")
+        }
+        val conditional = resolve(result, nested) as? IrWhen
+            ?: return modifiers(result, nested, parent)
+        val branches = conditional.branches.map { branch ->
+            val condition = if (branch is IrElseBranch) null else {
+                if (!branch.condition.type.isBoolean()) diagnostics.unsupported(branch.condition,
+                    "Modifier condition requires Boolean")
+                scalar(branch.condition, nested)
+            }
+            val branchModifiers = modifiers(branch.result, nested.fork(), parent)
+            if (branchModifiers.take(previous.size) != previous) diagnostics.unsupported(branch.result,
+                "Modifier let branches must extend their receiver without replacing it")
+            WidgetModifierBranch(condition, branchModifiers.drop(previous.size), language.source(branch.result))
+        }
+        return previous + WidgetModifier.Conditional(branches, language.source(conditional))
+    }
+
     private fun resolve(value: IrExpression, scope: Scope): IrExpression = when (value) {
-        is IrGetValue -> scope.aliases[value.symbol]?.let { resolve(it, scope) } ?: value
+        // Ordinary source vals already have a language-owned target binding and
+        // must keep their single evaluation.  Alias expansion is reserved for
+        // values without a target representation (Modifier/lambda/compiler
+        // temporaries).
+        is IrGetValue -> if (value.symbol in scope.bindings) value
+            else scope.aliases[value.symbol]?.let { resolve(it, scope) } ?: value
+        is IrTypeOperatorCall -> resolve(value.argument, scope)
+        is IrBlock -> (value.statements.lastOrNull() as? IrExpression)?.let { resolve(it, scope) } ?: value
+        is IrComposite -> (value.statements.lastOrNull() as? IrExpression)?.let { resolve(it, scope) } ?: value
         else -> value
     }
 
@@ -662,8 +1052,11 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
             is IrTypeOperatorCall -> rootedInBinding(current.argument)
             else -> false
         }
+        val propertyOwner = property?.parent
+        val tokenContainer = propertyOwner is IrFile ||
+            (propertyOwner as? IrClass)?.kind == ClassKind.OBJECT
         val sourceOwnedToken = owner != null && property != null && sourceFile(owner) != null &&
-            !rootedInBinding(call.dispatchReceiver ?: call.extensionReceiver)
+            tokenContainer && !rootedInBinding(call.dispatchReceiver ?: call.extensionReceiver)
         val constructor = (resolved as? IrConstructorCall)?.symbol?.owner?.parent as? IrClass
         val systemFontFamily = propertyName
             ?.takeIf { it.startsWith("androidx.compose.ui.text.font.FontFamily.Companion.") }
@@ -713,23 +1106,27 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
     }
 
     private fun scalar(value: IrExpression, scope: Scope): EtsExpression {
-        val emitted = language.expression(resolve(value, scope), scope)
-        fun stable(expression: EtsExpression): Boolean = when (expression) {
-            is EtsLiteral, is EtsReference -> true
-            is EtsMember -> expression.symbolId != null && stable(expression.receiver)
-            is EtsCast -> stable(expression.value)
-            is EtsBinary -> stable(expression.left) && stable(expression.right)
-            is EtsUnary -> stable(expression.operand)
-            is EtsConditional -> stable(expression.condition) && stable(expression.whenTrue) && stable(expression.whenFalse)
-            is EtsCall -> (expression.callee as? EtsMember)?.let { member ->
-                member.name == "fround" && (member.receiver as? EtsReference)?.symbol?.id == "stdlib:Math" &&
-                    expression.arguments.all(::stable)
-            } == true
-            else -> false
+        // The target tree consumes this expression exactly once at the same UI
+        // position. Calls, compiler-created expression blocks and ordered effects
+        // remain language-lowering concerns; resolving a block here would discard
+        // the temporaries that its final expression reads.
+        return language.expression(value, scope)
+    }
+
+    private fun shapeRadius(value: IrExpression, scope: Scope): EtsExpression =
+        language.callRules.filterIsInstance<ComposeShapeRule>().singleOrNull()
+            ?.borderRadius(value, language, scope, diagnostics)
+            ?: diagnostics.unsupported(value, "Widget shape requires ComposeShapeRule")
+
+    private fun materialInvocationContext(scope: Scope, source: SourceSpan): EtsExpression? {
+        if (language.callRules.none { it is ComposeTextStyleRule } ||
+            language.callRules.none { it is ComposeTypographyRule } ||
+            language.callRules.none { it is ComposeMaterialThemeValueRule }) return null
+        return scope.ambientValues.getOrPut(MATERIAL_CONTEXT) {
+            val shapes = language.callRules.filterIsInstance<ComposeShapeRule>().singleOrNull()
+                ?.initialShapes(source) ?: defaultMaterialShapes(source)
+            defaultMaterialContext(source, shapes)
         }
-        if (!stable(emitted)) diagnostics.unsupported(value,
-            "Widget values require stable scalars; effectful evaluation is outside this subset")
-        return emitted
     }
 
     private fun checkArguments(call: IrCall, supported: Set<String>) {
@@ -743,13 +1140,15 @@ class ComposeWidgetAdapter(private val language: Language, private val diagnosti
     private companion object {
         val supported = setOf("androidx.compose.material.Text", "androidx.compose.material3.Text",
             "androidx.compose.material.Button", "androidx.compose.material3.Button",
+            "androidx.compose.material.IconButton", "androidx.compose.material3.IconButton",
+            "androidx.compose.material3.TextButton",
             "androidx.compose.foundation.Image", "coil.compose.AsyncImage",
             "androidx.compose.foundation.text.BasicTextField", "androidx.compose.material.TextField",
             "androidx.compose.material3.TextField", "androidx.compose.material3.OutlinedTextField",
             "androidx.compose.foundation.pager.HorizontalPager",
             "androidx.compose.foundation.lazy.LazyColumn", "androidx.compose.foundation.lazy.LazyRow",
             "androidx.compose.foundation.layout.Row", "androidx.compose.foundation.layout.Column",
-            "androidx.compose.foundation.layout.Box")
+            "androidx.compose.foundation.layout.Box", "androidx.compose.foundation.layout.Spacer")
         val lazyCollectionTypes = setOf("kotlin.Array", "kotlin.collections.List",
             "kotlin.collections.MutableList", "kotlin.IntArray", "kotlin.FloatArray",
             "kotlin.DoubleArray", "kotlin.ByteArray", "kotlin.ShortArray", "kotlin.BooleanArray")

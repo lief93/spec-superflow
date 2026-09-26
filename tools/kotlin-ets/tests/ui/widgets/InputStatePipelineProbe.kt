@@ -46,14 +46,17 @@ fun main(args: Array<String>) {
         check("if ((state as UiState).loading)" in code &&
             "else if (! ((state as UiState).error === null))" in code)
         check("dispatch(\"retry\");" in code && "dispatch(\"refresh\");" in code)
-        check("Text((state as UiState).content)" in code)
+        fun hasBoundContent(source: String) = Regex(
+            """ForEach\(\[\(state as UiState\)\.content\] as Array<string>, \((__etsUiArg\d+_\d+): string\) => \{\s*Text\(\1\)""")
+            .containsMatchIn(source)
+        check(hasBoundContent(code))
         check(listOf("redux", "flow", "network").none { token -> code.lowercase().contains(token) })
 
         val ifCode = ComposeWidgetPipeline(
             EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules())), StandardLibraryRuntime)
             .compile(module, "widgetstateinput.InputStateIfProfile")
         check("if ((state as UiState).loading)" in ifCode && "else {" in ifCode)
-        check("dispatch(\"open\");" in ifCode && "Text((state as UiState).content)" in ifCode)
+        check("dispatch(\"open\");" in ifCode && hasBoundContent(ifCode))
 
         val failure = try {
             ComposeWidgetPipeline(EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules())), StandardLibraryRuntime)

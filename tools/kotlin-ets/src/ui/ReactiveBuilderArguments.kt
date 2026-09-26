@@ -2,7 +2,7 @@ package dev.ets
 
 /** ArkUI value parameters freeze outside an observed element. Use the SDK's
  * Binding contract for single-consumer state-dependent builder argument chains. */
-internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
+fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
     val builders = linkedMapOf<String, EtsFunction>()
     val states = mutableSetOf<Pair<String?, String>>()
     program.files.forEach { file -> file.declarations.forEach { declaration ->
@@ -82,7 +82,8 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
         .filter { !it.mutable }.map { it.symbol.id }.toSet()
     // Binding getters may run zero or many times. A single source reference does
     // not make calls or allocations safe to defer across a composition boundary.
-    fun repeatable(value: EtsExpression): Boolean = when (value) {
+    fun repeatable(value: EtsExpression): Boolean {
+        return when (value) {
         is EtsLiteral, is EtsUndefined, is EtsLambda -> true
         is EtsReference -> value.symbol.id in parameters || value.symbol.id in reactiveInputs ||
             value.symbol.id in valueParameters || value.symbol.id in constants
@@ -103,9 +104,51 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
         is EtsUnary -> repeatable(value.operand)
         is EtsConditional -> repeatable(value.condition) && repeatable(value.whenTrue) && repeatable(value.whenFalse)
         is EtsCast -> repeatable(value.value)
-        is EtsNew -> value.classType.symbolId in snapshots && value.arguments.all(::repeatable)
+        is EtsNew -> (value.repeatableSnapshot || value.classType.symbolId in snapshots) && value.arguments.all(::repeatable)
         is EtsObject -> value.fields.values.all(::repeatable)
         is EtsCall -> {
+            val immediate = value.callee as? EtsLambda
+            if (immediate != null) {
+                if (immediate.parameters.size != value.arguments.size || !value.arguments.all(::repeatable)) return false
+                val scoped = mutableListOf<String>()
+                fun bind(id: String) {
+                    valueParameters += id
+                    scoped += id
+                }
+                fun deterministicFailure(value: EtsExpression): Boolean =
+                    value is EtsNew && value.classType == targetErrorType && value.arguments.all(::repeatable)
+                fun guardStatement(statement: EtsStatement): Boolean = when (statement) {
+                    is EtsThrow -> deterministicFailure(statement.value)
+                    is EtsBlock -> statement.statements.all(::guardStatement)
+                    is EtsIf -> statement.branches.all { branch ->
+                        branch.condition?.let(::repeatable) != false && branch.body.all(::guardStatement)
+                    }
+                    else -> false
+                }
+                immediate.parameters.forEach { bind(it.symbol.id) }
+                try {
+                    var returned = false
+                    immediate.body.forEachIndexed { index, statement -> when (statement) {
+                        is EtsVariable -> {
+                            val initializer = statement.initializer
+                            // A compiler temporary may be declared mutable even when this
+                            // closed IIFE never writes it. Any actual assignment is rejected
+                            // by the statement whitelist below.
+                            if (initializer == null || !repeatable(initializer)) return false
+                            bind(statement.symbol.id)
+                        }
+                        is EtsIf -> if (!guardStatement(statement)) return false
+                        is EtsReturn -> {
+                            if (index != immediate.body.lastIndex || statement.value?.let(::repeatable) != true) return false
+                            returned = true
+                        }
+                        else -> return false
+                    } }
+                    return returned
+                } finally {
+                    valueParameters.removeAll(scoped.toSet())
+                }
+            }
             val member = value.callee as? EtsMember
             val math = (member?.receiver as? EtsReference)?.symbol?.id == "stdlib:Math" &&
                 member?.name in setOf("trunc", "min", "max", "fround")
@@ -129,15 +172,19 @@ internal fun bindReactiveBuilderArguments(program: EtsProgram): EtsProgram {
                 }
             } else false
         }
-        else -> false
+            else -> false
+        }
     }
+    fun stableIdentity(value: EtsExpression): Boolean =
+        value is EtsNew && value.stableIdentity && value.arguments.all(::repeatable)
     program.files.forEach { file -> file.declarations.forEach { declaration -> walkEts(declaration) { node ->
         if (node is EtsCall) {
             val parameters = builders[id(node)]?.parameters.orEmpty()
             if (parameters.any { it.symbol.id in bound }) node.arguments.forEachIndexed { index, argument ->
-                if (!repeatable(argument)) throw Unsupported(Diagnostic("UNSUPPORTED",
+                val reactive = parameters[index].symbol.id in bound
+                if (!repeatable(argument) && (reactive || !stableIdentity(argument))) throw Unsupported(Diagnostic("UNSUPPORTED",
                     "Reactive builder arguments require repeatable values; calls, allocations and mutable reads need an evaluation-preserving composition boundary: " +
-                        "${parameters[index].symbol.name} (${argument::class.simpleName}, reactive=${parameters[index].symbol.id in bound})", argument.source))
+                        "${parameters[index].symbol.name} (${argument::class.simpleName}, reactive=$reactive)", argument.source))
             }
         }
     } } }
@@ -187,6 +234,11 @@ private class ReactiveBuilderRewriter(private val builders: Map<String, EtsFunct
     private fun parameter(value: EtsParameter) = if (value.symbol.id in bound)
         value.copy(symbol = value.symbol.copy(type = binding(value.symbol.type)), defaultValue = null) else value
     private fun functionType(value: EtsFunction) = EtsFunctionType(value.parameters.map { parameter(it).symbol.type }, value.returnType, value.typeParameters)
+    private fun assignmentTarget(value: EtsExpression, locals: Map<String, EtsSymbol>): EtsExpression =
+        if (value is EtsReference && value.symbol.id in bound) {
+            val input = parameter(bound.getValue(value.symbol.id))
+            EtsMember(EtsReference(input.symbol, value.source), "value", value.type, value.source)
+        } else expression(value, locals)
     private fun expression(value: EtsExpression, locals: Map<String, EtsSymbol> = emptyMap()): EtsExpression = when (value) {
         is EtsReference -> if (value.symbol.id in locals) EtsReference(locals.getValue(value.symbol.id), value.source)
             else if (value.symbol.id in bound) EtsMember(
@@ -211,7 +263,7 @@ private class ReactiveBuilderRewriter(private val builders: Map<String, EtsFunct
         is EtsUnary -> value.copy(operand = expression(value.operand, locals))
         is EtsConditional -> value.copy(condition = expression(value.condition, locals),
             whenTrue = expression(value.whenTrue, locals), whenFalse = expression(value.whenFalse, locals))
-        is EtsAssignment -> value.copy(target = expression(value.target, locals), value = expression(value.value, locals))
+        is EtsAssignment -> value.copy(target = assignmentTarget(value.target, locals), value = expression(value.value, locals))
         is EtsCast -> value.copy(value = expression(value.value, locals))
         is EtsArray -> value.copy(elements = value.elements.map { expression(it, locals) })
         is EtsObject -> value.copy(fields = value.fields.mapValues { expression(it.value, locals) })

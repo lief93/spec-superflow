@@ -13,7 +13,7 @@ import org.jetbrains.org.objectweb.asm.Opcodes;
 public final class CliSeamAgent {
     private static final Map<String, Set<String>> METHODS = Map.of(
         "dev/ets/EtsLoweringPhases", Set.of("run"),
-        "dev/ets/ComposeLowering", Set.of("lower"),
+        "dev/ets/pipeline/ComposeWidgetPipeline", Set.of("lower"),
         "dev/ets/IrToEts", Set.of("program"),
         "dev/ets/IrModuleToEts", Set.of("lower"),
         "dev/ets/IrFileToEts", Set.of("lower"),

@@ -109,6 +109,7 @@ private class RelationLanguage(private val file: String) : Language {
         return EtsReference(symbol)
     }
     override fun statements(body: IrBody, scope: Scope): List<EtsStatement> = error("Not a body probe")
-    override fun function(function: IrSimpleFunction, scope: Scope): EtsFunction = error("Not a function probe")
+    override fun function(function: IrSimpleFunction, scope: Scope,
+        semantics: FunctionTargetSemantics): EtsFunction = error("Not a function probe")
     override fun clazz(declaration: IrClass): EtsClass = error("Not a class probe")
 }

@@ -1,13 +1,11 @@
-# S2.5: typed values, scoped layout modifiers → unified Harmony consumption
+# Production Compose semantics → neutral Widget IR → Harmony output
 
-This is an opt-in production compiler interface for a closed static widget
-subset. The existing default `page` CLI remains unchanged; switching all of its
-Material, state, scrolling, and project-adapter behavior is a separate migration.
-No language lowering, KLIB loader, shared compiler contract, or project adapter
-is changed by this slice. S2.5 adds a typed neutral value seam for String,
-Color, font size, font weight, font family, and line height while retaining the
-S2.4 widget and ordered-modifier structure. It also adds fill, scoped weight,
-and Box child alignment without adding state or scrolling.
+This is the production compiler interface for the current bounded widget subset.
+The `page` CLI enters this pipeline directly; there is no legacy page assembler
+fallback. Unsupported Material, state, scrolling or project-adapter behavior
+fails with source evidence. The interface provides typed values, explicit state
+bindings, conditions, eager/lazy iteration, content slots and ordered modifiers.
+Supported framework calls never emit ArkUI directly from the Compose adapter.
 
 Redwood remains the architecture/schema reference from
 [the spike](redwood-harmony-reference.md). The implementation does not link
@@ -28,6 +26,11 @@ lowerer, invokes `ComposeWidgetAdapter`, passes the neutral children to
 `HarmonyWidgetBackend`, builds an exported typed builder, validates the
 `EtsProgram`, and emits it through `emitEtsProgram`/`EtsPrinter`.
 
+The CLI's `page` mode enables the pipeline's target-packaging policy. It retains
+the source entry name and parameters as a component Builder method and adds only
+the ArkUI-required `build` container. Direct pipeline consumers can keep a
+stateless entry as a top-level Builder.
+
 - `dev.ets.widgets`: `Widget<V, S>`, `WidgetValue<V, S>`, `WidgetTextStyle<V, S>`,
   `WidgetValueType`, `WidgetValueProvenance`, `ImageSource<V, S>`,
   `WidgetModifier<V, S>`, `WidgetLayoutScope`, and `Children<V, S>`.
@@ -39,10 +42,20 @@ lowerer, invokes `ComposeWidgetAdapter`, passes the neutral children to
   `Children<EtsExpression, SourceSpan>`. It recognizes the resolved AndroidX
   symbols, reshapes arguments, and recursively retains semantic children slots.
   It cannot construct a native UI node and has no Harmony dependency.
+- `dev.ets.compose.ComposeWidgetAdapterModule`: optional project/framework SPI.
+  Its rule returns the same neutral Widget model and consumes shared structured
+  content/modifier/value services. It does not use the deprecated `lowerUi`
+  target-statement hook.
 - `dev.ets.harmony.HarmonyWidgetBackend`: consumes the model plus typed language
   values and produces `EtsUiElement`s. It alone selects native controls,
   attributes, layout wrappers, and Button content presentation. It compiles and
   runs with only the model, existing target module, and Kotlin stdlib.
+
+`MaterialTheme` becomes an explicit `Widget.ThemeProvider`: it carries a typed
+context binding, the new theme value and structured children. It is not flattened
+to a generic group and contains no ArkUI names. The Harmony backend alone chooses
+the legal target binding representation. `Surface` and `ProvideTextStyle`
+likewise update semantic context before their children are lowered.
 
 The lower-level adapter still requires callers to bind entry values in `Scope`;
 unbound parameters fail at their source declaration. The production pipeline
@@ -72,6 +85,9 @@ sample values or an entry component.
 | Source form | Neutral model | Harmony interpretation |
 | --- | --- | --- |
 | Material 2/3 String `Text` | `Widget.Text(WidgetValue(STRING, ...))` | native Text through the shared value consumer |
+| `MaterialTheme` | `ThemeProvider(reference, theme, children)` | scoped target context binding; no native layout node |
+| `Surface` / `ProvideTextStyle` | semantic background/text-style context plus children | Stack/background or context-only boundary |
+| `Scaffold`, `TopAppBar`, `SnackbarHost` | explicit widget records and named slots | native layout composition owned by one backend |
 | String literal / bound String | `Literal` / `Expression` provenance | typed String value |
 | `stringResource(R.string.*)` | `Resource` provenance plus typed String expression | native string-resource lookup and emitted string artifact |
 | `Color(...)` / bound Color | `Literal` / `Expression` provenance | typed ARGB value |
@@ -80,7 +96,7 @@ sample values or an entry component.
 | `FontWeight.Bold` | `Resource` provenance and `FONT_WEIGHT` type | native numeric font weight |
 | `FontFamily.Monospace` | `Resource` provenance and `FONT_FAMILY` type | native semantic family name |
 | mapped source-owned typography property | individual `ThemeToken` value | one validated text attribute |
-| whole `style = TextStyle(...)` | source-linked rejection | no object is passed to native Text |
+| whole `style = TextStyle(...)` | typed inherited/provided style expression | fields are merged once, then consumed as native Text attributes |
 | mapped source-owned property | `ThemeToken` provenance | project-adapter result after target-type validation |
 | unmapped source-owned property | source-linked rejection | project adapter mapping required |
 | foundation `Image(painterResource(...))` | `Widget.Image(ImageSource.Resource(...))` | native Image with typed Resource |
@@ -90,6 +106,11 @@ sample values or an entry component.
 | Material 2/3 `TextField` / `OutlinedTextField` | the same `Widget.TextField` | the same native TextInput |
 | layout `Row` / `Column` | ordered `children` slot | corresponding native layout |
 | layout `Box` | children slot, including the content-free overload | native Stack |
+| `Spacer` | explicit empty layout widget | native Blank plus ordered modifiers |
+| `HorizontalPager` / remembered pager state | pager state, controller, indexed content and change event | Swiper plus reactive current-page state |
+| `LazyColumn` / `LazyRow` | typed item slots, values/count sources and optional state | List/LazyForEach with target controller |
+| source `if` / supported `when` | `Conditional` branches with original conditions | target `if` without preview branch selection |
+| supported `repeat` | `ForEach(Count, item, children)` | target iteration with typed index binding |
 | scalar Dp `size` | one ordered `Size(width, height)` element | one wrapper with width and height |
 | `width`, `height` | distinct ordered elements | distinct size wrappers |
 | scalar Dp `padding` overloads | start/top/end/bottom | padding wrapper, LTR mapping |
@@ -97,6 +118,7 @@ sample values or an entry component.
 | `RowScope.weight` / `ColumnScope.weight` | ordered `Weight(value, recorded parent)` | layoutWeight wrapper |
 | `BoxScope.align` | ordered `Align(value, BOX)` | typed Alignment wrapper |
 | solid-color `background` | `Background(WidgetValue(COLOR, ...))` | backgroundColor through the shared value consumer |
+| `testTag(String)` | ordered `Tag` modifier | native `id` attribute with the same typed string |
 | `clickable(enabled, onClick)` | typed `Click(onClick, enabled)` | enabled/onClick wrapper |
 | `Modifier`, `then` | identity and ordered concatenation | no element erased or overwritten |
 
@@ -133,12 +155,12 @@ backend has one `consume` function that checks semantic type and target type;
 Text, Text nested in Button content, and every widget's Background modifier all
 use that function.
 
-`WidgetTextStyle` stores the four supported properties separately. Harmony maps
-them to `fontSize`, `fontWeight`, `fontFamily`, and `lineHeight` only after the
-shared consumer verifies their explicit semantic and ETS target types. Button
-content contains ordinary `Widget.Text`, so it uses the identical path. A whole
-custom `TextStyle`, state-backed style, and the remaining Compose Text styling
-arguments stay outside this slice and fail instead of being forwarded to ArkUI.
+`WidgetTextStyle` stores semantic fields separately and may also retain a typed
+inherited `TextStyle`. Harmony maps color, size, weight, family, line height,
+style, spacing, decoration, alignment, overflow and max-lines only after target
+type validation. A source `TextStyle` object is merged once with inherited
+Material typography before native Text consumes its fields; the object is never
+passed blindly to ArkUI.
 
 Source-owned property getters are project tokens. They cross this seam only
 when a registered call rule maps them to the required typed target value. An
@@ -166,27 +188,49 @@ semantics. In particular, preserving repeated preferred-size wrappers does not
 implement Compose's entire constraint algorithm. RTL, clipping, touch expansion,
 recomposition, and native rendering parity are outside this acceptance.
 
-Values must be stable scalars or statically resolved event values. Mutable
-builder locals, effectful scalar factories, dynamic event factories,
-unsupported widgets/modifiers/arguments, conditional children, arbitrary
-Painters, rich text, decoration slots, invalid literal URLs, and nonterminal or
-nonlocal UI returns fail with `Unsupported` and source spans. The adapter never
+Values are lowered once at their original UI position through `Language` and may
+contain ordinary calls or ordered language effects. Source locals become
+`ValueScope` records so one-time evaluation and lexical scope survive target
+lowering. Unsupported widgets/modifiers/arguments, dynamically selected slots,
+arbitrary Painters, rich text, decoration slots, invalid literal URLs, and
+nonterminal or nonlocal UI returns fail with `Unsupported` and source spans. The adapter never
 substitutes an unknown call with empty children. Ordinary function bodies inside
 supported events still belong to `Language`, not this adapter.
 
-Explicit empty children are valid; ignored behavior is not. Local Modifier
-aliases and the empty identity are accepted. Source composable helper calls,
-forwarded/dynamic content lambdas, state APIs, unsupported Material styling parameters,
-and arbitrary modifier functions are not implicitly
-expanded by this first interface. The legacy default path keeps those existing
-capabilities until they are deliberately migrated.
+### Source argument evaluation
 
-The modifier subset does not yet model Brush or shaped backgrounds, click label,
-role, indication or interactionSource semantics, combined/double/long click,
-range constraints, offset, clip, border, graphics transforms, scroll, pointer
-input, or semantics modifiers. Weight with `fill=false` remains outside this
-subset because ArkUI layoutWeight cannot preserve that sizing contract. Explicit arguments
-from these categories fail with their source span; they are not discarded.
+Kotlin evaluates a call receiver and explicit arguments once in source order.
+ArkUI may consume a widget value later inside a child builder or print a native
+attribute before another source argument. The neutral `Widget` contract therefore
+has an optional `sourceEvaluations` sequence containing the already-lowered typed
+expressions in original source order. It is generic widget metadata, not a Text or
+Compose API exception.
+
+`HarmonyWidgetBackend` wraps only non-reorderable values in typed
+`EtsUiForEach(kind = SOURCE_EVALUATION)` bindings and replaces every corresponding
+native call/attribute use with the binding symbol. In this form `ForEach` is the
+ArkUI-compatible once-only binding carrier; it does not represent a source loop.
+`target/UiEvaluationOrder.kt` owns the shared effect analysis and may remove a
+binding only after proving the complete target expression stable. Language
+lowering marks mutable local and top-level references as runtime reads. Ordinary
+member reads also remain conservative; language/platform lowering explicitly
+marks readonly stored properties and fixed target constants stable. Compose rules
+and the Harmony backend must not infer purity from API or property names.
+
+Explicit empty children are valid; ignored behavior is not. Local Modifier
+aliases and the empty identity are accepted. Named source composable calls and
+typed forwarded content slots use shared function lowering. Dynamically selected
+lambdas, unsupported Material styling parameters, and arbitrary modifier
+functions still require explicit semantics.
+
+The modifier subset does not yet model arbitrary Brush backgrounds, all shape
+families, click labels/roles, indication or interactionSource semantics,
+combined/double/long click, general offsets, graphics transforms, pointer input,
+or arbitrary semantics modifiers. Supported clipping is bounded to resolved
+corner radii; supported scrolling is bounded to modeled remembered state.
+Weight with `fill=false` remains outside this subset because ArkUI layoutWeight
+cannot preserve that sizing contract. Explicit unsupported arguments fail with
+their source span; they are not discarded.
 
 ## Reproduce
 

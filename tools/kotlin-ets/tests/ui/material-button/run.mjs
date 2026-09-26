@@ -50,10 +50,11 @@ for (const [entry, status] of [['Page', 0], ['UnsupportedInteraction', 2], ['Uns
     assert.match(code, /\.disabledContentColor/);
     assert.match(code, /__etsUniformPadding\(16(?:\.0)?\)/);
     assert.match(code, /new EtsShape\("rounded", 12(?:\.0)?, 12(?:\.0)?, 12(?:\.0)?, 12(?:\.0)?\)/);
-    assert.match(code, /\.borderRadius\(\{ topLeft: uiTemporary\d+_\d+\.topStart, topRight: uiTemporary\d+_\d+\.topEnd, bottomRight: uiTemporary\d+_\d+\.bottomEnd, bottomLeft: uiTemporary\d+_\d+\.bottomStart \}\)/);
+    assert.match(code, /\.borderRadius\(\{ topLeft: 12(?:\.0)?, topRight: 12(?:\.0)?, bottomRight: 12(?:\.0)?, bottomLeft: 12(?:\.0)? \}\)/);
     assert.match(code, /\.borderRadius\([^\n]+\)\.clip\(true\)/);
-    assert.match(code, /\.border\(\{ width: uiTemporary\d+_\d+\.width, color: uiTemporary\d+_\d+\.color, radius: \{ topLeft: [^}]+ \} \}\)/);
-    assert.match(code, /\.enabled\(enabled\)/);
+    assert.match(code, /\.border\(\{ width: [^,]+, color: [^,]+, radius: \{ topLeft: 12(?:\.0)?, topRight: 12(?:\.0)?, bottomRight: 12(?:\.0)?, bottomLeft: 12(?:\.0)? \} \}\)/);
+    assert.match(code, /\.enabled\(true\)/);
+    assert.match(code, /\.enabled\(false\)/);
   }
 }
 console.log('PASS ButtonColors JVM parity, source parameters, material button states and rejected interactions');

@@ -219,10 +219,9 @@ Source bindings use `EtsReference`/`EtsSymbol` identity and spans;
 content bindings use `EtsNamedType("WrappedBuilder", [EtsTupleType([])])`
 (schema notation, not Kotlin constructor syntax).
 
-`UiTextModule` deliberately names the remaining transitional text envelope.
-Its native component tree, Builder declarations, slots, and platform support
-templates are not yet an `EtsProgram`. This work does not claim a unified typed
-UI AST or whole-page target validation.
+Historical note: `UiTextModule` named the transitional text envelope at the time
+of this audit. It has since been removed; current page mode produces neutral
+widgets and then a validated `EtsProgram`.
 
 Do not run mutating JS lowerings over the shared UI input opportunistically.
 Inlining, local declaration extraction, property lowering, and name changes can
@@ -232,9 +231,9 @@ rule, preconditions, and source-boundary tests before it is enabled.
 
 ## Remaining Gaps And Gates
 
-- The typed expression/statement/declaration contract is available, but native
-  UI nodes and the transitional `UiTextModule` envelope still need a future
-  target-tree contract. No private prerequisite-statement protocol is added.
+- Native UI nodes now use the Widget model and typed target tree. This audit's
+  earlier `UiTextModule` gap is closed; broader framework coverage remains a
+  separate capability question.
 - The cached sources do not include the complete frontend/KLIB/linker setup,
   backend context construction, AST declarations/printer internals, call
   translation helpers, or all lowering/runtime implementations. Direct reuse

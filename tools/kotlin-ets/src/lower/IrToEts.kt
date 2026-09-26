@@ -39,7 +39,12 @@ object IrFileToEts {
     fun lower(file: IrFile, language: Language, diagnostics: DiagnosticSink): EtsFile =
         EtsFile(file.fileEntry.name, file.declarations.flatMap { declaration ->
             IrDeclarationToEts.lower(declaration, language, diagnostics)
-        } + lowerFileInitialization(file, language))
+        } + initialization(file, language))
+
+    /** Shared file-initialization lowering for language and UI entry pipelines. */
+    fun initialization(file: IrFile, language: Language,
+        selectedProperties: Set<IrProperty>? = null): List<EtsDeclaration> =
+        lowerFileInitialization(file, language, selectedProperties)
 }
 
 object IrDeclarationToEts {
@@ -59,8 +64,9 @@ object IrClassToEts {
 }
 
 object IrFunctionToEts {
-    fun lower(function: IrSimpleFunction, language: Language, scope: Scope = Scope()): EtsFunction =
-        language.function(function, scope)
+    fun lower(function: IrSimpleFunction, language: Language, scope: Scope = Scope(),
+        semantics: FunctionTargetSemantics = FunctionTargetSemantics()): EtsFunction =
+        language.function(function, scope, semantics)
 }
 
 object IrStatementToEts {

@@ -1,5 +1,10 @@
 # Compose basic controls
 
+> Historical coverage record for the removed direct `lowerUi` page path. The
+> production extension point is now documented in
+> [widget-semantic-pipeline.md](widget-semantic-pipeline.md); do not add new
+> `ComposeControlRule` implementations.
+
 Each control family lives in its own file under `src/ui/controls/`. A family
 can recognize the Material 2 and Material 3 versions of the same control; no
 file combines unrelated controls. Column, Row, Box and Spacer are separate,

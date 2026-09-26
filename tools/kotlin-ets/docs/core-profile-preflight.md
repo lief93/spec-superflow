@@ -2,11 +2,13 @@
 
 Every successful FIR2IR session scans resolved `IrCall` nodes and declaration
 types before target
-generation. The scan is read-only: it does not select adapters, rewrite IR or
-decide that an unsupported operation is safe. The normal language or Compose
-generator remains authoritative and still fails closed. If generation rejects
-a node, the retained report is annotated with that first observed failure before
-the CLI returns it.
+generation. The initial scan is read-only: it does not select adapters, rewrite
+IR or decide that an unsupported operation is safe. The normal language or
+Compose generator remains authoritative and still fails closed. If generation
+rejects a node, the retained report is annotated with that first observed
+failure before the CLI returns it. If generation succeeds, source-linked nodes
+in the validated target IR reconcile speculative type and missing-argument
+probes. An explicit degradation covering that source is never reconciled away.
 
 The report also records `projectCompilerVersion`, `frontendCompilerVersion` and
 `compatibilityDecision`. Direct source input has no project compiler version and
@@ -28,7 +30,7 @@ and `@Composable`; callers can use that list for a separate page-generation
 matrix. Project-wide coverage describes target-type readiness, not proof that
 every listed entry can already generate or run.
 
-The top-level `unsupportedNodes` inventory records declaration-level gaps that
+In standalone `--mode preflight`, the top-level `unsupportedNodes` inventory records declaration-level gaps that
 are not owned by a call, including parameter and field types, return types and
 supertypes. This lets a project scan expose an unsupported business-state type
 before a particular page happens to lower the containing class. Each item keeps
@@ -61,7 +63,8 @@ Each call record contains:
   `ImageResources.kt` separately.
 
 The top-level `coverage` object repeats all six groups, including empty groups.
-`recognized` counts calls whose target type was recognized and which do not own
+`recognized` counts calls whose target type was recognized up front or whose
+consumption is proven by source-linked validated target IR, and which do not own
 the first observed generation failure. `unsupported` counts recorded failures;
 `percentage` is `recognized / total`, or `null` when the group has no calls.
 This is coverage of the attempted entry, not a claim that every argument shape
@@ -109,6 +112,9 @@ appearing in the report.
   source resolution failure, with no preflight report or target;
 - the existing nontrivial `ComposableValues.kt` proves Compose classification
   with the real dependency classpath;
+- `ScrollProfile.kt` proves a framework-owned `ScrollState` can remain unknown
+  during conservative probing and then be reconciled only after generated state
+  fields and scroll semantics pass target validation;
 - `Coverage.kt` proves neutral widget, Modifier and resource grouping and
   attaches the first resource failure to its containing call;
 - `EmptyUi.kt` proves an empty builder is rejected at its source declaration.

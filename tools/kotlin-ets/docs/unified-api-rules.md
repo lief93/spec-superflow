@@ -1,47 +1,40 @@
 # Unified API rule dispatch
 
-The language backend and Compose now use the same resolved-call interface and
-dispatcher, rather than one library rule pipeline plus a separate UI API switch.
+> Historical record. The production page path no longer consumes
+> `CallRule.lowerUi` or `ComposeLowering`. New Compose controls belong in the
+> neutral widget adapter/model and the Harmony widget backend. `CallRule.lower`
+> remains the shared typed value/platform API mechanism.
+
+The current production contracts are documented in
+[`widget-semantic-pipeline.md`](widget-semantic-pipeline.md) and
+[`shared-contracts.md`](shared-contracts.md). `CallRule.lower` and
+`lowerStatement` remain the value/effect hooks used by the language backend.
+`lowerUi` is retained only for old adapter binaries; page mode never consults it.
 
 ```text
-Resolved Kotlin IrCall + lexical Scope + CallContext
-    -> adaptCall
-       scoped override -> scoped rules -> backend rules
-    -> Value | Statements | Ui
-    -> existing typed target tree and validator
-    -> existing printer and module output
+resolved Kotlin IR
+    -> shared language lowering for declarations, values and effects
+    -> ComposeWidgetAdapter / project ComposeWidgetRule
+    -> neutral Widget tree
+    -> HarmonyWidgetBackend
+    -> typed EtsProgram, validator and printer
 ```
-
-`CallRule.lower`, `lowerStatement` and `lowerUi` are typed hooks for different
-uses, not independent pipelines. `null` declines; an empty statement/UI list is
-explicitly handled. Value result types are checked even if discarded. UI hooks
-must handle Unit-returning calls; ordinary void/effect results are not inferred
-to mean UI content. Each applicable rule is consumed once; scoped forks retain
-the ordered registrations. Unknown Compose values can reach backend rules rather
-than being rejected solely by their framework package prefix.
 
 ## Ownership
 
-- `core/Contract.kt`: contexts, results, rule interface, priority and consumption.
-- `language/LanguageLowering.kt`: ordinary language lowering and source fallback;
-  calls the shared dispatcher, without its former private adapter type checker.
-- `ui/controls/*Rule.kt`: one control family per file, with the common
-  `ui/ComposeControlRule.kt` modifier-decoration contract. Each
-  receives the specific content/value/modifier operations it needs, not the
-  entire mutable ComposeLowering object.
-- `ui/ArkUiCalls.kt`: typed target API signatures/construction, no output strings.
-- `ui/ComposeLowering.kt`: source method/state/slot orchestration; registers UI
-  rules and requests UI adaptation through the shared dispatcher. Pager/repeat
-  and source slot invocation use that same registration path.
+- `language/LanguageLowering.kt`: Kotlin names, parameters, defaults, visibility,
+  generics, ordinary values and effects.
+- `ui/compose/ComposeSourceFunctionLowering.kt`: requests shared function
+  lowering and supplies only Builder, slot and neutral UI-body semantics.
+- `ui/compose/ComposeWidgetAdapter.kt`: resolved Compose calls to neutral widgets.
+- `ui/compose/ComposeWidgetRule.kt`: project/framework extension SPI targeting
+  neutral widgets, never ArkUI statements or source text.
+- `ui/harmony/HarmonyWidgetBackend.kt`: the only control/modifier target mapper.
 
-To add an external control, implement a `CallRule.lowerUi` rule using resolved
-symbols and typed nodes, then register it with the backend. Implement value or
-effect hooks on the same rule where the API family needs them. The test
-`tests/ui/UnifiedApi.kt` + `TypedBoundaryProbe.kt` shows one backend registration
-handling actual Compose CircularProgressIndicator and currentCompositeKeyHash calls.
-That probe is not a production progress-indicator mapping or a plugin-loader feature.
-Built-in scoped rules have priority over backend rules; unsupported arguments of
-an already claimed API still reject rather than bypassing its checks.
+Do not add an external control through `CallRule.lowerUi`. Add source-framework
+recognition to the Widget adapter, a neutral Widget/Modifier node when needed,
+and target rendering to the Harmony backend. Ordinary values and effects still
+use `CallRule.lower` and `lowerStatement`.
 
 Ordered Modifier application and remembered-state declarations retain specialized
 framework structure handling. This increment does not claim that all UI-specific

@@ -15,8 +15,10 @@ Official resolved Kotlin IR
   -> shared ETS printer
 ```
 
-`ComposeLowering.lower` returns this same program. The removed `UiTextModule`
-was an intermediate text envelope, not an acceptable typed target contract.
+`ComposeWidgetPipeline.lower` returns this same program. Compose calls first
+become target-independent widgets and then pass through `HarmonyWidgetBackend`.
+The removed legacy page assembler and `UiTextModule` were not acceptable parallel
+target contracts.
 No raw-source node replaces it. Controls and ordered modifier boundaries are
 `EtsUiElement`; content iteration is `EtsUiForEach`. Conditions, expressions,
 callbacks and local-value semantics reuse the existing language nodes. Component,

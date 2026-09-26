@@ -1,20 +1,20 @@
 package dev.ets
 
+import dev.ets.pipeline.ComposeWidgetPipeline
 import java.io.File
 
 fun main(args: Array<String>) {
     val program = withKotlinModule(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0]) + args.drop(2)) { module ->
         val sink = DiagnosticSink()
         val backend = EtsBackend(sink, listOf(StandardLibraryRules()))
-        backend.validateSource(module)
-        ComposeLowering(backend.language, sink).lower(module, "models.ui.ModelPage")
+        ComposeWidgetPipeline(backend, StandardLibraryRuntime).lower(module, "models.ui.ModelPage")
     }
     EtsValidator().validate(program, perFileNames = true)
-    val component = program.files.flatMap { it.declarations }.filterIsInstance<EtsClass>().single { it.component }
-    val method = component.members.filterIsInstance<EtsFunction>().single { it.name == "ModelPage" }
-    check(method.parameters.map { it.symbol.name } == listOf("minimum", "extra"))
+    val entry = program.files.flatMap { it.declarations }.filterIsInstance<EtsFunction>()
+        .single { it.name == "ModelPage" && it.builder }
+    check(entry.parameters.map { it.symbol.name } == listOf("minimum", "extra"))
     val nodes = mutableListOf<EtsNode>()
-    walkEts(component, nodes::add)
+    program.files.forEach { file -> file.declarations.forEach { walkEts(it, nodes::add) } }
     val texts = nodes.filterIsInstance<EtsUiElement>().filter { (it.call.callee as? EtsReference)?.symbol?.name == "Text" }
     check(texts.size == 4)
     val textCalls = texts.mapNotNull { it.call.arguments.firstOrNull() as? EtsCall }
@@ -33,7 +33,7 @@ fun main(args: Array<String>) {
     val click = EtsFunction("click", callback.parameters, EtsTypes.VOID, callback.body, callback.source, exported = true)
     val helpers = EtsProgram(program.files.map { file -> file.copy(declarations = file.declarations.filter {
         it is EtsGlobal || it is EtsFunction && !it.builder || it is EtsClass && !it.component
-    } + if (file.sourcePath == component.source.file) listOf(click) else emptyList()) })
+    } + if (file.sourcePath == callback.source.file) listOf(click) else emptyList()) })
     EtsValidator().validate(helpers, perFileNames = true)
     val host = File(output, "host").apply { mkdirs() }
     emitEtsModules(helpers, StandardLibraryRuntime).forEach { (name, text) -> File(host, name).writeText(text) }

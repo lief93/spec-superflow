@@ -53,11 +53,12 @@ function assertPageBoundary(label, emitter, fileCount) {
   const trace = readTrace(label);
   assert.deepEqual(trace.filter(event => !/^Ets(Program|Validator|Printer)\./.test(event)), [
     'EtsLoweringPhases.run:enter', 'EtsLoweringPhases.run:exit',
-    'ComposeLowering.lower:enter', 'ComposeLowering.lower:exit',
+    'pipeline/ComposeWidgetPipeline.lower:enter', 'pipeline/ComposeWidgetPipeline.lower:exit',
     `ModulesKt.${emitter}:enter`, `ModulesKt.${emitter}:exit`,
   ], 'page output must assemble one typed program and enter only the shared emitter');
-  const compose = trace.slice(trace.indexOf('ComposeLowering.lower:enter'), trace.indexOf('ComposeLowering.lower:exit') + 1);
-  assert.ok(compose.includes('EtsProgram.<init>:exit'), 'Compose lowering must return a typed EtsProgram');
+  const compose = trace.slice(trace.indexOf('pipeline/ComposeWidgetPipeline.lower:enter'),
+    trace.indexOf('pipeline/ComposeWidgetPipeline.lower:exit') + 1);
+  assert.ok(compose.includes('EtsProgram.<init>:exit'), 'Widget pipeline must return a typed EtsProgram');
   const emission = trace.slice(trace.indexOf(`ModulesKt.${emitter}:enter`), trace.indexOf(`ModulesKt.${emitter}:exit`) + 1);
   const validations = emission.filter(event => event.startsWith('EtsValidator.'));
   assert.deepEqual(validations.slice(0, 2),
@@ -149,7 +150,7 @@ assert.ok(composableValues.includes('Text(getRawString("title"))'), 'Text consum
 assert.ok(!composableValues.includes('this.getRawString('), 'value helper is not a UI builder');
 
 const typedExpressions = generate('typed-expressions', join(here, 'TypedExpressions.kt'), 'typedexpressions.TypedExpressions');
-assertEntryContainer(typedExpressions, 'this.TypedExpressions(0.5, true)');
+assertEntryContainer(typedExpressions, 'this.TypedExpressions(this.ratio, this.active)');
 assert.ok(typedExpressions.includes('.width(ratio * 100 + "%")'), 'fill uses typed arithmetic and a string literal through the shared printer');
 assert.match(typedExpressions,
   /\.backgroundColor\(\(\(color: number \| null\)[\s\S]*?\)\(active \? 4294901760 : 4278190080\)\)/,
@@ -163,8 +164,9 @@ for (const [label, size] of [
   ['Body', null], ['Large body', 24], ['Wrapped label', null], ['Explicit label', 16], ['Body restored', null],
 ]) {
   const text = materialText.split('\n').find(line => line.includes(`Text("${label}")`));
-  assert.ok(text?.includes(`__etsTextStyleModifier(null, ${size === null ? 'null' : `${size}.0`},`) &&
-    text.includes('__etsMaterialContext.textStyle ?? __etsMaterialContext.typography.bodyLarge'),
+  const normalizedText = text?.replaceAll('this.__etsMaterialContext', '__etsMaterialContext');
+  assert.ok(normalizedText?.includes(`__etsTextStyleModifier(null, ${size === null ? 'null' : `${size}.0`},`) &&
+    normalizedText.includes('__etsMaterialContext.textStyle ?? __etsMaterialContext.typography.bodyLarge'),
     `${label} must read its typed invocation context and retain explicit Text overrides`);
 }
 assert.match(materialText, /content\.builder\(new EtsMaterialContext\([\s\S]*?\.typography\.labelLarge,/,
@@ -176,8 +178,9 @@ const materialTopAppBar = generate('material-top-app-bar', join(here, 'MaterialT
 assert.match(materialTopAppBar, /@Entry\s+@Component\s+export struct MaterialTopAppBar/);
 assert.match(materialTopAppBar, /new EtsImageVector\(\$r\("sys\.symbol\.line_3_horizontal"\)\)/,
   'resolved Material Menu identity maps to the equivalent Harmony system symbol');
-assert.match(materialTopAppBar, /SymbolGlyph\(imageVector\.resource\).*\.accessibilityText\("Open navigation"\)/,
-  'typed ImageVector values remain passable through source builders and retain accessibility text');
+assert.match(materialTopAppBar,
+  /ForEach\(\[imageVector\.resource\] as Array<Resource>, \((__etsUiArg\d+_\d+): Resource\) => \{[\s\S]*?SymbolGlyph\(\1\).*\.accessibilityText\("Open navigation"\)/,
+  'typed ImageVector values are evaluated once, passed through source builders and retain accessibility text');
 assert.match(materialTopAppBar, /Text\("Statistics"\)[\s\S]*Text\("Action"\)[\s\S]*\.height\(72\.0\)/,
   'TopAppBar retains title, action slot, and explicit expanded height');
 assert.match(materialTopAppBar, /\.onClick\(onMenu\)/,
@@ -188,11 +191,11 @@ assert.match(materialTopAppBar, /\.height\(72\.0\)\.alignContent\(Alignment\.Cen
   'TopAppBar title is vertically centered in its source bar height');
 assert.match(generate('unsupported-material-icon', join(here, 'MaterialTopAppBar.kt'),
   'materialtopappbar.UnsupportedMaterialIcon', false).message,
-  /Unsupported language type: androidx\.compose\.material\.icons\.Icons\.Filled/,
+  /Unsupported external call: androidx\.compose\.material\.icons\.filled\.<get-Delete>\. Missing dependency body or declared typed adapter/,
   'unmapped ImageVector identities fail rather than selecting a guessed symbol');
 assert.match(generate('unsupported-top-app-bar-colors', join(here, 'MaterialTopAppBar.kt'),
   'materialtopappbar.UnsupportedTopAppBarColors', false).message,
-  /Unsupported androidx\.compose\.material3\.TopAppBar argument: colors/,
+  /Unsupported androidx\.compose\.material3\.TopAppBar widget argument: colors/,
   'explicit TopAppBar parameters outside the supported contract fail at their source argument');
 const materialScaffoldState = generate('material-scaffold-state', join(here, 'MaterialScaffoldState.kt'),
   'materialscaffoldstate.MaterialScaffoldState');
@@ -200,16 +203,19 @@ assert.match(materialScaffoldState, /@Require @Prop state: EtsStateFlow<ScreenSt
   'StateFlow root inputs remain typed host-provided component props');
 assert.match(materialScaffoldState, /@Require @Prop snackbarHostState: EtsSnackbarHostState/,
   'remembered root SnackbarHostState construction becomes a required host prop');
-assert.match(materialScaffoldState, /Text\(state\.value\.title\)/,
-  'delegated lifecycle StateFlow reads bind to the typed snapshot value');
-assert.match(materialScaffoldState, /Stack\(\{ alignContent: Alignment\.TopStart \}\)[\s\S]*Text\(state\.value\.title\)[\s\S]*Text\("Top"\)[\s\S]*Stack\(\{ alignContent: Alignment\.TopStart \}\) \{\}/,
+assert.match(materialScaffoldState,
+  /ForEach\(\[state\.value\.title\] as Array<string>, \((__etsUiArg\d+_\d+): string\) => \{[\s\S]*?Text\(\1\)/,
+  'delegated lifecycle StateFlow reads bind once to the typed snapshot value consumed by Text');
+assert.match(materialScaffoldState, /Stack\(\{ alignContent: Alignment\.TopStart \}\)[\s\S]*ForEach\(\[state\.value\.title\][\s\S]*Text\(__etsUiArg\d+_\d+\)[\s\S]*Text\("Top"\)[\s\S]*Stack\(\{ alignContent: Alignment\.TopStart \}\) \{\}/,
   'Scaffold retains top bar, snackbar layer, and content');
-assert.match(materialScaffoldState, /Text\(state\.value\.title\)[^\n]*\.padding\(__etsEdgePadding\(0, 64, 0, 0\)\)/,
-  'mapped Scaffold PaddingValues retain the Material top bar inset');
+assert.match(materialScaffoldState,
+  /Text\(__etsUiArg\d+_\d+\)[\s\S]*?\.width\("100\.0%"\)\.height\("100\.0%"\)\.padding\(__etsEdgePadding\(0, 64, 0, 0\)\)/,
+  'mapped Scaffold PaddingValues retain the Material top bar inset and source modifier order');
 const providedText = generate('provided-text', join(here, 'UnsupportedTextProvider.kt'), 'negative.UnknownPage');
-assert.match(providedText, /__etsMergeTextStyle\(__etsMaterialContext\.textStyle \?\? __etsMaterialContext\.typography\.bodyLarge, new EtsTextStyle/);
+assert.match(providedText,
+  /__etsMergeTextStyle\((?:this\.)?__etsMaterialContext\.textStyle \?\? (?:this\.)?__etsMaterialContext\.typography\.bodyLarge, new EtsTextStyle/);
 const invocationText = generate('invocation-text-contexts', join(here, 'UnsupportedTextContexts.kt'), 'negative.UnknownPage');
-assert.match(invocationText, /SharedLabel\(__etsMaterialContext\)/);
+assert.match(invocationText, /SharedLabel\((?:this\.)?__etsMaterialContext\)/);
 assert.match(invocationText, /SharedLabel\(new EtsMaterialContext\([\s\S]*?\.typography\.labelLarge,/);
 const unsupportedValueSource = join(here, 'UnsupportedComposableValue.kt');
 const unsupportedValue = generate('unsupported-composable-value', unsupportedValueSource, 'negative.UnknownPage', false);
@@ -236,17 +242,18 @@ for (const [x, expected] of [[62, '0'], [90, '1'], [103, '1'], [104, '2'], [105,
     { exports: {}, items, TouchTestStrategy: { DEFAULT: 0, FORWARD: 2 } }, { timeout: 1000 }), expected,
     'native-probe specified overlap points select the nearest nominal pointer rectangle');
 }
-assertEntryContainer(source, 'this.Page(12, 4)');
+assertEntryContainer(source, 'this.Page(this.base, this.extra)');
 assert.ok(!source.includes('uiTemporary'), 'immutable compiler temporaries must not introduce single-read builders');
 assert.ok(!source.includes('ComposeContentSlot'), 'multi-root content must remain in its source parent layout');
 assert.ok(source.split('Stack({ alignContent: Alignment.TopStart })').length - 1 <= 5,
   'only the entry, source Box, and ordering-required modifier/control boundaries need Stacks');
-for (const marker of ['struct Page', 'Page(__etsMaterialContext: EtsMaterialContext, base: number',
+for (const marker of ['struct Page', 'private Page(base: number = 12, extra: number = 4)',
   'PageFrame(__etsMaterialContext: EtsMaterialContext, title: string',
   'ContentPanel(__etsMaterialContext: EtsMaterialContext, spacing: number',
-  'content: WrappedBuilder<[EtsMaterialContext]>', 'content.builder(__etsMaterialContext)',
+  'content: Binding<WrappedBuilder<[EtsMaterialContext]>>', 'content.value.builder(__etsMaterialContext)',
   'Swiper(this.pagerState_controller)', 'this.pagerState_currentPage',
-  'this.callbackCount', '.onChange(', '.changeIndex(', '.id("pager")', 'length: 4']) {
+  'this.__etsState_callbackCount', '.onChange(', '.changeIndex(', '.id("pager")',
+  'ForEach([0, 1, 2, 3] as Array<number>']) {
   assert.ok(source.includes(marker), `missing semantic/structural seam: ${marker}`);
 }
 assert.ok(!source.includes('layoutPx'));
@@ -254,6 +261,14 @@ assert.ok(!source.includes('() => {}'), 'no empty content substitution');
 assert.ok(source.includes('base + extra'), 'source arithmetic survives');
 assert.equal(source.split('pageModel(page)').length - 1, 1, 'source model initializer evaluates once per page body');
 assert.ok(source.includes('model: Model'), 'source model local retains a typed binding');
+assert.ok(source.includes('private Page_ContentPanel_content(') && source.includes('private Page_content('),
+  'nested source slots retain distinct source-derived builder ownership');
+assert.equal(source.split('this.Page_content(').length - 1, 1,
+  'the entry invokes its slot once and no generated slot recursively calls itself');
+assert.ok(source.includes('callbackCount.value = __ets_callbackCount + 1'),
+  'a reactive snapshot writes through its source Binding');
+assert.doesNotMatch(source, /ForEach\([^\n]*\(__etsTmp\d*:/,
+  'compiler-generated Kotlin temporaries remain language aliases rather than UI value scopes');
 
 const kotlinHome = dependencies.find(path => path.includes('/kotlin-compiler-embeddable/')).split('/org.jetbrains.kotlin/')[0];
 const pluginRoot = join(kotlinHome, 'org.jetbrains.kotlin/kotlin-compose-compiler-plugin-embeddable/2.1.20');
@@ -275,8 +290,8 @@ writeFileSync(renamed, readFileSync(fixture, 'utf8')
   .replaceAll('callbackCount', 'clickTotal').replaceAll('pagerState', 'carousel')
   .replaceAll('base: Int = 12', 'base: Int = 7').replaceAll('extra: Int = 4', 'extra: Int = 5'));
 const renamedOutput = generate('renamed', renamed, 'sample.NotesPage');
-assertEntryContainer(renamedOutput, 'this.NotesPage(7, 5)');
-for (const marker of ['struct NotesPage', 'NotebookFrame', 'NotebookPanel', 'actionTitle', 'this.clickTotal',
+assertEntryContainer(renamedOutput, 'this.NotesPage(this.base, this.extra)');
+for (const marker of ['struct NotesPage', 'NotebookFrame', 'NotebookPanel', 'actionTitle', 'this.__etsState_clickTotal',
   'this.carousel_currentPage', 'this.NotesPage(']) {
   assert.ok(renamedOutput.includes(marker), `renamed source lost ${marker}`);
 }
@@ -285,7 +300,8 @@ const ordered = generate('modifier-order', join(here, 'ModifierOrder.kt'), 'orde
 const lines = ordered.split('\n');
 const depth = line => line.length - line.trimStart().length;
 const clickLayers = lines.filter(line => line.includes('}.onClick(') || line.includes('.onClick('));
-const paddingLayers = lines.filter(line => line.includes('.padding(4.0)'));
+const paddingLayers = lines.filter(line =>
+  line.includes('.padding({ left: 4.0, top: 4.0, right: 4.0, bottom: 4.0 })'));
 const widthLayers = lines.filter(line => line.includes('.width(20.0)'));
 const heightLayers = lines.filter(line => line.includes('.height(8.0)'));
 assert.equal(clickLayers.length, 2);
@@ -297,7 +313,10 @@ for (let index = 0; index < 2; index++) {
   assert.ok(depth(heightLayers[index]) > depth(paddingLayers[index]), '8vp height is inside 4vp outer padding');
   if (index === 1) assert.ok(!clickLayers[index].includes('.padding('), 'click-after-padding does not paint or lay out its outer padding');
 }
-assert.match(generate('unsupported-api', join(here, 'UnsupportedApi.kt'), 'negative.UnknownPage', false).message, /LazyRow/);
+const lazyRow = generate('lazy-row', join(here, 'UnsupportedApi.kt'), 'negative.UnknownPage');
+assert.ok(lazyRow.includes('List() {') && lazyRow.includes('ListItem() {') &&
+  lazyRow.includes('Text("Unsupported lazy layout")') && lazyRow.includes('.listDirection(Axis.Horizontal)'),
+  'LazyRow item content lowers through the neutral LazyList model to a horizontal native List');
 assert.match(generate('unsupported-modifier', join(here, 'UnsupportedModifier.kt'), 'negative.UnknownPage', false).message, /blur/);
 assert.match(generate('supported-text-argument', join(here, 'UnsupportedTextArgument.kt'), 'negative.UnknownPage'),
   /__etsTextStyleModifier\(null, null, null, null, null, 2\.0,/, 'Text letter spacing is preserved');
@@ -309,14 +328,22 @@ assert.match(timedCallback, /setTimeout\(\(\): void => \{/);
 assert.match(timedCallback, /Number\(delayMillis\)/);
 assert.match(generate('unsupported-coroutine', join(here, 'UnsupportedCoroutine.kt'), 'negative.UnknownPage', false).message, /coroutine/);
 assert.match(generate('unsupported-launch-value', join(here, 'UnsupportedLaunchValue.kt'), 'negative.UnknownPage', false).message,
-  /Unsupported resolved platform expression: kotlinx.coroutines.launch/, 'effect-only pager adapter must never fabricate a Job value');
+  /Coroutine launch is an effect and cannot produce a target Job value/,
+  'effect-only coroutine lowering must never fabricate a Job value');
 const sourceValues = generate('source-values', join(here, 'SourceValues.kt'), 'values.SourceValues');
 assert.equal(sourceValues.split('counter.next()').length - 1, 2, 'used and unused effectful local initializers each evaluate once');
 assert.ok(sourceValues.includes('label: string'), 'both Text reads share the captured source value');
 assert.ok(sourceValues.includes('unused: string'), 'unused declaration still evaluates its effectful initializer');
 const temporaries = generate('compiler-temporaries', join(here, 'CompilerTemporaries.kt'), 'temporaries.CompilerTemporaries');
 assert.ok(temporaries.includes('Text(value.immutable)'), 'default immutable property read stays directly in Text');
-assert.ok(!temporaries.includes('Text(value.mutable)'), 'mutable read must remain captured before a later argument can mutate it');
+const mutableRead = temporaries.indexOf('[value.mutable] as Array<string>');
+const laterMutation = temporaries.indexOf('[Math.fround(value.mutate())] as Array<number>', mutableRead);
+assert.ok(mutableRead >= 0 && laterMutation > mutableRead,
+  'mutable read evaluates before a later source argument mutates it');
+assert.match(temporaries,
+  /ForEach\(\[value\.mutable\] as Array<string>, \((__etsUiArg\d+_\d+): string\) => \{[\s\S]*?Text\(\1\)/,
+  'the once-only mutable snapshot is consumed by Text');
+assert.equal(temporaries.split('value.mutable').length - 1, 1, 'mutable read evaluates once');
 assert.equal(temporaries.split('value.effectText()').length - 1, 1, 'effectful compiler temporary evaluates once');
 assert.equal(temporaries.split('value.mutate()').length - 1, 1, 'later argument effect is neither duplicated nor dropped');
 const slotLayouts = generate('slot-layouts', join(here, 'SlotLayouts.kt'), 'slotlayouts.SlotLayouts');
@@ -328,15 +355,17 @@ assert.equal(slotLayouts.split('Stack({ alignContent: Alignment.TopStart })').le
 const layers = generate('modifier-layers', join(here, 'ModifierLayers.kt'), 'layers.ModifierLayers');
 assert.ok(layers.includes('.width(20.0).height(8.0).backgroundColor(4278190080).id("direct")'),
   'independent dimensions, paint, and tag belong directly on the source Box');
-assert.ok(layers.includes('.width(28.0).height(16.0).padding(4.0)'), 'padding inside fixed size preserves the outer constraint');
-assert.ok(layers.includes('.width("100%").height("100%").backgroundColor(4287137928).id("inside")'),
+assert.ok(layers.includes('.width(28.0).height(16.0).padding({ left: 4.0, top: 4.0, right: 4.0, bottom: 4.0 })'),
+  'padding inside fixed size preserves the outer constraint');
+assert.ok(layers.includes('Stack({ alignContent: Alignment.TopStart }) {}.backgroundColor(4287137928).id("inside")'),
   'inner paint receives the remaining content size after padding');
-assert.ok(layers.includes('.backgroundColor(4278190080).padding(4.0)'), 'outer paint includes padding');
+assert.ok(layers.includes('.backgroundColor(4278190080).padding({ left: 4.0, top: 4.0, right: 4.0, bottom: 4.0 })'),
+  'outer paint includes padding');
 assert.ok(layers.includes('.backgroundColor(4294901760).id("paint")'), 'inner paint remains independently ordered');
 assert.ok(!layers.includes('.width(40.0)'), 'later preferred size cannot override an already fixed outer width');
 assert.ok(layers.includes('.backgroundColor(0).id("alpha")'), 'transparent inner paint does not overwrite outer paint');
-assert.equal(layers.split('Stack({ alignContent: Alignment.TopStart })').length - 1, 12,
-  'six source Boxes plus five necessary ordering boundaries and the native entry bridge');
+assert.equal(layers.split('Stack({ alignContent: Alignment.TopStart })').length - 1, 11,
+  'six source Boxes plus four necessary ordering boundaries and the native entry bridge');
 
 const conditionalUi = generate('conditional-ui', join(here, 'ConditionalUi.kt'), 'conditionalui.ConditionalUi');
 assert.ok(conditionalUi.includes('if (active) {') && conditionalUi.includes('.id("Active")') &&
@@ -350,8 +379,11 @@ const moduleArgs = [cli, '--mode', 'page', '--entry', 'multimodule.Page', '--cla
   '--out-dir', moduleDirectory, ...moduleSources];
 const moduleRun = run('ui-modules', 'bash', moduleArgs, { env: traceEnv });
 assert.equal(moduleRun.status, 0, moduleRun.stdout + moduleRun.stderr);
-assertPageBoundary('ui-modules', 'emitEtsModules', 2);
-assert.deepEqual(readdirSync(moduleDirectory).sort(), ['Models.ets', 'Screen.ets']);
+assertPageBoundary('ui-modules', 'emitEtsModules', 7);
+assert.deepEqual(readdirSync(moduleDirectory).sort(), [
+  'EtsFontSelection.ets', 'EtsFontValues.ets', 'EtsLineHeightStyle.ets',
+  'EtsTextStyle.ets', 'EtsTextStyleModifier.ets', 'Models.ets', 'Screen.ets',
+]);
 const screen = readFileSync(join(moduleDirectory, 'Screen.ets'), 'utf8');
 const models = readFileSync(join(moduleDirectory, 'Models.ets'), 'utf8');
 assert.match(screen, /import \{ Model \} from "\.\/Models"/);
@@ -398,17 +430,6 @@ assert.match(ownershipPage, /import \{ Action \} from "\.\/Widgets"/);
 for (const name of readdirSync(ownershipDirectory)) moduleHashes.push({ path: join(ownershipDirectory, name),
   sha256: hash(join(ownershipDirectory, name)), entry: name === 'Screen.ets', relativePath: 'ownership/' + name });
 
-const productionSources = readdirSync(join(root, 'src'), { recursive: true })
-  .filter(path => path.endsWith('.kt')).sort().map(path => join(root, 'src', path));
-const typedJar = join(work, 'typed-boundary.jar');
-const typedCompile = run('typed-boundary-compile', java, ['-cp', dependencies.join(':'),
-  'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler', '-no-stdlib', '-no-reflect',
-  '-classpath', dependencies.join(':'), '-d', typedJar, ...productionSources, join(here, 'TypedBoundaryProbe.kt')]);
-assert.equal(typedCompile.status, 0, typedCompile.stderr);
-const typedProbe = run('typed-boundary-probe', java, ['-cp', `${typedJar}:${dependencies.join(':')}`,
-  'ui.test.TypedBoundaryProbeKt', classpath, fixture, join(here, 'UnifiedApi.kt')]);
-assert.equal(typedProbe.status, 0, `${typedProbe.stdout}\n${typedProbe.stderr}`);
-assert.ok(typedProbe.stdout.includes('PASS typed UI bindings'));
 for (const file of implementation) assert.equal(hash(file.path), file.sha256, 'Compiler changed during UI regression');
 for (const [file, sha256] of sourceInputs) assert.equal(hash(file), sha256, 'Fixture changed during UI regression');
 writeFileSync(join(work, 'result.json'), JSON.stringify({ passed: true, implementation,

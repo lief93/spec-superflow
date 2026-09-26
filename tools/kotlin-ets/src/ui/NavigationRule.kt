@@ -30,6 +30,14 @@ internal class ComposeNavigationRule : CallRule {
             "target_platform_default" else null
     }
 
+    override fun ownsSourceArgumentDependency(call: IrCall, index: Int): Boolean {
+        if (!isNavigate(call) || index != 0) return false
+        return when (call.getValueArgument(index)) {
+            is IrGetObjectValue, is IrConstructorCall, is IrConst -> true
+            else -> false
+        }
+    }
+
     override fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression? {
         if (!isNavigate(call)) return null
         val route = call.getValueArgument(0)

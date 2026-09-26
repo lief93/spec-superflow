@@ -39,12 +39,10 @@ IntDiv, IntRem, ListGet, ListAdd, ListMap, Substring, SubstringFrom. Each declar
 appears at most once. No input-dependent source generation, output-text scanning,
 new API mapping, library loader or generalized linker is introduced.
 
-The zero-argument `StandardLibraryRules.supportLines()` API remains intentionally
-unchanged. `Main.kt` page mode still consumes it because `ComposeEmitter.emit`
-returns `UiTextModule`, not a complete typed tree. That path still emits all seven
-helpers; claiming page-mode tree shaking would be incorrect. Removing this real
-consumer's fallback requires a separate typed UI dependency interface, not regex
-inspection of its output. No UI-specific workaround is part of this change.
+Page mode now returns a complete typed `EtsProgram` from
+`ComposeWidgetPipeline`, so it uses the same typed runtime-dependency collection
+as language mode. The former `UiTextModule` fallback was removed; runtime support
+must be selected from typed symbol dependencies, never output-text inspection.
 
 ## Official Kotlin/JS Reference
 

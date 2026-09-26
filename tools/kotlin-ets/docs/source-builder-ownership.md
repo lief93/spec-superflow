@@ -4,22 +4,33 @@ R1B moves reachable, page-independent source `@Composable` Unit functions to
 top-level `@Builder` functions in their original `EtsFile`. Source names,
 parameter names/types/defaults and declaration identities remain unchanged.
 Public/internal source builders are exported; private builders remain local to
-their original output file. The entry function stays a component method.
+their original output file. Direct pipeline use keeps a stateless entry as a
+top-level Builder. Production `page` mode packages the entry as a same-named
+component method called by `build`, while stateful direct entries are components.
 
 ## Binding and ownership
 
-`ComposeLowering` binds each actual `IrSimpleFunction` to the same
-`etsFunctionSymbol` used by its target declaration. Source builder calls and
-generated bridge calls initially use `EtsMember.symbolId`, not a lookup by name.
-Generated calls bind the exact newly created `EtsFunction.symbol`.
+`ComposeSourceFunctionLowering` delegates each reachable source
+`IrSimpleFunction` to `IrFunctionToEts` with `FunctionTargetSemantics`. The
+shared language lowering therefore owns the original name, parameters, defaults,
+generic binders, visibility and symbol identity; Compose supplies only builder
+effect, UI body lowering and typed slot representation. `ComposeWidgetPipeline`
+places the resulting typed builders in their source-owned `EtsFile`; source
+builder calls bind exact target symbols rather than looking declarations up by
+printed name.
 
-`BuilderOwnership` walks the immutable typed functions, including parameter
-defaults, lambdas, nested bodies and UI arguments. References to source builders
-form dependency edges. The root, real page receiver/state accesses and calls to
-generated slot/local-evaluation bridges anchor page ownership; this dependence
-propagates to source callers until stable. Callback parameters alone do not
-anchor their declaring builder. A page-capturing callback passed by the root
-still captures the page in the caller, without inventing a context parameter.
+Composable function parameters use `WrappedBuilder<[T...]>`, derived from the
+resolved Kotlin function type rather than a parameter name. Zero- and
+parameterized slots share declaration, forwarding, invocation and capture
+lifting. Synthetic helper names are limited to anonymous source lambdas; named
+business composables retain their source method names.
+
+Named source composables remain top-level builders. State and ordinary local
+values captured by an anonymous UI lambda become explicit parameters of its
+generated slot builder. The reactive-builder pass changes state-dependent
+parameters to ArkUI `Binding<T>` only after target structure is complete. A
+page-capturing callback stays in the page caller; it does not force the called
+business builder or its transitive callers into the component class.
 
 Receiver occurrences are counted per structural edge, not deduplicated by object
 identity. Sharing an immutable `EtsReference` between a source-call receiver and
@@ -33,11 +44,11 @@ Module assembly continues to check symbol ownership, visibility and collisions.
 
 ## Boundary
 
-Generated slot and evaluate-once bridges remain page methods, even when further
-capture conversion might theoretically make them global. A source builder
-depending on such a bridge remains page-owned transitively. No receiver/context
-parameters are introduced. Existing source-receiver/generic/slot limitations
-remain in force; this increment does not claim arbitrary Compose support.
+Generated slot bridges are top-level builders with explicit captured parameters;
+they never retain a free page `this`. No receiver/context parameters are
+introduced into named source functions. Source composable receivers and slot
+defaults remain outside the profile; this increment does not claim arbitrary
+Compose support.
 Recursive source UI traversal is still rejected by the existing material text
 context analysis. Cycles below are tested only at the typed ownership seam,
 not claimed as newly supported source recursion.
@@ -54,11 +65,10 @@ node tests/ui/ownership/probe.mjs
 Both runners pin low-CPU SerialGC JVM options and retain command/stdout/stderr,
 input SHA-256 hashes and outcomes under `tests/ui/ownership/.work/`. The source
 probe uses actual Kotlin 2.1.20 IR from `Widgets.kt`, `Screen.kt`, `Services.kt`;
-it checks five original-file globals, root and transitive page ownership, exact
-symbols/parameters/private visibility and live page callback captures. Ordinary
-source helper closures run on the JVM and the generated host code for five
-identical seeds, including signed overflow endpoints. The host helper projection
-comes from typed declarations, not a simulation of UI composition.
+it checks all reachable named source builders, generated anonymous slot builders,
+exact symbols/parameters/private visibility, explicit callback captures and the
+absence of free `this` in global builders. Ordinary Kotlin behavior is covered
+by the language/lowering suites rather than duplicated in this ownership test.
 
 The probe emits the complete untouched `OwnershipPage.ets` and `modules/*.ets`,
 with output hashes in `result.json`. The integration owner runs public CLI,
@@ -76,19 +86,16 @@ last visited declaration's file. Source file ordering is deliberately mixed.
 
 Graph RED `graph-5qrNEO` rejects the old identity-set classification when one
 receiver object is shared by a source call and an actual page field read.
-Source GREEN `tests/ui/ownership/.work/probe-VzNazW/result.json` records actual
-IR, detached validation, three module outputs and five same-input JVM/host
-results (`2`, `-4`, `16`, `2`, `0`), with the full production input hash guard.
+Each GREEN source probe records actual IR, detached validation, three module
+outputs and the full production input hash guard under
+`tests/ui/ownership/.work/`.
 Graph GREEN `tests/ui/ownership/.work/graph-fpLw9q/result.json` covers shared
 receiver occurrences, defaults/callbacks, bridge/transitive page dependence,
 pure and anchored typed graph cycles, and exact-symbol rewriting.
 
-Frozen production SHA-256:
-
-```text
-b144cc502b76749a8d95fc8574900ace6847e68934b59fd5b83090d287975bc6  src/ui/ComposeLowering.kt
-87e41cb362bbbab976f5b556085c6b326a91c05f9e57e2aa30c1f7e09fc944c4  src/ui/BuilderOwnership.kt
-```
+The frozen `ComposeLowering.kt` hash from the original experiment is historical
+evidence only. That page assembler was removed when page mode switched to the
+Widget pipeline and must not be restored as an alternate producer.
 
 These focused runs did not execute public CLI, SDK or devices. The integration
 owner separately reported the prerequisite five-module target-only global

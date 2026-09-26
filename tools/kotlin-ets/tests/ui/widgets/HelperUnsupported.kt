@@ -15,7 +15,7 @@ fun RecursiveEntry() {
 
 @Composable
 fun <T> GenericCard(value: T) {
-    Text(value.toString())
+    Text("generic")
 }
 
 @Composable

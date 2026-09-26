@@ -129,6 +129,21 @@ const compose = compile('compose', ['--mode', 'page', '--unsupported-policy', 'e
   '--entry', 'composablevalues.ComposableValues'], join(root, 'tests/ui/ComposableValues.kt'), 0, composeClasspath);
 assert.equal(entry(compose.report, 'androidx.compose.foundation.layout.Column(').category, 'neutral_compose_widget');
 assert.equal(entry(compose.report, 'androidx.compose.material3.Text(').category, 'neutral_compose_widget');
+assert.ok(compose.report.unsupportedNodes.every(node => node.symbol !== 'androidx.compose.foundation.layout.RowScope'),
+  'generated source component slots must reconcile speculative receiver declaration types');
+assert.equal((readFileSync(compose.output, 'utf8').match(/\.layoutWeight\(1(?:\.0)?\)/g) ?? []).length, 2,
+  'forwarded and direct RowScope content must retain row-layout modifier semantics');
+
+const scroll = compile('generated-scroll-state', ['--mode', 'page', '--unsupported-policy', 'error',
+  '--entry', 'widgetscroll.ScrollProfile'], join(root, 'tests/ui/widgets/ScrollProfile.kt'), 0, composeClasspath);
+const scrollStates = scroll.report.calls.filter(call =>
+  call.resolvedSymbol.startsWith('androidx.compose.foundation.rememberScrollState('));
+assert.equal(scrollStates.length, 2);
+assert.ok(scrollStates.every(call => call.firstUnsupportedNode === null),
+  'validated target IR must reconcile speculative state target-type failures');
+assert.equal(scroll.report.coverage.neutral_compose_widget.unsupported, 0);
+assert.ok(scroll.report.unsupportedNodes.every(node => node.symbol !== 'androidx.compose.foundation.ScrollState'),
+  'validated state fields must reconcile speculative source declaration types');
 
 const coverage = compile('coverage', ['--mode', 'page', '--unsupported-policy', 'error',
   '--entry', 'preflightfixture.CoveragePage'], join(here, 'Coverage.kt'), 2, composeClasspath);

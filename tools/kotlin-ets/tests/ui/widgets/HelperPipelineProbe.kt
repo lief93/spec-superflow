@@ -2,7 +2,7 @@
 package dev.ets.widgettest
 
 import dev.ets.*
-import dev.ets.compose.ComposeHelperLowering
+import dev.ets.compose.ComposeSourceFunctionLowering
 import dev.ets.compose.ComposeStateLowering
 import dev.ets.harmony.HarmonyWidgetBackend
 import dev.ets.pipeline.ComposeWidgetPipeline
@@ -21,7 +21,7 @@ fun main(args: Array<String>) {
         val scope = Scope()
         val entryParameters = backend.parameters(entry, scope)
         val state = ComposeStateLowering(backend.language, sink).lower(entry, scope, "HelperEntry")
-        val helpers = ComposeHelperLowering(backend, sink)
+        val helpers = ComposeSourceFunctionLowering(backend, sink)
         val model = helpers.lowerEntry(entry, state.scope, state.handledStatements)
         val call = (model.widgets.single() as Widget.BuilderCall).call as EtsCall
         val plans = helpers.plans()
@@ -33,7 +33,10 @@ fun main(args: Array<String>) {
         check((call.arguments[0] as EtsReference).symbol == entryParameters[0].symbol)
         check(call.arguments[1] is EtsUndefined)
         check((call.arguments[2] as EtsReference).symbol == entryParameters[2].symbol)
-        check((call.arguments[3] as EtsNew).classType.name == "WrappedBuilder")
+        check((call.arguments[3] as EtsNew).let {
+            it.classType.name == "WrappedBuilder" && it.classType.arguments == listOf(EtsTupleType(emptyList())) &&
+                it.classType.symbolId == "arkui:WrappedBuilder" && it.classType.external && it.repeatableSnapshot
+        })
         check(slot.signature.parameters.map { it.symbol.name } == listOf("label"))
         val target = HarmonyWidgetBackend()
         val helperNodes = mutableListOf<EtsNode>()
@@ -57,9 +60,14 @@ fun main(args: Array<String>) {
         check("HelperEntry_content(label);" in code)
         check(!Regex("(?:ActionCard|HelperEntry_content)_\\d+").containsMatchIn(code))
 
+        val genericCode = ComposeWidgetPipeline(
+            EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules())), StandardLibraryRuntime)
+            .compile(module, "widgethelpers.GenericEntry")
+        check("function GenericCard<T>(value: T)" in genericCode)
+        check("GenericCard<string>(\"value\")" in genericCode)
+
         val expected = linkedMapOf(
             "RecursiveEntry" to "Recursive source composable calls",
-            "GenericEntry" to "Generic source composables",
             "DefaultContentEntry" to "content defaults cannot replace",
         )
         val diagnostics = expected.map { (name, message) ->
@@ -75,5 +83,5 @@ fun main(args: Array<String>) {
         }
         File(output, "helper-diagnostics.tsv").writeText(diagnostics.joinToString("\n"))
     }
-    println("PASS cross-file named composable helper, typed/default arguments, callback and structured content slot")
+    println("PASS shared function lowering owns cross-file composable names, generics, defaults and typed slots")
 }

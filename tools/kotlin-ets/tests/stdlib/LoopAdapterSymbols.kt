@@ -97,6 +97,7 @@ private class AdapterLanguage(private val file: String) : Language {
         return EtsReference(symbol)
     }
     override fun statements(body: IrBody, scope: Scope): List<EtsStatement> = error("Unexpected statements")
-    override fun function(function: IrSimpleFunction, scope: Scope): EtsFunction = error("Unexpected function")
+    override fun function(function: IrSimpleFunction, scope: Scope,
+        semantics: FunctionTargetSemantics): EtsFunction = error("Unexpected function")
     override fun clazz(declaration: IrClass): EtsClass = error("Unexpected class")
 }

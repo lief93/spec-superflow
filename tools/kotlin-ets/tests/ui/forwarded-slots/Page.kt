@@ -17,9 +17,21 @@ fun Relay(content: @Composable () -> Unit) { Frame(content) }
 fun Outer(content: @Composable () -> Unit) { Relay(content) }
 
 @Composable
+fun OptionalFrame(content: @Composable (() -> Unit)?) {
+    Button(onClick = {}) { content?.invoke() }
+}
+
+@Composable
+fun ParameterizedFrame(content: @Composable (String) -> Unit) {
+    content("Parameterized label")
+}
+
+@Composable
 fun Page() {
     Column {
         Outer { Text("Forwarded label") }
+        OptionalFrame { Text("Optional label") }
+        ParameterizedFrame { label -> Text(label) }
         Text("Body restored")
     }
 }

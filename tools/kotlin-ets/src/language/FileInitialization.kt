@@ -18,8 +18,12 @@ internal fun fileInitializationCall(file: IrFile): EtsExpressionStatement {
     return EtsExpressionStatement(EtsCall(EtsReference(symbol), emptyList(), EtsTypes.VOID, at))
 }
 
-internal fun lowerFileInitialization(file: IrFile, language: Language): List<EtsDeclaration> {
-    if (!requiresFileInitialization(file)) return emptyList()
+internal fun lowerFileInitialization(file: IrFile, language: Language,
+    selectedProperties: Set<IrProperty>? = null): List<EtsDeclaration> {
+    val properties = file.declarations.filterIsInstance<IrProperty>().filter {
+        (selectedProperties == null || it in selectedProperties) && lazyTopLevelProperty(it) && it.backingField != null
+    }
+    if (properties.isEmpty()) return emptyList()
     val at = initializationSource(file)
     val name = initializationName(file)
     val state = EtsSymbol("file-init:${at.file}", name + "_state", EtsTypes.NUMBER, at)
@@ -29,7 +33,7 @@ internal fun lowerFileInitialization(file: IrFile, language: Language): List<Ets
     val caught = EtsSymbol("file-init-error:${at.file}", "__etsCaught", EtsTypes.OBJECT, at)
     val error = EtsCast(EtsReference(caught), targetErrorType, at)
     val alreadyWrapped = exceptionCheck(error, "Error", at)
-    val assignments = file.declarations.filterIsInstance<IrProperty>().filter { lazyTopLevelProperty(it) && it.backingField != null }.map { property ->
+    val assignments = properties.map { property ->
         val storage = topLevelStorage(property, language)
         EtsExpressionStatement(EtsAssignment(EtsReference(storage),
             language.expression(property.backingField!!.initializer!!.expression, Scope()), storage.source))

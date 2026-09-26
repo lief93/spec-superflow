@@ -1,6 +1,7 @@
 package dev.ets
 
 import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFir2IrPipelineArtifact
+import org.jetbrains.kotlin.ir.declarations.IrValueParameter
 
 /**
  * Ordered IR-to-IR pipeline. Frontend owns compiler lifetime and FIR2IR;
@@ -43,8 +44,9 @@ object EtsLoweringPhases {
         input: JvmFir2IrPipelineArtifact,
         bodies: FunctionBodies,
         rebindInlinedCaptures: () -> Unit,
+        retainSourceDefault: (IrValueParameter) -> Boolean = { true },
     ): Result {
-        val unavailable = JvmEtsIrLowerings.lowerSourceInlineFunctions(input, bodies)
+        val unavailable = JvmEtsIrLowerings.lowerSourceInlineFunctions(input, bodies, retainSourceDefault)
         JvmEtsIrLowerings.lowerLocalDeclarations(input)
         JvmEtsIrLowerings.lowerInheritedDefaults(input)
         JvmEtsIrLowerings.lowerNativeConstructorDispatch(input)
@@ -64,8 +66,9 @@ object EtsLoweringPhases {
  * never in `src/target` or `src/output`.
  */
 internal object JvmEtsIrLowerings {
-    fun lowerSourceInlineFunctions(input: JvmFir2IrPipelineArtifact, bodies: FunctionBodies) =
-        dev.ets.lowerSourceInlineFunctions(input, bodies)
+    fun lowerSourceInlineFunctions(input: JvmFir2IrPipelineArtifact, bodies: FunctionBodies,
+        retainSourceDefault: (IrValueParameter) -> Boolean) =
+        dev.ets.lowerSourceInlineFunctions(input, bodies, retainSourceDefault)
     fun lowerLocalDeclarations(input: JvmFir2IrPipelineArtifact) = dev.ets.lowerLocalDeclarations(input)
     fun lowerInheritedDefaults(input: JvmFir2IrPipelineArtifact) = dev.ets.lowerInheritedDefaults(input)
     fun lowerNativeConstructorDispatch(input: JvmFir2IrPipelineArtifact) = dev.ets.lowerNativeConstructorDispatch(input)

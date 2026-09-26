@@ -24,6 +24,48 @@ values and UI state behavior. Required target naming/slot/runtime bridges must
 be minimal and source-linked. Preview inputs never erase program conditions.
 Unsupported semantics are diagnosed, not replaced with empty UI or default values.
 
+## Semantic closure contract (2026-09-26)
+
+The architecture above remains the main path. The earlier roadmap was too coarse:
+it sometimes treated a parser, model record, or backend mapping as a completed
+capability even when the same source form still failed at another stage. From
+this point, every supported capability is tracked through the following five
+checkpoints. A row is not complete while any checkpoint is missing.
+
+| Checkpoint | Required result |
+| --- | --- |
+| Source semantics | The official frontend retains the resolved call/declaration, types, argument binding, source order, scope and source span. |
+| Language lowering | Values, effects, single evaluation, conditions, loops, callbacks and state reads/writes keep Kotlin behavior in the typed ETS tree. |
+| Neutral framework IR | Compose structure becomes typed `Widget`/modifier/state/resource semantics without ArkUI names or printed source fragments. |
+| Harmony lowering | One backend consumes the neutral semantics, validates target types and emits legal ArkUI/ETS without silent defaults. |
+| Evidence | A focused source fixture proves structure and host semantics; UI behavior requires SDK/HAP interaction evidence, and visual claims require matched screenshots. |
+
+The POC closure queue is organized by semantics rather than by individual pages
+or API names:
+
+| Capability family | Current closure | Next gate |
+| --- | --- | --- |
+| Kotlin declarations, values and control flow used by UI | Broad main path exists; unsupported combinations remain explicit | Preserve call argument order and one-time evaluation across UI target lowering, then rerun ordinary-language parity tests |
+| Source composable functions and business components | Names, parameters, defaults and structured slots use shared function lowering | Cross-file component parameter/slot regression plus real-page generation |
+| Core widgets and layout | Typed neutral model and shared Harmony backend exist | Complete common control/layout semantics and compile unchanged output with the SDK |
+| Modifier chains | Ordered neutral operations exist for the supported subset | Preserve source argument evaluation independently of ArkUI wrapper/attribute order; keep unsupported operations source-linked |
+| UI state and branching | Mutable/derived state subset, conditions, repeat, pager and scroll paths exist | Prove read/write/redraw and pager/button/indicator linkage in a HAP, not only generated text |
+| Resources, theme and project values | Typed resource/theme seams and project adapter contract exist | Verify real project strings/images/theme values and reject unmapped values before output |
+| Page/project delivery | Real project source selection and multi-file output exist | Generate, SDK-build, install and compare at least one public page before claiming page migration success |
+
+Latest source-to-target evidence: the Ekspensify `IntroScreen` project path
+resolves 147 calls and generates 17 ETS files plus resources through the formal
+Widget IR pipeline. All six call categories reconcile to 100% after target
+validation. Its only recorded degradation is an unrelated, unreferenced Gson
+file initializer omitted from the selected page. This proves generation, not
+SDK/HAP, interaction or visual equivalence; those remain the page-delivery gate.
+
+When a test exposes a gap, fix the earliest owning checkpoint and add a focused
+regression there. Do not add a page-local special case, bypass the neutral model,
+or relax a later-stage test. `generated` proves only source-to-ETS completion;
+`page verified` additionally requires HAP build, runtime interaction and matched
+visual evidence.
+
 ## Core Profile to real-project rollout (2026-09-22)
 
 This roadmap separates reusable compiler and framework capability from a real

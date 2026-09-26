@@ -30,6 +30,9 @@ private fun shapesValue(value: ThemeShapes<Double, SourceSpan>, at: SourceSpan):
     EtsNew(materialShapesType, listOf(value.extraSmall, value.small, value.medium, value.large, value.extraLarge)
         .map { shapeValue(it, at) }, at)
 
+internal fun defaultMaterialShapes(at: SourceSpan): EtsExpression =
+    shapesValue(defaultShapeValues(at), at)
+
 internal fun materialShapes(context: EtsExpression, at: SourceSpan): EtsExpression =
     materialContextMember(context, MaterialContextField.SHAPES, at)
 

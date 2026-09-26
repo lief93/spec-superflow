@@ -10,7 +10,10 @@ class EtsBackend(val diagnostics: DiagnosticSink, private val rules: List<CallRu
     val language: Language = lowering
 
     /** Bind a production entry signature with the same naming and type rules as ordinary functions. */
-    fun parameters(function: IrFunction, scope: Scope): List<EtsParameter> = lowering.parameters(function, scope)
+    fun parameters(function: IrFunction, scope: Scope,
+        semantics: FunctionTargetSemantics = FunctionTargetSemantics()): List<EtsParameter> =
+        semantics.frameworkParameters(scope) + lowering.parameters(function, scope,
+            semantics.parameterType, semantics.parameterBinding, semantics.retainSourceDefault)
 
     /** Link declarations contributed by the configured call rules. */
     fun link(program: EtsProgram): EtsProgram = linkAdapterDeclarations(program, rules)

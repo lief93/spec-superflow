@@ -40,17 +40,16 @@ second frontend. Only the frontend owner may change official pass order/context.
 the existing typed target nodes. `Scope` binds official value-symbol identities
 to target expressions; it does not resolve by parameter spelling.
 
-Scoped platform rules, registered library rules and Compose control rules all
-implement `CallRule`. A single `adaptCall` dispatcher selects and checks the
-result according to `CallContext.VALUE`, `STATEMENT` or `UI`:
+Scoped platform rules and registered library/value rules implement `CallRule`.
+A single `adaptCall` dispatcher selects and checks ordinary values and discarded
+effects according to `CallContext.VALUE` or `STATEMENT`:
 
 ```kotlin
 fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression?
 fun lowerStatement(call: IrCall, language: Language, scope: Scope): List<EtsStatement>?
-fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>?
 ```
 
-- `null` declines. An empty statement/UI result must have an explicit degradation
+- `null` declines. An empty statement result must have an explicit degradation
   record at the same source; otherwise it is rejected before emission.
 - Value positions consult only `lower`. The consumer supplies the expected target
   type and the result is checked against it. Expected-type mapping is lazy, so a
@@ -64,24 +63,22 @@ fun lowerUi(call: IrCall, language: Language, scope: Scope): List<EtsStatement>?
   statement position. It is rejected in a value position; effects cannot
   substitute for initializers or return values. Unit expression bodies use the
   statement path and append a target `return` without fabricating a value.
-- UI positions consult only `lowerUi`, which requires an actual Kotlin Unit
-  result and returns `CallResult.Ui`. A void-valued expression or statement
-  effect cannot silently become UI. `CallResult.Value`, `Statements` and `Ui`
-  preserve this distinction through consumption; the target validator still
-  checks the produced nodes in their actual placement.
 - Explicitly unsupported adaptations throw `Unsupported` with source evidence;
   recorded degradations remain diagnostics, not values. Malformed target nodes
   fail `EtsValidator`. None of these cases enters the emitter as a plausible value.
 - Runtime calls are typed `EtsCall`/`EtsSymbol` nodes, not arbitrary ETS strings.
 
-UI calls use the same dispatcher as ordinary calls. Layout, text and button
-rules live in `ui/ComposeControlRules.kt`; target API construction and signatures
-live in `ui/ArkUiCalls.kt`. Source builder/slot calls, UI repeat and Pager register
-through the same interface. Arguments and closures reuse `Language`; no rule
-parses source expressions or prints ETS text. Unknown platform values decline
-instead of blocking later rules merely because of an `androidx.compose` prefix.
-Recognized invalid uses, including consuming the effect-only pager launch as a
-Job value, still fail closed.
+Compose UI calls are structural input to `ComposeWidgetAdapter`, not value
+adapter results. They become neutral widgets and ordered modifiers before
+`HarmonyWidgetBackend` chooses ArkUI controls and attributes. Widget arguments
+and closures still reuse `Language`; no widget rule parses source expressions or
+prints ETS text. Ordinary framework values such as colors, dimensions and
+resources continue through checked `CallRule.lower` results.
+
+The source tree still contains a deprecated `lowerUi` compatibility hook in
+unported historical rules. The production page pipeline has no caller for that
+hook. It is deletion-only debt: new code, adapters and tests must not register or
+consume it.
 
 This unifies API dispatch, not all framework semantics into a call renamer.
 Remembered declarations, closure capture and ordered Modifier application remain
@@ -177,8 +174,8 @@ claimed. Target contract RED d3SQRy (missing API), RED Iifyiw (duplicate identit
 accepted), GREEN lyjtCh. Source-language, SDK and native R2D acceptance pending.
 
 The CLI assembles results before publishing files and refuses existing output
-paths. `ComposeLowering.lower` now returns `EtsProgram`; `UiTextModule` was removed.
-The page CLI uses this same validator/printer with `ComposeRuntime` composing
+paths. `ComposeWidgetPipeline.lower` returns `EtsProgram`; the old page assembler
+and `UiTextModule` were removed. The page CLI uses the shared validator/printer with `ComposeRuntime` composing
 the standard-library provider. Fixed typography/touch runtime support is selected
 by checked typed dependencies. It is not a container for generated page text.
 

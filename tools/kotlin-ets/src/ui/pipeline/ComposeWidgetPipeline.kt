@@ -1,28 +1,48 @@
+@file:OptIn(org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI::class)
 package dev.ets.pipeline
 
 import dev.ets.*
-import dev.ets.compose.ComposeInputContracts
-import dev.ets.compose.ComposeHelperLowering
+import dev.ets.compose.ComposeSourceFunctionLowering
+import dev.ets.compose.ComposeInvocationContext
 import dev.ets.compose.ComposeStateLowering
 import dev.ets.compose.ComposeWidgetAdapter
+import dev.ets.compose.ComposeWidgetRule
+import dev.ets.compose.composeHostProvidedRootDefault
+import dev.ets.compose.composeEmptyModifierDefault
 import dev.ets.harmony.HarmonyWidgetBackend
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.types.classFqName
+import org.jetbrains.kotlin.ir.types.classOrNull
+import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import org.jetbrains.kotlin.ir.util.hasAnnotation
+import org.jetbrains.kotlin.name.FqName
 
 /** Production boundary from resolved Compose IR through the neutral widget model to emitted ETS. */
 class ComposeWidgetPipeline(
     private val backend: EtsBackend,
     private val runtime: EtsRuntimeSupport,
+    private val widgetRules: List<ComposeWidgetRule> = emptyList(),
+    private val packageEntryComponent: Boolean = false,
 ) {
-    fun compile(module: IrModuleFragment, entryFqName: String): String {
+    fun compile(module: IrModuleFragment, entryFqName: String): String =
+        emitEtsProgram(lower(module, entryFqName), ComposeRuntime(runtime))
+
+    fun lower(module: IrModuleFragment, entryFqName: String): EtsProgram {
         backend.validateSource(module)
         val matches = module.files.flatMap { it.declarations }.filterIsInstance<IrSimpleFunction>()
             .filter { it.fqNameWhenAvailable?.asString() == entryFqName }
         require(matches.size == 1) { "Expected one top-level widget entry $entryFqName; found ${matches.size}" }
         val entry = matches.single()
+        val selected = selectSourceDeclarations(module, entryFqName,
+            targetOwnsSourceArgument = { call, index ->
+                backend.language.callRules.any { it.ownsSourceArgumentDependency(call, index) }
+            },
+            retainUnreferencedFileInitializer = ::hasSourceFileInitializerEffects,
+            prune = false).declarations
         if (entry.parent !is IrFile || entry.extensionReceiverParameter != null || entry.typeParameters.isNotEmpty()) {
             backend.diagnostics.unsupported(entry, "Widget pipeline entry must be a non-generic top-level function without a receiver")
         }
@@ -31,48 +51,108 @@ class ComposeWidgetPipeline(
                 val type = parameter.type.classFqName?.asString()!!.substringAfterLast('.')
                 backend.diagnostics.unsupported(parameter,
                     "Observed or shared $type parameters require target state ownership and are not supported")
-            }
+        }
 
         val scope = Scope()
-        val parameters = backend.parameters(entry, scope)
+        val entrySemantics = FunctionTargetSemantics(
+            parameterBinding = { parameter, type ->
+                if (parameter.type.classOrNull?.owner?.let(::symbolName) == "androidx.compose.ui.Modifier" &&
+                    composeEmptyModifierDefault(
+                        parameter.defaultValue?.expression))
+                    emptyModifierValue(backend.language.source(parameter)) else null
+            },
+            retainSourceDefault = { parameter ->
+                !composeHostProvidedRootDefault(parameter.defaultValue?.expression)
+            })
+        val parameters = backend.parameters(entry, scope, entrySemantics)
         val state = ComposeStateLowering(backend.language, backend.diagnostics)
             .lower(entry, scope, entry.name.asString())
-        val props = if (state.fields.isEmpty()) emptyList()
-            else componentProps(entry, parameters, state.scope)
-        val helpers = ComposeHelperLowering(backend, backend.diagnostics,
-            state.pagers, state.scrolls, state.lazyLists)
-        val model = helpers.lowerEntry(entry, state.scope, state.handledStatements)
+        val source = backend.language.source(entry)
+        val invocationContext = ComposeInvocationContext(backend.language)
+        val materialContextRequired = invocationContext.initialize(module, entry, state.scope)
+        val component = if (state.fields.isEmpty() && !packageEntryComponent) null
+            else componentBindings(entry, parameters, state)
+        val props = component?.props.orEmpty()
+        val contextField = if (component != null) invocationContext.bindComponent(entry, state.scope) else null
+        val fields = listOfNotNull(contextField) + (component?.fields ?: state.fields)
+        val pagers = component?.pagers ?: state.pagers
+        val scrolls = component?.scrolls ?: state.scrolls
+        val lazyLists = component?.lazyLists ?: state.lazyLists
+        val helpers = ComposeSourceFunctionLowering(backend, backend.diagnostics,
+            pagers, scrolls, lazyLists, widgetRules, materialContextRequired,
+            component?.let { etsClassSymbol(entry.name.asString(), source).type as EtsNamedType })
+        val entryPlan = if (component != null)
+            helpers.lowerEntryPlan(entry, state.scope, state.handledStatements, entrySemantics) else null
+        val model = entryPlan?.model ?: helpers.lowerEntry(entry, state.scope, state.handledStatements)
         val widgetBackend = HarmonyWidgetBackend()
         val body = widgetBackend.lower(model)
-        val source = backend.language.source(entry)
+        val componentHelpers = helpers.plans().filter { it.componentMember }.map { plan ->
+            plan.signature.copy(body = widgetBackend.lower(plan.model, plan.layoutScope))
+        }
         val path = source.file ?: backend.diagnostics.unsupported(entry, "Widget pipeline entry requires a source file")
-        val declaration: EtsDeclaration = if (state.fields.isEmpty()) {
+        val declaration: EtsDeclaration = if (component == null) {
             EtsFunction(entry.name.asString(), parameters, EtsTypes.VOID, body, source,
                 exported = true, builder = true)
+        } else if (entryPlan != null) {
+            val method = entryPlan.signature.copy(body = body, kind = EtsFunctionKind.METHOD,
+                exported = false)
+            val self = EtsReference(EtsSymbol("compose-entry:${source.file}:${source.start}:this", "this",
+                etsClassSymbol(entry.name.asString(), source).type, source, external = true))
+            val arguments = component.props.map { field -> EtsMember(self, field.symbol.name,
+                field.symbol.type, field.symbol.source, field.symbol.id) }
+            val call = EtsCall(EtsMember(self, method.name, method.symbol.type, source, method.symbol.id),
+                arguments, EtsTypes.VOID, source)
+            val build = EtsFunction("build", emptyList(), EtsTypes.VOID,
+                listOf(widgetBackend.entryContainer(call, source)), source,
+                kind = EtsFunctionKind.METHOD, build = true)
+            EtsClass(entry.name.asString(), props + fields + componentHelpers + method + build, source,
+                exported = true, component = true, entry = props.none { it.required })
         } else {
             val build = EtsFunction("build", emptyList(), EtsTypes.VOID, body, source,
                 kind = EtsFunctionKind.METHOD, build = true)
-            EtsClass(entry.name.asString(), props + state.fields + build, source,
-                exported = true, component = true, entry = parameters.isEmpty())
+            EtsClass(entry.name.asString(), props + fields + build, source,
+                exported = true, component = true, entry = props.none { it.required })
         }
         val files = linkedMapOf<String, MutableList<EtsDeclaration>>()
-        ComposeInputContracts(backend.language, backend.diagnostics).lower(entry).forEach { (contractPath, contract) ->
-            files.getOrPut(contractPath) { mutableListOf() } += contract
+        module.files.forEach { file ->
+            val selectedDeclarations = file.declarations.filter { it in selected }
+            if (selectedDeclarations.isEmpty()) return@forEach
+            backend.diagnostics.currentFile = file.fileEntry.name
+            val selectedProperties = selectedDeclarations.filterIsInstance<IrProperty>().toSet()
+            val declarations = selectedDeclarations.flatMap { source ->
+                if (source is IrSimpleFunction && source.hasAnnotation(composable) && source.returnType.isUnit()) emptyList()
+                else IrDeclarationToEts.lower(source, backend.language, backend.diagnostics)
+            } + IrFileToEts.initialization(file, backend.language, selectedProperties)
+            if (declarations.isNotEmpty()) {
+                files.getOrPut(file.fileEntry.name) { mutableListOf() } += declarations
+            }
         }
-        helpers.plans().forEach { plan ->
+        helpers.plans().filterNot { it.componentMember }.forEach { plan ->
             files.getOrPut(plan.sourcePath) { mutableListOf() } +=
-                plan.signature.copy(body = widgetBackend.lower(plan.model))
+                plan.signature.copy(body = widgetBackend.lower(plan.model, plan.layoutScope))
+        }
+        widgetBackend.supportDeclarations().forEach { support ->
+            files.getOrPut(requireNotNull(support.source.file)) { mutableListOf() } += support
         }
         files.getOrPut(path) { mutableListOf() } += declaration
-        val program = backend.link(EtsProgram(files.map { (sourcePath, declarations) ->
+        val linked = backend.link(EtsProgram(files.map { (sourcePath, declarations) ->
             EtsFile(sourcePath, declarations)
         }, imports = state.imports))
+        val program = bindReactiveBuilderArguments(simplifyPureUiEvaluationBindings(linked))
         EtsValidator().validate(program)
-        return emitEtsProgram(program, runtime)
+        return program
     }
 
-    private fun componentProps(entry: IrSimpleFunction, parameters: List<EtsParameter>,
-        scope: Scope): List<EtsField> {
+    private data class ComponentBindings(
+        val props: List<EtsField>,
+        val fields: List<EtsField>,
+        val pagers: Map<org.jetbrains.kotlin.ir.symbols.IrValueSymbol, ComposeStateLowering.PagerStateBinding>,
+        val scrolls: Map<org.jetbrains.kotlin.ir.symbols.IrValueSymbol, ComposeStateLowering.ScrollStateBinding>,
+        val lazyLists: Map<org.jetbrains.kotlin.ir.symbols.IrValueSymbol, ComposeStateLowering.LazyListStateBinding>,
+    )
+
+    private fun componentBindings(entry: IrSimpleFunction, parameters: List<EtsParameter>,
+        state: ComposeStateLowering.Plan): ComponentBindings {
         val at = backend.language.source(entry)
         val self = EtsReference(EtsSymbol("compose-props:${at.file}:${at.start}:this", "this",
             etsClassSymbol(entry.name.asString(), at).type, at, external = true))
@@ -127,15 +207,28 @@ class ComposeWidgetPipeline(
             }, body = value.body.map(rewriteStatement))
         } }
 
-        entry.valueParameters.zip(parameters).forEach { (source, parameter) ->
-            scope.bindings[source.symbol] = members.getValue(parameter.symbol.id)
+        state.scope.bindings.replaceAll { _, value -> expression(value) }
+        entry.valueParameters.forEach { source ->
+            val binding = state.scope.bindings[source.symbol] as? EtsReference ?: return@forEach
+            members[binding.symbol.id]?.let { member -> state.scope.bindings[source.symbol] = member }
         }
-        return parameters.map { parameter -> EtsField(parameter.symbol,
+        val props = parameters.map { parameter -> EtsField(parameter.symbol,
             parameter.defaultValue?.let(::expression), prop = true,
             required = parameter.defaultValue == null) }
+        val fields = state.fields.map { field -> field.copy(initializer = field.initializer?.let(::expression)) }
+        val pagers = state.pagers.mapValues { (_, value) -> value.copy(
+            currentPage = expression(value.currentPage), pageCount = expression(value.pageCount),
+            controller = expression(value.controller)) }
+        val scrolls = state.scrolls.mapValues { (_, value) -> value.copy(offset = expression(value.offset)) }
+        val lazyLists = state.lazyLists.mapValues { (_, value) -> value.copy(
+            initialIndex = expression(value.initialIndex), initialOffset = expression(value.initialOffset),
+            firstVisibleIndex = expression(value.firstVisibleIndex), controller = expression(value.controller),
+            initialOffsetApplied = value.initialOffsetApplied?.let(::expression)) }
+        return ComponentBindings(props, fields, pagers, scrolls, lazyLists)
     }
 
     private companion object {
+        val composable = FqName("androidx.compose.runtime.Composable")
         val frameworkStateTypes = setOf(
             "androidx.compose.foundation.lazy.LazyListState",
             "androidx.compose.foundation.pager.PagerState",

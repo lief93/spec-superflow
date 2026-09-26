@@ -74,9 +74,15 @@ fun main(args: Array<String>) {
         }
         check((swiper.call.callee as EtsReference).symbol.name == "Swiper")
         check(swiper.call.arguments.single() == state.controller)
-        check(swiper.attributes.map { (it.callee as EtsReference).symbol.name } ==
-            listOf("width", "index", "loop", "indicator", "disableSwipe", "onChange"))
-        check((swiper.attributes[4].arguments.single() as EtsUnary).operand == pager.enabled)
+        val swiperAttributes = swiper.attributes.associateBy {
+            (it.callee as EtsReference).symbol.name
+        }
+        check(swiperAttributes.keys ==
+            setOf("width", "index", "loop", "indicator", "disableSwipe", "onChange"))
+        check(swiper.attributes.count {
+            (it.callee as EtsReference).symbol.name == "width"
+        } == 1)
+        check((swiperAttributes.getValue("disableSwipe").arguments.single() as EtsUnary).operand == pager.enabled)
         val pages = swiper.children!!.single() as EtsUiForEach
         check((pages.items as EtsArray).elements.map { (it as EtsLiteral).value } == listOf(0, 1, 2, 3))
         check(pages.item.symbol == page.symbol && pages.body.single() is EtsIf)
@@ -91,17 +97,20 @@ fun main(args: Array<String>) {
         check("Swiper(this.pager_controller)" in code)
         check("ForEach([0, 1, 2, 3] as Array<number>, (page: number) => {" in code)
         check("if (page < 3)" in code && "Text(\"A\")" in code && "Text(\"B\")" in code)
-        check(".index(this.pager_currentPage)" in code)
-        check(".width(\"100%\")" in code)
+        check("[this.pager_currentPage] as Array<number>" in code)
+        check(Regex("""\.index\(__etsUiArg\d+_0\)""").containsMatchIn(code))
+        check(".width(\"100.0%\")" in code)
         check(".loop(false)" in code && ".indicator(false)" in code)
         check(".disableSwipe(! true)" in code)
         check(".onChange((index: number): void => {" in code)
         check("this.pager_currentPage = index;" in code)
-        check("Text(\"\" + \"Indicator \" + (this.pager_currentPage + 1 | 0) + \"/4\")" in code)
+        check(Regex("""ForEach\(\["" \+ "Indicator " \+ \(this\.pager_currentPage \+ 1 \| 0\) \+ "/4"\] as Array<string>, \((__etsUiArg\d+_0): string\) => \{\s*Text\(\1\)""")
+            .containsMatchIn(code))
         check("if (this.pager_currentPage === 3)" in code)
         check("Text(\"Finish\")" in code && "Text(\"Next\")" in code)
         check("this.__etsState_selected = this.pager_currentPage;" in code)
-        check("Text(\"\" + \"Selected \" + this.__etsState_selected)" in code)
+        check(Regex("""ForEach\(\["" \+ "Selected " \+ this\.__etsState_selected\] as Array<string>, \((__etsUiArg\d+_0): string\) => \{\s*Text\(\1\)""")
+            .containsMatchIn(code))
         check(listOf("onboarding", "animateScrollToPage", "changeIndex").none(code::contains))
         val fivePageCode = ComposeWidgetPipeline(
             EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules(), ComposeDimensionRule())), StandardLibraryRuntime)
@@ -112,7 +121,10 @@ fun main(args: Array<String>) {
         val dynamicCode = ComposeWidgetPipeline(
             EtsBackend(DiagnosticSink(), listOf(StandardLibraryRules(), ComposeDimensionRule())), StandardLibraryRuntime)
             .compile(module, "widgetpager.DynamicPageCount")
-        check("Swiper(" in dynamicCode && "pages" in dynamicCode && "length:" in dynamicCode)
+        check("Swiper(" in dynamicCode && "__etsPageIndices(this.pages)" in dynamicCode)
+        check("function __etsPageIndices(count: number): Array<number>" in dynamicCode)
+        check("pageIndices: while (index < count)" in dynamicCode && "values.push(index);" in dynamicCode)
+        check("length:" !in dynamicCode)
 
         val expected = linkedMapOf(
             "EmptyPageCount" to "must be positive",

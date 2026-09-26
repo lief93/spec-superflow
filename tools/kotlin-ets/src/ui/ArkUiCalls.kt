@@ -110,7 +110,8 @@ internal class ArkUiCalls(private val language: Language, val diagnostics: Diagn
     fun enumValue(type: String, name: String, owner: IrElement): EtsExpression {
         val source = language.source(owner)
         val targetType = EtsNamedType(type)
-        return EtsMember(EtsReference(EtsSymbol("arkui:$type", type, targetType, source, true)), name, targetType, source)
+        return etsStableMember(EtsReference(EtsSymbol("arkui:$type", type, targetType, source, true)),
+            name, targetType, source)
     }
 
     fun record(name: String, values: Map<String, EtsExpression>, owner: IrElement) =

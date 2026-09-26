@@ -56,9 +56,20 @@ internal fun arrangementOptions(value: EtsExpression, control: String, target: A
         EtsMember(value, "space", EtsTypes.NUMBER, value.source, arrangementSpace.id)), call)
 }
 
+internal fun arrangementSpace(value: EtsExpression): EtsExpression {
+    require(value.type == arrangementType) { "Expected a supported fixed-spacing Arrangement; got ${value.type}" }
+    return EtsMember(value, "space", EtsTypes.NUMBER, value.source, arrangementSpace.id)
+}
+
 /** Fixed Arrangement getters map to the native main-axis alignment attribute. */
 internal fun arrangementAlignment(value: org.jetbrains.kotlin.ir.expressions.IrExpression,
     scope: Scope, target: ArkUiCalls): EtsExpression? {
+    val name = arrangementAlignmentName(value, scope) ?: return null
+    return target.enumValue("FlexAlign", name, resolveExpression(value, scope) ?: value)
+}
+
+internal fun arrangementAlignmentName(value: org.jetbrains.kotlin.ir.expressions.IrExpression,
+    scope: Scope): String? {
     val resolved = resolveExpression(value, scope) ?: return null
     val (owner, propertyName) = when (resolved) {
         is IrCall -> {
@@ -86,7 +97,7 @@ internal fun arrangementAlignment(value: org.jetbrains.kotlin.ir.expressions.IrE
         "SpaceEvenly" -> "SpaceEvenly"
         else -> return null
     }
-    return target.enumValue("FlexAlign", name, resolved)
+    return name
 }
 
 private fun fixedArrangementName(call: IrCall): String? {

@@ -62,7 +62,8 @@ internal class ComposeTextStyleRule : CallRule {
         if (enums != null) {
             val target = enums.second[name] ?: reject(call, language, "Unsupported ${enums.first} value: $name")
             val type = EtsNamedType(enums.first)
-            return EtsMember(EtsReference(EtsSymbol("arkui:${enums.first}", enums.first, type, at, true)), target, type, at)
+            return etsStableMember(EtsReference(EtsSymbol("arkui:${enums.first}", enums.first,
+                type, at, true)), target, type, at)
         }
         if (symbolName(parent) == "androidx.compose.ui.text.TextStyle" && name in
             setOf("fontFamily", "fontWeight", "fontStyle", "textDecoration", "lineHeightStyle")) {

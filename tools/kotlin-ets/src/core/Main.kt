@@ -1,6 +1,10 @@
 @file:OptIn(org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI::class)
 package dev.ets
 
+import dev.ets.pipeline.ComposeWidgetPipeline
+import dev.ets.compose.ComposeWidgetAdapterModule
+import dev.ets.compose.ComposeSourceUiCallGuardRule
+import dev.ets.compose.composeHostProvidedRootDefault
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
@@ -87,11 +91,19 @@ fun main(arguments: Array<String>) {
             "Refusing to overwrite existing resource output: $resourceOutput"
         }
         val adapters = AdapterModules.load()
+        fun retainSourceDefault(parameter: org.jetbrains.kotlin.ir.declarations.IrValueParameter): Boolean {
+            val owner = parameter.parent as? org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+                ?: return true
+            if (mode != "page" || symbolName(owner) != entry) return true
+            val expression = parameter.defaultValue?.expression ?: return true
+            return !composeHostProvidedRootDefault(expression) &&
+                !adapters.consumesRootDefault(expression, parameter.type)
+        }
         val stdlib = StandardLibraryRules()
         val shapes = ComposeShapeRule()
         val elevations = ComposeCardElevationRule(diagnostics)
         val compositionLocals = ComposeCompositionLocalRule(diagnostics)
-        val rules = listOf(stdlib, images, strings, dimensions, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeSurfaceColorAtElevationRule(), ComposeProjectColorSchemeRule(), ComposePlatformVersionRule(), ComposeThemeModeRule(), ComposeStaticAnimationRule(diagnostics), ComposeIndicationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeMaterialImageVectorRule(), ComposeSnackbarHostStateRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposePagerBehaviorRule(), ComposeDimensionRule(), ComposeDrawGeometryRule(), ComposeBrushRule(diagnostics), ComposeBorderStrokeRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), compositionLocals, ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeNavigationRule(), ComposeFlowRule(), shapes, elevations, ComposeCardColorsRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
+        val rules = listOf(stdlib, CoroutineTimerRule(diagnostics), ComposeSourceUiCallGuardRule(diagnostics), images, strings, dimensions, ComposeColorValueRule(), ComposeColorFilterRule(), ComposeColorSchemeRule(), ComposeSurfaceColorAtElevationRule(), ComposeProjectColorSchemeRule(), ComposePlatformVersionRule(), ComposeThemeModeRule(), ComposeStaticAnimationRule(diagnostics), ComposeIndicationRule(diagnostics), ComposeMaterialThemeValueRule(), ComposeMaterialImageVectorRule(), ComposeSnackbarHostStateRule(), ComposeTypographyRule(), ComposeAlignmentRule(), ComposeContentScaleRule(), ComposeArrangementRule(), ComposePagerBehaviorRule(), ComposeDimensionRule(), ComposeDrawGeometryRule(), ComposeBrushRule(diagnostics), ComposeBorderStrokeRule(), ComposeConstraintsValueRule(), ComposeFontRule(fonts), ComposeLineHeightStyleRule(), ComposeTextStyleRule(), ComposeTextDecorationRule(), ComposeAnnotatedStringRule(), ComposeEmptyModifierRule(), ComposeWeightRule(), CoilImageRequestRule(), ComposeInspectionModeRule(), compositionLocals, ComposeLocalContextRule(), ComposeToastRule(), ComposeFocusManagerRule(), ComposeNavigationRule(), ComposeFlowRule(), shapes, elevations, ComposeCardColorsRule(), ComposeButtonColorsRule(), ComposePaddingValuesRule(), ComposeTextInputValueRule()) + adapters.rules()
         var preflight: CoreProfileReport? = null
         val target = withKotlinFrontend(compilerArgs, entry, runEtsLowerings = mode != "preflight", prepareModule = { module ->
             if (mode == "page") {
@@ -101,13 +113,12 @@ fun main(arguments: Array<String>) {
             if (mode == "page") rules.forEach { it.prepareSource(declaration, diagnostics) }
         }, externalSourceType = { type -> mode == "page" && adapters.providesSourceType(type) },
             externalSourceCall = { function -> mode == "page" && adapters.replacesSourceCall(function) },
+            targetOwnsSourceArgument = { call, index ->
+                mode == "page" && rules.any { it.ownsSourceArgumentDependency(call, index) }
+            },
+            retainSourceDefault = ::retainSourceDefault,
             retainUnreferencedFileInitializer = { property ->
                 mode != "page" || hasSourceFileInitializerEffects(property)
-            }, omitUnreferencedFileInitializer = { property ->
-                diagnostics.omitUi(property,
-                    "Unreferenced external file initializer omitted from the selected UI entry",
-                    "file-initializer:${symbolName(property)}", "platform_capability_fallback",
-                    "The unrelated platform/library initializer does not run in the generated page; direct reads still retain it.")
             }) { frontend ->
             val module = frontend.module
             val backend = EtsBackend(diagnostics, rules, frontend.types)
@@ -119,11 +130,15 @@ fun main(arguments: Array<String>) {
             try {
                 val generated = when (mode) {
                     "page" -> {
-                        backend.validateSource(module)
-                        val lowered = ComposeLowering(backend.language, diagnostics, adapters).lower(module,
-                            requireNotNull(entry))
+                        val widgetRules = adapters.modules.filterIsInstance<ComposeWidgetAdapterModule>()
+                            .map { it.createWidgetRule() }
+                        val lowered = ComposeWidgetPipeline(backend, StandardLibraryRuntime, widgetRules,
+                            packageEntryComponent = true)
+                            .lower(module, requireNotNull(entry))
                         val targetModule = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
                         diagnostics.verifyNoSilentFallback(targetModule)
+                        preflight = requireNotNull(preflight).reconcileGeneratedTarget(targetModule,
+                            diagnostics.degradations.map { it.diagnostic })
                         if ("--out-dir" in options) emitEtsModules(targetModule, ComposeRuntime(StandardLibraryRuntime))
                         else mapOf(output.name to emitEtsProgram(targetModule, ComposeRuntime(StandardLibraryRuntime)))
                     }
@@ -131,6 +146,8 @@ fun main(arguments: Array<String>) {
                         val lowered = backend.lower(module)
                         val program = lowered.copy(imports = (lowered.imports + adapters.imports).distinct())
                         diagnostics.verifyNoSilentFallback(program)
+                        preflight = requireNotNull(preflight).reconcileGeneratedTarget(program,
+                            diagnostics.degradations.map { it.diagnostic })
                         if ("--out-dir" in options) emitEtsModules(program, StandardLibraryRuntime)
                         else mapOf(output.name to emitEtsProgram(program, StandardLibraryRuntime))
                     }

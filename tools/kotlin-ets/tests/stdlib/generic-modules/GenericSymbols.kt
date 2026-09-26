@@ -163,6 +163,7 @@ private class SymbolLanguage(private val file: String) : Language {
         return EtsReference(symbol)
     }
     override fun statements(body: IrBody, scope: Scope): List<EtsStatement> = error("Not a body test")
-    override fun function(function: IrSimpleFunction, scope: Scope): EtsFunction = error("Not a function test")
+    override fun function(function: IrSimpleFunction, scope: Scope,
+        semantics: FunctionTargetSemantics): EtsFunction = error("Not a function test")
     override fun clazz(declaration: IrClass): EtsClass = error("Not a class test")
 }

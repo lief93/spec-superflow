@@ -10,7 +10,7 @@ internal val boxConstraintsBindingType = EtsNamedType("Binding", listOf(boxConst
 internal data class ConstraintContent(val builder: EtsExpression, val data: EtsExpression)
 internal val boxConstraintsArgsType = etsClassSymbol("__etsConstraintArgs", constraintsSource).type as EtsNamedType
 internal fun boxConstraintsOptions(data: EtsType) = EtsRecordType("BoxConstraintsOptions", mapOf(
-    "content" to EtsNamedType("WrappedBuilder", listOf(EtsTupleType(listOf(boxConstraintsArgsType)))),
+    "content" to wrappedBuilderType(listOf(boxConstraintsArgsType)),
     "data" to data, "alignment" to EtsNamedType("Alignment"),
     "fixedWidth" to EtsTypes.BOOLEAN, "fixedHeight" to EtsTypes.BOOLEAN))
 

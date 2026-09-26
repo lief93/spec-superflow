@@ -8,6 +8,16 @@ fun main() {
     // Runs with only model, target, backend and Kotlin stdlib: no compiler or Compose.
     val source = SourceSpan("model-only", 1, 2)
     fun number(value: Int) = EtsLiteral(value, EtsTypes.NUMBER, source)
+    check(staticTargetEvaluation(number(1)).canDiscard)
+    val runtimeOwner = EtsReference(EtsSymbol("test:runtime", "runtime", EtsTypes.OBJECT, source))
+    val mutableReference = EtsReference(EtsSymbol("test:mutable", "mutable", EtsTypes.STRING, source,
+        evaluation = EtsEvaluationSemantics(EtsObservableEffect.READS_RUNTIME)))
+    check(staticTargetEvaluation(mutableReference).effect == EtsObservableEffect.READS_RUNTIME)
+    check(staticTargetEvaluation(EtsMember(runtimeOwner, "value", EtsTypes.NUMBER, source)).effect ==
+        EtsObservableEffect.READS_RUNTIME)
+    check(!staticTargetEvaluation(EtsArray(listOf(number(1)), EtsTypes.NUMBER, source)).canDuplicate)
+    check(staticTargetEvaluation(EtsAssignment(runtimeOwner, runtimeOwner, source)).effect ==
+        EtsObservableEffect.WRITES_RUNTIME)
     fun string(value: String, provenance: WidgetValueProvenance = WidgetValueProvenance.Literal) =
         WidgetValue<EtsExpression, SourceSpan>(WidgetValueType.STRING,
             EtsLiteral(value, EtsTypes.STRING, source), provenance, source)
@@ -22,17 +32,71 @@ fun main() {
     val element = backend.lower(text)
     fun name(element: EtsUiElement) = (element.call.callee as EtsReference).symbol.name
     fun attribute(element: EtsUiElement) = (element.attributes.single().callee as EtsReference).symbol.name
-    check(name(element) == "Stack" && attribute(element) == "width")
-    val padding = element.children!!.single() as EtsUiElement
-    check(attribute(padding) == "padding")
-    val sides = padding.attributes.single().arguments.single() as EtsObject
+    check(name(element) == "Text")
+    check(element.attributes.map { (it.callee as EtsReference).symbol.name } == listOf("align", "width", "padding"))
+    check((element.attributes.single { (it.callee as EtsReference).symbol.name == "width" }
+        .arguments.single() as EtsLiteral).value == 100)
+    val sides = element.attributes.single { (it.callee as EtsReference).symbol.name == "padding" }
+        .arguments.single() as EtsObject
     check(sides.fields.mapValues { (it.value as EtsLiteral).value } == mapOf("left" to 1, "top" to 2, "right" to 3, "bottom" to 4))
-    val inner = padding.children!!.single() as EtsUiElement
-    check(attribute(inner) == "width")
-    check(name(inner.children!!.single() as EtsUiElement) == "Text")
     val alignmentType = EtsNamedType("Alignment")
-    val alignment = EtsMember(EtsReference(EtsSymbol("arkui:Alignment", "Alignment", alignmentType,
+    val alignment = etsStableMember(EtsReference(EtsSymbol("arkui:Alignment", "Alignment", alignmentType,
         source, external = true)), "BottomEnd", alignmentType, source)
+    check(staticTargetEvaluation(alignment).canReorder)
+    val readSource = SourceSpan("model-only", 10, 11)
+    val effectSource = SourceSpan("model-only", 20, 21)
+    val runtimeText = EtsMember(runtimeOwner, "text", EtsTypes.STRING, readSource)
+    val effectSize = EtsCall(EtsReference(EtsSymbol("test:effectSize", "effectSize",
+        EtsFunctionType(emptyList(), EtsTypes.NUMBER), effectSource, external = true)),
+        emptyList(), EtsTypes.NUMBER, effectSource)
+    val orderedText = Widget.Text(
+        WidgetValue(WidgetValueType.STRING, runtimeText, WidgetValueProvenance.Expression("runtime.text"), readSource),
+        WidgetTextStyle(WidgetValue(WidgetValueType.FONT_SIZE, effectSize,
+            WidgetValueProvenance.Expression("effectSize()"), effectSource), null, null, null),
+        emptyList(), source, sourceEvaluations = listOf(runtimeText, effectSize))
+    val textRead = backend.lower(Children(listOf(orderedText))).single() as EtsUiForEach
+    check(textRead.kind == EtsUiForEachKind.SOURCE_EVALUATION)
+    check((textRead.items as EtsArray).elements.single() == runtimeText)
+    val sizeEffect = textRead.body.single() as EtsUiForEach
+    check(sizeEffect.kind == EtsUiForEachKind.SOURCE_EVALUATION)
+    check((sizeEffect.items as EtsArray).elements.single() == effectSize)
+    val orderedTarget = sizeEffect.body.single() as EtsUiElement
+    check(orderedTarget.call.arguments.single() == EtsReference(textRead.item.symbol))
+    check(orderedTarget.attributes.single { (it.callee as EtsReference).symbol.name == "fontSize" }
+        .arguments.single() == EtsReference(sizeEffect.item.symbol))
+    val mutableText = Widget.Text(
+        WidgetValue(WidgetValueType.STRING, mutableReference,
+            WidgetValueProvenance.Expression("mutable"), source), noStyle,
+        emptyList(), source, sourceEvaluations = listOf(mutableReference))
+    val mutableRead = backend.lower(Children(listOf(mutableText))).single()
+    check(mutableRead is EtsUiForEach && mutableRead.kind == EtsUiForEachKind.SOURCE_EVALUATION)
+    val simplifiedMutableRead = simplifyPureUiEvaluationBindings(EtsProgram(listOf(EtsFile("model-only", listOf(
+        EtsFunction("MutableRead", emptyList(), EtsTypes.VOID, listOf(mutableRead), source, builder = true))))))
+        .files.single().declarations.single() as EtsFunction
+    check(simplifiedMutableRead.body.single() is EtsUiForEach)
+    val firstRead = mutableReference.copy(source = SourceSpan("model-only", 30, 31))
+    val middleEffect = effectSize.copy(source = SourceSpan("model-only", 40, 41))
+    val secondRead = mutableReference.copy(source = SourceSpan("model-only", 50, 51))
+    val rereadText = Widget.Text(
+        WidgetValue(WidgetValueType.STRING, firstRead,
+            WidgetValueProvenance.Expression("mutable"), firstRead.source),
+        WidgetTextStyle(WidgetValue(WidgetValueType.FONT_SIZE, middleEffect,
+            WidgetValueProvenance.Expression("effectSize()"), middleEffect.source), null,
+            WidgetValue(WidgetValueType.FONT_FAMILY, secondRead,
+                WidgetValueProvenance.Expression("mutable"), secondRead.source), null),
+        emptyList(), source, sourceEvaluations = listOf(firstRead, middleEffect, secondRead))
+    val firstReadBinding = backend.lower(Children(listOf(rereadText))).single() as EtsUiForEach
+    val middleEffectBinding = firstReadBinding.body.single() as EtsUiForEach
+    val secondReadBinding = middleEffectBinding.body.single() as EtsUiForEach
+    check(listOf(firstReadBinding, middleEffectBinding, secondReadBinding).map {
+        ((it.items as EtsArray).elements.single()).source.start
+    } == listOf(30, 40, 50))
+    val rereadTarget = secondReadBinding.body.single() as EtsUiElement
+    check(rereadTarget.call.arguments.single() == EtsReference(firstReadBinding.item.symbol))
+    check(rereadTarget.attributes.single { (it.callee as EtsReference).symbol.name == "fontSize" }
+        .arguments.single() == EtsReference(middleEffectBinding.item.symbol))
+    check(rereadTarget.attributes.single { (it.callee as EtsReference).symbol.name == "fontFamily" }
+        .arguments.single() == EtsReference(secondReadBinding.item.symbol))
     val rowChild = Widget.Text(string("row child"), noStyle, listOf(
         WidgetModifier.Fill<EtsExpression, SourceSpan>(true, false, EtsLiteral(0.5, EtsTypes.NUMBER, source), source),
         WidgetModifier.Weight(number(2), WidgetLayoutScope.ROW, source)), source)
@@ -40,8 +104,16 @@ fun main() {
     val weightLayer = rowLayout.children!!.single() as EtsUiElement
     check(attribute(weightLayer) == "layoutWeight")
     val fillLayer = weightLayer.children!!.single() as EtsUiElement
-    check(fillLayer.attributes.map { (it.callee as EtsReference).symbol.name } == listOf("width"))
-    check((fillLayer.attributes.single().arguments.single() as EtsLiteral).value == "50.0%")
+    check(fillLayer.attributes.map { (it.callee as EtsReference).symbol.name } == listOf("align", "width"))
+    check((fillLayer.attributes.single { (it.callee as EtsReference).symbol.name == "width" }
+        .arguments.single() as EtsLiteral).value == "50.0%")
+    val centeredColumn = backend.lower(Widget.Column(Children(emptyList()), emptyList(), source,
+        WidgetMainAxisArrangement.Alignment(WidgetMainAxisAlignment.CENTER, source),
+        EtsMember(EtsReference(EtsSymbol("arkui:HorizontalAlign", "HorizontalAlign",
+            EtsNamedType("HorizontalAlign"), source, true)), "Center", EtsNamedType("HorizontalAlign"), source)))
+    check(centeredColumn.attributes.map { (it.callee as EtsReference).symbol.name } ==
+        listOf("alignItems", "justifyContent"))
+    check((centeredColumn.attributes.last().arguments.single() as EtsMember).name == "Center")
     val boxChild = Widget.Text(string("box child"), noStyle, listOf(
         WidgetModifier.Align<EtsExpression, SourceSpan>(alignment, WidgetLayoutScope.BOX, source),
         WidgetModifier.Fill(true, true, number(1), source)), source)
@@ -49,7 +121,7 @@ fun main() {
     val alignLayer = boxLayout.children!!.single() as EtsUiElement
     check(attribute(alignLayer) == "align" && alignLayer.attributes.single().arguments.single() == alignment)
     check((alignLayer.children!!.single() as EtsUiElement).attributes.map {
-        (it.callee as EtsReference).symbol.name } == listOf("width", "height"))
+        (it.callee as EtsReference).symbol.name } == listOf("align", "width", "height"))
     val wrongParent = Widget.Column(Children(listOf(rowChild)), emptyList(), source)
     check(runCatching { backend.lower(wrongParent) }.exceptionOrNull() is IllegalArgumentException)
     val invalidFill = Widget.Text(string("bad fill"), noStyle, listOf(
@@ -84,13 +156,21 @@ fun main() {
         Children(listOf(Widget.Text(sharedText, sharedStyle, emptyList(), source))),
         listOf(WidgetModifier.Background(sharedColor, source)), source)
     val styledButton = backend.lower(button)
-    check(styledButton.attributes.single().arguments.single() == sharedColor.value)
-    val nativeButton = styledButton.children!!.single() as EtsUiElement
-    val buttonRow = nativeButton.children!!.single() as EtsUiElement
+    check(styledButton.attributes.single { (it.callee as EtsReference).symbol.name == "backgroundColor" }
+        .arguments.single() == sharedColor.value)
+    val buttonRow = styledButton.children!!.single() as EtsUiElement
     val buttonText = buttonRow.children!!.single() as EtsUiElement
     check(buttonText.call.arguments.single() == sharedText.value)
     check(buttonText.attributes.map { (it.callee as EtsReference).symbol.name } ==
         listOf("align", "fontSize", "fontWeight", "fontFamily", "lineHeight"))
+    val explicitlySizedButton = backend.lower(Widget.Button(click, null, Children(emptyList()), listOf(
+        WidgetModifier.Width<EtsExpression, SourceSpan>(number(100), source),
+        WidgetModifier.Height<EtsExpression, SourceSpan>(number(48), source)), source,
+        style = WidgetButtonStyle(null, null, null, null, null, null, textual = false, source = source)))
+    check(name(explicitlySizedButton) == "Button")
+    check(explicitlySizedButton.attributes.map { (it.callee as EtsReference).symbol.name }
+        .takeLast(2) == listOf("width", "height"))
+    check((explicitlySizedButton.attributes.last().arguments.single() as EtsLiteral).value == 48)
     val invalid = Widget.Text<EtsExpression, SourceSpan>(
         WidgetValue(WidgetValueType.STRING, number(1), WidgetValueProvenance.Expression(null), source), noStyle,
         emptyList(), source)
@@ -113,26 +193,15 @@ fun main() {
         EtsNamedType("Resource", external = true), source, external = true))
     val styledImage = backend.lower(Widget.Image(ImageSource.Resource(resource, source),
         EtsLiteral("Styled", EtsTypes.STRING, source), shared, source))
-    fun layers(root: EtsUiElement, count: Int): List<EtsUiElement> {
-        val result = mutableListOf<EtsUiElement>()
-        var current = root
-        repeat(count) {
-            result += current
-            current = current.children!!.single() as EtsUiElement
-        }
-        return result
-    }
     fun attributes(element: EtsUiElement) = element.attributes.map { (it.callee as EtsReference).symbol.name }
     for (styled in listOf(styledText, styledImage)) {
-        val ordered = layers(styled, shared.size)
-        check(ordered.map(::attributes) == listOf(
-            listOf("width", "height"), listOf("backgroundColor"),
-            listOf("enabled", "onClick"), listOf("padding")))
-        check(ordered[2].attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
+        check(attributes(styled).takeLast(6) == listOf(
+            "width", "height", "backgroundColor", "enabled", "onClick", "padding"))
+        check(styled.attributes.single { (it.callee as EtsReference).symbol.name == "onClick" }
             .arguments.single() == click)
     }
-    check(name(layers(styledText, shared.size).last().children!!.single() as EtsUiElement) == "Text")
-    check(name(layers(styledImage, shared.size).last().children!!.single() as EtsUiElement) == "Image")
+    check(name(styledText) == "Text")
+    check(name(styledImage) == "Image")
     val resourceImage = backend.lower(Widget.Image(ImageSource.Resource(resource, source),
         EtsLiteral("Local", EtsTypes.STRING, source), emptyList(), source))
     val urlImage = backend.lower(Widget.Image(ImageSource.Url(EtsLiteral("https://example.invalid/a.png",
@@ -158,16 +227,21 @@ fun main() {
     val changedPage = EtsParameter(EtsSymbol("test:changedPage", "index", EtsTypes.NUMBER, source))
     val pageChanged = EtsLambda(listOf(changedPage), listOf(EtsExpressionStatement(
         EtsAssignment(currentPage, EtsReference(changedPage.symbol), source))), EtsTypes.VOID, source)
-    val pager = backend.lower(Widget.Pager(currentPage, number(3), controller,
+    val pagerWidget = Widget.Pager(currentPage, number(3), controller,
         EtsLiteral(true, EtsTypes.BOOLEAN, source), pageChanged,
         IndexedChildren(page, Children(listOf(Widget.Text(string("page"), noStyle, emptyList(), source))), source),
-        emptyList(), source))
+        emptyList(), source)
+    val pager = backend.lower(pagerWidget)
     check(name(pager) == "Swiper")
     check(pager.attributes.map { (it.callee as EtsReference).symbol.name } ==
         listOf("width", "index", "loop", "indicator", "disableSwipe", "onChange"))
     val pageLoop = pager.children!!.single() as EtsUiForEach
     check((pageLoop.items as EtsArray).elements.map { (it as EtsLiteral).value } == listOf(0, 1, 2))
     check(pageLoop.item.symbol == page.symbol)
+    val sizedPager = backend.lower(pagerWidget.copy(modifiers = listOf(
+        WidgetModifier.Fill<EtsExpression, SourceSpan>(true, false, number(1), source))))
+    check(name(sizedPager) == "Swiper")
+    check(attributes(sizedPager).count { it == "width" } == 1)
     val scrollOffset = EtsReference(EtsSymbol("test:scrollOffset", "scrollOffset", EtsTypes.NUMBER,
         source, external = true))
     val xOffset = EtsParameter(EtsSymbol("test:xOffset", "xOffset", EtsTypes.NUMBER, source))
@@ -215,9 +289,21 @@ fun main() {
     val invalidConditional: Children<EtsExpression, SourceSpan> = Children(listOf(Widget.Conditional(listOf(
         WidgetBranch(number(1), Children(emptyList()), source)), source)))
     check(runCatching { backend.lower(invalidConditional) }.exceptionOrNull() is IllegalArgumentException)
+    val themeType = EtsNamedType("ThemeContext")
+    val themeReference = EtsReference(EtsSymbol("test:theme-context", "themeContext",
+        themeType, source))
+    val theme = EtsReference(EtsSymbol("test:theme", "theme", themeType, source, true))
+    val themeBoundary = backend.lower(Children(listOf(Widget.ThemeProvider(themeReference, theme,
+        Children(listOf(Widget.Text(string("themed"), noStyle, emptyList(), source))), source)))).single()
+        as EtsUiForEach
+    check(themeBoundary.item.symbol == themeReference.symbol)
+    val themeArray = themeBoundary.items as EtsArray
+    check(themeArray.elements.single() == theme)
+    check((themeBoundary.body.single() as EtsUiElement).call.arguments.single() ==
+        EtsLiteral("themed", EtsTypes.STRING, source))
     val fn = EtsFunction("view", emptyList(), EtsTypes.VOID,
         listOf(element, rowLayout, boxLayout, styledText, styledButton, styledImage,
-            resourceImage, urlImage, textField, pager, scroll, conditional),
+            resourceImage, urlImage, textField, pager, scroll, conditional, themeBoundary),
         source, builder = true)
     EtsValidator().validate(EtsProgram(listOf(EtsFile("model-only", listOf(fn)))))
     println("PASS backend without compiler/Compose; shared values, scoped layout modifiers, runtime branches and typed rejection")

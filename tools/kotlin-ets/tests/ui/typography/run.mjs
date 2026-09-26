@@ -47,8 +47,11 @@ run('page', 'bash', [join(root, 'kotlin-ets'), '--entry', 'typography.Page', '--
   '--out', out, join(here, 'Page.kt')]);
 const code = readFileSync(out, 'utf8');
 assert.match(code, /\.typography\.bodyLarge/);
-assert.match(code, /\.typography\.labelLarge/);
-assert.match(code, /\.typography\.titleSmall/);
+assert.match(code, /\.labelLarge/);
+assert.match(code, /\.titleSmall/);
+assert.match(code, /\.typography\.titleLarge/);
+assert.match(code, /__etsMergeTextStyle/);
+assert.doesNotMatch(code, /tmp\d+_\$this/);
 assert.match(code, /typography: EtsTypography/);
 assert.match(code, /__etsMaterialTheme/);
 assert.doesNotMatch(code, /theme\.typography|theme\.colorScheme/);

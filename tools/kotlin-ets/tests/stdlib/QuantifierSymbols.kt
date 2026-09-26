@@ -135,6 +135,7 @@ private class QuantifierLanguage : Language {
         return EtsReference(EtsSymbol("input${inputs.size}", "input${inputs.size}", type(expression.type), source(expression)))
     }
     override fun statements(body: IrBody, scope: Scope): List<EtsStatement> = error("Not a body-lowering test")
-    override fun function(function: IrSimpleFunction, scope: Scope): EtsFunction = error("Not a function-lowering test")
+    override fun function(function: IrSimpleFunction, scope: Scope,
+        semantics: FunctionTargetSemantics): EtsFunction = error("Not a function-lowering test")
     override fun clazz(declaration: IrClass): EtsClass = error("Not a class-lowering test")
 }

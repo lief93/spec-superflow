@@ -34,7 +34,21 @@ data class EtsSymbol(
     val type: EtsType,
     val source: SourceSpan,
     val external: Boolean = false,
+    val evaluation: EtsEvaluationSemantics = EtsEvaluationSemantics(EtsObservableEffect.NONE),
 )
+
+enum class EtsObservableEffect { NONE, READS_RUNTIME, WRITES_RUNTIME, UNKNOWN }
+
+/** Observable evaluation facts carried by target IR rather than inferred by framework backends. */
+data class EtsEvaluationSemantics(
+    val effect: EtsObservableEffect,
+    val createsIdentity: Boolean = false,
+    val mayThrow: Boolean = false,
+) {
+    val canDiscard: Boolean get() = effect == EtsObservableEffect.NONE && !mayThrow
+    val canReorder: Boolean get() = canDiscard
+    val canDuplicate: Boolean get() = canDiscard && !createsIdentity
+}
 
 sealed interface EtsNode { val source: SourceSpan }
 sealed interface EtsExpression : EtsNode { val type: EtsType }
@@ -50,10 +64,17 @@ data class EtsReference(val symbol: EtsSymbol, override val source: SourceSpan =
 }
 data class EtsSuper(override val type: EtsNamedType, override val source: SourceSpan) : EtsExpression
 data class EtsMember(val receiver: EtsExpression, val name: String, override val type: EtsType,
-    override val source: SourceSpan, val symbolId: String? = null) : EtsExpression
+    override val source: SourceSpan, val symbolId: String? = null,
+    val evaluation: EtsEvaluationSemantics = EtsEvaluationSemantics(EtsObservableEffect.READS_RUNTIME)) : EtsExpression
+
+/** A resolved member whose access itself has no observable behavior, such as a target enum constant. */
+fun etsStableMember(receiver: EtsExpression, name: String, type: EtsType, source: SourceSpan,
+    symbolId: String? = null): EtsMember = EtsMember(receiver, name, type, source, symbolId,
+    EtsEvaluationSemantics(EtsObservableEffect.NONE))
 data class EtsCall(val callee: EtsExpression, val arguments: List<EtsExpression>, override val type: EtsType,
     override val source: SourceSpan, val typeArguments: List<EtsType> = emptyList()) : EtsExpression
-data class EtsNew(val classType: EtsNamedType, val arguments: List<EtsExpression>, override val source: SourceSpan) : EtsExpression {
+data class EtsNew(val classType: EtsNamedType, val arguments: List<EtsExpression>, override val source: SourceSpan,
+    val repeatableSnapshot: Boolean = false, val stableIdentity: Boolean = false) : EtsExpression {
     override val type get() = classType
 }
 data class EtsBinary(val operator: String, val left: EtsExpression, val right: EtsExpression,
@@ -99,8 +120,10 @@ data class EtsUiElement(val call: EtsCall, val children: List<EtsStatement>? = n
     val attributes: List<EtsCall> = emptyList(), override val source: SourceSpan = call.source) : EtsStatement
 data class EtsUiComponent(val component: EtsReference, val properties: Map<String, EtsExpression>,
     override val source: SourceSpan = component.source) : EtsStatement
+enum class EtsUiForEachKind { ITERATION, SOURCE_EVALUATION }
 data class EtsUiForEach(val items: EtsExpression, val item: EtsParameter, val body: List<EtsStatement>,
-    override val source: SourceSpan, val key: EtsLambda? = null) : EtsStatement
+    override val source: SourceSpan, val key: EtsLambda? = null,
+    val kind: EtsUiForEachKind = EtsUiForEachKind.ITERATION) : EtsStatement
 data class EtsUiLazyForEach(val dataSource: EtsExpression, val item: EtsParameter,
     val index: EtsParameter, val body: List<EtsStatement>, val key: EtsLambda?,
     override val source: SourceSpan) : EtsStatement

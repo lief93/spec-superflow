@@ -4,7 +4,9 @@ Priority task, before further language expansion. New adapter modules should add
 their own source, JVM SPI service descriptor and tests without editing central
 rule lists or ArkUiCalls. Rebuilding remains required; no hot-loading or downloads.
 
-Main owns src/adapters/AdapterModules.kt plus Main.kt and ComposeLowering wiring.
+Main owns `src/adapters/AdapterModules.kt`, `Main.kt`, and value/effect/type
+adapter wiring. Compose structure is owned by `ComposeWidgetAdapter`; new UI
+extensions must target the neutral Widget contract rather than `lowerUi`.
 Parfit owns build-time module discovery/launcher changes, independent example
 modules, tests and the user-facing guide. Neither lane edits language lowering,
 target tree/validator/printer, existing control classes or the other's files.
@@ -25,17 +27,21 @@ Public API in package dev.ets:
 - AdapterTargetApi.value(id:String, type:EtsType, source:SourceSpan):EtsReference.
   The registered target type must structurally match the requested type. Declared
   symbol identities remain exact; an omitted symbol identity is a typed template.
-- AdapterUiServices.content(IrExpression, Scope):List<EtsStatement> and
-  decorate(IrExpression?, Scope, EtsUiElement, Set<String> = emptySet()):List<EtsStatement>
-  delegate existing content/modifier conversion, never reparse source.
+- `AdapterUiServices` is a deprecated compatibility surface for historical
+  modules. Production page mode does not instantiate it. New framework adapters
+  contribute neutral Widget semantics or checked value/effect/type rules.
+- `ComposeWidgetAdapterModule.createWidgetRule()` is the production UI extension
+  seam. `ComposeWidgetRule` receives resolved IR plus `ComposeWidgetServices`
+  and returns a neutral `Widget`; it cannot construct ArkUI statements. Services
+  lower structured content slots, ordered modifiers and typed semantic values.
 - AdapterModules(modules:List<AdapterModule> = emptyList()); companion load()
   uses JVM ServiceLoader. rules(ui:AdapterUiServices? = null):List<CallRule>;
   imports:List<EtsImport>. Module construction order is sorted by id. Duplicate
   module IDs, claimed source calls/types/fields, project declaration ownership,
   target call/value IDs and conflicting import bindings fail before generation.
-  Core and UI factories use the same CallRule
-  dispatcher and typed target nodes. Null ui creates value/effect/type rules;
-  scoped nonnull ui creates UI rules only, preventing duplicated value dispatch.
+  Production creates value/effect/type rules with `ui = null`; page mode also
+  discovers `ComposeWidgetAdapterModule` implementations from those same SPI
+  providers and gives their neutral rules to `ComposeWidgetAdapter`.
 
 Build contract: discover module directories beneath built-in `adapters/` plus
 optional external roots from KOTLIN_ETS_ADAPTER_DIRS (platform path separator).

@@ -5,11 +5,6 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
 
-internal val borderStrokeType = EtsRecordType("BorderOptions", linkedMapOf(
-    "width" to EtsTypes.NUMBER,
-    "color" to EtsTypes.NUMBER,
-))
-
 /** Compose BorderStroke is a portable width/color value, not a control-specific special case. */
 internal class ComposeBorderStrokeRule : CallRule {
     override fun mapType(type: IrType, language: Language): EtsType? {

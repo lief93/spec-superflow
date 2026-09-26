@@ -20,7 +20,8 @@ private fun asyncImageComponent(): EtsClass {
     fun nil() = EtsLiteral(null, EtsTypes.NULL, at)
     fun enum(type: String, name: String): EtsExpression {
         val target = EtsNamedType(type)
-        return EtsMember(EtsReference(EtsSymbol("arkui:$type", type, target, at, true)), name, target, at)
+        return etsStableMember(EtsReference(EtsSymbol("arkui:$type", type, target, at, true)),
+            name, target, at)
     }
     fun binary(op: String, left: EtsExpression, right: EtsExpression, type: EtsType = EtsTypes.BOOLEAN) = EtsBinary(op, left, right, type, at)
     fun parameter(name: String, type: EtsType) = EtsParameter(EtsSymbol("asyncImage:param:$name", name, type, at))

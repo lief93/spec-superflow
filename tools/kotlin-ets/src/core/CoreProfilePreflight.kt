@@ -8,8 +8,10 @@ import org.jetbrains.kotlin.ir.expressions.IrGetField
 import org.jetbrains.kotlin.ir.expressions.IrGetObjectValue
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrField
+import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrValueDeclaration
+import org.jetbrains.kotlin.ir.declarations.IrValueParameter
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.types.classOrNull
@@ -24,7 +26,7 @@ enum class CoreProfileCategory(val jsonName: String, val responsibleModule: Stri
     STDLIB("standard_library", "tools/kotlin-ets/src/stdlib/StandardLibraryRules.kt"),
     COMPOSE_WIDGET("neutral_compose_widget", "tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt"),
     MODIFIER("modifier", "tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt"),
-    RESOURCES("resources", "tools/kotlin-ets/src/ui/ComposeLowering.kt"),
+    RESOURCES("resources", "tools/kotlin-ets/src/ui/compose/ComposeWidgetAdapter.kt"),
     PROJECT_DEPENDENCY("project_dependencies", "tools/kotlin-ets/src/adapters/AdapterModules.kt"),
 }
 
@@ -89,6 +91,47 @@ data class CoreProfileReport(
     val firstUnsupportedNode: CoreProfileUnsupportedNode? = null,
     internal val recognizedNodes: List<CoreProfileNode> = emptyList(),
 ) {
+    /**
+     * Preflight type probing is intentionally conservative: framework state and project adapters may own a
+     * source value whose target type does not exist until lowering. Once a validated target program exists,
+     * source-linked target nodes are stronger evidence than that speculative probe. Only speculative call
+     * failures are cleared; explicit degradations and failures recorded by [record] remain reportable.
+     */
+    fun reconcileGeneratedTarget(program: EtsProgram, degradations: Collection<Diagnostic> = emptyList()): CoreProfileReport {
+        val targetSources = linkedMapOf<String, MutableList<Pair<SourceSpan, Boolean>>>()
+        program.files.forEach { file ->
+            file.declarations.forEach { declaration ->
+                walkEts(declaration) { node ->
+                    node.source.takeIf { it.file != null && it.start >= 0 && it.end >= it.start }
+                        ?.let { targetSources.getOrPut(requireNotNull(it.file)) { mutableListOf() }
+                            .add(it to (node is EtsFunction || node is EtsClass)) }
+                }
+            }
+        }
+        fun contains(outer: SourceSpan, inner: SourceSpan) = outer.file == inner.file &&
+            outer.start >= 0 && inner.start >= outer.start && inner.end <= outer.end
+        fun degraded(source: SourceSpan) = degradations.any { degradation ->
+            contains(source, degradation.source) || contains(degradation.source, source)
+        }
+        fun represented(source: SourceSpan, allowBroadContainers: Boolean = false) =
+            targetSources[source.file].orEmpty().any { (target, broadContainer) ->
+                contains(source, target) || (allowBroadContainers || !broadContainer) && contains(target, source)
+        }
+        val reconciled = calls.map { call ->
+            val unsupported = call.firstUnsupportedNode
+            if (unsupported?.kind in setOf("target_type", "missing_argument") &&
+                represented(call.source) && !degraded(call.source)) {
+                call.copy(firstUnsupportedNode = null)
+            } else call
+        }
+        val reconciledUnsupported = unsupportedNodes.filterNot { unsupported ->
+            unsupported.kind in setOf("declared_type", "return_type", "super_type") &&
+                represented(unsupported.source, allowBroadContainers = true) && !degraded(unsupported.source)
+        }
+        return copy(calls = reconciled, unsupportedNodes = reconciledUnsupported,
+            firstUnsupportedNode = reconciled.firstNotNullOfOrNull { it.firstUnsupportedNode })
+    }
+
     fun record(failure: Diagnostic): CoreProfileReport {
         fun contains(source: SourceSpan) = source.file == failure.source.file && source.start >= 0 &&
             failure.source.start >= source.start && failure.source.end <= source.end
@@ -176,6 +219,13 @@ fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnosti
         diagnostics.currentFile = file.fileEntry.name
         val sourceAnchors = mutableListOf<SourceSpan>()
         file.acceptChildrenVoid(object : IrElementVisitorVoid {
+            private fun frameworkLambdaReceiver(value: IrValueDeclaration): Boolean {
+                val parameter = value as? IrValueParameter ?: return false
+                val owner = parameter.parent as? IrFunction ?: return false
+                return owner.name.isSpecial && owner.extensionReceiverParameter === parameter &&
+                    parameter.type.classFqName?.asString()?.startsWith("androidx.compose.") == true
+            }
+
             private fun inspectType(type: IrType, kind: String, at: SourceSpan) {
                 try {
                     language.type(type)
@@ -206,7 +256,8 @@ fun coreProfilePreflight(module: IrModuleFragment, language: Language, diagnosti
                 val at = if (sourceLinked) elementSource else sourceAnchors.lastOrNull() ?: elementSource
                 try {
                     when (element) {
-                        is IrValueDeclaration -> inspectType(element.type, "declared_type", at)
+                        is IrValueDeclaration -> if (!frameworkLambdaReceiver(element))
+                            inspectType(element.type, "declared_type", at)
                         is IrField -> inspectType(element.type, "declared_type", at)
                         is IrSimpleFunction -> inspectType(element.returnType, "return_type", at)
                         is IrClass -> element.superTypes.forEach { inspectType(it, "super_type", at) }

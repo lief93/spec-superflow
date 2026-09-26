@@ -105,8 +105,11 @@ fun main(args: Array<String>) {
         check("LazyListState scrollOffset must be non-negative." in code)
         check("false, ScrollAlign.START, { extraOffset: LengthMetrics.px(__etsLazyOffset" in code)
         check("true, ScrollAlign.START, { extraOffset: LengthMetrics.px(__etsLazyOffset" in code)
-        check("Text(\"\" + \"Selected \" + this.__etsState_selected + \" at \" + " +
-            "this.columnState_firstVisibleItemIndex)" in code)
+        val selectedExpression = "\"\" + \"Selected \" + this.__etsState_selected + \" at \" + " +
+            "this.columnState_firstVisibleItemIndex"
+        check(Regex(
+            """ForEach\(\[${Regex.escape(selectedExpression)}\] as Array<string>, \((__etsUiArg\d+_\d+): string\) => \{\s*Text\(\1\)""")
+            .containsMatchIn(code))
         check("new __etsLazyArrayDataSource<string>([\"Ada\", \"Lin\"] as Array<string>)" in code)
         check("new __etsLazyArrayDataSource<number>(__etsLazyIndices(3))" in code)
         check("new __etsLazyArrayDataSource<string>([] as Array<string>)" in code)

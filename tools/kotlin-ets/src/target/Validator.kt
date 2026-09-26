@@ -720,7 +720,16 @@ class EtsValidator {
                 if (reference != null && !reference.symbol.external &&
                     globalFunctions[reference.symbol.id]?.builder != true) reject(value, "Source UI invocation requires a declared builder")
                 expression(value.call, scope, uiInvocation = true); expect(value.call, EtsTypes.VOID)
-                if (value.call.arguments.size != (value.call.callee.type as EtsFunctionType).parameters.size) reject(value, "Missing UI call argument")
+                val signature = value.call.callee.type as EtsFunctionType
+                if (value.call.arguments.size != signature.parameters.size) {
+                    val target = when (val callee = value.call.callee) {
+                        is EtsReference -> callee.symbol.name
+                        is EtsMember -> callee.name
+                        else -> "<expression>"
+                    }
+                    reject(value, "UI call $target requires ${signature.parameters.size} arguments; " +
+                        "received ${value.call.arguments.size}")
+                }
                 value.children?.let { statements(it, scope, EtsTypes.VOID, emptySet(), ui = true) }
                 value.attributes.forEach { attribute ->
                     if (attribute.callee !is EtsReference) reject(attribute, "UI attribute requires a declared attribute symbol")
@@ -788,7 +797,9 @@ class EtsValidator {
                 reject(value, "Target super requires the owning class's immediate base")
             is EtsReference -> {
                 name(value.symbol.name, value.source)
-                if (value.symbol.name == "this" && currentClass == null) reject(value, "Target this requires an owning class")
+                if (value.symbol.name == "this" && currentClass == null) reject(value,
+                    "Target this requires an owning class" +
+                        (currentFunction?.let { " in ${it.name}" } ?: ""))
                 if (!value.symbol.external && scope[value.symbol.id] != value.symbol) reject(value,
                     "Unbound target symbol: ${value.symbol.name}" +
                         (currentFunction?.let { " in ${it.name}" } ?: ""))
@@ -869,6 +880,12 @@ class EtsValidator {
             }
             is EtsNew -> {
                 value.arguments.forEach { visit(it) }
+                if (value.repeatableSnapshot && (!value.classType.external || value.classType.symbolId == null))
+                    reject(value, "Repeatable target snapshot requires an identified external class")
+                if (value.stableIdentity && value.classType.symbolId == null)
+                    reject(value, "Stable target identity requires an identified class")
+                if (value.repeatableSnapshot && value.stableIdentity)
+                    reject(value, "Target construction cannot be both repeatable and identity-stable")
                 value.classType.symbolId?.takeUnless { value.classType.external }?.let { id ->
                     val declaration = classes.getValue(id)
                     if (declaration.kind == EtsClassKind.INTERFACE || declaration.abstract) reject(value, "Cannot instantiate an interface or abstract class")

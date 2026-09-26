@@ -146,7 +146,9 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         is IrVararg -> lowerVararg(expression, this, scope)
         is IrConst -> constant(expression)
         is IrGetEnumValue -> enumEntryReference(expression.symbol.owner, this, source(expression))
-        is IrGetValue -> scope.bindings[expression.symbol]
+        is IrGetValue -> scope.bindings[expression.symbol]?.let { binding ->
+            if (binding is EtsReference) binding.copy(source = source(expression)) else binding
+        }
             ?: scope.aliases[expression.symbol]?.let { expression(it, scope) }
             ?: diagnostics.unsupported(expression, "Unbound value: ${expression.symbol.owner.name}")
         is IrSetValue -> {
@@ -177,8 +179,14 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
                         expression.symbol.owner.origin === IrDeclarationOrigin.FIELD_FOR_OUTER_THIS -> outerFieldSymbol(expression.symbol.owner)
                         else -> null
                     }
-                    EtsMember(expression.receiver?.let { expression(it, scope) } ?: thisReference(expression.symbol.owner.parent as IrClass, expression),
-                        captured?.name ?: fieldName(expression.symbol.owner), type(expression.type), source(expression), captured?.id)
+                    val receiver = expression.receiver?.let { expression(it, scope) }
+                        ?: thisReference(expression.symbol.owner.parent as IrClass, expression)
+                    val name = captured?.name ?: fieldName(expression.symbol.owner)
+                    val memberType = type(expression.type)
+                    val at = source(expression)
+                    if (expression.symbol.owner.isFinal)
+                        etsStableMember(receiver, name, memberType, at, captured?.id)
+                    else EtsMember(receiver, name, memberType, at, captured?.id)
                 }
             }
         }
@@ -337,7 +345,12 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
             // Final stored properties live on the instance, not the prototype.
             val propertyReceiver = if (targetReceiver is EtsSuper && !requiresAccessor(property))
                 expression(checkNotNull(receiver), scope) else targetReceiver
-            val access = propertyReceiver?.let { EtsMember(it, identifier(property), propertyType, source(call), symbol.id) }
+            val access = propertyReceiver?.let {
+                if (!property.isVar && (parent as? IrClass)?.kind != ClassKind.INTERFACE &&
+                    !requiresAccessor(property))
+                    etsStableMember(it, identifier(property), propertyType, source(call), symbol.id)
+                else EtsMember(it, identifier(property), propertyType, source(call), symbol.id)
+            }
                 ?: diagnostics.unsupported(call, "Top-level stored properties are outside the first language slice")
             return if (property.setter?.symbol == owner.symbol)
                 discard(EtsAssignment(access, arguments(call, scope).single(), source(call)), call) else access
@@ -400,10 +413,9 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
                     listOf(EtsExpressionStatement(EtsAssignment(EtsReference(name), it, source(value))))
                 }
             } else {
-                val initializer = value.initializer?.let { expression(it, scope) }
-                val name = bind(value, scope)
-                value.initializer?.let { scope.aliases[value.symbol] = it }
-                listOf(EtsVariable(name, initializer, value.isVar || initializer == null))
+                val local = lowerLocal(value, scope)
+                listOf(EtsVariable(requireNotNull(local.reference).symbol, local.initializer,
+                    value.isVar || local.initializer == null))
             }
         }
         is IrReturn -> {
@@ -658,7 +670,8 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         else EtsCast(operand, target, source(value))
     }
 
-    override fun function(function: IrSimpleFunction, scope: Scope): EtsFunction = withFile(function) {
+    override fun function(function: IrSimpleFunction, scope: Scope,
+        semantics: FunctionTargetSemantics): EtsFunction = withFile(function) {
         reserveNames(function)
         val property = function.correspondingPropertySymbol?.owner
         val originalName = if (topLevelAccessorName(function) != null) function.name.asString()
@@ -674,7 +687,9 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
             if (emittingInterfaceDefault !== function)
                 nested.bindings[it.symbol] = thisReference(function.parent as IrClass, function)
         }
-        val parameters = parameters(function, nested)
+        val parameters = semantics.frameworkParameters(nested) +
+            parameters(function, nested, semantics.parameterType, semantics.parameterBinding,
+                semantics.retainSourceDefault)
         val genericParameters = typeParameters(function)
         val parentClass = function.parent as? IrClass
         val overrides = function.overriddenSymbols.flatMap { it.owner.collectRealOverrides() }
@@ -716,12 +731,15 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         returnTargets.add(function)
         try {
             val initializer = (function.parent as? IrFile)?.takeIf { property?.isConst != true && requiresFileInitialization(it) }
-            val lines = listOfNotNull(initializer?.let(::fileInitializationCall)) + statements(body, nested)
+            val loweredBody = semantics.body?.invoke(body, nested) ?: statements(body, nested)
+            val lines = listOfNotNull(initializer?.let(::fileInitializationCall)) + loweredBody
             EtsFunction(emittedName, parameters,
                 type(function.returnType), lines, source(function), kind,
                 static = function.parent is IrClass && function.dispatchReceiverParameter == null,
                 visibility = if (parentClass == null) EtsVisibility.PUBLIC else memberVisibility(function.visibility),
-                typeParameters = genericParameters, overrides = overrideIds, sourceName = sourceName)
+                typeParameters = genericParameters, builder = semantics.builder,
+                exported = parentClass == null && !DescriptorVisibilities.isPrivate(function.visibility),
+                overrides = overrideIds, sourceName = sourceName)
         } finally {
             returnTargets.removeAt(returnTargets.lastIndex)
             expressionDepth = previousDepth
@@ -748,13 +766,27 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         }
     }
 
-    internal fun parameters(function: IrFunction, scope: Scope): List<EtsParameter> {
+    internal fun parameters(function: IrFunction, scope: Scope,
+        targetType: (IrValueParameter, () -> EtsType) -> EtsType = { _, defaultType -> defaultType() },
+        targetBinding: (IrValueParameter, EtsType) -> EtsExpression? = { _, _ -> null },
+        retainSourceDefault: (IrValueParameter) -> Boolean = { true }): List<EtsParameter> {
         prepareCapturedParameters(function)
         val parameters = listOfNotNull(function.extensionReceiverParameter) + function.valueParameters
-        parameters.forEach { bind(it, scope) }
-        return parameters.map { parameter -> withElement(parameter) {
+        val bindings = parameters.associateWith { parameter ->
+            val type = targetType(parameter) { type(parameter.type) }
+            targetBinding(parameter, type)?.also { binding ->
+                if (binding.type != type) diagnostics.unsupported(parameter,
+                    "Target parameter binding requires $type, got ${binding.type}")
+                scope.bindings[parameter.symbol] = binding
+            }
+        }
+        parameters.filter { bindings[it] == null }.forEach { parameter ->
+            bind(parameter, scope, targetType(parameter) { type(parameter.type) })
+        }
+        return parameters.mapNotNull { parameter -> if (bindings[parameter] != null) null else withElement(parameter) {
             EtsParameter((scope.bindings.getValue(parameter.symbol) as EtsReference).symbol,
-                parameter.defaultValue?.expression?.let { expression(it, scope) })
+                parameter.defaultValue?.expression?.takeIf { retainSourceDefault(parameter) }
+                    ?.let { expression(it, scope) })
         } }
     }
 
@@ -1225,14 +1257,35 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         return if (property != null && requiresAccessor(property)) "__etsField_${identifier(property)}" else identifier(field)
     }
 
-    private fun bind(value: IrValueDeclaration, scope: Scope): EtsSymbol {
+    private fun bind(value: IrValueDeclaration, scope: Scope, targetType: EtsType? = null): EtsSymbol {
         val generated = isGeneratedName(value)
         val name = capturedParameters[value.symbol] ?: if (generated || etsRestrictedValueBinding(value.name.asString())) temporaryNames.getOrPut(value.symbol) {
             freshName(if (generated) "__etsTmp" else "${identifier(value)}_", scope)
         } else identifier(value)
-        val symbol = symbols.getOrPut(value.symbol) { synthetic(name, withElement(value) { type(value.type) }, value) }
+        val expected = targetType ?: withElement(value) { type(value.type) }
+        val symbol = symbols.getOrPut(value.symbol) {
+            synthetic(name, expected, value, evaluation = if (value is IrVariable && value.isVar)
+                EtsEvaluationSemantics(EtsObservableEffect.READS_RUNTIME)
+            else EtsEvaluationSemantics(EtsObservableEffect.NONE))
+        }
+        if (symbol.type != expected) diagnostics.unsupported(value,
+            "One source binding cannot have conflicting target types: ${symbol.type} and $expected")
         scope.bindings[value.symbol] = EtsReference(symbol)
         return symbol
+    }
+
+    override fun lowerLocal(value: IrVariable, scope: Scope,
+        retainCompilerTemporary: Boolean): EtsLocalBinding = withElement(value) {
+        val initializer = value.initializer
+        if (!retainCompilerTemporary && isGeneratedName(value)) {
+            initializer?.let { scope.aliases[value.symbol] = it }
+            EtsLocalBinding(null, null)
+        } else {
+            val lowered = initializer?.let { expression(it, scope) }
+            val symbol = bind(value, scope, lowered?.type)
+            initializer?.let { scope.aliases[value.symbol] = it }
+            EtsLocalBinding(EtsReference(symbol), lowered)
+        }
     }
 
     private fun hasCaptureOrigin(field: IrField): Boolean =
@@ -1365,8 +1418,9 @@ class LanguageLowering(override val diagnostics: DiagnosticSink, rules: List<Cal
         }
     }
 
-    private fun synthetic(name: String, type: EtsType, element: IrElement, external: Boolean = false): EtsSymbol =
-        EtsSymbol("language:${nextSymbol++}", name, type, source(element), external)
+    private fun synthetic(name: String, type: EtsType, element: IrElement, external: Boolean = false,
+        evaluation: EtsEvaluationSemantics = EtsEvaluationSemantics(EtsObservableEffect.NONE)): EtsSymbol =
+        EtsSymbol("language:${nextSymbol++}", name, type, source(element), external, evaluation)
 
     private fun classReference(declaration: IrClass, element: IrElement): EtsExpression =
         EtsReference(etsClassSymbol(classNaming.name(declaration), declarationSource(declaration),

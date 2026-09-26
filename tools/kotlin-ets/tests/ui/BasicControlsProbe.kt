@@ -1,6 +1,7 @@
 package ui.test
 
 import dev.ets.*
+import dev.ets.pipeline.ComposeWidgetPipeline
 import java.io.File
 
 fun main(args: Array<String>) {
@@ -8,8 +9,7 @@ fun main(args: Array<String>) {
     val program = withKotlinModule(listOf("-no-stdlib", "-no-reflect", "-classpath", args[0], file)) { module ->
         val diagnostics = DiagnosticSink()
         val backend = EtsBackend(diagnostics, listOf(StandardLibraryRules()))
-        backend.validateSource(module)
-        ComposeLowering(backend.language, diagnostics).lower(module, "basiccontrols.BasicControls")
+        ComposeWidgetPipeline(backend, StandardLibraryRuntime).lower(module, "basiccontrols.BasicControls")
     }
     EtsValidator().validate(program)
     val nodes = mutableListOf<EtsNode>()
@@ -58,7 +58,7 @@ fun main(args: Array<String>) {
             val diagnostics = DiagnosticSink()
             val backend = EtsBackend(diagnostics, listOf(StandardLibraryRules()))
             val failure = runCatching {
-                ComposeLowering(backend.language, diagnostics).lower(module, "basiccontrols.$entry")
+                ComposeWidgetPipeline(backend, StandardLibraryRuntime).lower(module, "basiccontrols.$entry")
             }.exceptionOrNull()
             check(failure is Unsupported && reason in failure.message.orEmpty()) { "$entry: $failure" }
             val source = failure.diagnostic.source

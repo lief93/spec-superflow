@@ -5,8 +5,8 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.types.classFqName
 
 private val imageVectorSource = SourceSpan("EtsImageVector.kt", -1, -1)
-internal val materialImageVectorType = etsClassSymbol("EtsImageVector", imageVectorSource).type as EtsNamedType
-internal val materialImageVectorResourceType = EtsNamedType("Resource", external = true)
+internal val materialImageVectorType = etsImageVectorType
+internal val materialImageVectorResourceType = etsImageVectorResourceType
 
 /** Maps explicitly known Material vector identities to equivalent Harmony system symbols. */
 internal class ComposeMaterialImageVectorRule : CallRule {

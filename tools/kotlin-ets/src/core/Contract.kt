@@ -82,19 +82,40 @@ class Scope(
         LinkedHashMap(ambientValues), LinkedHashSet(semanticFlags))
 }
 
+/** Shared result for a Kotlin local after language-owned name, scope and alias lowering. */
+data class EtsLocalBinding(val reference: EtsReference?, val initializer: EtsExpression?)
+
 interface Language {
     val callRules: List<CallRule> get() = emptyList()
     val diagnostics: DiagnosticSink? get() = null
     fun source(element: IrElement): SourceSpan
     fun type(type: IrType): EtsType
+    fun lowerLocal(value: IrVariable, scope: Scope,
+        retainCompilerTemporary: Boolean = true): EtsLocalBinding =
+        error("This language backend does not expose local lowering")
     fun expression(expression: IrExpression, scope: Scope): EtsExpression
     fun statements(body: IrBody, scope: Scope): List<EtsStatement>
     fun statements(statements: List<IrStatement>, scope: Scope): List<EtsStatement> =
         error("This language backend does not expose statement-list lowering")
-    fun function(function: IrSimpleFunction, scope: Scope = Scope()): EtsFunction
+    fun function(function: IrSimpleFunction, scope: Scope = Scope(),
+        semantics: FunctionTargetSemantics = FunctionTargetSemantics()): EtsFunction
     fun clazz(declaration: IrClass): EtsClass
     fun interfaceDefaults(declaration: IrClass): List<EtsFunction> = emptyList()
 }
+
+/**
+ * A framework may change how one source function is represented without
+ * reimplementing Kotlin declaration lowering. Names, defaults, visibility,
+ * generics, receiver binding and ordinary expressions remain language-owned.
+ */
+data class FunctionTargetSemantics(
+    val builder: Boolean = false,
+    val frameworkParameters: (Scope) -> List<EtsParameter> = { emptyList() },
+    val parameterType: (IrValueParameter, () -> EtsType) -> EtsType = { _, defaultType -> defaultType() },
+    val parameterBinding: (IrValueParameter, EtsType) -> EtsExpression? = { _, _ -> null },
+    val retainSourceDefault: (IrValueParameter) -> Boolean = { true },
+    val body: ((IrBody, Scope) -> List<EtsStatement>)? = null,
+)
 
 fun interface CallRule {
     /** Whole resolved source module hook; runs before page reachability removes unrelated declarations. */
@@ -126,6 +147,13 @@ fun interface CallRule {
      * shared preflight fail-closed behavior.
      */
     fun omittedArgumentResolution(call: IrCall, parameter: IrValueParameter): String? = null
+
+    /**
+     * True only when this rule can lower the argument from the retained call IR without
+     * translating the referenced source declaration. The argument expression remains on
+     * the call; source reachability only stops at that expression's implementation.
+     */
+    fun ownsSourceArgumentDependency(call: IrCall, index: Int): Boolean = false
 
     /** A typed value, or null to decline. Unit effects belong in lowerStatement. */
     fun lower(call: IrCall, language: Language, scope: Scope): EtsExpression?

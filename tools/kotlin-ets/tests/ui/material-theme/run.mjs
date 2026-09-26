@@ -27,15 +27,15 @@ run('page', 'bash', [join(root, 'kotlin-ets'), '--entry', 'materialtheme.Page', 
   '--out', output, join(here, 'Page.kt')]);
 const code = readFileSync(output, 'utf8');
 assert.match(code, /WrappedBuilder<\[EtsMaterialContext\]>/);
-assert.match(code, /content.builder\(__etsMaterialContext\)/);
-assert.match(code, /Text\("Direct"\).*__etsTextStyleModifier\(__etsMaterialContext.contentColorFor\(__etsMaterialContext.colorScheme.primary\)/);
+assert.match(code, /content\.builder\(new EtsMaterialContext\(__etsMaterialContext\d+\.colorScheme, __etsMaterialContext\d+\.contentColorFor\(__etsMaterialContext\d+\.colorScheme\.primary\)/);
+assert.match(code, /Text\("Direct"\).*__etsTextStyleModifier\(__etsMaterialContext\d+\.contentColorFor\(__etsMaterialContext\d+\.colorScheme\.primary\)/);
 const classes = code.slice(code.indexOf('export class EtsMaterialColorValues'));
 assert.ok(classes.startsWith('export class '));
 const context = vm.createContext({ exports: {} });
 vm.runInContext(ts.transpileModule(classes, { compilerOptions: { target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.CommonJS } }).outputText, context);
 // Obtain default constructor arguments from the emitted root call, not a duplicate palette.
-const rootArgs = code.match(/this.Page\(new EtsMaterialContext\(new EtsMaterialColorValues\(([^)]*)\)/)?.[1];
+const rootArgs = code.match(/readonly __etsMaterialContext: EtsMaterialContext = new EtsMaterialContext\(new EtsMaterialColorValues\(([^)]*)\)/)?.[1];
 assert.ok(rootArgs);
 const args = JSON.parse(`[${rootArgs}]`);
 const scheme = new context.exports.EtsMaterialColorValues(...args);
@@ -63,9 +63,11 @@ run('Styled', 'bash', [join(root, 'kotlin-ets'), '--entry', 'materialtheme.Style
   '--out', styledOutput, join(here, 'Unsupported.kt')]);
 assert.match(readFileSync(styledOutput, 'utf8'), /\.typography\.bodyLarge/);
 for (const [entry, message] of [['ValueHelper', /composition invocation context/],
-  ['ThemedCheckbox', /Theme-aware Checkbox/],
-  ['ThemedSwitch', /Theme-aware Switch/], ['ThemedDivider', /Theme-aware Divider/],
-  ['ThemedVerticalDivider', /Theme-aware Divider/], ['ExplicitSchemeLookup', /explicit receiver and Unspecified result semantics/]]) {
+  ['ThemedCheckbox', /Unsupported resolved widget API: .*Checkbox/],
+  ['ThemedSwitch', /Unsupported resolved widget API: .*Switch/],
+  ['ThemedDivider', /Unsupported resolved widget API: .*HorizontalDivider/],
+  ['ThemedVerticalDivider', /Unsupported resolved widget API: .*VerticalDivider/],
+  ['ExplicitSchemeLookup', /explicit receiver and Unspecified result semantics/]]) {
   const failedOutput = join(work, entry + '.ets');
   const log = run(entry, 'bash', [join(root, 'kotlin-ets'), '--entry', `materialtheme.${entry}`, '--classpath-file', cpFile,
     '--out', failedOutput, join(here, 'Unsupported.kt')], 2);

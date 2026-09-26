@@ -15,8 +15,9 @@ approval, full Kotlin support claim, or page acceptance.
   symbol identities. Statement-only effects cannot stand in for returned values.
 - Target validation and printing are separate from lowering. Source function
   calls bind to their target declarations, including across source files.
-- Compose uses the same typed language interface; its `UiTextModule` control
-  envelope remains transitional and is not yet a fully typed UI target tree.
+- At this historical checkpoint Compose still used a transitional
+  `UiTextModule`. Current page mode has replaced it with the neutral Widget model
+  and typed `EtsProgram`; see `architecture.md`.
 
 ## Verification
 

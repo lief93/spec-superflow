@@ -1,6 +1,7 @@
 package ui.test
 
 import dev.ets.*
+import dev.ets.pipeline.ComposeWidgetPipeline
 import java.io.File
 
 fun main(args: Array<String>) {
@@ -8,7 +9,7 @@ fun main(args: Array<String>) {
         val diagnostics = DiagnosticSink()
         val backend = EtsBackend(diagnostics, listOf(StandardLibraryRules(), ImageResources(mapOf(
             "imagecontrols.R.drawable.banner" to "test_banner", "imagecontrols.R.drawable.second" to "test_second"))))
-        ComposeLowering(backend.language, diagnostics).lower(module, "imagecontrols.ImageControls")
+        ComposeWidgetPipeline(backend, StandardLibraryRuntime).lower(module, "imagecontrols.ImageControls")
     }
     EtsValidator().validate(program)
     val nodes = mutableListOf<EtsNode>()
@@ -37,7 +38,9 @@ fun main(args: Array<String>) {
             } else null
         }
         val backend = EtsBackend(diagnostics, listOf(invalid, ImageResources()))
-        val failure = runCatching { ComposeLowering(backend.language, diagnostics).lower(module, "imagecontrols.ImageControls") }.exceptionOrNull()
+        val failure = runCatching {
+            ComposeWidgetPipeline(backend, StandardLibraryRuntime).lower(module, "imagecontrols.ImageControls")
+        }.exceptionOrNull()
         check(failure is Unsupported && "Invalid call adapter result" in failure.message.orEmpty())
         println("PASS generic call-result checker rejects void for mapped Painter/Resource")
     }
@@ -61,7 +64,9 @@ fun main(args: Array<String>) {
         for ((entry, reason) in cases) {
             val diagnostics = DiagnosticSink()
             val backend = EtsBackend(diagnostics, listOf(StandardLibraryRules(), ImageResources(mapOf("imagecontrols.R.drawable.banner" to "test_banner"))))
-            val failure = runCatching { ComposeLowering(backend.language, diagnostics).lower(module, "imagecontrols.$entry") }.exceptionOrNull()
+            val failure = runCatching {
+                ComposeWidgetPipeline(backend, StandardLibraryRuntime).lower(module, "imagecontrols.$entry")
+            }.exceptionOrNull()
             check(failure is Unsupported && reason in failure.message.orEmpty()) { "$entry: $failure" }
             check(failure.diagnostic.source.let { it.file == args[4] && it.start >= 0 && it.end > it.start })
         }

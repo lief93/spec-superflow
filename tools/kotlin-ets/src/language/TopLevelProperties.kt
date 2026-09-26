@@ -43,7 +43,10 @@ internal fun topLevelStorage(property: IrProperty, language: Language): EtsSymbo
     val originalType = language.type(field.type)
     val storageType = if (lazy && originalType !in setOf(EtsTypes.NUMBER, EtsTypes.BOOLEAN) &&
         originalType !is EtsNullableType && !field.type.isChar()) EtsNullableType(originalType) else originalType
-    return EtsSymbol("global:${at.file}:${at.start}:$name", name, storageType, at)
+    return EtsSymbol("global:${at.file}:${at.start}:$name", name, storageType, at,
+        evaluation = if (property.isVar || lazy)
+            EtsEvaluationSemantics(EtsObservableEffect.READS_RUNTIME)
+        else EtsEvaluationSemantics(EtsObservableEffect.NONE))
 }
 
 internal fun readTopLevelProperty(property: IrProperty, at: SourceSpan, language: Language): EtsExpression {

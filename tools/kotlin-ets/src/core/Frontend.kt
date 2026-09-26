@@ -111,6 +111,8 @@ fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
     prepareDeclaration: (org.jetbrains.kotlin.ir.declarations.IrDeclaration) -> Unit = {},
     externalSourceType: (org.jetbrains.kotlin.ir.types.IrType) -> Boolean = { false },
     externalSourceCall: (org.jetbrains.kotlin.ir.declarations.IrSimpleFunction) -> Boolean = { false },
+    targetOwnsSourceArgument: (org.jetbrains.kotlin.ir.expressions.IrCall, Int) -> Boolean = { _, _ -> false },
+    retainSourceDefault: (org.jetbrains.kotlin.ir.declarations.IrValueParameter) -> Boolean = { true },
     retainUnreferencedFileInitializer: (org.jetbrains.kotlin.ir.declarations.IrProperty) -> Boolean = { true },
     omitUnreferencedFileInitializer: (org.jetbrains.kotlin.ir.declarations.IrProperty) -> Unit = {},
     emit: (KotlinFrontendSession) -> T): T {
@@ -142,10 +144,12 @@ fun <T> withKotlinFrontend(arguments: List<String>, entry: String? = null,
         prepareModule(frontend.module)
         entry?.let { System.err.println(selectSourceDeclarations(frontend.module, it, prepareDeclaration,
             externalSourceType = externalSourceType, externalSourceCall = externalSourceCall,
+            targetOwnsSourceArgument = targetOwnsSourceArgument,
             retainUnreferencedFileInitializer = retainUnreferencedFileInitializer,
-            omitUnreferencedFileInitializer = omitUnreferencedFileInitializer)) }
+            omitUnreferencedFileInitializer = omitUnreferencedFileInitializer).report) }
         val lowering = if (runEtsLowerings) {
-            EtsLoweringPhases.run(translated, frontend.bodies, frontend::rebindInlinedCaptures)
+            EtsLoweringPhases.run(translated, frontend.bodies, frontend::rebindInlinedCaptures,
+                retainSourceDefault)
         } else null
         check(!translated.diagnosticCollector.hasErrors && !messages.hasErrors()) {
             "Kotlin lowering diagnostics prohibit target output"

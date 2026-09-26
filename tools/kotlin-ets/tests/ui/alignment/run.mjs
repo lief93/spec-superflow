@@ -41,11 +41,27 @@ vm.runInContext(ts.transpileModule(functions, { compilerOptions: { target: ts.Sc
 assert.deepEqual([context.exports.horizontal(true), context.exports.horizontal(false),
   context.exports.vertical(true), context.exports.vertical(false), context.exports.corner(true), context.exports.corner(false)], [1,2,3,4,5,6]);
 assert.match(compile('Custom', 'Unsupported.kt', 2), /BiasAlignment/);
-for (const entry of ['ColumnOrder', 'RowOrder', 'BoxOrder']) {
-  assert.match(compile(entry, 'Order.kt', 2), /UI argument evaluation order/);
+for (const [entry, alignment] of [
+  ['ColumnOrder', 'afterWidth'],
+  ['RowOrder', 'afterWidthVertical'],
+  ['BoxOrder', 'afterWidthBox'],
+]) {
+  const ordered = compile(entry, 'Order.kt');
+  const widthEvaluation = ordered.indexOf('[Math.fround(nextWidth())]');
+  const alignmentEvaluation = ordered.indexOf(`[${alignment}()]`);
+  assert.ok(widthEvaluation >= 0 && alignmentEvaluation > widthEvaluation,
+    `${entry} evaluates source arguments from left to right`);
+  assert.equal((ordered.match(/nextWidth\(\)/g) ?? []).length, 2,
+    `${entry} width declaration plus one invocation`);
+  assert.equal((ordered.match(new RegExp(`${alignment}\\(\\)`, 'g')) ?? []).length, 2,
+    `${entry} alignment declaration plus one invocation`);
+  assert.match(ordered, /\.width\(__etsUiArg\d+_\d+\)/);
+  if (entry === 'BoxOrder') assert.match(ordered, /Stack\(\{ alignContent: __etsUiArg\d+_\d+ \}\)/);
+  else assert.match(ordered, /\.alignItems\(__etsUiArg\d+_\d+\)/);
 }
 const bound = compile('BoundOrder', 'Order.kt');
-assert.match(bound, /\.alignItems\(alignment\)\.width\(Math\.fround\(width\)\)/);
+assert.match(bound, /\.alignItems\(alignment\)/);
+assert.match(bound, /\.width\(Math\.fround\(width\)\)/);
 assert.equal((bound.match(/nextWidth\(\)/g) ?? []).length, 2, 'declaration plus one invocation');
 assert.equal((bound.match(/afterWidth\(\)/g) ?? []).length, 2, 'declaration plus one invocation');
-console.log('PASS typed alignment methods, parameter/branch flow and explicit custom-alignment rejection');
+console.log('PASS typed alignment, automatic source-order binding and explicit custom-alignment rejection');

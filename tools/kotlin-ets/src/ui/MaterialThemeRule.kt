@@ -67,9 +67,12 @@ internal fun materialContentColor(context: EtsExpression, at: SourceSpan) =
     materialContextMember(context, MaterialContextField.CONTENT_COLOR, at)
 internal fun materialTextStyleOverride(context: EtsExpression, at: SourceSpan) =
     materialContextMember(context, MaterialContextField.TEXT_STYLE, at)
-internal fun materialCurrentTextStyle(context: EtsExpression, at: SourceSpan): EtsExpression =
-    EtsBinary("??", materialTextStyleOverride(context, at),
-        EtsMember(materialTypography(context, at), "bodyLarge", textStyleType, at), textStyleType, at)
+internal fun materialCurrentTextStyle(context: EtsExpression, at: SourceSpan): EtsExpression {
+    val inherited = materialTextStyleOverride(context, at)
+    val body = EtsMember(materialTypography(context, at), "bodyLarge", textStyleType, at)
+    return if (inherited.type == EtsTypes.NULL) body
+    else EtsBinary("??", inherited, body, textStyleType, at)
+}
 internal fun defaultMaterialContext(at: SourceSpan, shapes: EtsExpression): EtsExpression = newMaterialContext(at,
     MaterialContextField.COLOR_SCHEME to EtsNew(materialColorValuesType, materialColorSchemeDefaults.map { (name, defaults) ->
         if (name == "surfaceTint") EtsLiteral(null, EtsTypes.NULL, at) else EtsLiteral(defaults.first, EtsTypes.NUMBER, at)

@@ -39,10 +39,10 @@ function loadUi(path) {
   vm.runInNewContext(code, { exports, require: name => loadUi(resolve(dirname(path), name + '.ets')) }, { timeout: 1000 });
   return exports;
 }
-const uiState = loadUi(join(uiHost, 'UiState.ets')), uiPage = loadUi(join(uiHost, 'UiPage.ets'));
+const uiState = loadUi(join(uiHost, 'UiState.ets'));
 assert.equal(uiState.counter, 0);
-uiPage.click(); assert.equal(uiState.counter, 1);
-uiPage.click(); assert.equal(uiState.counter, 2);
+uiState.click(); assert.equal(uiState.counter, 1);
+uiState.click(); assert.equal(uiState.counter, 2);
 result.relocatedCallback = { actualCounter: uiState.counter, level: 'actual typed callback replay; not ArkUI rendering' };
 run('jvm-build', 'bash', [compiler, ...sources, join(here, 'Oracle.kt'), '-d', jar]);
 result.expected = run('jvm', 'java', ['-cp', `${jar}:${cp}`, 'globals.OracleKt']).trim().split('\n');
