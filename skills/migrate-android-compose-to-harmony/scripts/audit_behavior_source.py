@@ -21,6 +21,15 @@ def digest(value):
                                      separators=(',', ':')) + '\n').encode()).hexdigest()
 
 
+def source_revision_identity(manifest, snapshot):
+    """Return a stable source identity for Git and non-Git safe snapshots."""
+    revision = (manifest.get('source_git') or {}).get('revision')
+    if isinstance(revision, str) and revision:
+        return revision
+    manifest_path = Path(snapshot) / '.android-to-harmony-safe.json'
+    return 'snapshot-sha256:' + hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+
+
 def safe_sources(snapshot):
     snapshot = Path(snapshot)
     if snapshot.is_symlink():
@@ -231,8 +240,8 @@ def census(snapshot, scope):
             or scope.get('kind') not in {'page', 'flow', 'application'}
             or not isinstance(scope.get('id'), str) or not scope['id']):
         raise ValueError('explicit page/flow/application source scope required')
-    revision = manifest.get('source_git', {}).get('revision')
-    if not revision or scope.get('source_revision') != revision:
+    revision = source_revision_identity(manifest, snapshot)
+    if scope.get('source_revision') != revision:
         raise ValueError('source scope revision differs from fixed snapshot')
     entries = scope.get('entry_paths')
     if not isinstance(entries, list) or not entries or any(p not in texts for p in entries):
@@ -314,7 +323,8 @@ def census(snapshot, scope):
     unresolved = [{'path': path, 'dependency': imp,
                    'reason': 'project import has no approved source definition; resolve generated/unavailable code'}
                   for path, imp in sorted(external)
-                  if any(package and imp.startswith(package + '.') for package in package_names)]
+                  if imp.rsplit('.', 1)[-1] != 'R'
+                  and any(package and imp.startswith(package + '.') for package in package_names)]
     unavailable = [x for x in manifest.get('blocked_files', [])
                    if Path(x.get('path', '')).suffix in {'.kt', '.java'}]
     for item in unavailable:

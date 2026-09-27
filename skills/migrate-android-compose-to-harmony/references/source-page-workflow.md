@@ -32,6 +32,133 @@ normal project/asset ownership checks. For an ordinary existing Harmony project,
 use the explicit existing-project mode below. New targets use module `entry`;
 existing targets may select `--module`.
 
+For AI-led migration, derive `effective-page-closure.json` directly from the unchanged full
+Contract and requested root/state before implementing that page. This is a compact source-reading
+index plus state/runtime evidence for AI review and semantic transcription; it is not a generated
+screen specification and does not replace source. The full Contract remains the reusable audit
+inventory. The deterministic page generator does not consume this closure and is not a substitute
+for the agent's source-first implementation.
+
+`source_scope` binds the validated safe-snapshot manifest plus every page, reached component and
+bounded host entry file by relative path and SHA-256. The agent reads all of those files and follows
+referenced project-local helpers needed to understand the page. The closure then supplies proven
+visible candidates, exact resolved text, control state/actions, source call IDs, and referenced
+strings/assets/theme tokens as evidence alongside that source. A Contract-derived closure fails if
+its safe snapshot or a scoped source file is unavailable; it must not silently continue from JSON
+alone.
+
+The selected root is also the business boundary. A normal closure rejects composables whose name
+contains `Preview`. Starting from the production root, `business_transcription` independently
+walks approved safe-snapshot definitions and records the exact files, dependency edges and bounded
+source-obligation count/hash needed for state, intents, callbacks and side effects. The compact
+closure does not duplicate obligation expressions; regenerate the bound census with
+`audit_behavior_source.py` when authoring or validating `behavior-contract.v2`. These files are merged
+into `source_scope` with reason `business_dependency`. Generated Android `R` remains a recorded
+platform resource dependency rather than a missing Kotlin source file.
+
+Implement the production page in this order:
+
+1. Preserve the source state and intent types and their initial values.
+2. Preserve each guard/branch and state transition, including loading, success, empty and error.
+3. Preserve callback arguments, repository/use-case calls and observable side-effect order.
+4. Replace Android lifecycle, coroutine, navigation, persistence and notification mechanisms with
+   named Harmony adapters without changing the business decision.
+5. Map every source behavior obligation to target code and behavior-contract scenarios. Missing or
+   unsupported mappings remain explicit diagnostics; preview fixtures, mock models and no-op
+   callbacks cannot close them.
+
+For a deliberately visual-only experiment, pass `--ui-only-preview` with an actual Preview root.
+The resulting closure marks `business_transcription.required=false` and
+`status=explicitly_out_of_scope`; it is not a migrated production page.
+
+If source conditions, collections, overlays, or sheets cannot be selected from the state fixture,
+status is `candidate_requires_runtime_facts`. `visible_components` then contains only components
+whose visibility is proven; `unresolved_branch_components` retains both alternatives with their
+original condition and source identity. The preview branch selected internally to keep projection
+bounded is not an implementation decision. Resolve the state from source/runtime facts before
+implementation rather than choosing the preview, expanding the whole application, or guessing from
+a screenshot.
+
+When available, pass the exact Android `page-snapshot.v2` for the same page/state. The closure
+copies only structured, provenance-bearing runtime facts and binds the page JSON SHA-256; it does
+not open or embed the screenshot file. Treat geometry as measurements in that snapshot's viewport.
+Normalize against Android and Harmony content bounds/safe areas before translating layout, and
+retain source-defined spacing and host behavior. A measured absolute coordinate is not permission
+to hardcode the same number on a different platform.
+
+If the page uses runtime `MaterialTheme` values, capture a matching
+`android-to-harmony.compose-theme-facts.v1` record with the bundled
+`assets/android-compose-theme-facts/RuntimeThemeFactsProbe.kt`. Copy the probe into an isolated
+Android test worktree, call `RuntimeThemeFactsProbe(themeId = "...")` inside the app's existing
+`MaterialTheme`, and give that debug build a distinct `applicationIdSuffix`. Build and install the
+test package only on the selected Android emulator. Do not edit the original Android repository or
+replace its installed production package.
+
+After clearing logcat and cold-starting the exact page environment, extract the single compressed
+record without hand-copying JSON:
+
+```bash
+adb -s "$ANDROID_EMULATOR" logcat -d -v raw -s AndroidToHarmony:I '*:S' \
+  | python3 "$SKILL_ROOT/scripts/extract_android_theme_facts.py" \
+      --output "/new/path/android-theme-facts.json"
+```
+
+The probe records the 36 Material3 color roles, 15 typography roles, 5 shape roles, density,
+font scale, layout direction, and Android SDK. It never records page display text. Runtime
+`TextStyle` cannot prove the backing font asset, so that identity stays `null` with an unresolved
+record and must be recovered from the safe source/font manifest. Remove the isolated test package
+and test worktree after capture. The closure rejects a theme file whose density or font scale does
+not match the bound Android page snapshot.
+
+`source_context.caller_edges` is a bounded reverse call-chain index from the full Contract. Use it
+to inspect likely hosts such as navigation roots, overlay registries, and sheet wrappers in the
+safe snapshot. It is candidate context, may include previews or generated content lambdas, and
+does not by itself select the active runtime host.
+
+Generate the working closure without creating a target:
+
+```bash
+python3 "$SKILL_ROOT/scripts/generate_effective_page_closure.py" \
+  --contract "/path/to/run/migration-contract.json" \
+  --style-definitions "/path/to/run/project-style-definitions.json" \
+  --root-source "app/src/main/java/example/HomeScreen.kt" \
+  --root-composable HomeScreen --page-id home --state-id loaded \
+  --state-fixture "/path/to/home-loaded.json" \
+  --android-page-json "/path/to/android/home-loaded/page.json" \
+  --android-theme-facts "/path/to/android/home-loaded/theme-facts.json" \
+  --output "/path/to/new-effective-page-closure.json"
+```
+
+The closure command refuses to replace an existing output and reports a stable identity hash.
+It selects from existing Contract facts; it does not scan or re-analyze the Android repository.
+
+### Preserve layout and drawing semantics across platforms
+
+Translate the source operation in its parent layout context; do not map a modifier name in
+isolation. In particular:
+
+- `fillMaxHeight()` inside a Compose parent using `height(IntrinsicSize.Min)` means “match the
+  measured sibling row,” not “occupy the ArkUI page.” Use the ArkUI parent's measured/content
+  height or an equivalent bounded child alignment. An unbounded `height('100%')` is not
+  semantics-preserving.
+- ArkUI Canvas drawing coordinates use the Canvas coordinate space. Do not multiply source
+  logical coordinates and stroke widths by `vp2px` unless the selected native API explicitly
+  requires physical pixels and that boundary is recorded.
+- Preserve the source drawing origin, direction, item order, gaps, cap/join behavior, and value
+  normalization. For example, Compose `drawArc(startAngle = 0f)` must remain a zero-degree start;
+  a conventional `-90°` pie-chart origin would rotate business categories into the wrong places.
+- Keep runtime-selected source branches explicit. A null/loading branch such as a skeleton remains
+  the first-state implementation when the captured state selects it; do not substitute a preview
+  value merely because the preview is easier to render.
+- Keep the Stage window out of unconditional full-screen layout so Harmony positions page content
+  against its own current `AvoidArea`. Android `WindowInsets` prove the source page's safe-area
+  policy; they are not target padding values. Do not copy Android status-bar pixels or dp into the
+  ArkUI page, and do not add a second manual top inset when the window already avoids the system bar.
+
+Treat a platform-specific implementation fix as reusable only when it can be stated in source
+semantics like the rules above. Do not preserve screenshot coordinates, one fixture's text, or a
+page-specific visual patch as a global mapping rule.
+
 ### Custom component and page directories
 
 Keep intermediate JSON/logs outside the target project with `--output-dir`.

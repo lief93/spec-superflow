@@ -25538,7 +25538,9 @@ class MigrationToolTests(unittest.TestCase):
             entry_ability = (
                 output / "entry/src/main/ets/entryability/EntryAbility.ets"
             ).read_text(encoding="utf-8")
-            self.assertIn("setWindowLayoutFullScreen(true)", entry_ability)
+            self.assertIn("setWindowLayoutFullScreen(false)", entry_ability)
+            self.assertNotIn("setWindowLayoutFullScreen(true)", entry_ability)
+            self.assertNotRegex(entry_ability, r"padding\([^\n]*(24|72)")
             self.assertIn(
                 "setWindowSystemBarEnable(['status', 'navigation'])",
                 entry_ability,

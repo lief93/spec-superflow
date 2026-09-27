@@ -1559,6 +1559,40 @@ def extract_compose_theme_tokens(files: dict[str, str]) -> dict[str, Any]:
                 color_accessors.append({'source': relative, 'expression': 'MaterialTheme.' + accessor.group(1),
                                         'type': accessor.group(2), 'composition_local': accessor.group(3)})
         declarations = extract_kotlin_val_declarations(relative, text)
+        syntax = None
+        if re.search(r"\bfun\s+[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)\s*:\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)*Typography\b", lexical_code_mask(text)):
+            from kotlin_psi import parse_declarations
+            syntax = parse_declarations(text)
+            for function in syntax.get("functions", []):
+                if not function.get("top_level"):
+                    continue
+                return_type = str(function.get("return_type") or "").rsplit(".", 1)[-1]
+                if return_type != "Typography":
+                    continue
+                statements = (function.get("body") or {}).get("statements") or []
+                if not statements or statements[-1].get("kind") != "return":
+                    continue
+                if any(
+                    item.get("kind") != "unsupported"
+                    or item.get("psiType") != "KtNamedFunction"
+                    for item in statements[:-1]
+                ):
+                    continue
+                value = statements[-1].get("value") or {}
+                callee = value.get("callee") or {}
+                if value.get("kind") != "call" or callee.get("kind") != "name":
+                    continue
+                if callee.get("name") != "Typography":
+                    continue
+                expression = value.get("text")
+                if not isinstance(expression, str):
+                    continue
+                declarations.append({
+                    "source": relative,
+                    "line": function.get("line"),
+                    "name": function.get("name"),
+                    "expression": expression,
+                })
         conditional_bindings = [
             parsed
             for declaration in declarations
@@ -1666,8 +1700,9 @@ def extract_compose_theme_tokens(files: dict[str, str]) -> dict[str, Any]:
                         }
                     )
             elif callee == "Typography":
-                from kotlin_psi import parse_declarations
-                syntax = parse_declarations(text)
+                if syntax is None:
+                    from kotlin_psi import parse_declarations
+                    syntax = parse_declarations(text)
                 scope = {'source': relative, 'imports': syntax['imports'],
                          'bindings': {p['name']: p['expression'] for p in syntax['globalProperties']
                                       if p.get('owner') is None}}
@@ -1864,7 +1899,7 @@ def extract_compose_theme_tokens(files: dict[str, str]) -> dict[str, Any]:
             key=lambda item: (item["source"], item["line"]),
         ),
         "limitations": [
-            "Static Kotlin scanning does not resolve aliases, delegated values, helper-returned themes, CompositionLocal overrides, or generated code.",
+            "Static Kotlin scanning resolves only a direct Typography constructor returned by the sole executable statement of a top-level function; local function declarations may precede it, while aliases, delegated or conditional helper-returned themes, CompositionLocal overrides, and generated code remain unresolved.",
             "Bare token references are resolved only when one compatible declaration is unique across the snapshot; duplicate names remain explicitly ambiguous.",
             "Color, typography, shape, and dimension expressions remain candidate source tokens until imports and runtime branches are reconciled.",
             "Material defaults still require the project's resolved Compose Material version.",

@@ -9,6 +9,65 @@ from real_page_pipeline import static_style_for_call
 
 
 class SourceThemeResolutionTest(unittest.TestCase):
+    def test_top_level_function_returning_typography_is_selected_by_theme_call(self):
+        from analyze_compose_project import extract_compose_theme_tokens
+        from ui_migration.frontend.theme import selected_theme_text_styles
+        inventory = extract_compose_theme_tokens({'Typography.kt': '''
+fun typography(context: Context): Typography {
+    fun getFont(weight: Int) = FontFamily(Font("font/manrope.ttf", context.assets))
+    return Typography(
+        displayMedium = TextStyle(
+            fontFamily = getFont(900),
+            fontSize = 45.sp
+        ),
+        titleMedium = TextStyle(fontSize = 16.sp)
+    )
+}
+@Composable fun Theme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        typography = typography(LocalContext.current),
+        content = content
+    )
+}
+'''})
+
+        styles = selected_theme_text_styles(inventory)
+
+        self.assertIn('45.sp', styles['displayMedium']['expression'])
+        self.assertEqual(
+            styles['displayMedium']['properties']['fontFamily']['expression'],
+            'getFont(900)',
+        )
+        self.assertIn('16.sp', styles['titleMedium']['expression'])
+
+    def test_unsupported_typography_provider_shapes_remain_unresolved(self):
+        from analyze_compose_project import extract_compose_theme_tokens
+
+        cases = {
+            'member function': '''
+class ThemeFactory {
+    fun typography(): Typography { return Typography(bodyLarge = TextStyle(fontSize = 11.sp)) }
+}
+''',
+            'conditional body': '''
+fun typography(): Typography {
+    if (compact) return Typography(bodyLarge = TextStyle(fontSize = 12.sp))
+    return Typography(bodyLarge = TextStyle(fontSize = 13.sp))
+}
+''',
+            'expression body': '''
+fun typography(): Typography = Typography(bodyLarge = TextStyle(fontSize = 14.sp))
+''',
+            'indirect provider': '''
+fun typography(): Typography { return makeTypography() }
+''',
+        }
+
+        for label, source in cases.items():
+            with self.subTest(label=label):
+                inventory = extract_compose_theme_tokens({'Typography.kt': source})
+                self.assertEqual(inventory['typography_set_count'], 0)
+
     def test_theme_styles_resolve_in_declaration_scope_and_keep_aliases(self):
         from analyze_compose_project import extract_compose_theme_tokens
         from ui_migration.frontend.theme import selected_theme_text_styles, resolve_theme_environment

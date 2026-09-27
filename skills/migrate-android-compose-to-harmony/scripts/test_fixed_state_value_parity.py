@@ -7,6 +7,26 @@ import test_ui_state_semantics as semantics
 
 
 class FixedStateValueParityTest(unittest.TestCase):
+    def test_kotlin_referential_equality_selects_known_fixed_state_branches(self):
+        shared = []
+        values = {
+            'subtitle': 'Known',
+            'sameLeft': shared,
+            'sameRight': shared,
+            'equalLeft': [],
+            'equalRight': [],
+        }
+        for expression, expected in [
+            ('subtitle !== null', True),
+            ('null !== null', False),
+            ('null === null', True),
+            ('sameLeft === sameRight', True),
+            ('equalLeft === equalRight', False),
+            ('equalLeft !== equalRight', True),
+        ]:
+            with self.subTest(expression=expression):
+                self.assertIs(evaluate_expression(expression, values), expected)
+
     def test_nullable_dimension_condition_selects_explicit_text_size(self):
         for expression, expected in [('30.sp == null', False), ('30.dp != null', True), ('null == 30.sp', False)]:
             self.assertEqual(evaluate_expression(expression, {}), expected)

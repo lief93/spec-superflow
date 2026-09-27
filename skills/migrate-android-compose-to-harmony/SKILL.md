@@ -14,6 +14,34 @@ For one selected Compose page, use the
 [page-level command](references/source-page-workflow.md#one-command-for-one-page)
 `migrate_compose_page.py`; for source JSON alone use `generate_source_page.py`.
 Both require the exact page function and explicit project style configuration.
+For AI-led semantic transcription, derive an `effective-page-closure.json` from the unchanged
+full migration Contract before implementing a selected page/state. The closure is a compact
+source-reading index plus state/runtime evidence, not a replacement for Android source and not
+input to the deterministic ArkUI page generator. The agent must read every hash-bound
+`source_scope.entry_files` file in the validated safe snapshot and follow referenced project-local
+helpers needed by the page before implementing it. Missing dynamic-state evidence is reported as
+`candidate_requires_runtime_facts`; both unresolved branch alternatives remain evidence and
+neither may be called proven visible until source or runtime facts select it.
+Normal page migration must name the production page composable, not a `Preview` wrapper. The
+closure derives a transitive `business_transcription` denominator from that root and adds its
+ViewModel/state/intent/use-case/repository/model dependencies to `source_scope`. Preserve state
+transitions, guards, callback inputs, branch conditions, side-effect order and navigation while
+replacing only platform mechanisms with explicit Harmony adapters. A missing target mapping is a
+diagnostic: never substitute preview models or no-op callbacks. Use `--ui-only-preview` only for an
+explicit UI-only prototype; that output records business transcription as out of scope and cannot
+support a behavior-complete claim.
+When a matching Android `page-snapshot.v2` exists, bind it with `--android-page-json`. Its
+structured viewport, geometry, content, and style facts are included without reading screenshot
+bytes. Reconcile coordinates against each platform's safe-area/content bounds; do not copy an
+absolute Android offset into ArkUI as a magic number. The closure also lists bounded caller-chain
+candidates from the full Contract so the agent can inspect page hosts, overlays, and wrappers in
+the safe source before transcribing the leaf page.
+For Compose pages whose colors, typography, or shapes depend on `MaterialTheme`, capture the
+resolved theme on an Android emulator with the bundled `RuntimeThemeFactsProbe.kt`, extract it with
+`extract_android_theme_facts.py`, and bind it with `--android-theme-facts`. Inject the probe only in
+an isolated test copy/worktree and use a distinct debug application ID; never modify the original
+Android repository for capture. When both inputs are present, page and theme capture density/font
+scale must match. Runtime-null font identity remains unresolved and must be reconciled from source.
 The page command automatically reuses compatible same-name components from the target
 module; see [component discovery and explicit overrides](references/business-component-reuse.md#automatic-matching-default-for-the-page-command).
 Use `--no-auto-component-reuse` to disable it. No per-component registration is needed
@@ -463,8 +491,10 @@ their `TextStyle` properties, shape roles, and `MaterialTheme` applications. Con
 such as a runtime dark-theme selection are retained when they directly feed the theme call. Use
 this inventory to create project-local Harmony color, float, font, typography, and shape resources
 before translating screens; do not substitute a public sample project's tokens. Aliases,
-delegated/helper-returned values, `CompositionLocal` overrides, runtime palette generation, and
-Material defaults still require source and dependency-version reconciliation.
+delegated or conditional helper-returned values, `CompositionLocal` overrides, runtime palette
+generation, and Material defaults still require source and dependency-version reconciliation. One
+bounded exception is a top-level function whose only executable statement directly returns a
+`Typography(...)` constructor; its named text styles remain candidate source tokens.
 The resource generator currently fills only the Material3 `lightColorScheme` default
 `onPrimary` color when the source omits that role; treat it as a candidate library default, not a
 complete generated Material default color table.
@@ -506,10 +536,11 @@ ambiguous, or unsupported facts remain explicit `unresolved` records; they are n
 source/contract fallback. The output manifest records `input_mode=page-json-only` and a zero source
 fallback count.
 
-The generated Stage template requests fullscreen window layout with status/navigation bars enabled.
-The page renderer uses native layout rather than uniformly scaling a captured screen. Verify the
-mounted root's edge-to-edge/inset policy against Android; neither this template nor a reference
-viewport proves equivalent system-bar behavior.
+The generated Stage template keeps fullscreen window layout disabled with status/navigation bars
+enabled, so Harmony positions ordinary page content against its current `AvoidArea`. The page
+renderer uses native layout rather than uniformly scaling a captured screen. Verify the mounted
+root's edge-to-edge/inset policy against Android; neither this template nor a reference viewport
+proves equivalent system-bar behavior, and Android inset values are never target padding constants.
 
 There is no source-only or dual-input fallback in this generator CLI. Source calls, definitions,
 arguments and ordered modifiers are resolved upstream into the final page JSON. The generator

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import copy
+import re
 from generate_harmony_theme_resources import MATERIAL3_LIGHT_COLOR_DEFAULTS, color_from_semantics
 from typing import Any
 from ui_migration.frontend.model import RealPageError
@@ -75,11 +76,15 @@ def selected_theme_colors(inventory: dict[str, Any] | None) -> dict[str, str]:
 def selected_theme_text_styles(inventory: dict[str, Any] | None, diagnostics: list | None = None) -> dict[str, Any]:
     if not inventory:
         return {}
-    names = {
-        item.get("arguments", {}).get("typography", {}).get("expression")
-        for item in inventory.get("theme_applications", [])
-        if isinstance(item, dict)
-    } - {None}
+    names = set()
+    for item in inventory.get("theme_applications", []):
+        if not isinstance(item, dict):
+            continue
+        expression = item.get("arguments", {}).get("typography", {}).get("expression")
+        if not isinstance(expression, str):
+            continue
+        match = re.fullmatch(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(.*\)\s*", expression, re.S)
+        names.add(match.group(1) if match is not None else expression)
     if not names:
         return {}
     matches = [item for item in inventory.get("typography_sets", []) if item.get("name") in names]

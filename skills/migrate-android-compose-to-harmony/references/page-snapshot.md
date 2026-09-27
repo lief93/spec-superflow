@@ -375,6 +375,27 @@ resolve the missing style from the exact XML/Compose/ArkTS declaration, record
 `origin=source_resolved`, and retain dynamic expressions under `unresolved`. This distinction is
 required for a reviewable result.
 
+## Capture resolved Compose theme facts
+
+A page snapshot may prove component geometry and sampled appearance while still leaving
+`MaterialTheme.colorScheme`, `typography`, and `shapes` unresolved. For Compose apps, use the
+bundled `assets/android-compose-theme-facts/RuntimeThemeFactsProbe.kt` in an isolated Android test
+worktree. Invoke it inside the app's existing `MaterialTheme`, build under a distinct debug
+application ID, and install only on the selected emulator. The original source repository remains
+read-only.
+
+The probe emits exactly one gzip/Base64 logcat record. Clear logcat before launch and extract it
+with `extract_android_theme_facts.py`; the extractor rejects duplicate, malformed, oversized, or
+non-Android records and never overwrites an existing output. The result contains 36 Material3
+color roles, 15 typography roles, 5 shape roles, and capture environment facts. It intentionally
+does not include page text. A runtime font family is not sufficient proof of its source asset, so
+font asset identity remains unresolved until source reconciliation.
+
+Bind the validated file to `generate_effective_page_closure.py` with
+`--android-theme-facts`. When a page snapshot is also bound, density and font scale must match;
+otherwise the command fails instead of combining evidence from different devices or emulator
+profiles.
+
 ## Generate both page files
 
 ```bash

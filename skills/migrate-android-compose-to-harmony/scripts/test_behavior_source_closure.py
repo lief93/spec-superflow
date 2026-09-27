@@ -250,6 +250,23 @@ class BehaviorSourceClosureTests(unittest.TestCase):
             self.assertTrue(any(x.get('dependency') == 'demo.generated.loadLedger'
                                 for x in census['unresolved']), census)
 
+    def test_generated_android_r_import_is_a_platform_resource_dependency(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            write_snapshot(root / 'snapshot', {'Entry.kt':
+                'package demo\nimport demo.R\nfun title(): Int = R.string.title\n'})
+            scope = {'schema_version': 'behavior-source-scope.v1', 'id': 'title', 'kind': 'page',
+                     'source_revision': 'source-rev', 'entry_paths': ['Entry.kt']}
+            (root / 'scope.json').write_text(json.dumps(scope))
+            result, census = run_cli('audit_behavior_source.py', 'census', '--snapshot',
+                root / 'snapshot', '--scope', root / 'scope.json')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse(census['unresolved'], census)
+            self.assertIn(
+                {'from_path': 'Entry.kt', 'import': 'demo.R'},
+                census['external_dependencies'],
+            )
+
     def test_target_requires_current_attested_device_receipt_and_named_scenario(self):
         # Existing external-device boundary fixture executes the real evidence
         # runner. Its fake HDC is test data, never public-project runtime evidence.

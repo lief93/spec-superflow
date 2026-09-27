@@ -199,6 +199,15 @@ class LayoutExpressions:
                 return (left, right)
             if op == '+' and isinstance(left, frozenset) and isinstance(right, frozenset):
                 return left | right
+            if op in ('===', '!=='):
+                primitive_types = (bool, int, float, str, bytes, LayoutDimension)
+                if left is not None and right is not None and (
+                    isinstance(left, primitive_types) or isinstance(right, primitive_types)
+                ):
+                    raise LayoutExpressionError(
+                        'referential equality requires known reference values'
+                    )
+                return (left is right) if op == '===' else (left is not right)
             if op in ('==', '!=') and (left is None or right is None):
                 return (left is right) if op == '==' else (left is not right)
             if op in ('in', '!in'):
