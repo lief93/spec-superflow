@@ -208,7 +208,7 @@ class SourceSymbolIndex:
         while pending:
             scope, expression = pending.pop()
             parameters = {p['name'] for p in scope.get('parameters', [])}
-            for name in set(expression_names(expression)) - parameters:
+            for name in sorted(set(expression_names(expression)) - parameters):
                 properties = self.visible_properties(scope, name)
                 if len(properties)!=1:
                     continue

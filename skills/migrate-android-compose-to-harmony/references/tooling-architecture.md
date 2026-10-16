@@ -1,5 +1,20 @@
 # UI Migration Tool Architecture
 
+## Maintaining the reusable business workflow
+
+For a workflow-improvement task, the deliverable is the Skill's executable procedure plus its
+shared validation/evidence behavior. Real migration pages are acceptance fixtures, not a change
+of product scope. Classify an observed failure before fixing it: a reusable collection/handoff/
+gate defect belongs in the shared tool; a source-to-target behavior mismatch belongs in the
+sample's mapped implementation; a test-host/device failure belongs in the harness or its evidence.
+Carry a sample finding into the Skill only when it changes a general decision or demonstrates a
+shared defect. One project's database, lifecycle owner or route name is not a universal rule.
+
+Keep validation bounded to the requested workflow change: first exercise its public CLI with
+positive and negative fixtures, then use representative source-first migrations for the behavior
+the scripts cannot prove. A blocked sample retains its concrete evidence without silently becoming
+a new app-migration requirement. Report reusable workflow delivery and sample acceptance separately.
+
 Source-page storage normalization lives in `contracts/source_storage.py`;
 writers share repeated values within one file and consumers expand at their
 input boundary. Rendering never depends on a sidecar or reopening Android code.
@@ -79,7 +94,8 @@ No new third-party dependency or CLI argument is introduced by this refactoring.
 | --- | --- |
 | `analyze_compose_project.py` | Safe-source component/call inventory |
 | `generate_source_page.py` | Exact Compose root + snapshot/contract + explicit project styles -> source-page.json |
-| `migrate_compose_page.py` | Page-level CLI orchestration, stage logs/timing and partial/error results; calls existing tools without new parsing/rendering rules |
+| `migrate_compose_page.py` | Direct `--dossier` mode delegates to the shared dossier check without analysis or generation; existing closure mode enforces source/target page behavior gates before scaffolding; explicit deterministic-candidate mode orchestrates the legacy generators |
+| `validate_behavior_contract_v2.py` | Existing structured Contract validation, or direct `--dossier` reference/executed-test checks through `validate_business_dossier.py`; direct checks never grant structured runtime completion |
 | `generate_project_style_definitions.py` | Reusable project-global theme file from the analyzed contract; explicit refresh only |
 | `generate_lanhu_source_page.py` | One selected source state to one `version_json.json` |
 | `generate_ui_state_previews.py` | Explicit named scenes, each with its own source-state document |
@@ -91,6 +107,11 @@ No new third-party dependency or CLI argument is introduced by this refactoring.
 as explicit aliases. They contain no second implementation or alternate translation path.
 
 ## Dependency Direction
+
+Direct AI migration reads safe source and its dossier, with no analyzer prerequisite. The optional
+closure-led AI path stops after the validated closure and reads its hash-bound source scope.
+The generator dependency direction below applies only to explicit deterministic-candidate tooling;
+none of these generator stages is called as a seed or fallback by normal migration.
 
 ```text
 Safe Android source -> inventory -> fixed-state projection -> Lanhu page document

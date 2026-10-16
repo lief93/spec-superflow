@@ -4,6 +4,18 @@ Use `behavior-contract.v2` to make the existing `behavior_contract` gate prove o
 business parity. The migration inventory remains a broad candidate file and capability inventory;
 it does not replace this page- or flow-level contract.
 
+## Automatic gate and independent review
+
+Both validation phases run without a review file. Their verdict and exit code depend on source
+scope, collection/coverage, implementation mappings and the applicable execution evidence, not a
+reviewer's approval. `--source-review` remains an optional compatibility input: its binding and
+approval checks appear only in `semantic_review` (`not_provided`, `pass`, or `fail`, with errors).
+Rejected, stale, malformed or unreadable review is visible there without suppressing the automatic
+checks. A surrounding workflow that requires independent review evaluates it separately.
+
+Automatic success proves the documented checks, not universal semantic equivalence. Keep reading
+source and testing observable behavior; a populated mapping is not proof that its method is correct.
+
 ## Implementation authority
 
 Read [semantic-transcription.md](semantic-transcription.md) when implementing business logic.
@@ -48,7 +60,9 @@ python3 "$SKILL_ROOT/scripts/collect_behavior_rules.py" selected --collection "$
 The scaffold contains all inventory IDs and all six categories as `unresolved`, with
 `status: pending`. Selection returns the full applicability index but loads detailed rules
 only for `applicable` families. These are internal tools, not an additional user workflow.
-Embed the reviewed object as `contract.collection`; preserve every existing v2 section.
+Embed the source-grounded object as `contract.collection`; preserve every existing v2 section.
+Set its `status` to `complete` after collection. Legacy `reviewed` remains accepted for compatibility,
+but neither label proves review approval; all collection checks still run. Pending scaffolds fail.
 Every category needs a source-anchored rationale and either applicable record IDs,
 evidenced `not_applicable`, or an explicit `unresolved` disposition. Missing/unknown decisions,
 pending scaffolds and unavailable source details fail both normal validation phases.
@@ -99,8 +113,9 @@ Inventory `source_evidence` and scenario `android_evidence` contain these anchor
 free-form test names. The validator independently validates the safe snapshot before any
 anchor reads and rejects excluded files, symlinks, stale hashes and nonexistent symbols.
 
-These checks prove structure and source provenance. A reviewer must still check semantic
-truth, complete function scopes, branch exhaustiveness and the page/flow denominator.
+These checks prove structure and source provenance. Semantic truth, complete function scopes,
+branch exhaustiveness and the page/flow denominator still need source reconciliation and behavioral
+tests; independent review can evaluate these separately when requested.
 Unreferenced source behavior cannot be inferred from a filled form; neither a source pass
 nor a test-symbol anchor establishes executed Android/Harmony parity. Keep unavailable
 repository implementations and runtime concerns explicit in `unresolved` or excluded scope.
@@ -130,9 +145,53 @@ separate balanced declaration/state/decision/operation regions, and binds all so
 regions, scope and snapshot hashes. Application scope includes every approved production source
 file. Required privacy-blocked source and unsupported syntax remain unresolved without being read.
 
+For a page, this default is a conservative candidate, not a requirement to migrate all methods of
+every referenced type. AI follows the actual UI-trigger/state/data chain in source. When a shared
+class or an already-created DI/application object would expand unrelated behavior, add
+`definition_boundaries` to the existing generated scope (not another artifact):
+
+```json
+{
+  "path": "data/Repository.kt",
+  "symbol": "Repository",
+  "behavior_ranges": [{"start_line": 20, "end_line": 35}],
+  "context_reason": "The page calls load; unrelated editor operations remain reading context.",
+  "resolved_dependencies": [{"path": "data/Store.kt", "symbol": "Store"}],
+  "unresolved": []
+}
+```
+
+Each boundary selects an unambiguous top-level definition. Inclusive source lines retain complete
+called methods, their annotations (including Room SQL), relevant state/defaults, initializers and
+accessors. The script rejects ranges cutting a callable body, but is not a member-level Kotlin
+type checker: AI must trace which entire members are needed, with separate review when requested. Dependencies
+from selected code continue to expand normally. `resolved_dependencies` names actual injected
+implementations or dependencies whose types are outside those spans. An empty `behavior_ranges`
+means context-only, and needs resolved dependencies or an explicit unresolved explanation.
+Unknown DI/dispatch is not a successful empty scope.
+
+For same-named definitions in one file (for example `Tag.toJson` and `Task.toJson`), the boundary
+and its `resolved_dependencies` may include `definition_line`: the 1-based start of the complete
+definition, including leading annotations. The name and line must both match; omitted or stale
+selectors never guess among overloads. This only identifies the source the agent traced, not
+receiver/type inference. Keep unrelated overloads as hash-bound context when resolving a lexical
+same-name candidate to the actual page dependency.
+
+The complete original files remain hash-bound in `files`/`source_scope`; `reading_context` records
+the selections and rationale. Context is not deleted or certified side-effect-free. Existing-object
+lookup differs from constructing it on the page: constructor/init work actually triggered by the
+page stays in the business chain. When requested, source review must examine these distinctions and omitted
+members, not merely count selected regions. Its existing scope/census hashes bind this decision;
+changing a boundary invalidates the review. Structural checks alone do not prove semantic reachability.
+
+Pass the edited scope as `--behavior-source-scope` to `migrate_compose_page.py` (or its closure helper).
+Only the optional boundaries may differ from the generated scope: page identity, revision and
+entry paths/symbols remain exact. The normal CLI rejects replacing the page root with a convenient
+handler. Source mappings and target execution gates remain required; review is a separate decision.
+
 This is a conservative **source coverage ledger**, not a Kotlin compiler or a semantic extractor.
-Import edges are candidate dependencies, not proof of runtime dispatch. The agent and independent
-reviewer must trace interface implementations/DI, callback/lambda ownership, scheduled work,
+Import edges are candidate dependencies, not proof of runtime dispatch. The implementing agent
+must trace interface implementations/DI, callback/lambda ownership, scheduled work,
 source-available helpers, mappers and persistence, and add missing entry files to the frozen scope.
 External APIs/platform behavior must be specified at their observed interface or left unresolved;
 an import listing does not establish backend or library correctness. Unknown expressions remain
@@ -140,14 +199,29 @@ in the ledger rather than disappearing because no keyword category matched.
 
 Populate `contract.source_closure` with `schema_version: behavior-source-closure.v1`,
 `census_sha256`, canonical `inventory_sha256` and `bindings`. The inventory hash makes changes to
-the inventory's meaning invalidate the bound source review as well. Every binding has one `obligation_id`, `record_ids` of existing
-typed collection facts/entities, and acceptance `scenario_ids`. Bind exact region expressions
+the inventory's meaning invalidate the bound source review as well. A single-region binding has
+one `obligation_id`, `record_ids` of existing
+typed collection facts/entities, and acceptance `scenario_ids`. When multiple regions share the
+same facts and scenarios, write one binding with `obligation_ids: ["<id>", "<id>"]` instead of
+repeating `record_ids` and `scenario_ids` per region. Use either `obligation_id` or `obligation_ids`
+in each binding; old and grouped bindings may coexist. Groups are a compact representation, not
+new business tasks: every named region is still checked individually. Missing, duplicate, unknown
+or wrongly mapped regions still fail. Grouping changes the contract hash and requires a current
+review to be refreshed if one is being used, just like other contract edits; it does not transfer an old approval.
+
+Organize facts and scenarios around the actual business chains. A shared scenario can exercise
+multiple regions, and an independent review expectation can cover multiple obligations. Neither
+node count nor binding count is a required number of business facts, tests or review paragraphs.
+Keep the exact source-expression/anchor checks below; grouping is not permission to merge
+different behavior or omit a source branch.
+
+Bind exact region expressions
 and source anchors covering the whole region. A broad function anchor cannot substitute for
 its separately enumerated operations or decisions; decision regions need branch/check facts.
 The normal validator regenerates the denominator, rejecting missing, duplicate, unknown or stale
 bindings even when the inventory and facts were deleted together.
 
-An actual independent reviewer then writes `behavior-source-review.v1`, binding the exact
+When independent review is requested, the actual reviewer writes `behavior-source-review.v1`, binding the exact
 `scope_sha256`, `census_sha256`, and canonical `contract_sha256`, reviewer identity, verdict,
 `unresolved`, examined `dependency_edges`/`external_dependencies`, and independent `expectations`.
 Each expectation has stable `id`, source-grounded `summary`, and `obligation_ids`, `record_ids`,
@@ -197,7 +271,7 @@ python3 "$SKILL_ROOT/scripts/validate_behavior_contract_v2.py" \
   --phase source \
   --contract "$BEHAVIOR_CONTRACT" \
   --inventory "$BEHAVIOR_INVENTORY" --snapshot "$SNAPSHOT" \
-  --source-scope "$BEHAVIOR_SOURCE_SCOPE" --source-review "$BEHAVIOR_SOURCE_REVIEW" \
+  --source-scope "$BEHAVIOR_SOURCE_SCOPE" \
   --output "$RUN_ROOT/behavior-contract-source-validation.json"
 ```
 
@@ -211,6 +285,15 @@ pass as target evidence.
 ## Target parity gate
 
 After implementation, create scenario results with this shape:
+
+Each implemented action's `target` uses a target-relative `file#symbol`, for example
+`entry/src/main/ets/model/TasksViewModel.ets#TasksViewModel.refresh`. The target gate resolves
+the file against the existing execution-evidence source manifest and requires production code
+under a module's `src/main`. A legacy basename such as `TasksViewModel.ets#refresh` is accepted
+only when it identifies one production file. Missing/ambiguous files, path escapes, test code
+and build/config artifacts cannot stand in for implementation. This is a file-provenance check,
+not a parser or proof of the symbol's body; source-to-target review and behavioral tests still
+establish what the mapped code actually does.
 
 ```json
 {
@@ -228,7 +311,7 @@ After implementation, create scenario results with this shape:
 }
 ```
 
-Each contract scenario also declares the independently reviewed `target_test`, for example
+Each contract scenario also declares its exact `target_test`, for example
 `TasksUiTest.opensDrawer`. Evidence paths must reference actual `evidence_runner.py` records
 inside the owned target, with this source-snapshot identity, the current target-source digest,
 the scope ID in `slice_ids`, the scenario ID in `demand_ids`, a passed `run` of `ui_tests` or
@@ -243,7 +326,7 @@ python3 "$SKILL_ROOT/scripts/validate_behavior_contract_v2.py" \
   --phase target \
   --contract "$BEHAVIOR_CONTRACT" \
   --inventory "$BEHAVIOR_INVENTORY" --snapshot "$SNAPSHOT" \
-  --source-scope "$BEHAVIOR_SOURCE_SCOPE" --source-review "$BEHAVIOR_SOURCE_REVIEW" \
+  --source-scope "$BEHAVIOR_SOURCE_SCOPE" \
   --target "$TARGET" \
   --scenario-results "$BEHAVIOR_RESULTS" \
   --output "$RUN_ROOT/behavior-contract-validation.json"
@@ -269,8 +352,9 @@ by `page-snapshot.v2` and screenshot comparison.
 
 `collection_valid` means the original six-family structure/provenance checks pass.
 `source_closure.coverage_complete` means all independent source regions have mappings.
-`source_complete` additionally requires the current independent semantic review and complete
-source contract. `runtime_complete` additionally requires the actual target execution above.
+`source_complete` additionally requires all automatic source-contract checks to pass; it does not
+assert independent review approval or semantic equivalence. `semantic_review` reports the separate
+review result. `runtime_complete` additionally requires the actual target execution above.
 Only an application-scoped runtime pass with no scope exclusions can set `application_complete`.
 `scenario_results.reported_passed` is the untrusted submitted count; `passed`/`percent` count only
 verified execution. None of these source-only percentages certifies whole-app runtime behavior.

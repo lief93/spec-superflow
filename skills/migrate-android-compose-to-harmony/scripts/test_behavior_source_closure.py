@@ -82,6 +82,261 @@ def reviewed_fixture(root, c, census):
 
 
 class BehaviorSourceClosureTests(unittest.TestCase):
+    def test_literal_before_bounded_dependency_keeps_exact_source_expressions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                'Page.kt': 'package demo\nfun Page(worker: Worker) { worker.send() }\n',
+                'Worker.kt': 'package demo\nprivate const val TAG = "Worker" // label\n'
+                             'class Worker {\n'
+                             '    fun unrelated() { service.start() }\n'
+                             '    fun send() { log(TAG); disk.write() }\n'
+                             '}\n',
+            }
+            write_snapshot(root / 'snapshot', files)
+            scope = {'schema_version': 'behavior-source-scope.v1', 'id': 'page', 'kind': 'page',
+                     'source_revision': 'source-rev', 'entry_paths': ['Page.kt'],
+                     'entry_symbols': {'Page.kt': ['Page']}, 'definition_boundaries': [{
+                         'path': 'Worker.kt', 'symbol': 'Worker',
+                         'behavior_ranges': [{'start_line': 5, 'end_line': 5}],
+                         'context_reason': 'Only send is reached; the other method remains reading context.',
+                         'resolved_dependencies': [], 'unresolved': []}]}
+            (root / 'scope.json').write_text(json.dumps(scope))
+            result, report = run_cli('audit_behavior_source.py', 'census', '--snapshot',
+                                    root / 'snapshot', '--scope', root / 'scope.json')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            expressions = [o['expression'] for o in report['obligations']]
+            self.assertIn('fun send() { log(TAG); disk.write() }', expressions)
+            self.assertFalse(any('unrelated' in e for e in expressions))
+            for obligation in report['obligations']:
+                self.assertIn(obligation['expression'], files[obligation['path']])
+
+    def test_page_boundary_can_identify_one_same_named_extension_without_dropping_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                'Page.kt': 'package demo\nfun Page(tag: Tag) { tag.toJson() }\n',
+                'Types.kt': 'package demo\nclass Tag\nclass Task\n',
+                'Json.kt': 'package demo\n'
+                           'fun Tag.toJson() { saveTag() }\n'
+                           'fun Task.toJson() { backgroundTask() }\n',
+                'Save.kt': 'package demo\nfun saveTag() { disk.write() }\n',
+                'Background.kt': 'package demo\nfun backgroundTask() { service.start() }\n',
+            }
+            write_snapshot(root / 'snapshot', files)
+            scope = {'schema_version': 'behavior-source-scope.v1', 'id': 'page', 'kind': 'page',
+                     'source_revision': 'source-rev', 'entry_paths': ['Page.kt'],
+                     'entry_symbols': {'Page.kt': ['Page']}, 'definition_boundaries': [{
+                         'path': 'Json.kt', 'symbol': 'toJson', 'definition_line': 3,
+                         'behavior_ranges': [],
+                         'context_reason': 'The page receiver is Tag, not Task; keep Task source as context.',
+                         'resolved_dependencies': [
+                             {'path': 'Json.kt', 'symbol': 'toJson', 'definition_line': 2}],
+                         'unresolved': []}]}
+
+            def check(candidate):
+                (root / 'scope.json').write_text(json.dumps(candidate))
+                return run_cli('audit_behavior_source.py', 'census', '--snapshot',
+                               root / 'snapshot', '--scope', root / 'scope.json')
+
+            result, report = check(scope)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            bodies = [o['expression'] for o in report['obligations'] if o['kind'] == 'callable']
+            self.assertIn('fun Tag.toJson() { saveTag() }', bodies)
+            self.assertFalse(any('backgroundTask' in body for body in bodies))
+            self.assertNotIn('Background.kt', [f['path'] for f in report['files']])
+            json_file = next(f for f in report['files'] if f['path'] == 'Json.kt')
+            self.assertEqual(json_file['sha256'], hashlib.sha256(files['Json.kt'].encode()).hexdigest())
+            self.assertEqual(report['reading_context'][0]['definition_line'], 3)
+            for invalid in (None, 1, True, '3'):
+                with self.subTest(definition_line=invalid):
+                    candidate = copy.deepcopy(scope)
+                    if invalid is None:
+                        candidate['definition_boundaries'][0].pop('definition_line')
+                    else:
+                        candidate['definition_boundaries'][0]['definition_line'] = invalid
+                    self.assertEqual(check(candidate)[0].returncode, 1)
+            candidate = copy.deepcopy(scope)
+            candidate['definition_boundaries'][0]['resolved_dependencies'][0].pop('definition_line')
+            self.assertEqual(check(candidate)[0].returncode, 1)
+
+    def test_grouped_source_bindings_preserve_coverage_and_review_checks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            c, i = fixture(root / 'snapshot', 'class TasksViewModel {\n var loading = false\n'
+                          ' fun refresh() { loading = true; loading = false }\n}\n')
+            c['collection']['facts'][0]['source_expressions'] = [
+                'fun refresh() { loading = true; loading = false }', 'loading = true', 'loading = false']
+            current = bind_source_closure(root, c, i)
+            reviewed_fixture(root, c, current)
+            old = copy.deepcopy(c['source_closure']['bindings'])
+            groups = {}
+            for binding in old:
+                key = (tuple(binding['record_ids']), tuple(binding['scenario_ids']))
+                group = groups.setdefault(key, {'obligation_ids': [],
+                    'record_ids': binding['record_ids'], 'scenario_ids': binding['scenario_ids']})
+                group['obligation_ids'].append(binding['obligation_id'])
+            c['source_closure']['bindings'] = list(groups.values())
+            self.assertLess(len(groups), len(old))
+            def check(candidate):
+                (root / 'contract.json').write_text(json.dumps(candidate))
+                (root / 'inventory.json').write_text(json.dumps(i))
+                return run_cli('validate_behavior_contract_v2.py', '--phase', 'source',
+                    '--contract', root / 'contract.json', '--inventory', root / 'inventory.json',
+                    '--snapshot', root / 'snapshot', '--source-scope', root / 'scope.json',
+                    '--source-review', root / 'review.json')
+            # Reformatting cannot transfer an approval bound to the old contract.
+            result, report = check(c)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(report['semantic_review']['verdict'], 'fail')
+            self.assertTrue(any('review contract is stale' in e for e in report['semantic_review']['errors']))
+            reviewed_fixture(root, c, current)
+            result, report = check(c)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(report['source_closure']['covered'], len(old))
+            self.assertTrue(report['source_complete'])
+            self.assertEqual(report['semantic_review']['verdict'], 'pass')
+            self.assertFalse(report['runtime_complete'])
+            grouped = copy.deepcopy(c)
+            # Both serialized forms can coexist without losing any source obligations.
+            group = c['source_closure']['bindings'].pop()
+            c['source_closure']['bindings'].extend({'obligation_id': key,
+                'record_ids': group['record_ids'], 'scenario_ids': group['scenario_ids']}
+                for key in group['obligation_ids'])
+            reviewed_fixture(root, c, current)
+            self.assertEqual(check(c)[0].returncode, 0)
+            for case in ('omitted', 'duplicate', 'unknown', 'ambiguous', 'empty', 'unbound-expression'):
+                with self.subTest(case=case):
+                    candidate = copy.deepcopy(grouped)
+                    bindings = candidate['source_closure']['bindings']
+                    if case == 'omitted':
+                        bindings.pop()
+                    elif case == 'duplicate':
+                        bindings.append(old[0])
+                    elif case == 'unknown':
+                        bindings[0]['obligation_ids'].append('f' * 64)
+                    elif case == 'ambiguous':
+                        bindings[0]['obligation_id'] = old[0]['obligation_id']
+                    elif case == 'empty':
+                        bindings[0]['obligation_ids'] = []
+                    else:
+                        candidate['collection']['facts'][0]['source_expressions'].remove('loading = false')
+                    reviewed_fixture(root, candidate, current)
+                    result, report = check(candidate)
+                    self.assertEqual(result.returncode, 1, result.stdout)
+                    self.assertFalse(report['source_complete'])
+
+    def test_page_boundary_retains_di_context_without_expanding_application_startup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {
+                'Page.kt': 'package demo\nfun Page(app: App) { app.repository.save() }\n',
+                'App.kt': 'package demo\nclass App {\n val repository = Repo()\n'
+                          ' fun onCreate() { Background().start() }\n}\n',
+                'Repo.kt': 'package demo\nclass Repo {\n fun save() { if (ready) { persist() } }\n'
+                           ' fun unused() { Background().start() }\n}\n',
+                'Persist.kt': 'package demo\nfun persist() { disk.write() }\n',
+                'Background.kt': 'package demo\nclass Background { fun start() {} }\n',
+            }
+            write_snapshot(root / 'snapshot', files)
+            scope = {'schema_version': 'behavior-source-scope.v1', 'id': 'page', 'kind': 'page',
+                     'source_revision': 'source-rev', 'entry_paths': ['Page.kt'],
+                     'entry_symbols': {'Page.kt': ['Page']}, 'definition_boundaries': [
+                         {'path': 'App.kt', 'symbol': 'App', 'behavior_ranges': [],
+                          'context_reason': 'Already-created application; page uses its repository.',
+                          'resolved_dependencies': [{'path': 'Repo.kt', 'symbol': 'Repo'}],
+                          'unresolved': []},
+                         {'path': 'Repo.kt', 'symbol': 'Repo',
+                          'behavior_ranges': [{'start_line': 3, 'end_line': 3}],
+                          'context_reason': 'Only save is invoked by this page.',
+                          'resolved_dependencies': [], 'unresolved': []},
+                     ]}
+            (root / 'scope.json').write_text(json.dumps(scope))
+            result, report = run_cli('audit_behavior_source.py', 'census', '--snapshot',
+                                    root / 'snapshot', '--scope', root / 'scope.json')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual({r['symbol'] for r in report['obligations'] if r['kind'] == 'callable'},
+                             {'Page', 'save', 'persist'})
+            self.assertEqual({f['path'] for f in report['files']},
+                             {'Page.kt', 'App.kt', 'Repo.kt', 'Persist.kt'})
+            self.assertTrue(any(o['expression'] == 'if (ready)' for o in report['obligations']))
+            self.assertEqual([r['symbol'] for r in report['reading_context']], ['App', 'Repo'])
+            self.assertFalse(report['unresolved'])
+
+            # Scope reduction never supplies behavior mappings or a review itself.
+            contract = {'source_closure': {'schema_version': 'behavior-source-closure.v1',
+                        'census_sha256': report['census_sha256'], 'inventory_sha256': digest({}),
+                        'bindings': []}, 'scope': {'included_scopes': ['page']},
+                        'identity': {'source_revision': 'source-rev'}}
+            for name, value in [('contract', contract), ('inventory', {})]:
+                (root / (name + '.json')).write_text(json.dumps(value))
+            failed, rejected = run_cli('validate_behavior_contract_v2.py', '--phase', 'source',
+                '--contract', root / 'contract.json', '--inventory', root / 'inventory.json',
+                '--snapshot', root / 'snapshot', '--source-scope', root / 'scope.json')
+            self.assertEqual(failed.returncode, 1)
+            required = {o['id'] for o in report['obligations'] if o['kind'] in {'callable', 'decision'}}
+            self.assertTrue(required.issubset(set(rejected['source_closure']['missing'])))
+            for label, update in [
+                ('page root', {'path': 'Page.kt', 'symbol': 'Page'}),
+                ('missing dependency', {'resolved_dependencies': [{'path': 'Absent.kt', 'symbol': 'Repo'}]}),
+                ('unmapped DI', {'resolved_dependencies': []}),
+            ]:
+                with self.subTest(label=label):
+                    changed = copy.deepcopy(scope)
+                    changed['definition_boundaries'][0].update(update)
+                    (root / 'scope.json').write_text(json.dumps(changed))
+                    failed, rejected = run_cli('audit_behavior_source.py', 'census', '--snapshot',
+                        root / 'snapshot', '--scope', root / 'scope.json')
+                    self.assertEqual(failed.returncode, 1, rejected)
+            changed = copy.deepcopy(scope)
+            changed['definition_boundaries'][0].update(resolved_dependencies=[], unresolved=['Unknown DI binding'])
+            changed['definition_boundaries'].pop()
+            (root / 'scope.json').write_text(json.dumps(changed))
+            result, unresolved = run_cli('audit_behavior_source.py', 'census', '--snapshot',
+                root / 'snapshot', '--scope', root / 'scope.json')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(unresolved['unresolved'], [{'path': 'App.kt', 'reason': 'Unknown DI binding'}])
+
+    def test_page_boundary_cannot_slice_a_business_method_before_its_effect(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            write_snapshot(root / 'snapshot', {
+                'Page.kt': 'package demo\nfun Page(repo: Repo) { repo.save() }\n',
+                'Repo.kt': 'package demo\nclass Repo {\n fun save() {\n  check()\n  persist()\n }\n}\n',
+            })
+            scope = {'schema_version': 'behavior-source-scope.v1', 'id': 'page', 'kind': 'page',
+                     'source_revision': 'source-rev', 'entry_paths': ['Page.kt'],
+                     'definition_boundaries': [{'path': 'Repo.kt', 'symbol': 'Repo',
+                         'behavior_ranges': [{'start_line': 4, 'end_line': 4}],
+                         'context_reason': 'Attempt to keep only the check',
+                         'resolved_dependencies': [], 'unresolved': []}]}
+            (root / 'scope.json').write_text(json.dumps(scope))
+            failed, rejected = run_cli('audit_behavior_source.py', 'census', '--snapshot',
+                root / 'snapshot', '--scope', root / 'scope.json')
+            self.assertEqual(failed.returncode, 1, rejected)
+            self.assertIn('complete callable', str(rejected))
+
+    def test_constructor_annotation_does_not_move_class_body_to_next_top_level_property(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            write_snapshot(root / 'snapshot', {
+                'Page.kt': 'package demo\nfun Page(vm: VM) { vm.save() }\n',
+                'VM.kt': 'package demo\n@Owner\nclass VM @Inject constructor() {\n'
+                         ' fun save() { persist() }\n}\nval LocalVM = localOf<VM>()\n',
+            })
+            scope = {'schema_version': 'behavior-source-scope.v1', 'id': 'page', 'kind': 'page',
+                     'source_revision': 'source-rev', 'entry_paths': ['Page.kt'],
+                     'definition_boundaries': [{'path': 'VM.kt', 'symbol': 'VM',
+                         'behavior_ranges': [{'start_line': 4, 'end_line': 4}],
+                         'context_reason': 'Page invokes save on an injected VM.',
+                         'resolved_dependencies': [], 'unresolved': []}]}
+            (root / 'scope.json').write_text(json.dumps(scope))
+            result, report = run_cli('audit_behavior_source.py', 'census', '--snapshot',
+                root / 'snapshot', '--scope', root / 'scope.json')
+            self.assertEqual(result.returncode, 0, report)
+            self.assertIn('save', [o.get('symbol') for o in report['obligations']])
+            self.assertNotIn('LocalVM', [d['symbol'] for d in report['reached_definitions']])
+
     def test_source_completion_cannot_satisfy_final_behavior_gate(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -153,8 +408,9 @@ class BehaviorSourceClosureTests(unittest.TestCase):
                     changed['expectations'][0][field].append(missing)
                     (root / 'review.json').write_text(json.dumps(changed))
                     result, rejected = check()
-                    self.assertEqual(result.returncode, 1, result.stdout)
-                    self.assertFalse(rejected['source_complete'])
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    self.assertTrue(rejected['source_complete'])
+                    self.assertEqual(rejected['semantic_review']['verdict'], 'fail')
             (root / 'review.json').write_text(json.dumps(review))
             i['items'][0]['summary'] = 'Different claimed business meaning after review'
             (root / 'inventory.json').write_text(json.dumps(i))
@@ -288,7 +544,16 @@ class BehaviorSourceClosureTests(unittest.TestCase):
         state_path.write_text(json.dumps(state))
         c['collection']['facts'][0]['source_expressions'] = [
             'fun refresh() { loading = true; loading = false }', 'loading = true', 'loading = false']
-        c['traceability']['target_implementation'][0].update(status='implemented', target='Index.ets#refresh')
+        implementation = owner.target / 'entry/src/main/ets/model/TasksViewModel.ets'
+        implementation.parent.mkdir(parents=True, exist_ok=True)
+        implementation.write_text('export class TasksViewModel { refresh(): void {} }\n')
+        for relative in ('entry/src/main/ets/a/Duplicate.ets',
+                         'entry/src/main/ets/b/Duplicate.ets',
+                         'entry/src/ohosTest/ets/test/OnlyTest.ets'):
+            extra = owner.target / relative
+            extra.parent.mkdir(parents=True, exist_ok=True)
+            extra.write_text('export function refresh(): void {}\n')
+        c['traceability']['target_implementation'][0].update(status='implemented', target='TasksViewModel.ets#refresh')
         c['scenarios'][0]['target_test'] = 'DemoUiTest.opensDemo'
         census = bind_source_closure(root, c, i)
         reviewed_fixture(root, c, census)
@@ -324,6 +589,27 @@ class BehaviorSourceClosureTests(unittest.TestCase):
         self.assertEqual(report['artifact_type'], 'behavior_contract_validation')
         self.assertFalse(report['application_complete'])
         self.assertEqual(report['scenario_results']['percent'], 100.0)
+        # A reviewed label and valid execution receipt cannot point at absent,
+        # out-of-target, or non-production implementation files.
+        mapping = c['traceability']['target_implementation'][0]
+        for invalid in ('Missing.ets#refresh', '../TasksViewModel.ets#refresh',
+                        'entry/hvigorfile.ts#refresh',
+                        'Duplicate.ets#refresh',
+                        'entry/src/ohosTest/ets/test/OnlyTest.ets#refresh',
+                        'entry/src/main/ets/model/TasksViewModel.ets#'):
+            with self.subTest(implementation=invalid):
+                mapping['target'] = invalid
+                reviewed_fixture(root, c, census)
+                (root / 'contract.json').write_text(json.dumps(c))
+                rejected, failure = check()
+                self.assertEqual(rejected.returncode, 1, rejected.stdout)
+                self.assertFalse(failure['runtime_complete'])
+                self.assertTrue(any('target implementation source' in e for e in failure['errors']))
+        mapping['target'] = 'entry/src/main/ets/model/TasksViewModel.ets#TasksViewModel.refresh'
+        reviewed_fixture(root, c, census)
+        (root / 'contract.json').write_text(json.dumps(c))
+        accepted, report = check()
+        self.assertEqual(accepted.returncode, 0, accepted.stdout)
         # Same code with a new snapshot identity still needs a matching execution receipt.
         original_marker = marker.read_text()
         changed_manifest = json.loads(original_marker)
@@ -436,23 +722,60 @@ class BehaviorSourceClosureTests(unittest.TestCase):
             self.assertEqual(failed.returncode, 1, failed.stdout)
             self.assertTrue(any('census' in e for e in rejected['errors']))
 
-    def test_matching_source_coverage_without_independent_review_is_not_complete(self):
+    def test_complete_source_gate_does_not_require_independent_review(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             c, i = fixture(root / 'snapshot', 'class TasksViewModel {\n var loading = false\n'
                           ' fun refresh() { loading = true; loading = false }\n}\n')
             c['collection']['facts'][0]['source_expressions'] = [
                 'fun refresh() { loading = true; loading = false }', 'loading = true', 'loading = false']
+            c['collection']['status'] = 'complete'
             bind_source_closure(root, c, i)
             (root / 'contract.json').write_text(json.dumps(c))
             (root / 'inventory.json').write_text(json.dumps(i))
             result, report = run_cli('validate_behavior_contract_v2.py', '--phase', 'source',
                 '--contract', root / 'contract.json', '--inventory', root / 'inventory.json',
                 '--snapshot', root / 'snapshot', '--source-scope', root / 'scope.json')
-            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertEqual(result.returncode, 0, result.stdout)
             self.assertTrue(report['source_closure']['coverage_complete'])
+            self.assertTrue(report['source_complete'])
+            self.assertEqual(report['semantic_review'], {'verdict': 'not_provided', 'errors': []})
+            self.assertFalse(report['runtime_complete'])
+            for content in ('{"verdict":"fail"}', '{"verdict":"pass"}', '[]', '{broken', None):
+                with self.subTest(review=content):
+                    review_path = root / 'optional-review.json'
+                    if content is None:
+                        review_path.unlink()
+                    else:
+                        review_path.write_text(content)
+                    result, report = run_cli('validate_behavior_contract_v2.py', '--phase', 'source',
+                        '--contract', root / 'contract.json', '--inventory', root / 'inventory.json',
+                        '--snapshot', root / 'snapshot', '--source-scope', root / 'scope.json',
+                        '--source-review', review_path)
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    self.assertTrue(report['source_complete'])
+                    self.assertEqual(report['semantic_review']['verdict'], 'fail')
+                    self.assertTrue(report['semantic_review']['errors'])
+            for status in ('pending', 'unknown', None):
+                with self.subTest(collection_status=status):
+                    c['collection']['status'] = status
+                    (root / 'contract.json').write_text(json.dumps(c))
+                    result, report = run_cli('validate_behavior_contract_v2.py', '--phase', 'source',
+                        '--contract', root / 'contract.json', '--inventory', root / 'inventory.json',
+                        '--snapshot', root / 'snapshot', '--source-scope', root / 'scope.json')
+                    self.assertEqual(result.returncode, 1, result.stdout)
+                    self.assertFalse(report['collection_valid'])
+                    self.assertTrue(any('collection' in error for error in report['errors']))
+            c['collection']['status'] = 'complete'
+            # Without review, dropping a bound source operation still fails mechanically.
+            missing = c['source_closure']['bindings'].pop()['obligation_id']
+            (root / 'contract.json').write_text(json.dumps(c))
+            result, report = run_cli('validate_behavior_contract_v2.py', '--phase', 'source',
+                '--contract', root / 'contract.json', '--inventory', root / 'inventory.json',
+                '--snapshot', root / 'snapshot', '--source-scope', root / 'scope.json')
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn(missing, report['source_closure']['missing'])
             self.assertFalse(report['source_complete'])
-            self.assertTrue(any('semantic review' in e for e in report['errors']))
 
     def test_census_discovers_whole_functions_branches_and_local_dependency_without_inventory(self):
         with tempfile.TemporaryDirectory() as temporary:

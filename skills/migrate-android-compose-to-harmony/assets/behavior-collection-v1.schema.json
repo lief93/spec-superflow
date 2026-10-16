@@ -6,7 +6,7 @@
   "required": ["schema_version", "status", "source_revision", "categories", "entities", "relationships", "facts", "anchors"],
   "properties": {
     "schema_version": {"const": "behavior-collection.v1"},
-    "status": {"enum": ["pending", "reviewed"]},
+    "status": {"enum": ["pending", "complete", "reviewed"]},
     "source_revision": {"type": "string", "minLength": 1},
     "inventory_ids": {"type": "array", "items": {"type": "string"}},
     "categories": {"type": "array", "minItems": 6, "maxItems": 6, "items": {

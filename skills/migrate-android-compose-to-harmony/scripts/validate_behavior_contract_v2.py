@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -67,7 +68,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scenario-results", type=Path)
     parser.add_argument("--snapshot", type=Path, help="Approved safe source snapshot required in both phases")
     parser.add_argument("--source-scope", type=Path, help="Independently selected full page/flow/application source scope")
-    parser.add_argument("--source-review", type=Path, help="Independent semantic review bound to the current source and contract")
+    parser.add_argument("--source-review", type=Path, help="Optional independent review; reported separately from the business gate")
     parser.add_argument("--target", type=Path, help="Owned Harmony target containing signed execution evidence")
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
@@ -144,6 +145,45 @@ def collect_inventory_refs(value: Any, refs: set[str]) -> None:
             collect_inventory_refs(child, refs)
 
 
+def validate_target_sources(mappings, target):
+    """Resolve implementation pointers against the same source set as execution evidence.
+
+    This checks file provenance, not whether a symbol's body implements its claimed semantics.
+    That remains the source-to-target review and scenario tests' responsibility.
+    """
+    from hash_target_source import create_manifest, normalize_target
+    errors = []
+    try:
+        if target is None:
+            raise ValueError('requires the owned --target')
+        manifest, _ = create_manifest(normalize_target(Path(target)))
+        sources = [item['path'] for item in manifest['files']
+                   if '/src/main/' in item['path']
+                   and Path(item['path']).suffix in {'.ets', '.ts', '.js', '.mjs', '.cjs'}]
+        for action_id, mapping in mappings.items():
+            if mapping.get('status') != 'implemented':
+                continue
+            reference = mapping.get('target')
+            if not isinstance(reference, str) or reference.count('#') != 1:
+                errors.append(f'target implementation source {action_id}: expected file#symbol')
+                continue
+            name, symbol = reference.split('#')
+            relative = Path(name)
+            if (not name or not symbol.strip() or relative.is_absolute()
+                    or '..' in relative.parts or '\\' in name):
+                errors.append(f'target implementation source {action_id}: unsafe or incomplete reference')
+                continue
+            # Retain legacy basename references only when they resolve uniquely.
+            matches = [path for path in sources if path == relative.as_posix() or
+                       (len(relative.parts) == 1 and Path(path).name == name)]
+            if len(matches) != 1:
+                errors.append(f'target implementation source {action_id}: '
+                              f'{name} must resolve to one current production source file')
+    except (OSError, ValueError, RuntimeError) as error:
+        errors.append('target implementation source: ' + str(error))
+    return errors
+
+
 def validate_runtime_evidence(contract, results, target, closure):
     """Reuse the normal runner's attestation/command/artifact checks, not path strings."""
     if target is None:
@@ -164,7 +204,7 @@ def validate_runtime_evidence(contract, results, target, closure):
             scenario = scenarios.get(item.get('id'), {})
             test_id = scenario.get('target_test')
             if not isinstance(test_id, str) or not re.fullmatch(r'[\w$]+\.[\w$]+', test_id):
-                errors.append(f"runtime execution evidence has no reviewed target_test for {item.get('id')}")
+                errors.append(f"runtime execution evidence has no declared target_test for {item.get('id')}")
                 continue
             matched = False
             for name in item.get('evidence', []):
@@ -222,10 +262,13 @@ def validate(
     errors.extend(collection_result["errors"])
     closure_result = validate_closure(contract, inventory, snapshot, source_scope)
     errors.extend(closure_result['errors'])
-    try:
-        errors.extend(validate_semantic_review(contract, closure_result, source_review))
-    except (ValueError, TypeError, KeyError, AttributeError) as error:
-        errors.append('source semantic review malformed: ' + str(error))
+    review_result = {'verdict': 'not_provided', 'errors': []}
+    if source_review is not None:
+        try:
+            review_errors = validate_semantic_review(contract, closure_result, source_review)
+        except (ValueError, TypeError, KeyError, AttributeError) as error:
+            review_errors = ['source semantic review malformed: ' + str(error)]
+        review_result = {'verdict': 'fail' if review_errors else 'pass', 'errors': review_errors}
     missing_sections = sorted(REQUIRED_SECTIONS - contract.keys())
     if missing_sections:
         errors.append("missing contract sections: " + ", ".join(missing_sections))
@@ -370,6 +413,7 @@ def validate(
     result_by_scenario: dict[str, dict[str, Any]] = {}
     executed_scenarios: set[str] = set()
     if phase == "target":
+        errors.extend(validate_target_sources(target_by_action, owned_target))
         for action_id, mapping in target_by_action.items():
             if mapping.get('status') != 'implemented':
                 errors.append(f"target mapping {action_id} is not implemented")
@@ -438,6 +482,7 @@ def validate(
         "collection": collection_result,
         "collection_valid": collection_result["verdict"] == "pass",
         "source_complete": source_complete,
+        "semantic_review": review_result,
         "runtime_complete": phase == 'target' and not errors and executed_scenarios == scenario_set,
         "application_complete": phase == 'target' and not errors and executed_scenarios == scenario_set
             and (source_scope or {}).get('kind') == 'application' and not contract.get('scope', {}).get('excluded'),
@@ -486,7 +531,17 @@ def validate(
 
 
 def main() -> int:
+    from validate_business_dossier import requested, main as dossier_main
+    if requested(sys.argv[1:]):
+        return dossier_main()
     args = parse_args()
+    source_review = None
+    review_input_error = None
+    if args.source_review:
+        try:
+            source_review = load_json(args.source_review, "source review")[0]
+        except ValidationInputError as error:
+            review_input_error = str(error)
     try:
         contract, contract_sha256 = load_json(args.contract, "behavior contract")
         inventory, inventory_sha256 = load_json(args.inventory, "source inventory")
@@ -503,9 +558,11 @@ def main() -> int:
             scenario_results=scenario_results,
             snapshot=args.snapshot,
             source_scope=load_json(args.source_scope, "source scope")[0] if args.source_scope else None,
-            source_review=load_json(args.source_review, "source review")[0] if args.source_review else None,
+            source_review=source_review,
             target=args.target,
         )
+        if review_input_error:
+            result['semantic_review'] = {'verdict': 'fail', 'errors': [review_input_error]}
         result["artifacts"] = {
             "contract_sha256": contract_sha256,
             "inventory_sha256": inventory_sha256,

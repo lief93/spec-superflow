@@ -357,12 +357,13 @@ def load_run_identity(run_root: Path, target: Path, secret: str) -> str:
     source = recorded_absolute_path(paths, "source", "source")
     if (
         recorded_target != target
-        or snapshot != run_root / "snapshot"
-        or contract != run_root / "migration-contract.json"
         or contract_owner
         != contract.with_name(f"{contract.name}.owner.json")
     ):
         raise RunnerError("run paths do not belong to the recorded run root")
+    # Page runs reuse approved snapshots/contracts outside their per-page log directory.
+    # Their paths, hashes, source identity and owned target copy are checked below;
+    # relocating the log directory must not require copying or re-identifying source.
     normalized_directory(snapshot, "safe snapshot")
 
     manifest_path = snapshot / ".android-to-harmony-safe.json"

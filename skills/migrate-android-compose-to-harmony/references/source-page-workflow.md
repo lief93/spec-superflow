@@ -1,9 +1,12 @@
-# Source to Lanhu JSON to ArkUI
+# Source-first page migration and the legacy deterministic candidate
 
 This is the implementation-stage recipe used inside the migration workflow. It is not a
 second planning entry point: normal runs still start/resume through `migration_agent.py`.
-The page-level commands below wrap the existing parser, state projection and ArkUI
-generator. They do not add another translation implementation.
+The default page command prepares a runtime-bound closure and the bounded AI implementation
+context. It never runs the source-page, Lanhu or ArkUI page generators. The explicit
+deterministic-candidate mode separately evaluates the legacy bounded generator; it is not a
+prerequisite, fallback, or seed for normal migration. Neither path adds another business
+translation implementation.
 
 ## One command for one page
 
@@ -17,7 +20,10 @@ python3 "$SKILL_ROOT/scripts/migrate_compose_page.py" \
   --root-source "app/src/main/java/example/HomeScreen.kt" \
   --root-composable HomeScreen --page-id home --state-id loaded \
   --state-fixture "/path/to/home-loaded.json" \
-  --viewport-width-dp 360 --viewport-height-dp 760 \
+  --android-page-json "/path/to/android-home-loaded/page.json" \
+  --android-theme-facts "/path/to/android-theme-facts.json" \
+  --behavior-contract "/path/to/behavior-contract.json" \
+  --behavior-inventory "/path/to/behavior-inventory.json" \
   --output-dir "/path/to/new-home-attempt" \
   --target "/path/to/harmony-project"
 ```
@@ -32,12 +38,54 @@ normal project/asset ownership checks. For an ordinary existing Harmony project,
 use the explicit existing-project mode below. New targets use module `entry`;
 existing targets may select `--module`.
 
-For AI-led migration, derive `effective-page-closure.json` directly from the unchanged full
-Contract and requested root/state before implementing that page. This is a compact source-reading
+For AI-led migration, `migrate_compose_page.py` requires a state fixture, Android page snapshot
+and runtime theme facts. It derives `effective-page-closure.json` and the exact
+`behavior-source-scope.json`, then stops with `status=business_specification_required` unless a
+current, source-grounded `behavior-contract.v2` inventory is supplied. The command invokes
+`validate_behavior_contract_v2.py --phase source` itself; placeholder, stale, or differently scoped
+materials fail before target creation. After that gate passes, it initializes only an empty target
+scaffold when needed. It does not produce
+`source-page.json`, `version_json.json`, generated ArkUI, generated theme resources, or generated
+page assets. The result returns `status=ready_for_ai_implementation`. The current agent must read
+every hash-bound `source_scope.entry_files` file, follow referenced project-local helpers, and
+write both UI and business behavior directly from source plus the bound runtime facts before
+running build/runtime gates.
+
+`--behavior-source-review` is optional. When supplied, its validation is reported separately under
+`semantic_review` in both behavior-stage results; absent, rejected, stale or unreadable review
+does not change the automatic business verdict. A workflow that requires review acceptance checks
+that separate result. Automatic checks do not establish semantic equivalence by themselves.
+
+The result returns the closure path, hashes, status, visible/unresolved component counts, and
+business-transcription status in `result.json.effective_page_closure`. This is a compact source-reading
 index plus state/runtime evidence for AI review and semantic transcription; it is not a generated
 screen specification and does not replace source. The full Contract remains the reusable audit
-inventory. The deterministic page generator does not consume this closure and is not a substitute
-for the agent's source-first implementation.
+inventory. At this stage, `ok=true` means the implementation context is ready; it does not mean
+implementation, build, behavior, or visual verification passed.
+
+For an owned Harmony target, the page command also writes `agent-state.json` using the same
+run-identity builder as project migration. Use `result.json.evidence_run_root` as the existing
+`evidence_runner.py --run-root` when capturing verification evidence. No separate project
+initialization is needed. Reused snapshots and contracts stay at their original paths; their
+hashes, source identity, target ownership and copied contract are still validated. This page
+record supports evidence capture, not whole-project `migration_agent.py resume` orchestration.
+An already initialized owned target without a contract is bound through the existing attachment
+command after source validation, preserving its application files and ownership proof. A recorded
+contract that is missing, changed, or belongs to another source is not automatically replaced.
+
+After implementing the page, rerun with the same source artifacts and
+`--behavior-scenario-results /path/to/results.json`. The command invokes
+`validate_behavior_contract_v2.py --phase target`; missing target mappings or signed scenario
+evidence fail closed. A pass returns `status=page_business_verified` and
+`business_verified=true`. That verdict covers only the selected page and its transitive
+ViewModel/state/action/repository behavior scope. `implementation_complete` and
+`migration_complete` remain false until their separate gates pass.
+
+To evaluate the bounded deterministic generator without the AI completion stage, add
+`--deterministic-candidate --viewport-width-dp 360 --viewport-height-dp 760`. That explicit mode
+runs the source-page -> Lanhu -> ArkUI stages and may return `partial_generation` when its mapping
+surface is incomplete. That verdict is generator-only and is not a substitute for, input to, or
+fallback for the agent's source-first completion.
 
 `source_scope` binds the validated safe-snapshot manifest plus every page, reached component and
 bounded host entry file by relative path and SHA-256. The agent reads all of those files and follows
@@ -49,35 +97,91 @@ alone.
 
 The selected root is also the business boundary. A normal closure rejects composables whose name
 contains `Preview`. Starting from the production root, `business_transcription` independently
-walks approved safe-snapshot definitions and records the exact files, dependency edges and bounded
-source-obligation count/hash needed for state, intents, callbacks and side effects. The compact
+walks the exact root symbol plus its immediate non-Preview production caller symbol. It then follows only their
+referenced approved safe-snapshot definitions and records the exact files, dependency edges and
+bounded source-obligation count/hash needed for state, intents, callbacks and side effects. This
+captures a common `Route(viewModel) -> Screen(state, onIntent)` split without pulling unrelated
+sibling routes, anonymous Compose content scopes or Preview dependencies from the same files. The compact
 closure does not duplicate obligation expressions; regenerate the bound census with
 `audit_behavior_source.py` when authoring or validating `behavior-contract.v2`. These files are merged
 into `source_scope` with reason `business_dependency`. Generated Android `R` remains a recorded
 platform resource dependency rather than a missing Kotlin source file.
+If the selected production root already owns that state boundary, its navigation host is retained
+as contextual source rather than a transitive business root. The exact arguments at the matching
+host callsite are still recorded, and callback-shaped arguments appear under
+`business_transcription.host_callback_obligations`. This keeps back/navigation/effect bodies in
+the completion checklist without admitting unrelated sibling destinations.
 
-Implement the production page in this order:
+Use the existing behavior artifacts as the implementation worklist. For each UI/system trigger,
+read its complete source handler chain and record the input, guard, state writes, ordered effects,
+and observable result in the existing action/scenario fields. Include the source's failure and
+lifetime behavior at the platform boundary. The census is a coverage ledger: several syntax
+regions can belong to one business chain; its region count is not a feature count.
 
-1. Preserve the source state and intent types and their initial values.
-2. Preserve each guard/branch and state transition, including loading, success, empty and error.
-3. Preserve callback arguments, repository/use-case calls and observable side-effect order.
-4. Replace Android lifecycle, coroutine, navigation, persistence and notification mechanisms with
-   named Harmony adapters without changing the business decision.
-5. Map every source behavior obligation to target code and behavior-contract scenarios. Missing or
-   unsupported mappings remain explicit diagnostics; preview fixtures, mock models and no-op
-   callbacks cannot close them.
+When the command returns `business_specification_required`, continue authoring with
+[behavior-contract-v2.md](behavior-contract-v2.md#collection-order), using the emitted
+`behavior-source-scope.json`. Reuse those facts through implementation and verification rather
+than creating a second checklist. Resolve source questions by reading the bound definitions;
+reserve user questions for actual product decisions. Independent source review is separate from
+the automatic source gate, not a prerequisite or a substitute for writing the missing facts.
+
+For shared state holders, repositories and already-created DI/application objects, follow actual
+page calls rather than porting every member. Add explicit `definition_boundaries` to that same
+scope and pass it back with `--behavior-source-scope`. See the behavior-contract reference for
+complete source ranges, injected implementation references and context rationale. The normal
+command validates unchanged generated roots, retains original files as reading context, and
+binds the new census to the business contract. An optional review becomes stale when these inputs
+change. The command does not infer that unselected initialization has no
+side effects or that selected ranges prove complete runtime dispatch.
+
+Execute the [complete business-chain loop](semantic-transcription.md#execute-a-complete-business-chain)
+for the production page. That reference owns the implementation order, source/target comparison
+and completion criteria. The closure's source pointers and existing action/scenario fields are
+its inputs; it does not create a second plan or defer business logic until after a UI-only port.
+
+For each implemented chain, run source-derived checks at the business method boundary and its
+real page entry point. Exercise applicable exceptional paths through the platform adapter seam
+(for example a rejected write or a late asynchronous result after owner destruction), comparing
+state and effect order as well as returned values. A platform API replacement is complete only
+when these semantics are preserved or its difference is explicitly unresolved in the contract.
+Group related assertions in the existing test suite; one test process per census region is not
+needed. Update the same target mappings/results, then rerun the target gate. Report implemented
+actions and verified scenarios separately from source coverage and build success.
+
+When paired tests emit JSON observations, compare their actual records with the shared helper:
+
+```bash
+python3 "$SKILL_ROOT/scripts/compare_behavior_traces.py" \
+  --source /path/to/android-test.log --source-prefix 'SOURCE_TRACE ' \
+  --target /path/to/harmony-test.log --target-prefix 'TARGET_TRACE ' \
+  --expected-records 8
+```
+
+Choose the expected count from the source-derived scenario steps before execution. The command
+compares all fields and array/record order, retains log hashes, and rejects missing, malformed or
+type-changed observations. It does not sort outcomes, discard fields or generate expected business
+values. Normalize only genuinely nondeterministic platform values in the paired test instrumentation,
+with that normalization documented in the existing scenario. Check both test runners' actual results
+as well: equal traces alone do not prove a test completed, full branch coverage, or business acceptance.
+Keep this comparison with the scenario evidence; it does not replace the existing source/target gates.
 
 For a deliberately visual-only experiment, pass `--ui-only-preview` with an actual Preview root.
 The resulting closure marks `business_transcription.required=false` and
 `status=explicitly_out_of_scope`; it is not a migrated production page.
 
-If source conditions, collections, overlays, or sheets cannot be selected from the state fixture,
-status is `candidate_requires_runtime_facts`. `visible_components` then contains only components
-whose visibility is proven; `unresolved_branch_components` retains both alternatives with their
-original condition and source identity. The preview branch selected internally to keep projection
-bounded is not an implementation decision. Resolve the state from source/runtime facts before
-implementation rather than choosing the preview, expanding the whole application, or guessing from
-a screenshot.
+If a source condition, overlay, or sheet branch cannot be selected from the state fixture, status
+is `candidate_requires_runtime_facts`. `visible_components` then contains only components whose
+visibility is proven; `unresolved_branch_components` retains both alternatives with their original
+condition and source identity. The preview branch selected internally to keep projection bounded
+is not an implementation decision. Transcribe the whole page's original conditions and all branches
+from source; the target chooses visibility at runtime. This status does not block behavior-spec
+authoring or a source-reviewed AI handoff, and does not require per-branch decision paperwork.
+The handoff retains `runtime_state_selection=unresolved`; it proves neither current visibility nor
+visual acceptance. Missing source, contradictory captures and unresolved business semantics still
+fail their existing checks. If a dynamic collection, pager body, remote asset,
+or platform expression cannot be materialized by the bounded projector, status is
+`candidate_ready_for_ai`. Read and transcribe that source directly; the unresolved records are
+obligations, not permission to invent values or invoke the deterministic generator.
 
 When available, pass the exact Android `page-snapshot.v2` for the same page/state. The closure
 copies only structured, provenance-bearing runtime facts and binds the page JSON SHA-256; it does
@@ -115,7 +219,8 @@ to inspect likely hosts such as navigation roots, overlay registries, and sheet 
 safe snapshot. It is candidate context, may include previews or generated content lambdas, and
 does not by itself select the active runtime host.
 
-Generate the working closure without creating a target:
+Generate the working closure directly only when inspecting or enriching it without preparing the
+target through the normal page command:
 
 ```bash
 python3 "$SKILL_ROOT/scripts/generate_effective_page_closure.py" \
@@ -221,7 +326,7 @@ and `generate_arkui_page.py` as applicable. The page runner forwards these optio
 all target-writing stages, including font copying. Source-page and Lanhu generation
 do not require this project marker and retain their existing input flags.
 
-This mode only generates page code and required resources. Host integration,
+The deterministic candidate mode only generates page code and required resources. Host integration,
 configuration, signing, SDK compilation, and runtime acceptance remain separate.
 
 Standalone `generate_lanhu_source_page.py` accepts `--component-dir` and
@@ -234,7 +339,7 @@ imports are unchanged, so changing the destination does not require rewriting ad
 `--force` still only replaces unchanged owned output at the same path; relocating an
 already generated page is not an implicit move/delete operation.
 
-The page command automatically scans existing named components in the target module
+The deterministic candidate mode automatically scans existing named components in the target module
 and reuses a unique same-name declaration using target defaults only. Inspect
 `lanhu/component-discovery.json` for selection decisions; explicit component adapters
 take priority and can map source values. Automatic reuse omits all source arguments;
@@ -251,7 +356,8 @@ state does not invent loaded data. `--api-adapters /absolute/manifest.json` pass
 explicit project API adapters to state projection. PSI still uses the documented
 `JAVA_HOME` / `KOTLIN_PSI_CLASSPATH` environment, not a guessed project JDK.
 
-The command emits `source-page.json`, `lanhu/version_json.json`, per-stage command,
+With `--deterministic-candidate`, the command emits `source-page.json`,
+`lanhu/version_json.json`, per-stage command,
 stdout/stderr and elapsed-time records, plus `result.json` containing the emitted
 ArkUI path and manifest. It prepares theme resources, selected manifest-backed
 drawables and unambiguous local font files using the existing verified tools.
@@ -260,7 +366,7 @@ are not downloaded or invented; prepare unsupported/external target dependencies
 through their documented adapters/resource tools. Resource integrity errors stop
 the run with their failed stage and logs.
 
-This ends at **generated page code**, not build/install/visual acceptance and not
+That explicit deterministic mode ends at **generated page code**, not build/install/visual acceptance and not
 automatic production navigation registration. Import the exported root type from
 the generated manifest into the desired host/route. Existing project files are
 not replaced. `--force` only permits the existing owned-page regeneration checks;
@@ -269,7 +375,13 @@ Theme resources use the existing regeneration guard, which checks that previousl
 generated files are unchanged before writing; user-edited theme files cause a
 stage error rather than being overwritten.
 
-Exit 0 means output was produced. `status=partial_generation`, `verdict=fail` and
+In the default AI mode, exit 0 and `status=ready_for_ai_implementation` mean only that the
+runtime-bound closure, automatically validated page behavior specification and target scaffold are ready; the
+current agent must continue implementation from scoped source. No deterministic page generator
+has run. Exit 0 with `status=page_business_verified` means only the selected page's target behavior
+mapping and signed scenarios passed; it is not whole-migration completion.
+In deterministic candidate mode, exit 0 means candidate output was produced.
+`status=partial_generation`, `verdict=fail` and
 `generation_complete=false` retain unresolved facts and are not acceptance.
 Fatal errors exit 1, set `failed_stage`, and preserve intermediate artifacts/logs.
 The final stdout/result JSON also contains `diagnosis`: grouped generation problems,
@@ -308,7 +420,7 @@ quote each argument normally, without embedding Python or setting `PYTHONPATH`.
 
 ## Live progress and slow-run diagnosis
 
-Commands are unchanged. `migrate_compose_page.py`, `analyze_compose_project.py`,
+`migrate_compose_page.py`, `analyze_compose_project.py`,
 `generate_source_page.py`, `generate_lanhu_source_page.py` and `generate_arkui_page.py`
 emit flushed `[progress]` JSON records on **stderr**.
 Stdout remains one final machine-readable JSON result. A wrapper must forward or
@@ -324,9 +436,10 @@ The page command writes these files under its new `--output-dir`:
 - `NN-analysis.stderr.log`: live analyzer detail, including PSI file, function
   dependencies, cross-file symbol matching and call closures. Other stages have
   their corresponding stdout/stderr files; files are not delayed until process exit.
-- `NN-lanhu.stderr.log`: internal state projection, component-state variants, layout
+- `NN-effective-page-closure.stderr.log`: default AI-context selection and source-scope checks.
+- `NN-lanhu.stderr.log`: deterministic candidate state projection, component-state variants, layout
   calculation, layer export, validation and JSON packing/writing checkpoints.
-- `NN-arkui.stderr.log`: JSON decoding, visual defaults, document validation,
+- `NN-arkui.stderr.log`: deterministic candidate JSON decoding, visual defaults, document validation,
   component-state decoding, ArkTS rendering and output writing checkpoints.
   Internal records are forwarded live to the terminal and kept in these child logs;
   `progress.jsonl` contains the parent-stage records, not all child records.
@@ -430,6 +543,24 @@ selecting a smaller page does not reduce that intake scan.
 
 ## Inputs and outputs
 
+The normal AI-led path is:
+
+```text
+read-only Android project
+  -> validated safe snapshot
+  -> migration-contract.json
+  -> effective-page-closure.json
+  -> AI reads every scoped source file and required helper
+  -> AI authors behavior inventory/contract from those source chains
+  -> existing automatic source validation (independent review is separate)
+  -> source-first ArkUI UI and business implementation
+  -> build + runtime behavior + screenshot comparison
+  -> existing target validation using current scenario evidence
+```
+
+It does not execute any of the page generators below. The following artifact chain exists only
+for an explicit `--deterministic-candidate` evaluation:
+
 ```text
 read-only Android project
   -> validated safe snapshot
@@ -442,14 +573,17 @@ read-only Android project
 running Android/Harmony pages -> screenshots + runtime page.json -> comparison
 ```
 
-| File | Producer / purpose | Implementation input? |
+| File | Producer / purpose | Normal AI implementation input? |
 | --- | --- | --- |
-| `migration-contract.json` | Source analyzer; source calls, definitions, resources and candidate business inventory | Only upstream of the page JSON |
-| `source-page.json` | `generate_source_page.py` calls `build_source_page_spec`; expanded source component tree and expressions | Input to the Lanhu generator |
-| `state-fixture.json` | Author supplies one source-reachable state's values | Input to state projection, not a second ArkUI input |
-| `version_json.json` | Lanhu generator; hierarchy, layout/style facts, migration metadata and unresolved facts | **The only page-fact input to ArkUI** |
-| `component-manifest.json`, `page-state-manifest.json` | Lanhu generator; component/geometry/state diagnostics | No sidecar required by ArkUI |
-| runtime `page.json` and screenshot | Real-page capture scripts; measured validation evidence | Comparison only in this source-only recipe |
+| `migration-contract.json` | Source analyzer; source calls, definitions, resources and candidate business inventory | Upstream evidence for the closure |
+| `effective-page-closure.json` | Selected page/state, hash-bound source scope and runtime facts | Yes, as an index and evidence; it never replaces source |
+| scoped safe-snapshot source | Exact Android UI and business implementation | **Yes; authoritative implementation input** |
+| behavior inventory + `behavior-contract.v2` | AI-authored source semantics, acceptance scenarios and source-to-target mappings | Yes; drives implementation and verification together with source |
+| `source-page.json` | Legacy deterministic-candidate expanded source component tree | No |
+| `state-fixture.json` | Author supplies one source-reachable state's values | Yes, as selected-state evidence |
+| `version_json.json` | Legacy deterministic-candidate Lanhu projection | No |
+| `component-manifest.json`, `page-state-manifest.json` | Legacy deterministic-candidate diagnostics | No |
+| runtime `page.json` and screenshot | Real-page capture scripts; measured validation evidence | Runtime facts and final comparison only |
 
 This `version_json.json` is source-generated, Lanhu-compatible data with migration extensions.
 It is not downloaded from Lanhu and not reconstructed from a screenshot. An arbitrary raw Lanhu
@@ -509,6 +643,11 @@ python3 "$SKILL_ROOT/scripts/analyze_compose_project.py" \
 Stop on a nonzero command exit. Inspect only approved snapshot text. Do not view source images,
 run OCR, or copy blocked files into the snapshot. Confirm the exact `ROOT_SOURCE` and
 `ROOT_COMPOSABLE` pair occurs in `ui.custom_composable_call_graph.transitive_closures`.
+
+## Legacy deterministic-candidate procedure
+
+The remaining source-page, Lanhu and ArkUI generation sections apply only when the caller
+explicitly requested `--deterministic-candidate`. A normal AI-led migration must skip them.
 
 ## 2. Generate source-page.json without a device
 

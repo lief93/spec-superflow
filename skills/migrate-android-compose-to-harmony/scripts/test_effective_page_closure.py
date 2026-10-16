@@ -7,6 +7,9 @@ import sys
 import tempfile
 import unittest
 
+from ui_migration.contracts.identity import canonical_sha256
+from ui_migration.contracts.source_storage import unpack_source_page
+
 
 SCRIPTS = Path(__file__).parent
 
@@ -105,6 +108,71 @@ class PreviewBusinessRepository : BusinessRepository {
 }
 '''
         )
+        (cls.source / "LeafScreen.kt").write_text(
+            '''package example
+import androidx.compose.runtime.Composable
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
+@Composable fun LeafScreen(
+  title: String,
+  onRefresh: () -> Unit,
+  onBack: () -> Unit = {},
+  onDetails: (String) -> Unit = {},
+) {
+  Text(title)
+  Button(onClick = onRefresh) { Text("Refresh") }
+  Button(onClick = onBack) { Text("Back") }
+  Button(onClick = { onDetails(title) }) { Text("Details") }
+}
+'''
+        )
+        (cls.source / "LeafRoute.kt").write_text(
+            '''package example
+import androidx.compose.runtime.Composable
+@Composable fun LeafRoute(
+  viewModel: LeafViewModel,
+  onBack: () -> Unit = {},
+  onDetails: (String) -> Unit = {},
+) {
+  LeafScreen(viewModel.title, { viewModel.refresh() }, onBack, onDetails)
+}
+@Composable fun UnrelatedRoute(service: UnrelatedService) { service.run() }
+'''
+        )
+        (cls.source / "LeafViewModel.kt").write_text(
+            '''package example
+class LeafViewModel(private val repository: LeafRepository) {
+  var title: String = "Initial"
+  fun refresh() { title = repository.load() }
+}
+'''
+        )
+        (cls.source / "LeafRepository.kt").write_text(
+            '''package example
+interface LeafRepository { fun load(): String }
+'''
+        )
+        (cls.source / "UnrelatedService.kt").write_text(
+            '''package example
+class UnrelatedService {
+  fun run() = Unit
+  fun open(id: String) = Unit
+}
+'''
+        )
+        (cls.source / "AppHost.kt").write_text(
+            '''package example
+import androidx.compose.runtime.Composable
+@Composable fun AppHost(viewModel: LeafViewModel, service: UnrelatedService) {
+  LeafRoute(
+    viewModel,
+    onBack = { service.run() },
+    onDetails = { id -> service.open(id) },
+  )
+  UnrelatedRoute(service)
+}
+'''
+        )
         values = cls.source / "app/src/main/res/values/strings.xml"
         values.parent.mkdir(parents=True)
         values.write_text(
@@ -149,6 +217,40 @@ class PreviewBusinessRepository : BusinessRepository {
     def sha256(path):
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
+    def test_selected_business_scope_preserves_context_and_changes_closure_identity(self):
+        args = ['--contract', self.contract, '--style-definitions', self.styles,
+                '--root-source', 'BusinessPage.kt', '--root-composable', 'BusinessPage',
+                '--page-id', 'business', '--state-id', 'default']
+        original_path = self.root/'business-boundary-original.json'
+        self.run_tool('generate_effective_page_closure.py', *args, '--output', original_path)
+        original = json.loads(original_path.read_text())
+        scope = original['business_transcription']['scope']
+        scope['definition_boundaries'] = [{
+            'path': 'BusinessViewModel.kt', 'symbol': 'BusinessViewModel',
+            'behavior_ranges': [{'start_line': 3, 'end_line': 3}],
+            'context_reason': 'This fixture page only reads the initial state; it has no event callback.',
+            'resolved_dependencies': [], 'unresolved': [],
+        }]
+        scope_path = self.root/'business-boundary-scope.json'
+        scope_path.write_text(json.dumps(scope))
+        selected_path = self.root/'business-boundary-selected.json'
+        self.run_tool('generate_effective_page_closure.py', *args,
+                      '--behavior-source-scope', scope_path, '--output', selected_path)
+        selected = json.loads(selected_path.read_text())
+        business = selected['business_transcription']
+        self.assertEqual(business['scope'], scope)
+        roundtrip_scope = self.root/'business-boundary-roundtrip-scope.json'
+        roundtrip_scope.write_text(json.dumps(business['scope']))
+        roundtrip_census = self.run_tool('audit_behavior_source.py', 'census',
+                                        '--snapshot', self.snapshot, '--scope', roundtrip_scope)
+        self.assertEqual(roundtrip_census['census_sha256'], business['census_sha256'])
+        self.assertLess(business['obligation_summary']['total'],
+                        original['business_transcription']['obligation_summary']['total'])
+        self.assertNotEqual(business['census_sha256'], original['business_transcription']['census_sha256'])
+        self.assertEqual(business['reading_context'][0]['symbol'], 'BusinessViewModel')
+        self.assertIn('BusinessViewModel.kt', [f['path'] for f in selected['source_scope']['entry_files']])
+        self.assertNotIn('BusinessRepository.kt', [f['path'] for f in business['files']])
+
     def closure_args(self):
         return [
             "--contract", self.contract,
@@ -158,6 +260,34 @@ class PreviewBusinessRepository : BusinessRepository {
             "--page-id", "page",
             "--state-id", "settings-expanded",
         ]
+
+    def test_contract_closure_uses_the_same_snapshot_bound_source_page_identity(self):
+        source_page_path = self.root / "identity-source-page.json"
+        self.run_tool(
+            "generate_source_page.py",
+            "--snapshot", self.snapshot,
+            "--contract", self.contract,
+            "--style-definitions", self.styles,
+            "--root-source", "Page.kt",
+            "--root-composable", "Page",
+            "--page-id", "page",
+            "--state-id", "settings-expanded",
+            "--output", source_page_path,
+        )
+        source_page = unpack_source_page(json.loads(source_page_path.read_text()))
+        closure_path = self.root / "identity-source-page-closure.json"
+
+        self.run_tool(
+            "generate_effective_page_closure.py",
+            *self.closure_args(),
+            "--output", closure_path,
+        )
+
+        closure = json.loads(closure_path.read_text())
+        self.assertEqual(
+            closure["identity"]["source_input_sha256"],
+            canonical_sha256(source_page),
+        )
 
     def test_fixture_selects_only_visible_page_layers_and_referenced_resources(self):
         fixture = self.root / "settings-state.json"
@@ -240,6 +370,74 @@ class PreviewBusinessRepository : BusinessRepository {
         )
         self.assertIn("state", business["required_target_mappings"])
         self.assertIn("side_effect_order", business["required_target_mappings"])
+
+    def test_leaf_ui_root_traces_host_callback_and_business_dependencies_by_symbol(self):
+        output = self.root / "leaf-business-closure.json"
+        self.run_tool(
+            "generate_effective_page_closure.py",
+            "--contract", self.contract,
+            "--style-definitions", self.styles,
+            "--root-source", "LeafScreen.kt",
+            "--root-composable", "LeafScreen",
+            "--page-id", "leaf",
+            "--output", output,
+        )
+
+        closure = json.loads(output.read_text())
+        business = closure["business_transcription"]
+        self.assertEqual(business["status"], "ready_for_source_transcription")
+        self.assertEqual(
+            business["scope"]["entry_symbols"],
+            {
+                "LeafRoute.kt": ["LeafRoute"],
+                "LeafScreen.kt": ["LeafScreen"],
+            },
+        )
+        self.assertEqual(
+            {item["path"] for item in business["files"]},
+            {"LeafRoute.kt", "LeafScreen.kt", "LeafViewModel.kt", "LeafRepository.kt"},
+        )
+        self.assertNotIn("UnrelatedService.kt", {item["path"] for item in business["files"]})
+        scoped = {item["path"] for item in closure["source_scope"]["entry_files"]}
+        self.assertTrue({"LeafRoute.kt", "LeafScreen.kt", "LeafViewModel.kt", "LeafRepository.kt"} <= scoped)
+
+    def test_state_owning_route_keeps_navigation_host_context_out_of_business_denominator(self):
+        output = self.root / "route-business-closure.json"
+        self.run_tool(
+            "generate_effective_page_closure.py",
+            "--contract", self.contract,
+            "--style-definitions", self.styles,
+            "--root-source", "LeafRoute.kt",
+            "--root-composable", "LeafRoute",
+            "--page-id", "leaf-route",
+            "--output", output,
+        )
+
+        closure = json.loads(output.read_text())
+        business = closure["business_transcription"]
+        self.assertEqual(
+            business["scope"]["entry_symbols"],
+            {"LeafRoute.kt": ["LeafRoute"]},
+        )
+        self.assertEqual(
+            {item["path"] for item in business["files"]},
+            {"LeafRoute.kt", "LeafScreen.kt", "LeafViewModel.kt", "LeafRepository.kt"},
+        )
+        self.assertNotIn("AppHost.kt", {item["path"] for item in business["files"]})
+        self.assertNotIn("UnrelatedService.kt", {item["path"] for item in business["files"]})
+        scoped = {item["path"]: item for item in closure["source_scope"]["entry_files"]}
+        self.assertIn("page_host", scoped["AppHost.kt"]["reasons"])
+        callbacks = business["host_callback_obligations"]
+        self.assertEqual(
+            {item["parameter"] for item in callbacks},
+            {"onBack", "onDetails"},
+        )
+        self.assertTrue(all(item["caller"] == {
+            "source": "AppHost.kt", "composable": "AppHost"
+        } for item in callbacks))
+        expressions = "\n".join(item["expression"] for item in callbacks)
+        self.assertIn("service.run()", expressions)
+        self.assertIn("service.open(id)", expressions)
 
     def test_preview_root_requires_explicit_ui_only_mode(self):
         args = [
@@ -420,6 +618,96 @@ class PreviewBusinessRepository : BusinessRepository {
             )
             self.assertIn(expected, failed.stdout)
 
+    def test_android_page_json_must_match_the_selected_source_page_identity(self):
+        android_page = self.root / "wrong-source-page.json"
+        android_page.write_text(json.dumps({
+            "schema": "android-to-harmony.page-snapshot.v2",
+            "platform": "android",
+            "page": {"id": "page", "state": "settings-expanded"},
+            "capture": {"screenshot": {"sha256": "d" * 64}},
+            "input_hashes": {"source_page_spec_sha256": "e" * 64},
+            "components": [],
+        }))
+
+        failed = self.run_tool(
+            "generate_effective_page_closure.py",
+            *self.closure_args(),
+            "--android-page-json", android_page,
+            "--output", self.root / "wrong-source-page-closure.json",
+            expected=1,
+        )
+
+        self.assertIn("source page identity must match", failed.stdout)
+
+    def test_android_page_json_visible_content_must_match_the_state_fixture(self):
+        fixture = self.root / "runtime-content-state.json"
+        fixture.write_text(json.dumps({
+            "schema": "android-to-harmony.page-state-fixture.v1",
+            "page": {"id": "page", "state": "settings-expanded"},
+            "values": {"activeSheet": "settings"},
+        }))
+        projected_output = self.root / "runtime-content-projected-closure.json"
+        self.run_tool(
+            "generate_effective_page_closure.py",
+            *self.closure_args(),
+            "--state-fixture", fixture,
+            "--output", projected_output,
+        )
+        projected = json.loads(projected_output.read_text())
+        settings_title = next(
+            item for item in projected["visible_components"]
+            if item.get("display", {}).get("text") == "Settings visible"
+        )
+        android_page = self.root / "runtime-content-mismatch-page.json"
+        android_page.write_text(json.dumps({
+            "schema": "android-to-harmony.page-snapshot.v2",
+            "platform": "android",
+            "page": {"id": "page", "state": "settings-expanded"},
+            "capture": {"screenshot": {"sha256": "f" * 64}},
+            "components": [{
+                "id": "runtime-settings-title",
+                "type": "Text",
+                "component_context": {
+                    "source_component_id": settings_title["id"],
+                },
+                "style": {"content": {"text": "Different runtime text"}},
+            }],
+        }))
+
+        failed = self.run_tool(
+            "generate_effective_page_closure.py",
+            *self.closure_args(),
+            "--state-fixture", fixture,
+            "--android-page-json", android_page,
+            "--output", self.root / "runtime-content-mismatch-closure.json",
+            expected=1,
+        )
+
+        self.assertIn(
+            "state fixture visible content must match Android page capture",
+            failed.stdout,
+        )
+        self.assertNotIn("Different runtime text", failed.stdout)
+
+    def test_runtime_formatted_textbox_content_keeps_fixture_value_private(self):
+        from generate_effective_page_closure import require_matching_runtime_content
+
+        require_matching_runtime_content(
+            {
+                "components": [{
+                    "source_component_id": "card-number",
+                    "style": {"content": {"role": "textbox", "text": "6304-0000"}},
+                }],
+            },
+            [{
+                "id": "card-number",
+                "style": {"content": {"role": "textbox", "text": "63040000"}},
+                "parameter_bindings": {
+                    "visualTransformation": "{ value -> formatCardNumber(value) }",
+                },
+            }],
+        )
+
     def test_android_runtime_theme_is_hash_bound_and_available_to_transcription(self):
         theme_facts = self.root / "android-theme-facts.json"
         theme_facts.write_text(json.dumps({
@@ -578,6 +866,9 @@ class PreviewBusinessRepository : BusinessRepository {
                 "callee": {"source": "Page.kt", "composable": "Page"},
                 "line": 4,
                 "call_id": "Host.kt:4:Page:1",
+                "invocation_arguments": [
+                    {"name": "activeSheet", "expression": '"settings"'}
+                ],
             },
             context["caller_edges"],
         )

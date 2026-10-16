@@ -46,6 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--android-page-json", type=Path)
     parser.add_argument("--android-theme-facts", type=Path)
     parser.add_argument("--api-adapters", type=Path)
+    parser.add_argument("--behavior-source-scope", type=Path)
     parser.add_argument(
         "--ui-only-preview",
         action="store_true",
@@ -233,7 +234,7 @@ def selected_definitions(projected: dict[str, Any], components: list[dict[str, A
 
 
 def android_runtime_facts(
-    path: Path | None, expected_page: dict[str, Any]
+    path: Path | None, expected_source_page: dict[str, Any]
 ) -> tuple[dict[str, Any] | None, str | None]:
     if path is None:
         return None, None
@@ -243,8 +244,17 @@ def android_runtime_facts(
         raise EffectiveClosureError("Android page JSON must use page-snapshot.v2")
     if payload.get("platform") != "android":
         raise EffectiveClosureError("Android page JSON platform must be android")
-    if payload.get("page") != expected_page:
+    if payload.get("page") != expected_source_page.get("page"):
         raise EffectiveClosureError("Android page JSON page/state must match source page")
+    bound_source_page_sha256 = (payload.get("input_hashes") or {}).get("source_page_spec_sha256")
+    if bound_source_page_sha256 is not None:
+        if (
+            not isinstance(bound_source_page_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", bound_source_page_sha256) is None
+        ):
+            raise EffectiveClosureError("Android page JSON source page identity must be a lowercase SHA-256")
+        if bound_source_page_sha256 != canonical_sha256(expected_source_page):
+            raise EffectiveClosureError("Android page JSON source page identity must match selected source page")
     capture = payload.get("capture") or {}
     screenshot = capture.get("screenshot") or {}
     screenshot_sha256 = screenshot.get("sha256")
@@ -258,6 +268,7 @@ def android_runtime_facts(
         if not isinstance(item, dict):
             raise EffectiveClosureError("Android page JSON component must be an object")
         mapping = item.get("source_mapping") or {}
+        context = item.get("component_context") or {}
         components.append(compact({
             "id": item.get("id"),
             "type": item.get("type"),
@@ -265,6 +276,7 @@ def android_runtime_facts(
             "children_ids": item.get("children_ids") or [],
             "sibling_index": item.get("sibling_index"),
             "semantic_key": item.get("semantic_key"),
+            "source_component_id": context.get("source_component_id"),
             "source_call_id": mapping.get("source_call_id"),
             "source_mapping_method": mapping.get("method"),
             "bounds_dp": item.get("bounds_dp"),
@@ -274,6 +286,7 @@ def android_runtime_facts(
         }))
     return compact({
         "origin": "android-page-snapshot-v2",
+        "source_page_spec_sha256": bound_source_page_sha256,
         "screenshot_sha256": screenshot_sha256,
         "viewport": payload.get("viewport"),
         "components": components,
@@ -282,6 +295,57 @@ def android_runtime_facts(
         "unmapped_source_components": payload.get("unmapped_source_components") or [],
         "limitations": payload.get("limitations") or [],
     }), sha256_file(resolved)
+
+
+def require_matching_runtime_content(
+    runtime_facts: dict[str, Any] | None,
+    projected_components: list[dict[str, Any]],
+) -> None:
+    if runtime_facts is None:
+        return
+    projected_by_id = {
+        item.get("id"): item
+        for item in projected_components
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    mask_characters = frozenset({"•", "*", "●"})
+    for runtime_component in runtime_facts.get("components") or []:
+        source_component_id = runtime_component.get("source_component_id")
+        if not isinstance(source_component_id, str):
+            continue
+        projected = projected_by_id.get(source_component_id)
+        if projected is None:
+            continue
+        runtime_text = ((runtime_component.get("style") or {}).get("content") or {}).get("text")
+        runtime_role = ((runtime_component.get("style") or {}).get("content") or {}).get("role")
+        projected_display = projected.get("display") or (
+            (projected.get("style") or {}).get("content") or {}
+        )
+        projected_text = projected_display.get("text")
+        if not isinstance(runtime_text, str) or not isinstance(projected_text, str):
+            continue
+        masked_value = (
+            runtime_role == "textbox"
+            and projected_display.get("role") == "textbox"
+            and bool(runtime_text)
+            and len(runtime_text) == len(projected_text)
+            and set(runtime_text).issubset(mask_characters)
+        )
+        visual_transformation = (projected.get("parameter_bindings") or {}).get(
+            "visualTransformation"
+        )
+        transformed_value = (
+            runtime_role == "textbox"
+            and projected_display.get("role") == "textbox"
+            and isinstance(visual_transformation, str)
+            and visual_transformation.strip()
+            not in {"", "VisualTransformation.None"}
+        )
+        if runtime_text != projected_text and not masked_value and not transformed_value:
+            raise EffectiveClosureError(
+                "state fixture visible content must match Android page capture "
+                f"for source component {source_component_id}"
+            )
 
 
 def android_runtime_theme(path: Path | None) -> tuple[dict[str, Any] | None, str | None]:
@@ -328,6 +392,14 @@ def bounded_caller_context(
         }
     graph = ((contract.get("ui") or {}).get("custom_composable_call_graph") or {})
     edges = graph.get("edges") or []
+    semantic_calls = ((contract.get("ui") or {}).get("semantic_translation_candidates") or {}).get(
+        "calls"
+    ) or []
+    calls_by_id = {
+        item.get("call_id"): item
+        for item in semantic_calls
+        if isinstance(item, dict) and isinstance(item.get("call_id"), str)
+    }
     frontier = {(root.get("source"), root.get("composable"))}
     visited = set(frontier)
     selected: list[dict[str, Any]] = []
@@ -341,6 +413,23 @@ def bounded_caller_context(
             callee = edge.get("callee") or {}
             if (callee.get("source"), callee.get("composable")) not in frontier:
                 continue
+            caller_name = caller.get("composable")
+            if (
+                not isinstance(caller_name, str)
+                or caller_name.startswith("__content_")
+                or "preview" in caller_name.lower()
+            ):
+                continue
+            call_id = edge.get("call_id")
+            call = calls_by_id.get(call_id) or {}
+            custom_component = call.get("custom_composable") or {}
+            arguments = [
+                compact({"name": item.get("name"), "expression": item.get("expression")})
+                for item in custom_component.get("arguments") or []
+                if isinstance(item, dict)
+                and isinstance(item.get("name"), str)
+                and isinstance(item.get("expression"), str)
+            ]
             level.append({
                 "depth": depth,
                 "caller": compact({
@@ -352,7 +441,8 @@ def bounded_caller_context(
                     "composable": callee.get("composable"),
                 }),
                 "line": edge.get("line"),
-                "call_id": edge.get("call_id"),
+                "call_id": call_id,
+                "invocation_arguments": arguments,
             })
         level.sort(key=lambda item: (
             item["caller"].get("source", ""),
@@ -371,6 +461,13 @@ def bounded_caller_context(
         frontier = next_frontier
         if not frontier or len(selected) >= max_edges:
             break
+    if frontier and any(
+        isinstance(edge, dict)
+        and ((edge.get("callee") or {}).get("source"),
+             (edge.get("callee") or {}).get("composable")) in frontier
+        for edge in edges
+    ):
+        truncated = True
     return {
         "status": "bounded-candidate-context",
         "max_depth": max_depth,
@@ -385,11 +482,42 @@ def is_preview_root(root: dict[str, Any]) -> bool:
     return isinstance(name, str) and "preview" in name.lower()
 
 
+def root_owns_business_state(source_page: dict[str, Any]) -> bool:
+    """Return true when the selected production root already owns its state adapter.
+
+    A leaf UI function normally receives state/callback values and needs its immediate Route
+    caller in the business denominator. A Route that injects a ViewModel or collects/emits state
+    already owns that boundary; its navigation host is context only and must not pull sibling
+    routes into the transitive business scope.
+    """
+    root = source_page.get("root") or {}
+    function = next((item for item in source_page.get("source_functions") or []
+        if isinstance(item, dict)
+        and item.get("top_level") is True
+        and item.get("source") == root.get("source")
+        and item.get("name") == root.get("composable")), None)
+    if function is None:
+        return False
+    parameter_types = [
+        str(item.get("type") or "")
+        for item in function.get("parameters") or []
+        if isinstance(item, dict)
+    ]
+    body_text = str((function.get("body") or {}).get("text") or "")
+    return (
+        any("ViewModel" in value for value in parameter_types)
+        or "collectAsState" in body_text
+        or ".emitIntent(" in body_text
+    )
+
+
 def business_transcription_context(
     contract: dict[str, Any] | None,
     source_page: dict[str, Any],
+    caller_context: dict[str, Any],
     *,
     ui_only_preview: bool,
+    selected_scope: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     root = source_page.get("root") or {}
     preview = is_preview_root(root)
@@ -435,13 +563,38 @@ def business_transcription_context(
     root_source = root.get("source")
     if not isinstance(root_source, str) or not root_source:
         raise EffectiveClosureError("page root does not identify a source file")
+    entry_symbols: dict[str, set[str]] = {root_source: {str(root.get("composable"))}}
+    caller_is_business_owner = not root_owns_business_state(source_page)
+    for edge in caller_context.get("caller_edges") or []:
+        if not isinstance(edge, dict):
+            continue
+        if edge.get("depth") != 1 or not caller_is_business_owner:
+            continue
+        caller = edge.get("caller") or {}
+        source = caller.get("source")
+        composable = caller.get("composable")
+        if (
+            isinstance(source, str)
+            and source
+            and isinstance(composable, str)
+            and composable
+            and "preview" not in composable.lower()
+        ):
+            entry_symbols.setdefault(source, set()).add(composable)
     scope = {
         "schema_version": "behavior-source-scope.v1",
         "id": f"page:{source_page.get('page', {}).get('id')}:{root.get('composable')}",
         "kind": "page",
         "source_revision": source_revision_identity(manifest, snapshot_root),
-        "entry_paths": [root_source],
+        "entry_paths": sorted(entry_symbols),
+        "entry_symbols": {
+            path: sorted(symbols) for path, symbols in sorted(entry_symbols.items())
+        },
     }
+    if selected_scope is not None:
+        if {k: v for k, v in selected_scope.items() if k != "definition_boundaries"} != scope:
+            raise EffectiveClosureError("business source scope must retain the generated page roots and identity")
+        scope = selected_scope
     try:
         census = behavior_census(snapshot_root, scope)
     except (OSError, ValueError, KeyError, TypeError) as error:
@@ -463,13 +616,32 @@ def business_transcription_context(
     for obligation in obligations:
         kind = str(obligation.get("kind") or "unknown")
         counts[kind] = counts.get(kind, 0) + 1
-    unresolved = census.get("unresolved") or []
-    return compact({
+    unresolved = list(census.get("unresolved") or [])
+    host_callback_obligations = []
+    for edge in caller_context.get("caller_edges") or []:
+        if not isinstance(edge, dict) or edge.get("depth") != 1:
+            continue
+        for argument in edge.get("invocation_arguments") or []:
+            if not isinstance(argument, dict):
+                continue
+            name = argument.get("name")
+            expression = argument.get("expression")
+            if not isinstance(name, str) or not isinstance(expression, str):
+                continue
+            stripped = expression.strip()
+            if not (name.startswith("on") or stripped.startswith("{") or "::" in stripped):
+                continue
+            host_callback_obligations.append(compact({
+                "call_id": edge.get("call_id"),
+                "caller": edge.get("caller"),
+                "parameter": name,
+                "expression": expression,
+            }))
+    result = compact({
         "schema": "android-to-harmony.page-business-transcription.v1",
         "status": "requires_source_resolution" if unresolved else "ready_for_source_transcription",
         "required": True,
         "root_kind": "production_page",
-        "scope": census.get("scope"),
         "scope_sha256": census.get("scope_sha256"),
         "census_sha256": census.get("census_sha256"),
         "source_revision": census.get("source_revision"),
@@ -477,9 +649,11 @@ def business_transcription_context(
         "reached_definitions": census.get("reached_definitions") or [],
         "dependency_edges": census.get("dependency_edges") or [],
         "external_dependencies": census.get("external_dependencies") or [],
+        "reading_context": census.get("reading_context") or [],
         "obligation_summary": {"total": len(obligations), "by_kind": counts},
         "obligation_index_sha256": canonical_sha256(obligation_index),
         "unresolved": unresolved,
+        "host_callback_obligations": host_callback_obligations,
         "required_target_mappings": [
             "state", "intent", "branch", "callback", "side_effect_order",
             "navigation", "platform_adapter",
@@ -487,13 +661,19 @@ def business_transcription_context(
         "completion_rule": (
             "Read every bound source file and transcribe each reachable business obligation. "
             "Platform mechanisms may use Harmony adapters, but source branches, state transitions, "
-            "callback inputs, and side-effect order must remain traceable. Missing mappings are "
+            "callback inputs, host-provided callback bodies, and side-effect order must remain "
+            "traceable. Host callback obligations stop at the exact selected-page invocation and "
+            "must not expand unrelated sibling routes. Missing mappings are "
             "diagnostics and must never be replaced by mock values or no-op callbacks. Regenerate "
             "the hash-bound obligation index with audit_behavior_source.py when authoring the "
             "behavior contract; it is intentionally not duplicated in this compact closure."
         ),
         "limitations": census.get("limits") or [],
     })
+    # Scope is a hash-bound validator input, not compact display facts. Empty
+    # boundary lists carry meaning and must survive the normal CLI round trip.
+    result["scope"] = census["scope"]
+    return result
 
 
 def scoped_source_files(
@@ -628,6 +808,10 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         contract = read_object(contract_path, "migration contract")
         contract_sha256 = sha256_file(contract_path)
         styles = load_style_definitions(args.style_definitions.expanduser().resolve())
+        snapshot_value = (contract.get("source") or {}).get("safe_snapshot_root")
+        if not isinstance(snapshot_value, str) or not snapshot_value:
+            raise EffectiveClosureError("migration contract does not identify a safe snapshot root")
+        snapshot_root = Path(snapshot_value).expanduser().resolve()
         source_page = build_source_page_spec(
             contract,
             args.root_source,
@@ -635,7 +819,7 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             args.page_id,
             args.state_id,
             contract_sha256,
-            None,
+            snapshot_root,
             style_definitions=styles,
         )
         source_input_sha256 = canonical_sha256(source_page)
@@ -684,14 +868,28 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
     components = [visible_component(item) for item in proven_components]
     branch_components = [visible_component(item) for item in unresolved_branch_components]
     evidence_components = [*components, *branch_components]
-    runtime_facts, android_page_sha256 = android_runtime_facts(
-        args.android_page_json, source_page.get("page")
+    unresolved_state_selection = bool(selection.get("preview_branch_choices")) or any(
+        (item.get("source") or {}).get("state_resolution", {}).get("kind") == "condition"
+        for item in unresolved_branch_components
     )
+    status = (
+        "candidate_complete"
+        if complete
+        else "candidate_requires_runtime_facts"
+        if unresolved_state_selection
+        else "candidate_ready_for_ai"
+    )
+    runtime_facts, android_page_sha256 = android_runtime_facts(
+        args.android_page_json, source_page
+    )
+    require_matching_runtime_content(runtime_facts, proven_components)
     runtime_theme, android_theme_sha256 = android_runtime_theme(args.android_theme_facts)
     require_matching_android_capture_environment(runtime_facts, runtime_theme)
     caller_context = bounded_caller_context(contract, source_page.get("root") or {})
     business_context = business_transcription_context(
-        contract, source_page, ui_only_preview=args.ui_only_preview
+        contract, source_page, caller_context, ui_only_preview=args.ui_only_preview,
+        selected_scope=(read_object(args.behavior_source_scope, "behavior source scope")
+                        if args.behavior_source_scope else None),
     )
     source_scope = scoped_source_files(contract, source_page, caller_context, business_context)
     identity_input = {
@@ -709,7 +907,7 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
     }
     payload = {
         "schema": SCHEMA,
-        "status": "candidate_complete" if complete else "candidate_requires_runtime_facts",
+        "status": status,
         "authoritative": False,
         "identity": {**identity_input, "sha256": canonical_sha256(identity_input)},
         "root": source_page.get("root"),

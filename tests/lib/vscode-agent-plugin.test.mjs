@@ -482,11 +482,14 @@ describe('VS Code Agent Plugin', () => {
     assert.match(executor, /scoped to that Change[\s\S]*ordinary non-migration projects/i);
   });
 
-  it('keeps executable planning behind the workflow seam and relegates helper CLIs to maintainer debug use', () => {
+  it('keeps optional tool-backed planning behind its workflow seam and helper CLIs in maintainer debug use', () => {
     const migration = read('skills/migrate-android-compose-to-harmony/SKILL.md');
+    const toolingLink = migration.match(/\[scripted-migration\.md\]\((references\/scripted-migration\.md)\)/);
+    assert.ok(toolingLink, 'direct migration Skill must route to its optional tool-backed instructions');
+    const tooling = read(`skills/migrate-android-compose-to-harmony/${toolingLink[1]}`);
     const reference = read('skills/migrate-android-compose-to-harmony/references/capability-graph-and-gates.md');
 
-    for (const content of [migration, reference]) {
+    for (const content of [tooling, reference]) {
       assert.match(content, /workflow and `migration_agent\.py`(?: are| must also derive).*only normal user entry|normal entry remains the existing workflow or\s+`migration_agent\.py`/i);
       assert.match(content, /start`, `resume`, and `status`|for `start`, `resume`, and `status`/i);
       assert.match(content, /maintainer\/debug helper|maintainer\/debug seam/i);

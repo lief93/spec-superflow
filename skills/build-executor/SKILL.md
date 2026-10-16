@@ -19,11 +19,13 @@ Check workflow mode first: `ssf state get <change-dir> workflow`. If `tweak` →
 
 Check optional capability next: `ssf state get <change-dir> capability`. If it
 returns `android-to-harmony`, load `migrate-android-compose-to-harmony` before
-implementation and follow that Skill for migration intake, safe snapshot,
-contract analysis, source-to-ArkUI transcription, asset copy/conversion,
-business-slice ledgers, Harmony build/UITest/device evidence, and local
-screenshot diagnostics. These checks are scoped to that Change and must not be
-applied to ordinary non-migration projects.
+implementation and follow its selected migration path: safe snapshot,
+UI/business dossier, source-first transcription through concrete consumers,
+code-completeness reconciliation, and applicable build/behavior/runtime checks.
+Contract analysis and structured slice ledgers belong to that Skill's optional
+tool-backed path, not prerequisites for direct AI transcription. Preserve the
+Change's approved verification obligations. These checks are scoped to that Change
+and must not be applied to ordinary non-migration projects.
 
 Config check: `ssf config --get execution.inlineThreshold` (default: 3).
 

@@ -93,7 +93,7 @@ enterprise isolation, run the model under a separate OS user/container and expos
 snapshot and target through ACLs or a broker. Keep the original repository and asset store outside
 that mount.
 
-## Visual verification without AI image access
+## Visual verification without AI image access (default)
 
 Use two independent channels:
 
@@ -104,3 +104,16 @@ Use two independent channels:
 
 A local comparison report is diagnostic and non-authoritative. Record the actual human result as
 visual-review evidence; do not ask the model to infer it from a score or protected image artifact.
+
+## Explicitly authorized screenshot inspection
+
+When the user explicitly permits AI screenshot inspection for acceptance, record that permission
+and its page/data scope in the existing dossier. Within that scope, inspect local source/target
+emulator captures and their paired comparison images to identify visible discrepancies. Use
+synthetic or otherwise authorized data; if authorization or sensitive content is uncertain, use
+the default metadata/local-comparison path until clarified.
+
+This exception covers the authorized screenshots, not original asset/font/vector files, unrelated
+screens or secret-bearing data. Keep safe-snapshot intake and opaque resource handling unchanged.
+Report the result as AI visual inspection rather than human acceptance. Screenshots establish only
+visible appearance/state; use source and behavioral evidence for logic, effects and completeness.

@@ -110,6 +110,10 @@ def declaration_units(code):
             pos = match.end() - (1 if code[match.end() - 1] == '(' else 0)
             continue
         if pos in matching:
+            if code[pos] == '{':
+                # Constructor/type annotations belong to this declaration, not
+                # the next top-level property after its body.
+                annotation = None
             pos = matching[pos] + 1
         else:
             pos += 1
@@ -120,6 +124,9 @@ def declaration_units(code):
 
 def source_regions(path, text):
     code = lexical_code_mask(text)
+    # Literal values terminate statements too. A fully masked string after '='
+    # must not join this declaration to the next retained definition.
+    statement_text = lexical_code_mask(text, mask_strings=False)
     matching = pairs(code)
     regions, unresolved = [], []
 
@@ -206,7 +213,7 @@ def source_regions(path, text):
                 beginning = pos
                 continue
             if char in '\n;':
-                before, after = code[beginning:pos].rstrip(), code[pos + 1:end].lstrip()
+                before, after = statement_text[beginning:pos].rstrip(), statement_text[pos + 1:end].lstrip()
                 if char == ';' or not (after.startswith(('.', '?.', '?:')) or
                     before.endswith(('=', '.', ',', '->', '+', '-', '&&', '||', '?:'))):
                     emit(beginning, pos)
@@ -234,6 +241,77 @@ def source_regions(path, text):
     return sorted(regions, key=lambda r: (r['start'], r['kind'])), unresolved
 
 
+def definition_boundaries(scope, texts, units, roots):
+    """Validate AI-authored page boundaries; never infer runtime dispatch from type names."""
+    boundaries = scope.get('definition_boundaries', [])
+    if not isinstance(boundaries, list) or (boundaries and scope['kind'] != 'page'):
+        raise ValueError('definition_boundaries require a page scope and a list')
+    result = {}
+
+    def resolve(reference):
+        if not isinstance(reference, dict):
+            raise ValueError('definition reference must name path and symbol')
+        path, symbol = reference.get('path'), reference.get('symbol')
+        line = reference.get('definition_line')
+        if 'definition_line' in reference and (type(line) is not int or line < 1):
+            raise ValueError('definition_line must be a positive source line')
+        matches = [i for i, u in enumerate(units.get(path, [])) if u['symbol'] == symbol]
+        if line is not None:
+            matches = [i for i in matches
+                       if texts[path].count('\n', 0, units[path][i]['start']) + 1 == line]
+        if len(matches) != 1:
+            raise ValueError(f'boundary definition must resolve exactly once: {path}:{symbol}')
+        return path, matches[0]
+
+    for boundary in boundaries:
+        key = resolve(boundary)
+        path, index = key
+        if key in result or key in roots or (path, None) in roots:
+            raise ValueError('definition boundary cannot duplicate or narrow a page entry')
+        reason = boundary.get('context_reason')
+        ranges = boundary.get('behavior_ranges')
+        dependencies = boundary.get('resolved_dependencies')
+        unresolved = boundary.get('unresolved')
+        if (not isinstance(reason, str) or not reason.strip() or not isinstance(ranges, list)
+                or not isinstance(dependencies, list) or not isinstance(unresolved, list)
+                or any(not isinstance(x, str) or not x.strip() for x in unresolved)):
+            raise ValueError('boundary needs behavior_ranges, context_reason, resolved_dependencies and unresolved')
+        text, unit = texts[path], units[path][index]
+        offsets = [0]
+        for line in text.splitlines(keepends=True):
+            offsets.append(offsets[-1] + len(line))
+        spans = []
+        for selection in ranges:
+            if not isinstance(selection, dict):
+                raise ValueError('invalid boundary behavior line range')
+            start, end = selection.get('start_line'), selection.get('end_line')
+            if (type(start) is not int or type(end) is not int
+                    or not 1 <= start <= end < len(offsets)):
+                raise ValueError('invalid boundary behavior line range')
+            a, b = offsets[start - 1], offsets[end]
+            if text[a:unit['start']].strip() or text[unit['end']:b].strip():
+                raise ValueError('behavior range escapes its definition')
+            a, b = max(a, unit['start']), min(b, unit['end'])
+            if a >= b or any(a < y and x < b for x, y in spans):
+                raise ValueError('empty or overlapping behavior ranges')
+            spans.append((a, b))
+        regions, _ = source_regions(path, text)
+        for region in regions:
+            if region['kind'] == 'callable' and any(
+                    a < region['end'] and region['start'] < b for a, b in spans):
+                if not any(a <= region['start'] and b >= region['end'] for a, b in spans):
+                    raise ValueError('behavior range must retain the complete callable body')
+        resolved = {resolve(reference) for reference in dependencies}
+        if not spans and not resolved and not unresolved:
+            raise ValueError('context-only boundary needs resolved dependencies or an unresolved explanation')
+        selected = ['\n' if c == '\n' else ' ' for c in text]
+        for a, b in spans:
+            selected[a:b] = text[a:b]
+        result[key] = {'text': ''.join(selected), 'dependencies': resolved,
+                       'context': {**boundary, 'file_sha256': hashlib.sha256(text.encode()).hexdigest()}}
+    return result
+
+
 def census(snapshot, scope):
     manifest, texts = safe_sources(snapshot)
     if (scope.get('schema_version') != 'behavior-source-scope.v1'
@@ -259,22 +337,45 @@ def census(snapshot, scope):
     file_symbols = {}
     for path in texts:
         file_symbols.setdefault(packages[path] + '.' + Path(path).stem, set()).add(path)
-    roots = set(texts) if scope['kind'] == 'application' else set(entries)
+    entry_symbols = scope.get('entry_symbols')
+    if entry_symbols is not None:
+        if (not isinstance(entry_symbols, dict)
+                or set(entry_symbols) != set(entries)
+                or any(not isinstance(names, list) or not names
+                       or any(not isinstance(name, str) or not name for name in names)
+                       for names in entry_symbols.values())):
+            raise ValueError('scope entry_symbols must name non-empty symbols for every entry path')
+    if scope['kind'] == 'application':
+        roots = {(path, None) for path in texts}
+    elif entry_symbols is None:
+        roots = {(path, None) for path in entries}
+    else:
+        roots = set()
+        for path, names in entry_symbols.items():
+            for name in names:
+                matches = [index for index, unit in enumerate(units[path]) if unit['symbol'] == name]
+                if len(matches) != 1:
+                    raise ValueError(
+                        f'scope entry symbol must resolve exactly once: {path}:{name}'
+                    )
+                roots.add((path, matches[0]))
+    boundaries = definition_boundaries(scope, texts, units, roots)
     # None denotes a complete root file. A dependency denotes a whole top-level
     # definition (class with every member, or full callable/property/accessors).
-    included = {(path, None) for path in roots}
+    included = set(roots)
     edges, external = set(), set()
     pending = list(included)
     while pending:
         path, index = pending.pop()
         unit = units[path][index] if index is not None else {'start': 0, 'end': len(masks[path])}
-        code = masks[path][unit['start']:unit['end']]
+        boundary = boundaries.get((path, index))
+        code = (lexical_code_mask(boundary['text']) if boundary else masks[path])[unit['start']:unit['end']]
         imports = re.findall(r'(?m)^\s*import\s+([\w.*]+)(?:\s+as\s+(\w+))?', masks[path])
         # Imports are lookup context, not executable references. This matters
         # especially for root files that import unused helpers or entire packages.
         code = re.sub(r'(?m)^\s*(?:import|package)\s+[^\n]+', '', code)
         referenced = set(re.findall(r'\b[A-Za-z_]\w*\b', code))
-        dependencies = set()
+        dependencies = set(boundary['dependencies']) if boundary else set()
         lookup_names = referenced.copy()
         for imp, alias in imports:
             if (alias or imp.rsplit('.', 1)[-1]) in referenced:
@@ -307,6 +408,8 @@ def census(snapshot, scope):
             if other not in included and (other[0], None) not in included:
                 included.add(other)
                 pending.append(other)
+    if set(boundaries) - included:
+        raise ValueError('definition boundary is outside the reached page scope')
     included_paths = {p for p, _ in included}
     projected = {}
     for path in included_paths:
@@ -317,7 +420,8 @@ def census(snapshot, scope):
         for p, index in included:
             if p == path:
                 unit = units[p][index]
-                chars[unit['start']:unit['end']] = texts[p][unit['start']:unit['end']]
+                source = boundaries.get((p, index), {}).get('text', texts[p])
+                chars[unit['start']:unit['end']] = source[unit['start']:unit['end']]
         projected[path] = ''.join(chars)
     obligations = []
     unresolved = [{'path': path, 'dependency': imp,
@@ -325,6 +429,9 @@ def census(snapshot, scope):
                   for path, imp in sorted(external)
                   if imp.rsplit('.', 1)[-1] != 'R'
                   and any(package and imp.startswith(package + '.') for package in package_names)]
+    unresolved.extend({'path': key[0], 'reason': reason}
+                      for key, boundary in boundaries.items()
+                      for reason in boundary['context']['unresolved'])
     unavailable = [x for x in manifest.get('blocked_files', [])
                    if Path(x.get('path', '')).suffix in {'.kt', '.java'}]
     for item in unavailable:
@@ -351,7 +458,34 @@ def census(snapshot, scope):
         'obligations': obligations, 'unresolved': unresolved,
         'limits': ['Balanced Kotlin source coverage is not semantic correctness or runtime parity.',
                    'Dependency injection, external APIs and platform behavior require semantic review and execution.']}
+    if boundaries:
+        payload['reading_context'] = [boundaries[key]['context'] for key in sorted(boundaries)]
+        payload['limits'].append(
+            'Page definition boundaries are AI-authored source claims requiring independent semantic review; '
+            'context is retained for reading, not certified as irrelevant by static analysis.')
     return {**payload, 'census_sha256': digest(payload)}
+
+
+def index_bindings(proof):
+    """Expand shared fact/scenario mappings without changing the coverage denominator."""
+    bindings, errors = {}, []
+    rows = proof.get('bindings', [])
+    if not isinstance(rows, list):
+        return {}, ['source bindings must be a list']
+    for row in rows:
+        if not isinstance(row, dict) or ('obligation_id' in row) == ('obligation_ids' in row):
+            errors.append('source binding requires exactly one ID form')
+            continue
+        ids = row.get('obligation_ids') if 'obligation_ids' in row else [row['obligation_id']]
+        if not isinstance(ids, list) or not ids or any(not isinstance(key, str) or not key for key in ids):
+            errors.append('source binding requires nonempty obligation IDs')
+            continue
+        for key in ids:
+            if key in bindings:
+                errors.append('duplicate source obligation binding: ' + key)
+            else:
+                bindings[key] = row
+    return bindings, errors
 
 
 def validate_closure(contract, inventory, snapshot, scope):
@@ -384,13 +518,8 @@ def validate_closure(contract, inventory, snapshot, scope):
         records = {r['id']: r for key in ('facts', 'entities') for r in collection.get(key, [])}
         anchors = {r['id']: r for r in collection.get('anchors', [])}
         scenarios = {r['id'] for r in contract.get('scenarios', [])}
-        bindings = {}
-        for binding in proof.get('bindings', []):
-            key = binding.get('obligation_id')
-            if not isinstance(key, str) or key in bindings:
-                errors.append('missing or duplicate source obligation binding')
-            else:
-                bindings[key] = binding
+        bindings, binding_errors = index_bindings(proof)
+        errors.extend(binding_errors)
         for obligation in current['obligations']:
             binding = bindings.pop(obligation['id'], {})
             chosen = binding.get('record_ids', [])
@@ -448,7 +577,8 @@ def validate_semantic_review(contract, closure, review):
             errors.append('source semantic review has unexamined ' + key)
     required = set(closure.get('obligation_ids', []))
     covered, expectation_ids = set(), set()
-    bindings = {b.get('obligation_id'): b for b in contract.get('source_closure', {}).get('bindings', [])}
+    bindings, binding_errors = index_bindings(contract.get('source_closure', {}))
+    errors.extend(binding_errors)
     record_ids = {r['id'] for section in ('facts', 'entities')
                   for r in contract.get('collection', {}).get(section, [])}
     scenario_ids = {s['id'] for s in contract.get('scenarios', [])}

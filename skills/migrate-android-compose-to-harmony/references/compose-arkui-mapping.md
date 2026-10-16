@@ -1,5 +1,39 @@
 # Android UI to ArkUI mapping
 
+## Dossier style reconciliation
+
+For direct AI transcription, use safe source and the existing dossier's UI section; the optional
+inventory fields below are reading aids, not prerequisites. The goal is source-equivalent
+appearance and interaction, not one platform-native redesign per operating system.
+
+Follow each reached component into its definition. Resolve visual values in source precedence:
+call-site overrides, component implementation, active theme/resources, then defaults from the
+actual library version. Record unresolved values as questions for source/runtime collection,
+not guessed Harmony defaults. Shared tokens and component definitions need one reference in the
+dossier, with state-specific differences beside their callers, not a second style document.
+
+Collect the facts that affect this page: parent/child bounds and ordered spacing, text metrics,
+surface/border/shape/elevation, asset/tint, and enabled/selected/focused states. Runtime theme,
+font scale, keyboard and system insets can change these values; bind observations to the matching
+page state. Inspect missing defaults with text-only runtime facts or the pinned library source.
+Bind probes to the production Application/Activity and active theme initialization. A test
+Application, theme reset or isolated component host can suppress dynamic colors or overlays while
+returning internally consistent but wrong defaults. Record that distinction and reconcile with the
+captured production page before using probe values as the target's styling oracle.
+
+Choose ArkUI primitives only after those facts are known. A source component made from an outlined
+clickable Box, icon and label remains that composition unless a styled native control reproduces
+it. Explicitly reconcile target default padding, minimum size, corner shape, background, font,
+decoration and touch feedback wherever they differ. Preserve its real business callbacks while
+doing this. Native system pickers/permission surfaces are separate platform boundaries; retain
+their actual constraints instead of impersonating system UI to match a screenshot.
+
+Before accepting the first rendered page, compare the dossier's component/state facts with the
+actual target properties and bounds, then capture paired states with equivalent data, theme and
+viewport. Label a missing fact, omitted transcription and unavoidable platform difference
+separately so the fix goes to collection, implementation or an explicit adaptation. Retain the
+first-render evidence and subsequent corrections; a repaired page is not first-pass proof.
+
 ## UI structure
 
 `ui.primitive_component_mapping_catalog` is the executable candidate index for the global
@@ -163,8 +197,9 @@ render and an insertion; either check alone can pass while the other remains rev
   applied at runtime.
 - Preserve every typography role separately, including font family, weight, size, line height, and
   letter spacing. Translate code-defined font resource keys only through the approved opaque-font
-  copy path; `FontFamily.Default` should resolve to the target platform default instead of copying
-  an unrelated font.
+  copy path. For `FontFamily.Default`, resolve the effective source font and metrics for the active
+  platform/theme; the Harmony default is not automatically appearance-equivalent. Reuse an approved
+  source font when available, or verify the fallback's metrics and record any remaining difference.
 - Preserve shape roles as project-local tokens. Map corner type and each corner radius explicitly;
   do not reduce `CutCornerShape`, asymmetric shapes, or zero-radius roles to one global rounded
   rectangle rule.
@@ -236,6 +271,13 @@ boundary so RTL behavior remains equivalent.
 
 Model state as explicit transitions. Keep I/O behind interfaces so pending, success, error, empty,
 retry, and concurrency behavior can be unit-tested with deferred promises.
+
+Keep reactive dependencies live at ArkUI render sites. With V1 state management, a helper getter
+or by-value `@Builder` argument can leave a label, icon or conditional toolbar at its initial value
+even though the controller and database changed. Read observed state directly for render conditions;
+for dynamic Builder inputs, use a single reference-parameter object (`$$`) or a component with
+reactive properties. In the existing interaction check, assert the visible state immediately after
+the action as well as the stored result, before navigation or recreation can hide a stale binding.
 
 Do not replace a source state machine with a handful of UI booleans unless the behavior contract
 proves equivalence.

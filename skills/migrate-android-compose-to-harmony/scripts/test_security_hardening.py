@@ -342,6 +342,28 @@ class SecurityHardeningTests(unittest.TestCase):
                 (target / ".migration/source-contract.json").is_file()
             )
 
+    def test_attach_does_not_resign_tampered_target_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            target = root / "HarmonyFixture"
+            initialized = run_script(
+                INITIALIZE, "--output", str(target),
+                "--project-name", "HarmonyFixture", "--bundle-name", "com.example.harmonyfixture",
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stdout)
+            contract = root / "contract.json"
+            contract.write_text(json.dumps(contract_fixture(root / "android", root / "snapshot")))
+            state_path = target / ".migration/state.json"
+            state = json.loads(state_path.read_text())
+            state["bundle_name"] = "com.example.tampered"
+            state_path.write_text(json.dumps(state))
+            original = state_path.read_bytes()
+            attached = run_script(ATTACH_CONTRACT, "--contract", str(contract), "--target", str(target))
+            self.assertNotEqual(attached.returncode, 0)
+            self.assertIn("ownership proof is invalid", json.loads(attached.stdout)["error"])
+            self.assertEqual(state_path.read_bytes(), original)
+            self.assertFalse((target / ".migration/source-contract.json").exists())
+
     def test_attach_rejects_symlinked_migration_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

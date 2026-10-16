@@ -2771,6 +2771,45 @@ def report_run(
     }
 
 
+def build_run_state(
+    run_root: Path, source: Path, snapshot: Path, contract: Path,
+    target: Path, project: dict[str, Any],
+) -> dict[str, Any]:
+    """Bind either entry point to the same source/target evidence identity."""
+    contract_payload = load_json_object(contract, "migration contract")
+    contract_owner = contract.with_name(f"{contract.name}.owner.json")
+    return {
+        "schema": STATE_SCHEMA,
+        "generator": GENERATOR,
+        "ownership": {
+            "schema": OWNERSHIP_SCHEMA,
+            "run_id": str(uuid.uuid4()),
+            "run_root": str(run_root),
+        },
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "phase": "implementation",
+        "paths": {
+            "source": str(source), "snapshot": str(snapshot),
+            "contract": str(contract), "contract_owner": str(contract_owner),
+            "target": str(target),
+        },
+        "project": project,
+        "artifacts": {
+            "snapshot_manifest_sha256": sha256_file(snapshot / ".android-to-harmony-safe.json"),
+            "contract_sha256": sha256_file(contract),
+            "contract_owner_sha256": sha256_file(contract_owner),
+            "target_state_path": str(target / ".migration/state.json"),
+        },
+        "inventory": {
+            "status": contract_payload.get("inventory", {}).get("status"),
+            "authoritative": contract_payload.get("inventory", {}).get("authoritative"),
+            "quality": contract_payload.get("inventory_quality"),
+        },
+        "batch_ids": [batch.get("id") for batch in contract_payload["migration_batches"]
+                      if isinstance(batch, dict) and isinstance(batch.get("id"), str)],
+    }
+
+
 def start_run(args: argparse.Namespace) -> dict[str, Any]:
     source = normalize_path(args.source, "source")
     run_root = normalize_path(args.run_root, "run root")
@@ -2792,7 +2831,6 @@ def start_run(args: argparse.Namespace) -> dict[str, Any]:
     run_root.mkdir()
     snapshot = run_root / SNAPSHOT_NAME
     contract = run_root / CONTRACT_NAME
-    contract_owner = contract.with_name(f"{contract.name}.owner.json")
 
     try:
         run_tool(
@@ -2843,7 +2881,6 @@ def start_run(args: argparse.Namespace) -> dict[str, Any]:
         raise
 
     manifest_path = snapshot / ".android-to-harmony-safe.json"
-    target_state_path = target / ".migration" / "state.json"
     contract_payload = load_json_object(contract, "migration contract")
     batches = contract_payload.get("migration_batches")
     if not isinstance(batches, list):
@@ -2862,43 +2899,11 @@ def start_run(args: argparse.Namespace) -> dict[str, Any]:
         else "reconcile_inventory_and_completion_gates"
     )
     try:
-        state = {
-            "schema": STATE_SCHEMA,
-            "generator": GENERATOR,
-            "ownership": {
-                "schema": OWNERSHIP_SCHEMA,
-                "run_id": str(uuid.uuid4()),
-                "run_root": str(run_root),
-            },
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "phase": "implementation",
-            "paths": {
-                "source": str(source),
-                "snapshot": str(snapshot),
-                "contract": str(contract),
-                "contract_owner": str(contract_owner),
-                "target": str(target),
-            },
-            "project": {
-                "name": args.project_name,
-                "bundle_name": args.bundle_name,
-                "sdk_version": args.sdk_version,
-            },
-            "artifacts": {
-                "snapshot_manifest_sha256": sha256_file(manifest_path),
-                "contract_sha256": sha256_file(contract),
-                "contract_owner_sha256": sha256_file(contract_owner),
-                "target_state_path": str(target_state_path),
-            },
-            "inventory": {
-                "status": contract_payload.get("inventory", {}).get("status"),
-                "authoritative": contract_payload.get("inventory", {}).get(
-                    "authoritative"
-                ),
-                "quality": contract_payload.get("inventory_quality"),
-            },
-            "batch_ids": batch_ids,
-        }
+        state = build_run_state(run_root, source, snapshot, contract, target, {
+            "name": args.project_name,
+            "bundle_name": args.bundle_name,
+            "sdk_version": args.sdk_version,
+        })
         capability_artifacts = materialize_capability_artifacts(
             contract_payload,
             contract,

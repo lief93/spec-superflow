@@ -85,8 +85,8 @@ def validate_collection(contract, inventory, snapshot):
     collection = contract.get('collection')
     if not isinstance(collection, dict):
         return {'verdict': 'fail', 'errors': ['collection proof is required']}
-    if collection.get('schema_version') != SCHEMA or collection.get('status') != 'reviewed':
-        error('requires reviewed behavior-collection.v1; scaffold remains pending')
+    if collection.get('schema_version') != SCHEMA or collection.get('status') not in ('complete', 'reviewed'):
+        error('requires complete behavior-collection.v1; scaffold remains pending')
     if collection.get('source_revision') != inventory.get('source_revision'):
         error('source revision differs')
     def records(key):
@@ -343,7 +343,7 @@ def validate_collection(contract, inventory, snapshot):
             'source_fact_coverage': {'covered': len(inventory_ids - missing_fact_ids),
                                      'total': len(inventory_ids),
                                      'missing': sorted(missing_fact_ids)},
-            'limits': ['Checks structure and source provenance; semantic completeness requires source review.',
+            'limits': ['Checks structure and source provenance, not semantic equivalence or review approval.',
                        'No Android/Harmony runtime parity is established by collection validation.']}
 
 

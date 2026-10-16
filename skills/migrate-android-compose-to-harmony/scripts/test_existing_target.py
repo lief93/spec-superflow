@@ -101,7 +101,8 @@ class ExistingTargetTest(unittest.TestCase):
         failed = self.run_tool('migrate_compose_page.py', *self.args(), expected=1)
         report = json.loads(failed.stdout)
         self.assertEqual(report['failed_stage'], 'drawables')
-        self.assertIn('unowned vector', (self.root / 'run/03-drawables.stdout.log').read_text())
+        drawables = next(stage for stage in report['stages'] if stage['stage'] == 'drawables')
+        self.assertIn('unowned vector', (self.root / 'run' / drawables['stdout']).read_text())
         self.assertEqual(vector.read_text(), '<svg><!-- company asset --></svg>')
         self.assertFalse((self.target / '.migration').exists())
 

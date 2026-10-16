@@ -93,9 +93,10 @@ capability stays on the normal spec-superflow route.
 
 When `ssf state get <change-dir> capability` returns `android-to-harmony`, use
 the linked `migrate-android-compose-to-harmony` Skill as the domain-specific
-authority for migration intake, asset isolation, code-first UI transcription,
-business-slice ledgers, Harmony build/UITest/device evidence, and local
-screenshot diagnostics. Continue to use the ordinary state machine for
+authority for safe source intake, UI/business dossier, source-first transcription,
+code-completeness reconciliation, and applicable migration verification. Use its
+optional tool-backed audit path only when selected; domain routing does not add
+analysis artifacts to the direct AI path. Continue to use the ordinary state machine for
 planning, approval, and review timing; the migration Skill owns only the
 Android-to-Harmony path inside that Change.
 

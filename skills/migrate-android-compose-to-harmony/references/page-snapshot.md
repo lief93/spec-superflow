@@ -109,7 +109,7 @@ python3 "$SKILL_ROOT/scripts/generate_real_harmony_page_json.py" \
   --root-source "app/src/main/java/example/HomeScreen.kt" \
   --root-composable HomeScreen \
   --page-id home --state-id empty \
-  --source-root "$HARMONY_TARGET" \
+  --source-root "$SNAPSHOT" \
   --runtime-source-map "$HARMONY_RUNTIME_SOURCE_MAP" \
   --bundle com.example.harmony \
   --serial "$HARMONY_DEVICE_ID" --hdc "$HDC" \
@@ -118,6 +118,8 @@ python3 "$SKILL_ROOT/scripts/generate_real_harmony_page_json.py" \
 ```
 
 Android package filtering and HarmonyOS bundle filtering exclude system and other-app windows.
+Both wrappers use the Android safe snapshot for `--source-root`: it supplies the source component
+identity being compared. The Harmony target is not a Kotlin source root.
 The Android wrapper removes its remote layout, runs `uiautomator dump`, takes the screenshot, and
 then reads the new layout. The HarmonyOS wrapper removes both remote capture files, runs
 `uitest dumpLayout`, runs `uitest screenCap`, and receives both files in that order. These fixed

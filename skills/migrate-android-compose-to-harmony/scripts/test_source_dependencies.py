@@ -1,3 +1,7 @@
+import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -95,6 +99,35 @@ fun width() = 90.dp
         box = next(n for n in page['components'] if n['type']=='Box')
         self.assertEqual(box['style']['layout']['width_dp'],90)
         self.assertIn('width',[f['name'] for f in source['source_dependency_trace']['definitions']])
+
+    def test_dependency_trace_is_stable_across_python_hash_seeds(self):
+        program = r'''import json
+from ui_migration.frontend.source_symbols import SourceSymbolIndex
+files = {'Page.kt': ''' + repr('''
+val Color = colorFactory()
+val FontFamily = fontFactory()
+val mixed = merge(Color, FontFamily)
+@Composable fun Page() { Text(style = mixed) }
+fun colorFactory() = Color.Red
+fun fontFactory() = FontFamily.Default
+fun merge(color: Color, font: FontFamily) = TextStyle(color = color, fontFamily = font)
+''') + r'''}
+trace = SourceSymbolIndex(files, roots={('Page.kt', 'Page')}).trace('Page.kt', 'Page')
+print(json.dumps(trace, sort_keys=True))
+'''
+        outputs = []
+        for seed in ('1', '2', '3', '4'):
+            environment = dict(os.environ, PYTHONHASHSEED=seed)
+            result = subprocess.run(
+                [sys.executable, '-c', program],
+                cwd=Path(__file__).parent,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            outputs.append(json.loads(result.stdout.splitlines()[-1]))
+        self.assertTrue(all(trace == outputs[0] for trace in outputs[1:]))
 
     def test_scope_passed_as_parameter_preserves_content(self):
         _, page = self.page('LazyColumn { addRows(this) }', {'Parts.kt': '''package pieces

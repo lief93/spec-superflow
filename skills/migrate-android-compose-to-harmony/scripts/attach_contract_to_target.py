@@ -12,7 +12,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from init_harmony_project import load_contract
+from init_harmony_project import (
+    attach_ownership_proof,
+    has_external_ownership_proof,
+    load_contract,
+    load_external_ownership,
+)
 
 
 STATE_SCHEMA = "android-to-harmony.project-state.v1"
@@ -116,6 +121,11 @@ def attach(
         raise AttachContractError("migration contract is required")
     require_separate_target(target, contract)
     state_path, state = load_target_state(target)
+    ownership_secret = None
+    if state.get("ownership") is not None:
+        if not has_external_ownership_proof(target, state):
+            raise AttachContractError("target project ownership proof is invalid")
+        ownership_secret = load_external_ownership(target)
     destination = target / ".migration" / "source-contract.json"
     if destination.is_symlink():
         raise AttachContractError(
@@ -155,6 +165,8 @@ def attach(
         "sha256": contract_hash,
         "source_revision": source_revision,
     }
+    if ownership_secret is not None:
+        attach_ownership_proof(state, target, ownership_secret)
     state_temporary = write_temporary(state_path, state)
     contract_backup = destination.with_name(f".{destination.name}.backup")
     state_backup = state_path.with_name(f".{state_path.name}.backup")
